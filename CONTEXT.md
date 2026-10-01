@@ -26,6 +26,20 @@ _Avoid_: Login, connection, profile
 Changes made in Commander are written back to the Source, and changes in the Source show up in Commander.
 _Avoid_: Import, mirror
 
+## Projects
+
+**Project**:
+A body of work the User is pursuing (e.g. Longtail, Titanlink, Tactics); every item in Commander belongs to at most one Project, and a Source's own groupings (Linear projects, GitHub repos, email domains) can be mapped into it.
+_Avoid_: Workspace, venture, tag, area; and never plain "project" for a Linear or GitHub project, say "Linear project" or "GitHub project"
+
+**Badge**:
+A Project's short code on its accent colour (e.g. `LT`), marking which Project an item belongs to.
+_Avoid_: Tag, label, icon, chip
+
+**Unfiled**:
+The state of an item that belongs to no Project yet.
+_Avoid_: Uncategorised, inbox, misc
+
 ## Email
 
 **Bucket**:
