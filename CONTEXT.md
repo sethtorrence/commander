@@ -43,8 +43,12 @@ _Avoid_: Uncategorised, inbox, misc
 ## Email
 
 **Bucket**:
-A category the Agent sorts incoming email into automatically (e.g. needs reply, FYI, newsletters).
-_Avoid_: Folder, label, category
+What to do with an email (e.g. Needs reply, FYI, Newsletters), defined by the User with a plain description; each email sits in exactly one Bucket, independent of its Project.
+_Avoid_: Folder, label, category, tab
+
+**Unsorted**:
+The state of an email the Agent hasn't confidently placed in a Bucket yet.
+_Avoid_: Uncategorised, unfiled (that's for Projects), inbox
 
 **Triage**:
 A manual, keyboard-driven pass through email where you decide what happens to each message.
