@@ -1,0 +1,8 @@
+{
+  "name": "prototype-microsoft-signin-test",
+  "private": true,
+  "type": "module",
+  "description": "PROTOTYPE, throwaway: checks Microsoft sign-in, sync and threading behaviour for the Commander wayfinder map.",
+  "scripts": { "test-account": "node check.mjs" },
+  "dependencies": { "@azure/msal-node": "^3.0.0", "open": "^10.1.0" }
+}
