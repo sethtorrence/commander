@@ -99,3 +99,7 @@ _Avoid_: Permission, capability, action type
 **User**:
 A person running their own Commander with their own Accounts; testers are Users too.
 _Avoid_: Customer, member, tenant
+
+**Person**:
+Someone the User works with, recognised as the same human across Sources (their GitHub user, Linear user and email addresses).
+_Avoid_: Contact, teammate, member, user (that's the person running Commander)
