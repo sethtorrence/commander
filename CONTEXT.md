@@ -66,17 +66,25 @@ _Avoid_: Journal, entry, page
 The background process that continually works through incoming information from every Source, sorting it and pulling out what needs your attention.
 _Avoid_: Bot, assistant, worker
 
-**Titanus**:
+**Ares**:
 The name and persona under which the Agent presents itself to the User.
-_Avoid_: Assistant, bot, AI
+_Avoid_: Titanus (former name), assistant, bot, AI
 
 **Update**:
-Everything Titanus has queued to tell the User since they last asked, delivered only when the User is active and asks for it.
+Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it.
 _Avoid_: Notification, alert, briefing, digest
 
 **Autonomy setting**:
-A User's choice, per kind of action and per Section, of how far the Agent may go on its own (act, propose, or stay out).
+A User's choice, per Action kind and optionally per Section, of the Autonomy level the Agent works at.
 _Avoid_: Permission, mode, policy
+
+**Autonomy level**:
+How far the Agent may go on its own: Off, Ask (it suggests, the User accepts), Auto when sure, or Auto.
+_Avoid_: Trust level, mode
+
+**Action kind**:
+A group of Agent actions sorted by who can see the result: Organise (only inside Commander), Tidy your Sources (in the User's own Accounts, unseen by others), Act for you (seen by other people), and Delete (permanent or hard to undo).
+_Avoid_: Permission, capability, action type
 
 ## People
 
