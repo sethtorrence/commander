@@ -78,6 +78,10 @@ _Avoid_: Bot, assistant, worker
 The name and persona under which the Agent presents itself to the User.
 _Avoid_: Titanus (former name), assistant, bot, AI
 
+**Memory**:
+What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from.
+_Avoid_: Knowledge base, context, history, profile
+
 **Update**:
 Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it.
 _Avoid_: Notification, alert, briefing, digest
