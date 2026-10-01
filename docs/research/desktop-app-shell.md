@@ -27,7 +27,7 @@ Find out:
   - It has run natively on Wayland by default since Electron 38.
   - Its global shortcuts go through the desktop portal, which Hyprland's portal implements.
   - It can block email content at the network level (`session.webRequest`), and it has Chromium-only email-hardening features (the iframe `csp` attribute and `Element.setHTML`).
-  - It has built-in OS-keychain encryption (`safeStorage`) and an updater that covers AppImage, deb, rpm and pacman.
+  - It has built-in OS-keychain encryption (`safeStorage`) and an updater that covers AppImage, deb, rpm and pacman. Caveat: on Hyprland, `safeStorage` falls back to a hard-coded key unless the app passes `--password-store=gnome-libsecret` (section 6).
   - The cost is about a 117 MiB download and 283 MiB on disk for the runtime, plus more RAM. A multi-GB local model dwarfs both.
   - Tauri wins on footprint and on the phone tiebreaker.
 - **Hard constraints whatever the shell:**
@@ -49,8 +49,8 @@ Find out:
 | **Tauri v2** | System webviews: WebView2 (Chromium) on Windows, WKWebView on macOS, WebKitGTK on Linux ([webview versions](https://v2.tauri.app/reference/webview-versions/)) | Rust core + any web frontend | Stable since 2.0 on 2024-10-02 ([blog](https://v2.tauri.app/blog/tauri-20/)). 2.12.0 shipped 2026-09-26 ([blog](https://v2.tauri.app/blog/tauri-2.12/)); 2.12.1 shipped 2026-09-30 ([releases](https://github.com/tauri-apps/tauri/releases)). | Three engines to test. Linux uses WebKitGTK. Official Source SDKs are TS, not Rust. |
 | Tauri v3 (preview) | Adds an optional bundled-Chromium runtime, `tauri-runtime-cef` | Rust | **Alpha.** 3.0.0-alpha.0 shipped 2026-09-13; alpha.3 and runtime-cef alpha.4 shipped 2026-09-26 ([release notes](https://github.com/tauri-apps/tauri/releases/tag/tauri-v3.0.0-alpha.0)). Breaking changes include how the runtime is selected and the plugin trait. | Not ready for v1. If it ships, the CEF runtime would remove the WebKitGTK concern at Electron-like size. |
 | **Wails** | System webviews. On Linux, v3 defaults to GTK4 + WebKitGTK 6.0 ([v3 status](https://github.com/wailsapp/wails/blob/master/docs/mpress/content/status.md)) | Go | v2 is the stable line (2.14.0, 2026-08-10, [releases](https://github.com/wailsapp/wails/releases)). v3 is **beta** (beta.0 on 2026-08-02, beta.26 on 2026-09-25); Android/iOS are experimental ([v3 beta notes](https://github.com/wailsapp/wails/releases/tag/v3.0.0-beta.0)). | Go isn't in the project's stated toolchain (it happens to be installed; see section 6). Same Linux engine concerns as Tauri, with a smaller ecosystem. |
-| Electrobun | System webview, or bundled CEF via `bundleCEF` ([README](https://github.com/blackboardsh/electrobun)) | TS on its own JSC-based runtime ("Cottontail") or Bun | 2.0.2 shipped 2026-09-29. First tagged releases (0.1.0) were in Aug 2025 ([releases](https://github.com/blackboardsh/electrobun/releases)). Official on Ubuntu 24.04+; **other Linux distros (Arch) are "Community"** ([README](https://github.com/blackboardsh/electrobun)). | Young. Non-Node runtime. Arch isn't officially supported. |
-| Local web server + browser | Whatever browser the User runs | Any | n/a | No tray or app identity unless the User installs a PWA. MDN says Firefox needs an extension for that ([MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Installing)). The localhost server is reachable by other local processes and by web pages, so it needs its own auth. Chrome only began prompting for public-site→loopback requests in Chrome 142 ([Chrome blog](https://developer.chrome.com/blog/local-network-access)). Tauri's own docs warn that serving an app over localhost "brings considerable security risks" ([localhost plugin](https://v2.tauri.app/plugin/localhost/)). |
+| Electrobun | System webview, or bundled CEF via `bundleCEF` ([README](https://github.com/blackboardsh/electrobun)) | TS on its own JSC-based runtime ("Cottontail") or Bun | 2.0.2 shipped 2026-09-29. First GitHub releases were 0.0.19 betas in July 2025, and 0.1.0 shipped 2025-08-25 ([releases](https://github.com/blackboardsh/electrobun/releases)). Official on Ubuntu 24.04+; **other Linux distros (Arch) are "Community"** ([README](https://github.com/blackboardsh/electrobun)). | Young. Non-Node runtime. Arch isn't officially supported. |
+| Local web server + browser | Whatever browser the User runs | Any | n/a | No tray or app identity unless the User installs a PWA. MDN says Firefox needs an extension for that ([MDN](https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps/Guides/Installing)). The localhost server is reachable by other local processes and by web pages, so it needs its own auth. Chrome only began prompting for public-site→loopback requests in Chrome 142 ([Chrome blog](https://developer.chrome.com/blog/local-network-access)). Tauri's own docs warn that its localhost plugin (which serves the app over localhost) "brings considerable security risks" ([localhost plugin](https://v2.tauri.app/plugin/localhost/)). |
 | Native toolkits | Need an embedded engine for email HTML anyway | C++/Python (Qt), Dart (Flutter), Rust (Slint/iced/egui) | n/a | Qt WebEngine's platform notes cover only Windows, macOS and Linux ([Qt docs](https://doc-snapshots.qt.io/qtwebengine/qtwebengine-platform-notes.html)). Flutter's official `webview_flutter` supports Android, iOS and macOS only, **not Linux or Windows** ([pub.dev](https://pub.dev/packages/webview_flutter)). Inference (not separately sourced): pure-Rust GUIs (Slint/iced/egui) don't include an HTML engine, and a full email client, calendar and notes UI would all be hand-built. |
 | (Dioxus desktop) | Uses `wry`, the same webview layer as Tauri ([Cargo.toml](https://github.com/DioxusLabs/dioxus/blob/main/packages/desktop/Cargo.toml)) | Rust | 0.7.10 (2026-07-30) | Has the same engine trade-offs as Tauri. Its desktop plumbing (tray, updater, signing) was not evaluated. |
 
@@ -114,7 +114,7 @@ Hyprland has no built-in bar, so a tray icon needs a StatusNotifierItem host. Th
 **Where the Agent and Source polling run**
 - **Electron:**
   - `utilityProcess.fork()` starts a child process with Node and MessagePorts, launched through Chromium's Services API ([utilityProcess](https://www.electronjs.org/docs/latest/api/utility-process)). A TypeScript Agent can live there, isolated from the UI renderer.
-  - `node-llama-cpp` (in-process llama.cpp) supports Electron but "only on the main process" ([guide](https://node-llama-cpp.withcat.ai/guide/electron)).
+  - `node-llama-cpp` (in-process llama.cpp) supports Electron but "only on the main process"; using it in a renderer "will crash the application" ([guide](https://node-llama-cpp.withcat.ai/guide/electron)). The guide does not say whether a `utilityProcess` works.
   - An external `llama-server` or Ollama can be spawned as a child process instead.
 - **Tauri:**
   - Background work runs as Rust async tasks in the core process.
@@ -166,11 +166,11 @@ Hyprland has no built-in bar, so a tray icon needs a StatusNotifierItem host. Th
   - the iframe `csp` attribute (Chrome 61+; not in Firefox or Safari);
   - `Element.setHTML` with the HTML Sanitizer API (Chrome 146+, Firefox 148+, not Safari).
   - Electron 44 is on Chromium 152, so it has both.
-- Chromium can run sandboxed iframes without `allow-same-origin` in their own process (`IsolateSandboxedIframes`). Microsoft announced it would be on by default in WebView2 "latest by" runtime 132 ([WebView2 announcement](https://github.com/MicrosoftEdge/WebView2Announcements/issues/99)). *Not verified here:* whether Electron 44 has it on.
+- Chromium can run sandboxed iframes without `allow-same-origin` in their own process (`IsolateSandboxedIframes`). Microsoft announced it would be on by default in WebView2 "latest by" runtime 132 ([WebView2 announcement](https://github.com/MicrosoftEdge/WebView2Announcements/issues/99)). Chromium defines it as `FEATURE_ENABLED_BY_DEFAULT` ("only iframes with origin-restricted sandboxes are isolated") ([blink features.cc](https://chromium.googlesource.com/chromium/src/+/refs/heads/main/third_party/blink/common/features.cc)). Electron's feature overrides on the `44-x-y` branch don't disable it ([feature_list.cc](https://github.com/electron/electron/blob/44-x-y/shell/browser/feature_list.cc)). So it is very likely on in Electron 44 (inferred from source; not checked at runtime).
 
 **Tauri:**
 - CSP is enforced only if set in the config, and Tauri adds nonces and hashes for bundled assets ([CSP](https://v2.tauri.app/security/csp/)).
-- Capabilities limit which commands the frontend may call. But the docs warn: **"On Linux and Android, Tauri is unable to distinguish between requests from an embedded `<iframe>` and the window itself"** ([capabilities](https://v2.tauri.app/security/capabilities/)). An email iframe that could run script would have the main window's IPC rights on Linux. The no-`allow-scripts` sandbox is therefore mandatory, not optional.
+- Capabilities limit which commands the frontend may call. But the docs warn, in a caution under "Remote API Access": **"On Linux and Android, Tauri is unable to distinguish between requests from an embedded `<iframe>` and the window itself"** ([capabilities](https://v2.tauri.app/security/capabilities/)). An email iframe that could run script would have the main window's IPC rights on Linux. The no-`allow-scripts` sandbox is therefore mandatory, not optional.
 - `on_web_resource_request` only works for the `tauri` protocol ([WebviewBuilder](https://docs.rs/tauri/latest/tauri/webview/struct.WebviewBuilder.html)). Blocking remote content therefore relies on CSP and HTML rewriting, not network interception.
 - A separate capability-less webview for email needs the multi-webview API, which is behind the `unstable` feature in v2 ([Window::add_child](https://docs.rs/tauri/latest/tauri/window/struct.Window.html)). It also has the open Wayland bounds bug ([#15656](https://github.com/tauri-apps/tauri/issues/15656)).
 - The optional isolation pattern intercepts all IPC through a sandboxed iframe ([isolation](https://v2.tauri.app/concept/inter-process-communication/isolation/)).
@@ -189,7 +189,7 @@ Hyprland has no built-in bar, so a tray icon needs a StatusNotifierItem host. Th
 - **Tauri updater:**
   - Signatures are required: "This cannot be disabled." Losing the private key means existing installs can never be updated again.
   - Updates can be served from a static JSON file, e.g. on GitHub Releases ([updater](https://v2.tauri.app/plugin/updater/)).
-  - On Linux it updates AppImage, and also deb and rpm (via `dpkg -i` / `rpm -U`) ([plugin changelog](https://github.com/tauri-apps/plugins-workspace/blob/v2/plugins/updater/CHANGELOG.md)).
+  - On Linux it updates AppImage, deb (since plugin 2.1.0) and rpm (since 2.10.0, which added "all bundle types"). deb/rpm installs prompt for sudo ([plugin changelog](https://github.com/tauri-apps/plugins-workspace/blob/v2/plugins/updater/CHANGELOG.md)).
 - **Electron's built-in `autoUpdater`:**
   - macOS and Windows only; "There is no built-in support for auto-updater on Linux."
   - On macOS it requires a signed app ([autoUpdater](https://www.electronjs.org/docs/latest/api/auto-updater)).
@@ -201,7 +201,7 @@ Hyprland has no built-in bar, so a tray icon needs a StatusNotifierItem host. Th
 | Platform | What testers see unsigned | Cost to fix |
 |---|---|---|
 | macOS | Since Sequoia, users "will no longer be able to Control-click to override Gatekeeper". They must use System Settings > Privacy & Security ([Apple, 2024-08-06](https://developer.apple.com/news/?id=saqachfa); [Apple support](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac)). Ad-hoc signing doesn't avoid this ([Tauri macOS signing](https://v2.tauri.app/distribute/sign/macos/)). | Apple Developer Program, $99/yr. A free account cannot notarize ([Tauri macOS signing](https://v2.tauri.app/distribute/sign/macos/); [Electron code signing](https://www.electronjs.org/docs/latest/tutorial/code-signing)). |
-| Windows | Unsigned: "Strong SmartScreen block". Newly signed builds still warn until reputation builds. EV has given no instant bypass since 2024 ([Microsoft, updated 2026-08-29](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)). | Azure Artifact Signing (formerly Trusted Signing): about $9.99/month, but **individuals must be in the USA or Canada**. OV certificate: $150–300/yr, key on an HSM. Microsoft Store MSIX: free re-signing. SignPath Foundation: free for open source ([same page](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)), but it requires "an OSI-approved Open Source license without commercial dual-licensing" ([SignPath terms](https://signpath.org/terms)). That conflicts with possible monetization, and the repo has no license today (`license: null` via GitHub API). |
+| Windows | Unsigned: "Strong SmartScreen block". Newly signed builds still warn until reputation builds. EV has given no instant bypass since 2024 ([Microsoft, updated 2026-08-29](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)). | Azure Artifact Signing (formerly Trusted Signing): about $9.99/month, but **individuals must be in the USA or Canada** (organizations: USA, Canada, EU, UK). It gives no instant SmartScreen trust either. OV certificate: $150–300/yr, key on an HSM. Microsoft Store MSIX: free re-signing. SignPath Foundation: free for open source ([same page](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/code-signing-options)), but it requires "an OSI-approved Open Source license without commercial dual-licensing for all components", no proprietary code, and an already-released, actively maintained project ([SignPath terms](https://signpath.org/terms)). That conflicts with possible monetization, and the repo has no license today (`license: null` via GitHub API). |
 | Linux | No signing is required. AppImages can be GPG-signed ([Tauri Linux signing](https://v2.tauri.app/distribute/sign/linux/)). | None |
 
 ## 6. Footprint and developer ergonomics
@@ -233,7 +233,8 @@ Hyprland has no built-in bar, so a tray icon needs a StatusNotifierItem host. Th
 - `node:sqlite` is built in. In Node 24 it is "1.2 - Release candidate" ([Node](https://nodejs.org/docs/latest-v24.x/api/sqlite.html)). Electron fixed the missing binding in July 2025 ([electron#47706](https://github.com/electron/electron/pull/47706)).
 - Native modules (e.g. `better-sqlite3`) must be recompiled for Electron's ABI ([native modules](https://www.electronjs.org/docs/latest/tutorial/using-native-node-modules)).
 - Since Electron 42, the `electron` package downloads its binary on first run, not in `postinstall`, so it works with `--ignore-scripts` ([breaking changes, 42.0](https://www.electronjs.org/docs/latest/breaking-changes)).
-- `safeStorage` encrypts with the OS keychain (Keychain, DPAPI, or libsecret/KWallet/portal). It falls back to a hard-coded plaintext key (`basic_text`) when Linux has no secret store ([safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)).
+- `safeStorage` encrypts with the OS keychain (Keychain, DPAPI, or libsecret/KWallet/the Secret portal). It falls back to a hard-coded plaintext key (`basic_text`) when Linux has no secret store, **or "when the desktop environment is not recognised"**. Only Cinnamon, Deepin, GNOME, Pantheon, XFCE, UKUI, Unity and KDE are recognised ([safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)).
+  - On the author's machine, `XDG_CURRENT_DESKTOP=Hyprland`, while gnome-keyring owns `org.freedesktop.secrets` (observed). So Electron would likely pick `basic_text` unless the app appends `--password-store=gnome-libsecret` before `ready`. The docs list the Secret portal as "preferred for sandboxed environments like Flatpak", and it's unclear whether it is tried outside Flatpak. Check `safeStorage.getSelectedStorageBackend()` in the spike.
 - Upkeep: a new major every 8 weeks, with 3 supported at a time ([timelines](https://www.electronjs.org/docs/latest/tutorial/electron-timelines)).
 
 **Tauri**
@@ -276,7 +277,47 @@ For **#12 Tech stack and local database** (language, UI framework, local databas
    - $99/yr Apple membership for notarization;
    - a Windows signing route (Artifact Signing only if the signer is a US/Canada individual or an eligible organization; otherwise OV);
    - a license decision, because the free open-source signing routes (SignPath, and update.electronjs.org's "open-source" framing) conflict with future monetization or need a public repo.
-6. **Before locking in, do a one-hour Hyprland spike** with both hello-worlds: tray via Quickshell, a portal shortcut, a sandboxed email iframe, and window behaviour. This closes the gaps this research didn't measure (RAM, real Wayland behaviour).
+6. **Before locking in, do a one-hour Hyprland spike** with both hello-worlds: tray via Quickshell, a portal shortcut, a sandboxed email iframe, window behaviour, and (Electron) which `safeStorage` backend gets picked. This closes the gaps this research didn't measure (RAM, real Wayland behaviour).
+
+## Verification
+
+Adversarial fact-check on 2026-10-01. Each load-bearing claim was re-opened at its primary source, or checked through the GitHub/crates.io APIs and raw source files.
+
+**Confirmed as written:**
+- **Versions and dates.** Electron 44.0.0 on 2026-08-25 (Chromium M152, Node 24.18.1); 44.5.1 on 2026-09-29/30 (Chromium 152.0.7977.130, Node 24.21.0); 45.0.0 due 2026-10-20. 8-week cadence, 3 supported majors. Tauri 2.12.0 on 2026-09-26 and 2.12.1 on 2026-09-30. Tauri v3.0.0-alpha.0 on 2026-09-13, and alpha.3 plus runtime-cef alpha.4 on 2026-09-26. Wails 2.14.0 on 2026-08-10; v3 beta.0 on 2026-08-02 and beta.26 on 2026-09-25. Electrobun 2.0.2 on 2026-09-29. Electron 38.0.0 on 2025-09-02. DOMPurify 3.4.16.
+- **Tauri v3 alpha notes.** Runtime selection moved to `Builder::runtime`. The Linux tray moves to ksni. `cleanup_before_exit` was added in alpha.3.
+- **Electron breaking changes.** Wayland default in 38. macOS 11 dropped in 38 and macOS 12 in 44. Binary download on first run since 42.
+- **Electron APIs.** The `globalShortcut` portal path is on by default and needs `desktopName`. Electron's 44 feature list also enables `GlobalShortcutsPortalPreferredTrigger`. `xdg-desktop-portal-hyprland` implements `GlobalShortcuts`. `global-hotkey` says "Linux (X11 Only)", and tauri#3578 has been open since 2022-03-01.
+- **Trays.** Electron's Tray uses StatusNotifierItem and doesn't specify the activation gesture. Tauri's tray click events are "Linux: Unsupported".
+- **Login items.** Electron's `setLoginItemSettings` is macOS/Windows only, with the "may silently fail" note. Tauri's autostart plugin exposes only the macOS launcher, uses `auto-launch` 0.6 (which has a systemd mode), and handles the AppImage path on Linux.
+- **Hyprland autostart.** Hyprland doesn't run XDG autostart entries itself (discussion #3389). uwsm adds XDG autostart support.
+- **Signing.** Microsoft's code-signing page (ms.date 2026-08-29): Artifact Signing about $9.99/month, individuals USA/Canada only; OV $150–300/yr; EV has had no instant bypass since 2024; unsigned gets a "Strong SmartScreen block". Apple's Sequoia Control-click removal was announced 2024-08-06. Tauri's macOS signing page says a free account cannot notarize.
+- **Updaters.** Tauri updater signatures "cannot be disabled". electron-updater supports AppImage/DEB/Pacman/RPM and validates Windows signatures. update.electronjs.org needs a public GitHub repo and runs on macOS and Windows only.
+- **Web platform.** MDN BCD: iframe `csp` is Chrome 61 only; `setHTML` is Chrome 146 and Firefox 148, not Safari. Chrome 142 Local Network Access prompt.
+- **Node.** `node:sqlite` is 1.2 (RC since 24.15.0). SEA is 1.1. Both checked in the v24.21.0 docs.
+- **Source SDKs.** Linear `@linear/sdk`; the Graph SDK list has TS/JS and no Rust; Gmail has Node.js and no Rust; GitHub lists octocrab as third-party.
+- **Other platforms.** `webview_flutter` is Android/iOS/macOS only. Capacitor is on v8. Wails v3 needs Go 1.25+, defaults to GTK4 + WebKitGTK 6.0, and treats mobile as experimental.
+- **Tauri API.** `on_web_resource_request` is "only implemented for the tauri URI protocol". `add_child` is behind `unstable`.
+- **Footprint.** Electron 44.5.1 asset sizes: 117.2, 124.2 and 150.7 MiB. Hopp benchmark: 172 vs 409 MB and 8.6 vs 244 MiB, N=1. The Tauri docs' "<600KB" and AppImage "2-6 MB to 70+ MB" quotes.
+- **Cited issues.** All seven cited Tauri/Electron issues are still open.
+- **Repo and local machine.** The repo is public with `license: null`. Local observations were re-checked: Node 24.20.0, pnpm 12.4.2, rustc 1.98.1, Go 1.27.1, webkit2gtk-4.1 2.52.6, xdph 1.4.1, StatusNotifierWatcher owned by `qs`, `xdg-desktop-autostart.target` inactive.
+
+**Corrected or added:**
+- `safeStorage` on Hyprland. The original said it falls back only when there is no secret store. The docs also fall back to `basic_text` when the desktop environment is "not recognised", and Hyprland isn't on the list. Added this caveat, the `--password-store=gnome-libsecret` mitigation, and the observation that gnome-keyring is running. Also added it to the short answer and the spike list.
+- `IsolateSandboxedIframes`, previously "not verified". It is `FEATURE_ENABLED_BY_DEFAULT` in Chromium, and Electron's 44-x-y feature list doesn't disable it. It is now marked very likely on, from source rather than a runtime check.
+- Tauri localhost quote. The warning is about the localhost *plugin*, not localhost serving in general. Reworded.
+- Tauri capabilities iframe caution. Noted that it sits under "Remote API Access". It still applies to any script-capable iframe in a window.
+- Tauri updater. Replaced the unsourced `rpm -U` detail with the changelog versions: deb in 2.1.0, all bundle types in 2.10.0.
+- node-llama-cpp. The guide's warning is about renderers, and it doesn't address `utilityProcess`.
+- Electrobun history. 0.0.19 betas were released in July 2025, before 0.1.0 (2025-08-25).
+- Artifact Signing: added the organization regions and "no instant SmartScreen trust". SignPath: added the "for all components" and no-proprietary-code / already-released conditions.
+
+**Could not confirm:**
+- RAM and startup on this machine. No first-hand measurement; only secondary data.
+- Real Hyprland behaviour of either shell (tray click, portal shortcut, window rules). Neither app was launched.
+- Whether Electron's Secret-portal backend is tried outside Flatpak on Hyprland.
+- A Tauri v3 / runtime-cef stable timeline. None is published.
+- Whether Tauri's `keyring` crate route behaves differently from `safeStorage` on Hyprland. It talks to the Secret Service directly, but this wasn't tested.
 
 ## Sources
 
