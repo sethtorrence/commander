@@ -1,0 +1,78 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Lives only on the prototype/daily-note-look branch, never on main.
+  Question: what should Commander's Daily Notes look and feel like?
+  Plan: four structurally different Daily Note variants, switchable via ?variant=A|B|C|D,
+  each a standalone page in variants/ shown in a full-window frame.
+  Run: open this file in a browser (or `python3 -m http.server -d prototypes/daily-note-look 8765`).
+  Switch with the bottom bar or the ← → keys (not while typing in a note).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Daily Note look and feel</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+  #proto-bar {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 4px; padding: 5px;
+    background: #ff3d7f; color: #fff; border-radius: 999px;
+    font: 600 13px/1 system-ui, sans-serif; letter-spacing: .01em;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 0 2px rgba(255,255,255,.85);
+    z-index: 2147483647; user-select: none;
+  }
+  #proto-bar button {
+    all: unset; cursor: pointer; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 16px; background: rgba(0,0,0,.18);
+  }
+  #proto-bar button:hover { background: rgba(0,0,0,.32); }
+  #proto-label { padding: 0 12px; min-width: 260px; text-align: center; white-space: nowrap; }
+  #proto-label small { opacity: .8; font-weight: 500; }
+</style>
+</head>
+<body>
+<iframe id="stage" title="Variant"></iframe>
+<div id="proto-bar" role="toolbar" aria-label="Prototype variant switcher">
+  <button id="prev" aria-label="Previous variant">‹</button>
+  <div id="proto-label"></div>
+  <button id="next" aria-label="Next variant">›</button>
+</div>
+<script>
+  const VARIANTS = [
+    { key: 'A', name: 'Notebook spread', file: 'variants/a.html' },
+    { key: 'B', name: 'Raw markdown, keyboard-first', file: 'variants/b.html' },
+    { key: 'C', name: 'Journal stream outliner', file: 'variants/c.html' },
+    { key: 'D', name: 'Day timeline', file: 'variants/d.html' },
+  ];
+  const stage = document.getElementById('stage');
+  const label = document.getElementById('proto-label');
+  let i = Math.max(0, VARIANTS.findIndex(v => v.key === (new URLSearchParams(location.search).get('variant') || 'A').toUpperCase()));
+
+  function show() {
+    const v = VARIANTS[i];
+    stage.src = v.file;
+    label.innerHTML = `${v.key} <small>(${v.name}) · ${i + 1}/${VARIANTS.length}</small>`;
+    const url = new URL(location.href);
+    url.searchParams.set('variant', v.key);
+    history.replaceState(null, '', url);
+    document.title = `PROTOTYPE · ${v.key} ${v.name}`;
+  }
+  function step(d) { i = (i + d + VARIANTS.length) % VARIANTS.length; show(); }
+
+  document.getElementById('prev').onclick = () => step(-1);
+  document.getElementById('next').onclick = () => step(1);
+  const isTyping = el => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  document.addEventListener('keydown', e => {
+    if (isTyping(e.target)) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+  // Variants forward ← → here when focus is inside the frame but not in an editable element.
+  addEventListener('message', e => {
+    if (e.data && e.data.type === 'proto-key') step(e.data.key === 'ArrowLeft' ? -1 : 1);
+  });
+  show();
+</script>
+</body>
+</html>
