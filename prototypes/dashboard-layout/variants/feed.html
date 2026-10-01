@@ -1,4 +1,5 @@
 <!-- PROTOTYPE — throwaway. Dashboard variant FEED: One ranked feed. -->
+<!-- Projects (CONTENT-PROJECTS.md): every item carries a Project Badge (LT / TL / TX / — Unfiled); a PRJ filter bar on the Dashboard and every Section (P then 0–4), a Project page per Project (#project/lt), a Badge picker for manual override (click a Badge or press B), rule hints, and Titanus's suggestion (Sam Okafor email). -->
 <!-- Intent: the Dashboard is one merged list of "what needs you", ranked into bands (Now / Today / Waiting on others / FYI) across every Section, driven from the keyboard; Sections are numbered notebook index tabs on the sheet edge. -->
 <!doctype html>
 <html lang="en" data-theme="dark">
@@ -216,7 +217,7 @@
   .fkeys kbd{height:17px;min-width:17px;font-size:9px}
   .fkeys .t kbd{border-color:var(--org);color:var(--org-ink)}
 
-  .flt{position:sticky;top:var(--body);z-index:6;display:flex;align-items:stretch;height:40px;background:var(--sheet);border-bottom:1px solid var(--line)}
+  .flt{position:sticky;top:calc(var(--body) + 36px);z-index:6;display:flex;align-items:stretch;height:40px;background:var(--sheet);border-bottom:1px solid var(--line)}
   .flt .lb{width:41px;flex:none;display:grid;place-items:center;font:600 8px/1 var(--mono);letter-spacing:.12em;color:var(--faint);border-right:1px solid var(--line2)}
   .flt button{border:0;border-right:1px solid var(--line2);background:none;padding:0 12px;display:flex;align-items:center;gap:8px;cursor:pointer;
     font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
@@ -228,7 +229,7 @@
   .flt .fx{margin-left:auto;display:flex;align-items:center;padding:0 16px;font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
 
   .band{position:relative}
-  .bh{position:sticky;top:calc(var(--body) + 40px);z-index:5;display:flex;align-items:center;gap:12px;height:34px;padding:0 20px 0 52px;background:var(--sheet);border-bottom:1px solid var(--line)}
+  .bh{position:sticky;top:calc(var(--body) + 76px);z-index:5;display:flex;align-items:center;gap:12px;height:34px;padding:0 20px 0 52px;background:var(--sheet);border-bottom:1px solid var(--line)}
   .band + .band .bh,.band:first-child .bh{border-top:0}
   .band + .band{margin-top:14px}
   .band + .band .bh{border-top:1px solid var(--line)}
@@ -242,7 +243,7 @@
   .band.empty .bh .nm{opacity:.5}
   .bempty{padding:12px 20px 12px 52px;font-size:13.5px;color:var(--faint);border-bottom:1px solid var(--line2);background-image:repeating-linear-gradient(-45deg,var(--hatch) 0 1px,transparent 1px 7px)}
 
-  .it{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr) 88px;column-gap:14px;padding:10px 20px 11px 52px;border-bottom:1px solid var(--line2);cursor:default;scroll-margin:200px 0 120px}
+  .it{position:relative;display:grid;grid-template-columns:24px 25px minmax(0,1fr) 88px;column-gap:12px;padding:10px 20px 11px 52px;border-bottom:1px solid var(--line2);cursor:default;scroll-margin:236px 0 120px}
   .it .rk{position:absolute;left:0;top:10px;width:40px;text-align:center;font:500 9px/22px var(--mono);color:var(--faint);letter-spacing:.02em;font-variant-numeric:tabular-nums;user-select:none}
   .it .mkr{height:22px;display:grid;place-items:center;padding:0;border:0;background:none;color:var(--ink)}
   .it .mkr.btn{cursor:pointer}
@@ -272,7 +273,7 @@
   .it .pbar{display:flex;gap:2px;margin-top:9px;max-width:420px}
   .it .pbar i{flex:1;height:8px;border:1px solid var(--line)}
   .it .pbar i.f{background:var(--ink);border-color:var(--ink)}
-  .it .bar{display:none;grid-column:2 / 4;margin-top:10px;flex-wrap:wrap;align-items:center}
+  .it .bar{display:none;grid-column:3 / 5;margin-top:10px;flex-wrap:wrap;align-items:center}
   .it.sel .bar{display:flex}
   .bar button{height:28px;padding:0 10px;border:1px solid var(--line);background:var(--sheet);display:flex;align-items:center;gap:8px;cursor:pointer;
     font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
@@ -491,7 +492,7 @@
   .stats div:last-child{border-right:0}
   .stats b{display:block;font:800 30px/1 var(--sans);font-stretch:125%;color:var(--ink);font-variant-numeric:tabular-nums}
   .stats span{font:500 9px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
-  .pr{position:relative;display:grid;grid-template-columns:24px minmax(0,1fr) auto;column-gap:12px;align-items:start;padding:10px 20px 11px 52px;border-bottom:1px solid var(--line2)}
+  .pr{position:relative;display:grid;grid-template-columns:24px 25px minmax(0,1fr) auto;column-gap:12px;align-items:start;padding:10px 20px 11px 52px;border-bottom:1px solid var(--line2)}
   .pr .rk{position:absolute;left:0;top:10px;width:40px;text-align:center;font:500 9px/22px var(--mono);color:var(--faint)}
   .pr .t1{font:600 15px/22px var(--sans);color:var(--ink)}
   .pr .t1 em{font:500 11.5px/22px var(--mono);font-style:normal;color:var(--muted);margin-right:9px}
@@ -509,7 +510,7 @@
   .rel2 .rr span{color:var(--muted)}
 
   /* Notes */
-  .notes-crop{position:relative;overflow:hidden;height:calc(100vh - var(--body) - 31px);background:var(--bg)}
+  .notes-crop{position:relative;overflow:hidden;height:calc(100vh - var(--body) - 31px - 74px);background:var(--bg)}
   .notes-frame{position:absolute;left:-94px;top:-86px;width:calc(100% + 94px);height:calc(100% + 86px);border:0;background:var(--bg)}
 
   /* ================= Email Section ================= */
@@ -679,7 +680,8 @@
   .qa .q-done:hover{background:var(--org);border-color:var(--org);color:var(--on-org)}
   .qa .q-dis{border-left:0}
   .qa .q-dis:hover{background:var(--raise)}
-  .qa .q-ref{margin-left:auto;border:0;padding:0 0 0 10px;color:var(--muted);letter-spacing:.08em;font-weight:500}
+  .qa .q-pb{margin-left:auto;display:grid;place-items:center}
+  .qa .q-ref{border:0;padding:0 0 0 10px;color:var(--muted);letter-spacing:.08em;font-weight:500}
   .qa .q-ref:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
   .qi.cleared{padding:11px 0 12px}
   .qi.cleared .qn{color:var(--faint);font-size:16px;padding-top:3px}
@@ -706,6 +708,155 @@
   .toast button{border:1px solid currentColor;background:none;color:inherit;font:600 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;height:26px;padding:0 10px;cursor:pointer;flex:none}
   .toast button:hover{background:var(--org);border-color:var(--org);color:var(--on-org)}
 
+  /* ================= Projects: Badges, filter bar, picker, Project page ================= */
+  /* Accents live ONLY in Badges and thin left-edge bars. Orange stays for live things and Titanus. */
+  html[data-theme=dark]{--p-lt:#3D7BFF;--p-tl:#00BFA5;--p-tx:#A970FF;--on-p:#141414}
+  html[data-theme=light]{--p-lt:#3D7BFF;--p-tl:#009581;--p-tx:#9D68ED;--on-p:#141414}
+  [data-p=lt]{--pc:var(--p-lt)} [data-p=tl]{--pc:var(--p-tl)} [data-p=tx]{--pc:var(--p-tx)}
+  .pb{flex:none;display:inline-grid;place-items:center;width:25px;height:16px;padding:0;margin:0;border:0;background:var(--pc);color:var(--on-p);
+    font:700 9px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;cursor:pointer;vertical-align:middle;user-select:none;border-radius:0}
+  span.pb{cursor:default}
+  .pb[data-pk]{cursor:pointer}
+  .pb[data-p=none]{background:none;box-shadow:inset 0 0 0 1px var(--faint);color:var(--faint);font-weight:500}
+  .pb.sug{background:none;box-shadow:none;border:1px dashed var(--pc);color:var(--ink)}
+  .pb[data-pk]:hover,.pb[data-pk]:focus-visible,.pb.open{outline:1px solid var(--ink);outline-offset:1px}
+  .pb.sm{width:20px;height:13px;font-size:7.5px;letter-spacing:.03em}
+  .pb.lg{width:66px;height:42px;font-size:20px;letter-spacing:.04em}
+  .pbc{height:22px;display:grid;place-items:center}
+  .it[data-p]:not([data-p=none])::before,.em[data-p]:not([data-p=none])::before,.td[data-p]:not([data-p=none])::before,.pr[data-p]:not([data-p=none])::before{
+    content:'';position:absolute;left:39px;top:-1px;bottom:0;width:2px;background:var(--pc);pointer-events:none}
+  .lc[data-p]:not([data-p=none]){box-shadow:inset 2px 0 0 var(--pc)}
+
+  /* Project filter bar (PRJ) */
+  .pflt{display:flex;align-items:stretch;height:36px;background:var(--sheet);border-bottom:1px solid var(--line);flex:none;position:relative}
+  .feed-sheet .pflt{position:sticky;top:var(--body);z-index:7}
+  .pflt .lb{width:41px;flex:none;display:grid;place-items:center;font:600 8px/1 var(--mono);letter-spacing:.12em;color:var(--faint);border-right:1px solid var(--line2)}
+  .pfg{display:flex;border-right:1px solid var(--line2)}
+  .pflt .pf{border:0;background:none;padding:0 12px;display:flex;align-items:center;gap:9px;cursor:pointer;
+    font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .pflt .pf b{font-weight:500;color:var(--faint);font-variant-numeric:tabular-nums}
+  .pflt .pf:hover{color:var(--ink);background:var(--raise)}
+  .pflt .pf.on{background:var(--ink);color:var(--sheet)}
+  .pflt .pf.on b{color:var(--sheet);opacity:.7}
+  .pflt .pf.on .pb[data-p=none]{box-shadow:inset 0 0 0 1px var(--sheet);color:var(--sheet)}
+  .pflt .pf.zero{color:var(--faint)}
+  .pflt .pg{width:26px;border:0;border-left:1px solid var(--line2);background:none;padding:0;cursor:pointer;font:600 11px/1 var(--mono);color:var(--faint)}
+  .pflt .pg:hover{color:var(--ink);background:var(--raise)}
+  .pflt .pg.on{color:var(--ink);box-shadow:inset 0 -2px 0 var(--ink)}
+  .pflt .kn{display:none;height:15px;min-width:15px;font-size:8.5px;padding:0 3px;border-color:currentColor;color:inherit}
+  .pflt.arm .kn{display:inline-flex}
+  .pflt.arm{box-shadow:inset 0 -2px 0 var(--ink)}
+  .pflt .px{display:flex;align-items:center;gap:6px;padding:0 14px;font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+  .pflt.arm .px{color:var(--ink)}
+  .pflt .px kbd{height:16px;min-width:16px;font-size:8.5px}
+  .pflt .pgo{border:0;border-left:1px solid var(--line);background:none;padding:0 14px;display:flex;align-items:center;gap:9px;cursor:pointer;font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+  .pflt .sp{flex:1}
+  .pflt .pgo kbd{height:16px;min-width:16px;font-size:8.5px;border-color:currentColor;color:inherit}
+  .pflt .pgo:hover{background:var(--raise)}
+  .pflt .note{display:flex;align-items:center;padding:0 14px;margin-left:auto;font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+
+  /* global "scoped to a Project" stamp in the tab rail, and the Project page tab */
+  .tpf[hidden]{display:none}
+  .tabs.scoped .tk{display:none}
+  .tpf{align-self:center;height:30px;display:flex;align-items:center;gap:8px;padding:0 0 0 8px;border:1px solid var(--ink);margin-right:10px;font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+  .tpf button{height:100%;border:0;border-left:1px solid var(--line);background:none;cursor:pointer;color:var(--muted);font:inherit;padding:0 8px}
+  .tpf button:hover{background:var(--ink);color:var(--sheet)}
+  .tab.ptab{gap:9px;padding-right:6px}
+  .tab.ptab .pb{width:22px;height:19px}
+  .tab.ptab .px{border:0;background:none;width:22px;height:22px;padding:0;cursor:pointer;color:var(--faint);font:500 13px/1 var(--mono);margin-left:2px}
+  .tab.ptab .px:hover{color:var(--ink);background:var(--raise)}
+
+  /* Badge picker (manual override) */
+  .pk{position:fixed;z-index:45;width:296px;background:var(--sheet);border:1px solid var(--ink);color:var(--text)}
+  .pk[hidden]{display:none}
+  .pk-h{display:flex;justify-content:space-between;align-items:center;gap:10px;height:28px;padding:0 10px;background:var(--ink);color:var(--sheet);font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+  .pk-h .id{opacity:.7;overflow:hidden;text-overflow:ellipsis;font-weight:500;min-width:0}
+  .pk-s{position:relative;padding:10px 10px 10px 13px;border-bottom:1px solid var(--line);font-size:13px;line-height:18px;color:var(--text)}
+  .pk-s::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--org)}
+  .pk-s .k{display:flex;align-items:center;gap:8px;margin-bottom:4px;font:600 9px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--org-ink)}
+  .pk-s .k .pb{width:22px;height:14px;font-size:8px}
+  .pk-s .cf{margin-top:8px;height:24px;padding:0 10px;border:1px solid var(--org);background:none;cursor:pointer;font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--org-ink)}
+  .pk-s .cf:hover{background:var(--org);color:var(--on-org)}
+  .pk-o{display:grid;grid-template-columns:30px minmax(0,1fr) auto auto;align-items:center;gap:8px;width:100%;height:34px;padding:0 10px;border:0;border-bottom:1px solid var(--line2);background:none;cursor:pointer;text-align:left}
+  .pk-o .nm{font:600 13.5px/1 var(--sans);color:var(--ink)}
+  .pk-o .cur{font:500 8.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .pk-o kbd{height:17px;min-width:17px;font-size:9px}
+  .pk-o:hover{background:var(--raise)}
+  .pk-o.on{box-shadow:inset 3px 0 0 var(--ink)}
+  .pk-how{padding:9px 10px 10px;font:500 9px/1.55 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line2)}
+  .pk-how b{color:var(--ink);font-weight:600}
+  .pk-go{width:100%;height:32px;border:0;background:none;display:flex;justify-content:space-between;align-items:center;padding:0 10px;cursor:pointer;font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+  .pk-go kbd{height:17px;min-width:17px;font-size:9px;border-color:currentColor;color:inherit}
+  .pk-go:hover{background:var(--ink);color:var(--sheet)}
+
+  /* Titanus project suggestion, inline */
+  .psug{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-top:7px;font-size:13px;line-height:19px;color:var(--muted)}
+  .psug .k{display:flex;align-items:center;gap:7px;font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--org-ink);white-space:nowrap}
+  .psug .k::before{content:'';width:6px;height:6px;background:var(--org)}
+  .psug .bt{display:flex}
+  .psug button{height:22px;padding:0 9px;border:1px solid var(--line);background:var(--sheet);cursor:pointer;font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+  .psug button + button{border-left:0}
+  .psug .cf{border-color:var(--org);color:var(--org-ink)}
+  .psug .cf + button{border-left:1px solid var(--line)}
+  .psug .cf:hover{background:var(--org);color:var(--on-org)}
+  .psug button:not(.cf):hover{background:var(--raise)}
+  .bar .pjh{flex-basis:100%;margin-top:9px;display:flex;align-items:center;gap:8px;font:500 9px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .bar .pjh b{color:var(--ink);font-weight:600}
+  .bar .pjh kbd{height:15px;min-width:15px;font-size:8.5px}
+
+  /* Project page */
+  .ftop h1.pj{display:flex;align-items:center;gap:18px}
+  .pj-secs{display:flex;align-items:stretch;height:50px;border-bottom:1px solid var(--line);background:var(--sheet)}
+  .pj-secs .lb{width:41px;flex:none;display:grid;place-items:center;font:600 8px/1 var(--mono);letter-spacing:.12em;color:var(--faint);border-right:1px solid var(--line2)}
+  .pj-secs button{flex:1;min-width:0;border:0;border-right:1px solid var(--line2);background:none;cursor:pointer;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:5px;padding:0 12px;text-align:left}
+  .pj-secs button:last-child{border-right:0}
+  .pj-secs .w{font:500 8.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .pj-secs .n{font:700 19px/1 var(--sans);font-stretch:112%;color:var(--ink);font-variant-numeric:tabular-nums}
+  .pj-secs .z .n{color:var(--faint);font-weight:400}
+  .pj-secs button:hover{background:var(--raise)}
+  .pjs .h{padding:8px 10px 3px;font:600 8.5px/1.4 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .pjs .r{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:8px;align-items:center;width:100%;padding:6px 10px;border:0;border-bottom:1px solid var(--line2);background:none;text-align:left;cursor:pointer;font-size:12.5px;line-height:17px;color:var(--ink)}
+  .pjs .r:hover{background:var(--raise)}
+  .pjs .r em{font:500 10px/17px var(--mono);font-style:normal;color:var(--muted)}
+  .pjs .r .s{font:600 8.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .pjs .r .s.nx{color:var(--org-ink)}
+  .pjs .r.past{color:var(--muted)}
+  .pjs .e{padding:6px 10px 10px;font-size:12.5px;line-height:17px;color:var(--faint)}
+  .rules .ru{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line2);font-size:12.5px;line-height:17px;color:var(--text)}
+  .rules .ru .tg{height:17px;padding:0 5px}
+  .rules .ru .n{font:500 8.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+  .rules .ft{padding:8px 10px 10px;font:500 8.5px/1.5 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+  .kv{margin:0}
+  .kv div{display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--line2);font:500 9px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+  .kv div:last-child{border-bottom:0}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;color:var(--ink);font-weight:600}
+  .kv .t dt,.kv .t dd{color:var(--org-ink)}
+  .tq.pj-sg .sgi{padding:10px 12px 11px 14px;border-bottom:1px solid var(--line2);font-size:12.5px;line-height:17px;color:var(--text)}
+  .tq.pj-sg .sgi b{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--ink);margin-bottom:3px}
+  .tq.pj-sg .psug{margin-top:6px}
+  .dnm{padding:8px 10px 10px;font-size:12.5px;line-height:18px;color:var(--text);border-bottom:1px solid var(--line2);cursor:pointer}
+  .dnm:hover{background:var(--raise)}
+  .dnm em{display:flex;align-items:center;gap:8px;font:600 8.5px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;font-style:normal;color:var(--ink);margin-bottom:3px}
+  .tl .ev .pb{margin-left:-2px}
+  .tl .ev.pdim,.tmr .r.pdim{opacity:.28}
+  .tmr .r .pb{align-self:center}
+
+  /* Daily Note blocks strip (Notes Section) */
+  .dnb{display:flex;align-items:stretch;height:38px;border-bottom:1px solid var(--line);background:var(--sheet)}
+  .dnb .lb{width:41px;flex:none;display:grid;place-items:center;font:600 8px/1 var(--mono);letter-spacing:.12em;color:var(--faint);border-right:1px solid var(--line2)}
+  .dnb .bk{display:flex;align-items:center;gap:9px;padding:0 14px;border-right:1px solid var(--line2);font-size:13px;color:var(--ink);white-space:nowrap;min-width:0}
+  .dnb .bk em{font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;font-style:normal;color:var(--muted)}
+  .dnb .bk span{overflow:hidden;text-overflow:ellipsis}
+  .dnb .bk.dim{opacity:.3}
+  .dnb .note{margin-left:auto;display:flex;align-items:center;padding:0 14px;font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);white-space:nowrap}
+  .ctl .ev .pb{flex:none}
+  .em .r1 .pb{align-self:center;margin-right:-2px}
+  .tri-card .tc-h .pb{height:16px;padding:0;border-right:0}
+  .tri-card .tc-h .pb.sug{border-right:1px dashed var(--pc)}
+  .tmw .r .pb{align-self:center}
+  .tmw .r.pdim{opacity:.28}
+  .repos .rr{grid-template-columns:22px minmax(0,1fr) 110px 28px}
+
   @media (max-width:1440px){
     .ftop h1{font-size:38px}
     .fkeys{grid-template-columns:auto auto}
@@ -715,6 +866,12 @@
     .tabs .tk{display:none}
     .bkt{flex-basis:140px}
     .ebar .proc{display:none}
+    .pflt .px{display:none}
+    .pflt .pf{padding:0 10px;gap:7px}
+    .tpf .tpl{display:none}
+    .tab.ptab{min-width:0}
+    .tab.ptab .tlb{display:none}
+    .pj-secs .w i{display:none}
     .tab{min-width:112px}
     .t-l2{font-size:13px}
   }
@@ -788,10 +945,10 @@
   <!-- 01 Dashboard -->
   <section class="view g8" id="v-dashboard" data-sec="dashboard">
     <article class="sheet feed-sheet">
-      <div class="sh-strip"><span class="eb">Dashboard</span><span class="pn">DSH-2026-274</span><span class="tt"><i class="led"></i><span id="rankedAt">Ranked by Titanus · 11:38</span></span><span class="sp"></span><span id="feedSrcCount">6 Sections merged</span><span>Sheet 01 / 07</span></div>
+      <div class="sh-strip"><span class="eb" id="feedEb">Dashboard</span><span class="pn" id="feedPn">DSH-2026-274</span><span class="tt"><i class="led"></i><span id="rankedAt">Ranked by Titanus · 11:38</span></span><span class="sp"></span><span id="feedSrcCount">6 Sections merged</span><span>Sheet 01 / 07</span></div>
       <div class="ftop">
         <div>
-          <h1>What needs you</h1>
+          <h1 id="feedH1">What needs you</h1>
           <div class="dt" id="feedDt"></div>
         </div>
         <div class="fkeys" aria-label="Keys">
@@ -800,9 +957,13 @@
           <span class="x3"><kbd>1</kbd>–<kbd>7</kbd>Sections</span>
           <span><kbd>X</kbd>Tick</span>
           <span><kbd>E</kbd>Clear</span>
+          <span class="x3"><kbd>P</kbd><kbd>1</kbd>–<kbd>4</kbd>Project</span>
+          <span><kbd>B</kbd>Badge</span>
           <span class="t x3"><kbd>U</kbd>Update</span>
         </div>
       </div>
+      <div id="pjSecs"></div>
+      <div class="pflt" id="pflt" data-scope="dashboard"></div>
       <div class="flt" id="flt"></div>
       <div id="feed"></div>
     </article>
@@ -815,6 +976,8 @@
   <section class="view g8" id="v-notes" data-sec="notes">
     <article class="sheet full">
       <div class="sh-strip"><span class="eb">Notes</span><span class="pn">DN-2026-274</span><span>Daily Note · Thursday 1 October</span><span class="sp"></span><span>Scroll for earlier days</span><span>Sheet 02 / 07</span></div>
+      <div class="pflt" id="pfltNotes" data-scope="notes"></div>
+      <div class="dnb" id="dnb"></div>
       <div class="notes-crop"><iframe class="notes-frame" id="dnFrame" title="Daily Note"></iframe></div>
     </article>
   </section>
@@ -840,6 +1003,8 @@
   </div>
   <div class="upd-ask" aria-disabled="true" title="Talking to Titanus comes later"><span class="ua-p">Ask Titanus…</span><span class="ua-l">Coming later</span></div>
 </aside>
+
+<div class="pk" id="pk" hidden role="dialog" aria-label="Change Project"></div>
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -878,25 +1043,33 @@
     'ENG-421': { title: 'Review rate-limiter PR', status: 'In Review', pr: 'gh-2213' },
     'ENG-418': { title: 'Rotate Acme sandbox API keys', status: 'Todo' },
     'ENG-399': { title: 'Retire legacy billing cron', status: 'Backlog' },
+    'TAC-14': { title: 'Draft Q4 positioning', status: 'In Progress', note: 'In Progress for 2 days', ws: 'Northwind' },
+    'LT-88': { title: 'Onboarding checklist copy', status: 'Todo', ws: 'Longtail' },
   };
   const TODOS = {
     t412: { lid: 'ENG-412' },
     t418: { lid: 'ENG-418' },
     t421: { lid: 'ENG-421' },
+    ttac14: { lid: 'TAC-14' },
+    tlt88: { lid: 'LT-88' },
     tdana: { text: 'Reply to Dana about the Q4 offsite dates', origin: 'agent', src: 'email', sug: 'open', why: 'Dana emailed about the Q4 offsite dates. She’s waiting on a reply.' },
     tpriya: { text: 'Give Priya Acme sandbox access', origin: 'agent', src: 'note', sug: 'open', why: 'You wrote a follow-up in your 1:1. Nobody has done it yet.' },
     tacme: { text: 'Decide on the Acme Payments contract', origin: 'manual', due: 'Due Friday' },
     tsam: { text: 'Buy a birthday gift for Sam', origin: 'manual' },
     tdoc: { text: 'Review Priya’s backoff design doc', origin: 'manual', done: true },
   };
-  const TODO_ORDER = ['t412', 't421', 't418', 'tdana', 'tpriya', 'tacme', 'tsam', 'tdoc'];
+  const TODO_ORDER = ['t412', 't421', 'ttac14', 't418', 'tlt88', 'tdana', 'tpriya', 'tacme', 'tsam', 'tdoc'];
 
   const ACCTS = { nw: { name: 'Northwind', kind: 'Google Workspace' }, per: { name: 'Personal', kind: 'Gmail' }, out: { name: 'Outlook.com', kind: 'Outlook' } };
   const BUCKETS = [{ k: 'reply', name: 'Needs reply' }, { k: 'fyi', name: 'FYI' }, { k: 'news', name: 'Newsletters' }, { k: 'rcpt', name: 'Receipts' }];
   const EXTRA = { fyi: { nw: 4, per: 1, out: 1 }, news: { nw: 5, per: 12, out: 6 }, rcpt: {} };
   const MAIL = [
+    { id: 'm-sam', b: 'reply', a: 'nw', from: 'Sam Okafor', to: 'You · Northwind', subj: 'Re: intro to the Tactics advisors', age: '1h', at: 'Today 10:34', todoText: 'Reply to Sam about a time with the Tactics advisors',
+      body: ['Seth,', 'Thanks for the intro. I spoke to Helen this morning and she’s keen. Could the three of us find thirty minutes next week?', 'Sam'] },
     { id: 'm-dana', b: 'reply', a: 'nw', from: 'Dana Whitfield', to: 'You · Northwind', subj: 'Q4 offsite: which dates work?', age: '2h', at: 'Today 09:41', sug: 'tdana', todoText: 'Reply to Dana about the Q4 offsite dates',
       body: ['Hi Seth,', 'We’re locking in the Q4 offsite this week. Two options: 12–13 November in Lisbon, or 19–20 November in Porto.', 'Which works for you? I need to book the venue by Monday.', 'Thanks,\nDana'] },
+    { id: 'm-jo', b: 'reply', a: 'per', from: 'Jo Alvarez · Longtail', to: 'You · Personal', subj: 'Longtail beta: onboarding feedback', age: '3h', at: 'Today 08:44', todoText: 'Reply to Jo about the onboarding feedback',
+      body: ['Hi Seth,', 'I pulled together the beta feedback on onboarding. Three things came up again and again:', '1. The checklist copy reads like it’s for us, not for them.\n2. The magic-link email is slow to arrive.\n3. Nobody finds the import button.', 'Can you look at the checklist copy this week?\nJo'] },
     { id: 'm-leo', b: 'reply', a: 'nw', from: 'Leo Park · Acme Payments', to: 'You · Northwind', subj: 'Contract redlines, v3', age: '5h', at: 'Today 06:52', att: 'Northwind–Acme MSA v3.pdf', todoText: 'Reply to Leo about the v3 redlines',
       body: ['Hi Seth,', 'Attached is v3 with our redlines. The main changes are in section 4 (fees) and section 9 (termination). Everything else is as agreed.', 'We can walk through it on today’s call at 16:00.', 'Best,\nLeo Park\nAcme Payments'] },
     { id: 'm-mum', b: 'reply', a: 'per', from: 'Mum', to: 'You · Personal', subj: 'Sunday lunch?', age: 'Yesterday', at: 'Wed 30 Sep 19:12', todoText: 'Reply to Mum about Sunday lunch',
@@ -926,15 +1099,16 @@
     { id: 'e-acme', s: '16:00', e: '16:45', title: 'Vendor call: Acme Payments', who: 'Leo Park (Acme Payments)', where: 'Meet', note: 'Contract review. Leo sent v3 redlines this morning.',
       rel: [['email', 'Leo Park · Contract redlines, v3', 'email', 'm-leo'], ['todos', 'Decide on the Acme Payments contract · due Friday', 'todos', 'tacme'], ['linear', 'ENG-418 Rotate Acme sandbox API keys', 'linear', 'ENG-418']] },
   ];
-  const TOMORROW = [{ s: '10:00', title: 'Board prep with Marcus' }, { s: '15:00', title: 'Interview: Staff engineer' }];
+  const TOMORROW = [{ id: 'tm-board', s: '10:00', title: 'Board prep with Marcus' }, { id: 'tm-int', s: '15:00', title: 'Interview: Staff engineer' }];
 
   const PRS = [
     { id: 'gh-2213', repo: 'api', n: 2213, title: 'Rate limiter: sliding window', kind: 'review', by: 'dkim', lid: 'ENG-421', note: 'Almost done. Needs your review.' },
     { id: 'gh-340', repo: 'infra', n: 340, title: 'Bump Postgres to 17.6', kind: 'review', by: 'ana-r', note: 'Infra is waiting on you.' },
     { id: 'gh-981', repo: 'web', n: 981, title: 'Billing settings redesign', kind: 'review', by: 'jonah' },
+    { id: 'gh-57', org: 'longtail', repo: 'app', n: 57, title: 'Magic-link sign-in', kind: 'review', by: 'jo-alvarez', note: 'Small. Jo’s feedback says the magic link is slow.' },
     { id: 'gh-2198', repo: 'api', n: 2198, title: 'Webhook retries with jitter', kind: 'mine', ci: 'failing', lid: 'ENG-412' },
   ];
-  const REPOS = [['api', 6, 2], ['web', 4, 2], ['infra', 1, 1], ['billing', 1, 0], ['sdk-js', 1, 0], ['docs', 1, 0], ['mobile', 0, 0], ['design-system', 0, 0]];
+  const REPOS = [['api', 6, 2], ['web', 4, 2], ['infra', 1, 1], ['billing', 1, 0], ['sdk-js', 1, 0], ['docs', 1, 0], ['mobile', 0, 0], ['design-system', 0, 0], ['longtail/app', 0, 1]];
   const GH_SUMMARY = 'Quiet day yesterday. Most of the work was in api and web. The rate limiter is almost done and needs your review. Infra is waiting on you for the Postgres bump. Nothing is on fire.';
 
   // The ranked feed. Order inside a band is the rank.
@@ -947,8 +1121,13 @@
     { id: 'f5', band: 'today', kind: 'todo', todo: 'tacme', title: 'Decide on the Acme Payments contract', tags: [['todos', 'Manual · due Fri'], ['email', 'Leo Park · Redlines v3 · 5h']], why: 'Your call with Acme is at four. If you decide on the call, you’re done early.', ttn: true, meta: ['FRI', 'Due'], open: ['email', 'm-leo'] },
     { id: 'f6', band: 'today', kind: 'meeting', ev: 'e-acme', title: 'Vendor call: Acme Payments', tags: [['calendar', '16:00–16:45']], why: 'Read Leo’s v3 redlines before it.', meta: ['16:00', 'Starts'], open: ['calendar', 'e-acme'] },
     { id: 'f7', band: 'today', kind: 'todo', todo: 't421', pr: 'gh-2213', pre: 'api #2213', title: 'Rate limiter: sliding window', tags: [['github', 'Review requested'], ['linear', 'ENG-421 · In Review']], why: 'It’s almost done and needs your review.', ttn: true, meta: ['REV', 'On you'], open: ['github', 'gh-2213'] },
+    { id: 'fjo', band: 'today', kind: 'mail', mail: 'm-jo', title: 'Jo Alvarez: “Longtail beta: onboarding feedback”', tags: [['email', 'Personal · Needs reply']], why: 'She pulled together the beta feedback. She’s been waiting three hours.', ttn: true, meta: ['3H', 'Waiting'], open: ['email', 'm-jo'] },
+    { id: 'ftac', band: 'today', kind: 'todo', todo: 'ttac14', pre: 'TAC-14', title: 'Draft Q4 positioning', tags: [['linear', 'In Progress · 2 days']], why: 'Board prep is tomorrow at ten. Marcus will ask where it is.', ttn: true, meta: ['FRI', 'Board prep'], open: ['linear', 'TAC-14'] },
     { id: 'f8', band: 'today', kind: 'pr', pr: 'gh-340', pre: 'infra #340', title: 'Bump Postgres to 17.6', tags: [['github', 'Review requested']], why: 'Infra is waiting on you for this one.', ttn: true, meta: ['REV', 'On you'], open: ['github', 'gh-340'] },
+    { id: 'f57', band: 'today', kind: 'pr', pr: 'gh-57', pre: 'longtail/app #57', title: 'Magic-link sign-in', tags: [['github', 'Review requested']], why: 'It’s small. Jo’s feedback says the magic link is slow.', ttn: true, meta: ['REV', 'On you'], open: ['github', 'gh-57'] },
     { id: 'f9', band: 'today', kind: 'todo', todo: 't418', title: 'Rotate Acme sandbox API keys', tags: [['linear', 'ENG-418 · Todo']], why: 'Same sandbox as Priya’s access. Do both at once.', ttn: true, meta: ['ENG', 'Cycle 41'], open: ['linear', 'ENG-418'] },
+    { id: 'flt88', band: 'today', kind: 'todo', todo: 'tlt88', title: 'Onboarding checklist copy', tags: [['linear', 'LT-88 · Todo']], why: 'Jo’s feedback is mostly about this copy. Read her email first.', ttn: true, meta: ['LT', 'No cycle'], open: ['linear', 'LT-88'] },
+    { id: 'fsam', band: 'today', kind: 'mail', mail: 'm-sam', title: 'Sam Okafor: “Re: intro to the Tactics advisors”', tags: [['email', 'Northwind · Needs reply']], why: 'He replied to your intro. Nothing in it is urgent.', meta: ['1H', 'Waiting'], open: ['email', 'm-sam'] },
     { id: 'f10', band: 'today', kind: 'pr', pr: 'gh-981', pre: 'web #981', title: 'Billing settings redesign', tags: [['github', 'Review requested']], why: 'Review requested. Nothing is blocked on it today.', meta: ['REV', 'On you'], open: ['github', 'gh-981'] },
     { id: 'f11', band: 'today', kind: 'mail', mail: 'm-mum', title: 'Mum: “Sunday lunch?”', tags: [['email', 'Personal · Needs reply']], why: 'She needs an answer by Saturday.', meta: ['1D', 'Waiting'], open: ['email', 'm-mum'] },
     { id: 'f12', band: 'today', kind: 'todo', todo: 'tsam', title: 'Buy a birthday gift for Sam', tags: [['todos', 'Manual']], why: 'No date on it. You wrote it down.', meta: ['—', 'No date'], open: ['todos', 'tsam'] },
@@ -958,7 +1137,8 @@
     { id: 'f14', band: 'fyi', kind: 'info', title: 'GitHub since yesterday: 14 merged, 5 opened, 2 releases', tags: [['github', '8 repos · northwind']], why: 'Releases: api v4.12.0 and web 2026.10.01.', quote: GH_SUMMARY, meta: ['14', 'Merged'], open: ['github', ''] },
     { id: 'f15', band: 'fyi', kind: 'info', title: 'Cycle 41 ends Tuesday', tags: [['linear', 'Northwind']], why: '62% complete. Three of your issues are still open in it.', pbar: 62, meta: ['62%', 'Complete'], open: ['linear', ''] },
     { id: 'f16', band: 'fyi', kind: 'info', title: '44 emails sorted into Buckets', tags: [['email', 'FYI 12 · Newsletters 28 · Receipts 4']], why: 'None of them need a reply.', ttn: true, meta: ['44', 'Sorted'], open: ['email', 'b:fyi'] },
-    { id: 'f17', band: 'fyi', kind: 'info', title: 'Tomorrow: Board prep with Marcus, Interview: Staff engineer', tags: [['calendar', 'Fri 02 · 10:00 · 15:00']], why: 'Board prep is first thing. Marcus sent the agenda.', meta: ['FRI', '2 events'], open: ['calendar', ''] },
+    { id: 'f17', band: 'fyi', kind: 'info', pk: 'e:tm-board', title: 'Tomorrow: Board prep with Marcus', tags: [['calendar', 'Fri 02 · 10:00']], why: 'It’s first thing. Marcus sent the agenda.', meta: ['10:00', 'Fri'], open: ['calendar', ''] },
+    { id: 'f17b', band: 'fyi', kind: 'info', pk: 'e:tm-int', title: 'Tomorrow: Interview: Staff engineer', tags: [['calendar', 'Fri 02 · 15:00']], why: 'The Longtail hire. The afternoon is clear around it.', meta: ['15:00', 'Fri'], open: ['calendar', ''] },
     { id: 'f18', band: 'fyi', kind: 'todo', todo: null, lid: 'ENG-399', pre: 'ENG-399', title: 'Retire legacy billing cron', tags: [['linear', 'Backlog']], why: 'In your backlog. Not in this cycle.', meta: ['—', 'Backlog'], open: ['linear', 'ENG-399'] },
   ];
   const BANDS = [
@@ -975,6 +1155,148 @@
     { id: 'q3', title: 'The Acme decision is due Friday.', body: 'Your call with them is at four today. If you decide on the call, you’re done early.', ref: ['calendar', 'e-acme'], refLabel: 'Calendar · 16:00', src: 'Calendar' },
     { id: 'q4', title: 'ENG-412 has been In Progress for six days.', body: 'That’s longer than these usually take. Priya might be stuck. Worth a quick question.', ref: ['linear', 'ENG-412'], refLabel: 'Linear · ENG-412', src: 'Linear' },
   ].map(q => ({ ...q, state: 'open', at: '' }));
+  const QUEUE_PK = { q1: 'm:m-dana', q2: 'dn:d-1on1', q3: 'e:e-acme', q4: 'i:ENG-412' };
+
+  /* ------------------------------------------------------------------ */
+  /* Projects (CONTENT-PROJECTS.md)                                      */
+  /* Every item belongs to at most one Project, or is Unfiled.           */
+  /* ------------------------------------------------------------------ */
+  const PROJ = { lt: { code: 'LT', name: 'Longtail' }, tl: { code: 'TL', name: 'Titanlink' }, tx: { code: 'TX', name: 'Tactics' }, none: { code: '—', name: 'Unfiled' } };
+  const PKEYS = ['lt', 'tl', 'tx', 'none'];
+  const RULES = {
+    rEng: { src: 'linear', when: 'Linear team ENG', p: 'tl' },
+    rLt: { src: 'linear', when: 'Linear team LT', p: 'lt' },
+    rTac: { src: 'linear', when: 'Linear team TAC', p: 'tx' },
+    rGhNw: { src: 'github', when: 'GitHub northwind/api, northwind/infra', p: 'tl' },
+    rGhLt: { src: 'github', when: 'GitHub longtail/app', p: 'lt' },
+    rAcme: { src: 'email', when: 'Email from @acmepayments.com', p: 'tl' },
+    rLtMail: { src: 'email', when: 'Email from @longtail.so', p: 'lt' },
+    rBoard: { src: 'calendar', when: 'Calendar events with “Board”', p: 'tx' },
+  };
+  const R = r => ({ p: RULES[r].p, how: 'rule', r });
+  const YOU = p => ({ p, how: 'you' });
+  // how: rule | you | ttn (Titanus filed it, you confirmed) | sug (Titanus suggests, unconfirmed) | from (follows its source)
+  const PJ = {
+    'm:m-sam': { p: 'none', how: 'sug', sug: 'tx', why: 'The subject says Tactics and Sam wrote about it last week.' },
+    'm:m-dana': YOU('tx'), 'm:m-leo': R('rAcme'), 'm:m-jo': R('rLtMail'),
+    'm:m-f1': YOU('tx'), 'm:m-f4': R('rAcme'),
+    'i:ENG-412': R('rEng'), 'i:ENG-418': R('rEng'), 'i:ENG-421': R('rEng'), 'i:ENG-399': R('rEng'), 'i:LT-88': R('rLt'), 'i:TAC-14': R('rTac'),
+    'pr:gh-2213': R('rGhNw'), 'pr:gh-340': R('rGhNw'), 'pr:gh-2198': R('rGhNw'), 'pr:gh-981': YOU('tl'), 'pr:gh-57': R('rGhLt'),
+    'e:e-priya': YOU('tl'), 'e:e-acme': { p: 'tl', how: 'ttn' }, 'e:tm-board': R('rBoard'), 'e:tm-int': YOU('lt'),
+    't:tdana': { from: 'm:m-dana' }, 't:tpriya': { from: 'dn:d-1on1' }, 't:tacme': YOU('tl'), 't:tdoc': YOU('tl'),
+    'dn:d-1on1': YOU('tl'),
+    'f:f15': R('rEng'),
+  };
+  const REPO_P = { api: 'rGhNw', infra: 'rGhNw', 'longtail/app': 'rGhLt' };
+  const DNB = [
+    { id: 'd-morning', label: 'Morning', text: 'Slept badly but the head is clear. Big rocks today.' },
+    { id: 'd-1on1', label: '1:1 with Priya', text: 'Priya can’t get into the Acme sandbox. Follow up: give her access.' },
+    { id: 'd-idea', label: 'Idea', text: 'The Daily Note should be where I think.' },
+  ];
+  let pf = 'all', page = null, pArm = 0, pArmT = 0;
+
+  function pj(key) {
+    const a = PJ[key];
+    if (!a) return { p: 'none', how: 'none' };
+    if (a.from) { const s = pj(a.from); return { p: s.p === 'none' && s.how === 'sug' ? 'none' : s.p, how: 'from', src: a.from }; }
+    return a;
+  }
+  const inPf = key => pf === 'all' || pj(key).p === pf;
+  const pName = p => PROJ[p].name;
+  function keyLabel(key) {
+    const [t, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+    if (t === 'm') { const m = mailById(id); return m ? `Email · ${m.from.split(' · ')[0]}` : 'Email'; }
+    if (t === 'i') return `Linear · ${id}`;
+    if (t === 'pr') { const p = prById(id); return p ? `GitHub · ${p.org || 'northwind'}/${p.repo} #${p.n}` : 'GitHub'; }
+    if (t === 'e') { const e = evById(id) || TOMORROW.find(x => x.id === id); return e ? `Calendar · ${e.title}` : 'Calendar'; }
+    if (t === 't') return `Todo · ${TODOS[id] ? tText(TODOS[id]) : id}`;
+    if (t === 'dn') { const b = DNB.find(x => x.id === id); return `Daily Note · ${b ? b.label : ''}`; }
+    if (t === 'f') { const f = FEED.find(x => x.id === id); return f ? `Dashboard · ${f.title}` : 'Dashboard'; }
+    return key;
+  }
+  function howText(key, rich) {
+    const a = pj(key), B = x => rich ? `<b>${esc(x)}</b>` : x;
+    if (a.how === 'rule') return `Mapped by rule: ${B(RULES[a.r].when + ' → ' + pName(a.p))}`;
+    if (a.how === 'you') return a.over ? `Set by you · overrides rule: ${B(RULES[a.over].when + ' → ' + pName(RULES[a.over].p))}` : a.p === 'none' ? 'Unfiled by you' : `Set by you`;
+    if (a.how === 'ttn') return `Filed by Titanus · you confirmed it`;
+    if (a.how === 'sug') return `Unfiled · no rule matched · Titanus thinks: ${B(PROJ[a.sug].code)}`;
+    if (a.how === 'from') return `Follows its source: ${B(keyLabel(a.src))}`;
+    return 'Unfiled · no rule matched';
+  }
+  // The Badge. Clicking it opens the picker (manual override).
+  function badge(key, cls = '') {
+    const a = pj(key);
+    // a span with role=button, so it can sit inside other buttons (calendar blocks, rows)
+    if (a.how === 'sug') return `<span role="button" tabindex="0" class="pb sug ${cls}" data-p="${a.sug}" data-pk="${esc(key)}" title="Unfiled. Titanus thinks: ${PROJ[a.sug].code}. ${esc(a.why)} Click to confirm or change.">${PROJ[a.sug].code}</span>`;
+    return `<span role="button" tabindex="0" class="pb ${cls}" data-p="${a.p}" data-pk="${esc(key)}" title="${pName(a.p)} · ${esc(howText(key))}. Click to change.">${PROJ[a.p].code}</span>`;
+  }
+  const stamp = (p, cls = '') => `<span class="pb ${cls}" data-p="${p}">${PROJ[p].code}</span>`;
+  const sugHTML = key => {
+    const a = pj(key); if (a.how !== 'sug') return '';
+    return `<div class="psug"><span class="k">Titanus thinks: ${PROJ[a.sug].code}.</span><span>${esc(a.why)}</span><span class="bt"><button type="button" class="cf" data-pa="confirm" data-pk="${esc(key)}">Confirm</button><button type="button" data-pa="change" data-pk="${esc(key)}">Change</button></span></div>`;
+  };
+
+  function setProject(key, p) {
+    const old = pj(key);
+    if (old.how !== 'sug' && old.p === p) { closePicker(); return; }
+    closePicker();
+    act(() => {
+      const prev = PJ[key];
+      PJ[key] = { p, how: 'you' };
+      if (prev && prev.how === 'rule') PJ[key].over = prev.r;
+      if (prev && prev.over) PJ[key].over = prev.over;
+      return p === 'none' ? `Unfiled: <b>${esc(keyLabel(key))}</b>` : `Filed under <b>${pName(p)}</b>: ${esc(keyLabel(key))}`;
+    });
+  }
+  function confirmSug(key) {
+    const a = PJ[key]; if (!a || a.how !== 'sug') return;
+    closePicker();
+    act(() => { PJ[key] = { p: a.sug, how: 'ttn', was: a }; return `Filed under <b>${pName(a.sug)}</b>, as Titanus suggested.`; });
+  }
+  function setPf(p, keepPage) {
+    pf = p;
+    if (sec === 'project' && !keepPage) {
+      if (p === 'lt' || p === 'tl' || p === 'tx') page = p;
+      else { go('dashboard'); pf = p; renderAll(); return; }
+    }
+    renderAll();
+  }
+  function openPage(p) {
+    if (!PROJ[p] || p === 'none') return;
+    page = p; pf = p; closePicker();
+    go('project');
+  }
+  function closePage() {
+    page = null; pf = 'all';
+    if (sec === 'project') go('dashboard'); else renderAll();
+  }
+  // Project filter bar, shared by the Dashboard and every Section. counts: { all, lt, tl, tx, none }
+  function pfltHTML(counts, scope) {
+    const onPage = sec === 'project';
+    let h = `<span class="lb" title="Project">PRJ</span>`;
+    h += `<span class="pfg"><button type="button" class="pf${pf === 'all' ? ' on' : ''}" data-pf="all"><kbd class="kn">0</kbd>Everything<b>${pad(counts.all)}</b></button></span>`;
+    PKEYS.forEach((k, i) => {
+      const isP = k !== 'none';
+      h += `<span class="pfg"><button type="button" class="pf${pf === k ? ' on' : ''}${counts[k] ? '' : ' zero'}" data-pf="${k}" title="${isP ? `Only ${pName(k)} · Shift-click opens its page` : 'Only items with no Project'}"><kbd class="kn">${i + 1}</kbd>${stamp(k)}${pName(k)}<b>${pad(counts[k])}</b></button>${isP ? `<button type="button" class="pg${onPage && page === k ? ' on' : ''}" data-pg="${k}" title="Open the ${pName(k)} page">↗</button>` : ''}</span>`;
+    });
+    h += `<span class="sp"></span>`;
+    h += `<span class="px">${pxHTML()}</span>`;
+    if (onPage) h += `<button type="button" class="pgo" data-pgo="close">Dashboard<kbd>Esc</kbd></button>`;
+    else if (pf !== 'all' && pf !== 'none') h += `<button type="button" class="pgo" data-pg="${pf}">${pName(pf)} page ↗</button>`;
+    return h;
+  }
+  const pxHTML = () => pArm ? `<kbd>0</kbd>All <kbd>1</kbd>–<kbd>4</kbd>Project <kbd>O</kbd>Page` : `<kbd>P</kbd>then<kbd>1</kbd>–<kbd>4</kbd>`;
+  function paintArm() { $$('.pflt').forEach(b => { b.classList.toggle('arm', !!pArm); const px = $('.px', b); if (px) px.innerHTML = pxHTML(); }); }
+  function armP(on) {
+    clearTimeout(pArmT); pArm = on ? 1 : 0;
+    if (on) pArmT = setTimeout(() => { pArm = 0; paintArm(); }, 2400);
+    paintArm();
+  }
+  const countBy = (list, keyOf) => {
+    const c = { all: list.length, lt: 0, tl: 0, tx: 0, none: 0 };
+    list.forEach(x => { c[pj(keyOf(x)).p]++; });
+    return c;
+  };
 
   /* ------------------------------------------------------------------ */
   /* State helpers                                                       */
@@ -990,6 +1312,8 @@
   const evState = e => { const m = nowMin(), s = toMin(e.s), en = toMin(e.e); if (en <= m) return 'past'; if (s <= m) return 'live'; const nx = EVENTS.find(x => toMin(x.s) > m); return nx === e ? 'next' : 'later'; };
 
   const itSugOpen = f => !!(f.sug && TODOS[f.sug].sug === 'open');
+  const tKey = id => TODOS[id] && TODOS[id].lid ? 'i:' + TODOS[id].lid : 't:' + id;
+  const fKey = f => f.pk || (f.mail ? 'm:' + f.mail : f.ev ? 'e:' + f.ev : f.kind === 'sug' ? 't:' + f.sug : f.todo ? tKey(f.todo) : f.pr ? 'pr:' + f.pr : f.lid ? 'i:' + f.lid : 'f:' + f.id);
   const itTodo = f => {
     if (f.sug && TODOS[f.sug].sug === 'accepted') return f.sug;
     if (f.todo) return f.todo;
@@ -1030,12 +1354,14 @@
 
   /* Undoable actions: snapshot the whole in-memory state */
   function snap() {
-    return JSON.stringify({ TODOS, ISS, MAIL: MAIL.map(m => [m.id, m.b, !!m.arch, m.todo || null]), FEED: FEED.map(f => [f.id, !!f.cleared]), PRS: PRS.map(p => [p.id, !!p.reviewed, !!p.cleared]) });
+    return JSON.stringify({ PJ, TODOS, ISS, MAIL: MAIL.map(m => [m.id, m.b, !!m.arch, m.todo || null]), FEED: FEED.map(f => [f.id, !!f.cleared]), PRS: PRS.map(p => [p.id, !!p.reviewed, !!p.cleared]) });
   }
   function restore(s) {
     const d = JSON.parse(s);
     for (const k of Object.keys(TODOS)) if (!(k in d.TODOS)) delete TODOS[k];
     Object.assign(TODOS, d.TODOS); Object.assign(ISS, d.ISS);
+    for (const k of Object.keys(PJ)) if (!(k in d.PJ)) delete PJ[k];
+    Object.assign(PJ, d.PJ);
     d.MAIL.forEach(([id, b, arch, todo]) => { const m = mailById(id); m.b = b; m.arch = arch; m.todo = todo || undefined; });
     d.FEED.forEach(([id, c]) => { FEED.find(f => f.id === id).cleared = c; });
     d.PRS.forEach(([id, r, c]) => { const p = prById(id); p.reviewed = r; p.cleared = c; });
@@ -1064,7 +1390,7 @@
   function makeTodoFromMail(m) {
     if (m.sug && TODOS[m.sug].sug === 'open') return accept(m.sug);
     if (mailTodo(m)) { toast('That’s already a Todo.'); return; }
-    act(() => { const id = 't-' + m.id; TODOS[id] = { text: m.todoText, origin: 'email' }; TODO_ORDER.splice(TODO_ORDER.length - 1, 0, id); m.todo = id; return `New Todo: <b>${esc(m.todoText)}</b>`; });
+    act(() => { const id = 't-' + m.id; TODOS[id] = { text: m.todoText, origin: 'email' }; PJ['t:' + id] = { from: 'm:' + m.id }; TODO_ORDER.splice(TODO_ORDER.length - 1, 0, id); m.todo = id; return `New Todo: <b>${esc(m.todoText)}</b>`; });
   }
   const archiveMail = m => act(() => { m.arch = true; return `Archived: <b>${esc(m.subj)}</b>`; });
   const moveMail = (m, b) => act(() => { m.b = b; return `Moved to ${BUCKETS.find(x => x.k === b).name}.`; });
@@ -1075,19 +1401,33 @@
   let sec = 'dashboard';
   const tabsEl = $('#tabs');
   tabsEl.innerHTML = SECTIONS.map(s => `<button class="tab" type="button" data-sec="${s.id}" title="${s.label} · press ${s.n}"><span class="tn">${s.n}</span><span class="tlb">${s.label}</span><span class="tc" id="tc-${s.id}"></span></button>`).join('')
-    + `<span class="tsp"></span><span class="tk"><kbd>1</kbd>–<kbd>7</kbd> Sections</span>`
+    + `<span class="tsp"></span><span class="tpf" id="tpf" hidden></span><span class="tk"><kbd>1</kbd>–<kbd>7</kbd> Sections</span>`
     + `<button class="tbx" id="thmBtn" type="button" title="Switch light / dark"><svg viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="15"/><path d="M4.5 19.5 19.5 4.5V19.5Z" fill="currentColor"/></svg><span id="thmLbl">Drk</span></button>`
     + `<span class="tav" title="Seth">ST</span>`;
-  tabsEl.addEventListener('click', e => { const t = e.target.closest('.tab'); if (t) go(t.dataset.sec); });
+  tabsEl.addEventListener('click', e => {
+    if (e.target.closest('[data-pclose]')) { closePage(); return; }
+    if (e.target.closest('[data-pfclear]')) { setPf('all'); return; }
+    const t = e.target.closest('.tab'); if (t) go(t.dataset.sec);
+  });
 
   function go(id, target) {
-    if (!SECTIONS.some(s => s.id === id)) return;
+    if (id === 'project' && !page) id = 'dashboard';
+    if (id !== 'project' && !SECTIONS.some(s => s.id === id)) return;
+    if (id === 'dashboard' && sec === 'project') pf = 'all';
     const changed = id !== sec;
     sec = id;
-    $$('.view').forEach(v => v.classList.toggle('on', v.dataset.sec === id));
-    const s = SECTIONS.find(x => x.id === id);
-    $('#hSec').textContent = `Sec ${pad(s.n)} / ${s.label}`;
-    $('#hTitle').textContent = id === 'dashboard' ? 'Dashboard' : id === 'notes' ? 'Daily Notes' : s.label;
+    const view = id === 'project' ? 'dashboard' : id;
+    closePicker();
+    $$('.view').forEach(v => v.classList.toggle('on', v.dataset.sec === view));
+    if (id === 'project') { $('#hSec').textContent = `Sec 01 / Project ${PROJ[page].code}`; $('#hTitle').textContent = pName(page); }
+    else {
+      const s = SECTIONS.find(x => x.id === id);
+      $('#hSec').textContent = `Sec ${pad(s.n)} / ${s.label}`;
+      $('#hTitle').textContent = id === 'dashboard' ? 'Dashboard' : id === 'notes' ? 'Daily Notes' : s.label;
+    }
+    // A link into a Section that the Project filter would hide drops the filter, so the target is visible
+    if (target && pf !== 'all' && id === 'email' && !target.startsWith('b:') && mailById(target) && !inPf('m:' + target)) pf = 'all';
+    if (target && pf !== 'all' && id === 'calendar' && evById(target) && !inPf('e:' + target)) pf = 'all';
     if (id === 'notes') loadNotes();
     if (id === 'email' && target) {
       if (target.startsWith('b:')) { E.bucket = target.slice(2); E.sel = null; }
@@ -1098,22 +1438,33 @@
     renderAll();
     if (changed) scrollTo({ top: 0 });
     if (target) requestAnimationFrame(() => {
-      const el = $(`[data-flash="${CSS.escape(target)}"]`, $('#v-' + id));
+      const el = $(`[data-flash="${CSS.escape(target)}"]`, $('#v-' + view));
       if (el) { el.scrollIntoView({ block: 'center' }); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1900); }
     });
   }
 
+  const openTodosIn = () => Object.keys(TODOS).filter(id => tExists(TODOS[id]) && !tDone(TODOS[id]) && inPf(tKey(id))).length;
   function renderTabs() {
+    let pt = $('.ptab', tabsEl);
+    if (page) {
+      if (!pt) { pt = document.createElement('button'); pt.type = 'button'; pt.className = 'tab ptab'; pt.dataset.sec = 'project'; tabsEl.firstElementChild.after(pt); }
+      pt.title = `${pName(page)} · Project page`;
+      pt.innerHTML = `${stamp(page)}<span class="tlb">${pName(page)}</span><span class="px" data-pclose="1" title="Close the ${pName(page)} page">×</span>`;
+    } else if (pt) pt.remove();
     $$('.tab', tabsEl).forEach(t => t.classList.toggle('on', t.dataset.sec === sec));
-    const needs = FEED.filter(f => !itHidden(f) && !itDone(f) && f.band !== 'fyi').length;
+    const tpf = $('#tpf');
+    tpf.hidden = pf === 'all' || sec === 'project';
+    tabsEl.classList.toggle('scoped', !!page || pf !== 'all');
+    if (pf !== 'all') tpf.innerHTML = `<span class="tpl">Scoped to</span>${stamp(pf)}<span class="tpl">${pName(pf)}</span><button type="button" data-pfclear="1" title="Show everything (P then 0)">×</button>`;
+    const needs = FEED.filter(f => !itHidden(f) && !itDone(f) && f.band !== 'fyi' && inPf(fKey(f))).length;
     const set = (id, v, cls) => { const el = $('#tc-' + id); el.textContent = v; el.className = 'tc' + (cls ? ' ' + cls : ''); };
     set('dashboard', pad(needs));
     set('notes', '');
-    set('todos', pad(openTodos()));
-    set('linear', pad(Object.values(ISS).filter(i => i.status !== 'Done').length));
-    set('email', pad(MAIL.filter(m => m.b === 'reply' && !m.arch).length));
-    set('calendar', pad(EVENTS.filter(e => toMin(e.s) > nowMin()).length));
-    set('github', pad(PRS.filter(p => p.kind === 'review' && !p.reviewed && !p.cleared).length));
+    set('todos', pad(openTodosIn()));
+    set('linear', pad(Object.keys(ISS).filter(l => ISS[l].status !== 'Done' && inPf('i:' + l)).length));
+    set('email', pad(MAIL.filter(m => m.b === 'reply' && !m.arch && inPf('m:' + m.id)).length));
+    set('calendar', pad(EVENTS.filter(e => toMin(e.s) > nowMin() && inPf('e:' + e.id)).length));
+    set('github', pad(PRS.filter(p => p.kind === 'review' && !p.reviewed && !p.cleared && inPf('pr:' + p.id)).length));
   }
 
   /* ------------------------------------------------------------------ */
@@ -1121,7 +1472,7 @@
   /* ------------------------------------------------------------------ */
   let filter = 'all', selId = 'f1';
   const FILTERS = [['all', 'All'], ['calendar', 'Calendar'], ['todos', 'Todos'], ['email', 'Email'], ['linear', 'Linear'], ['github', 'GitHub'], ['notes', 'Notes'], ['titanus', 'Titanus']];
-  const visibleFeed = () => FEED.filter(f => !itHidden(f) && (filter === 'all' || itSecs(f).has(filter)));
+  const visibleFeed = () => FEED.filter(f => !itHidden(f) && (filter === 'all' || itSecs(f).has(filter)) && inPf(fKey(f)));
 
   function statusSvg(s) {
     if (s === 'Done') return '<svg class="st" viewBox="0 0 16 16"><rect class="f" x="1" y="1" width="14" height="14"/><path class="k" d="M4.4 8.1l2.4 2.4 4.8-5"/></svg>';
@@ -1158,6 +1509,8 @@
     h += `<button class="pri" type="button" data-act="open"><kbd>↵</kbd>Open in ${openLabel(f)}</button>`;
     h += `<button type="button" data-act="clear"><kbd>E</kbd>${f.kind === 'mail' ? 'Archive' : 'Clear'}</button>`;
     h += `<span class="note">${f.kind === 'mail' ? 'Archive also archives the email' : 'Clear hides it here. It stays in its Section.'}</span>`;
+    const k = fKey(f), a = pj(k);
+    h += `<span class="pjh">${a.how === 'sug' ? stamp(a.sug, 'sm sug') : stamp(a.p, 'sm')}<b>${a.how === 'sug' ? 'Unfiled' : pName(a.p)}</b>· ${howText(k, true)} · <kbd>B</kbd> to change</span>`;
     return h;
   }
   function itemHTML(f, rank) {
@@ -1168,12 +1521,15 @@
     let extra = '';
     if (f.quote) extra += `<div class="q"><small>Titanus · summary</small>${esc(f.quote)}</div>`;
     if (f.pbar) extra += `<div class="pbar">${Array.from({ length: 25 }, (_, i) => `<i class="${i < Math.round(f.pbar / 4) ? 'f' : ''}"></i>`).join('')}</div>`;
-    return `<div class="it${f.id === selId ? ' sel' : ''}${done ? ' done' : ''}" data-id="${f.id}" data-flash="${f.id}">
+    const pk = fKey(f);
+    return `<div class="it${f.id === selId ? ' sel' : ''}${done ? ' done' : ''}" data-id="${f.id}" data-flash="${f.id}" data-p="${pj(pk).p}">
       <span class="rk">${pad(rank)}</span>
       ${marker(f)}
+      <span class="pbc">${badge(pk)}</span>
       <div class="main">
         <div class="ttl">${f.pre ? `<span class="pre">${esc(f.pre)}</span>` : ''}${esc(itTitle(f))}</div>
         <div class="sub">${tags}<span class="why${f.ttn ? ' t' : ''}"${f.ttn ? ' title="Ranked here by Titanus"' : ''}>${esc(why)}</span></div>
+        ${sugHTML(pk)}
         ${extra}
       </div>
       <div class="meta${f.live ? ' live' : ''}"><b>${esc(meta[0])}</b><span>${esc(meta[1])}</span></div>
@@ -1189,21 +1545,62 @@
       const open = items.filter(f => !itDone(f)).length;
       h += `<section class="band ${b.k}${items.length ? '' : ' empty'}" id="band-${b.k}" data-flash="band-${b.k}">
         <div class="bh"><span class="bno">${b.no}</span><span class="nm">${b.name}</span><span class="sb">${b.live ? '<i class="led"></i>' : ''}${esc(b.sub())}</span><span class="ct">${b.k === 'fyi' ? `${pad(items.length)} <span>to know</span>` : `${pad(open)} <span>open</span>${items.length - open ? ` · ${pad(items.length - open)} <span>done</span>` : ''}`}</span></div>
-        ${items.length ? items.map(f => itemHTML(f, ++rank)).join('') : `<div class="bempty">${filter === 'all' ? 'Nothing here.' : 'Nothing from this Section in this band.'}</div>`}
+        ${items.length ? items.map(f => itemHTML(f, ++rank)).join('') : `<div class="bempty">${filter === 'all' && pf === 'all' ? 'Nothing here.' : pf !== 'all' && filter === 'all' ? `Nothing ${pf === 'none' ? 'Unfiled' : 'for ' + pName(pf)} in this band.` : 'Nothing from this Section in this band.'}</div>`}
       </section>`;
     });
     const cleared = FEED.filter(f => f.cleared).length;
     h += `<div class="fend"><span class="m">End · ${pad(rank)} ranked</span><span>${cleared ? `<b>${cleared} cleared</b> from the Dashboard today. <button type="button" data-act="unclear">Bring them back</button>` : 'That’s everything. The rest lives in its Section.'}</span><span class="m">DSH-2026-274</span></div>`;
     $('#feed').innerHTML = h;
     $('#flt').innerHTML = `<span class="lb">SEC</span>` + FILTERS.map(([k, l]) => {
-      const n = FEED.filter(f => !itHidden(f) && (k === 'all' || itSecs(f).has(k))).length;
+      const n = FEED.filter(f => !itHidden(f) && (k === 'all' || itSecs(f).has(k)) && inPf(fKey(f))).length;
       return `<button type="button" class="${filter === k ? 'on' : ''}" data-f="${k}">${k === 'titanus' ? '<i class="sq"></i>' : ''}${l}<b>${pad(n)}</b></button>`;
     }).join('') + `<span class="fx">Merged from 6 Sections · Titanus ranks</span>`;
-    const total = FEED.filter(f => !itHidden(f)).length;
-    const nowN = FEED.filter(f => f.band === 'now' && !itHidden(f) && !itDone(f)).length;
-    $('#feedDt').innerHTML = `Thursday 1 October 2026 · <b>${total} items</b>, ${nowN} of them before 13:00`;
+    const pool = FEED.filter(f => !itHidden(f) && (filter === 'all' || itSecs(f).has(filter)));
+    $('#pflt').innerHTML = pfltHTML(countBy(pool, fKey), 'dashboard');
+    $('#pflt').classList.toggle('arm', !!pArm);
+    const scoped = FEED.filter(f => !itHidden(f) && inPf(fKey(f)));
+    const total = scoped.length;
+    const nowN = scoped.filter(f => f.band === 'now' && !itDone(f)).length;
+    const onPage = sec === 'project';
+    $('#feedEb').textContent = onPage ? 'Project' : 'Dashboard';
+    $('#feedPn').textContent = onPage ? `PRJ-${PROJ[page].code}-274` : 'DSH-2026-274';
+    $('#feedSrcCount').textContent = onPage ? `${pName(page)} · across all Sections` : '6 Sections merged';
+    const h1 = $('#feedH1');
+    h1.classList.toggle('pj', onPage);
+    h1.innerHTML = onPage ? `${stamp(page, 'lg')}<span>${pName(page)}</span>` : 'What needs you';
+    if (onPage) {
+      const nRules = Object.values(RULES).filter(r => r.p === page).length;
+      $('#feedDt').innerHTML = `Project · <b>${total} item${total === 1 ? '' : 's'}</b> ranked for you · ${nowN ? `${nowN} before 13:00 · ` : ''}${nRules} rule${nRules === 1 ? '' : 's'} map into it`;
+      const S = pjSectionCounts(page);
+      $('#pjSecs').innerHTML = `<div class="pj-secs"><span class="lb" title="This Project in each Section">IN</span>${S.map(([id, label, n, w]) => `<button type="button" class="${n ? '' : 'z'}" data-go="${id}" title="Open ${label}, scoped to ${pName(page)}"><span class="w">${label}<i> · ${w}</i></span><span class="n">${pad(n)}</span></button>`).join('')}</div>`;
+    } else {
+      $('#feedDt').innerHTML = `Thursday 1 October 2026 · <b>${total} items</b>${pf !== 'all' ? ` ${pf === 'none' ? 'Unfiled' : 'in ' + pName(pf)}` : ''}, ${nowN} of them before 13:00`;
+      $('#pjSecs').innerHTML = '';
+    }
+  }
+  function pjSectionCounts(p) {
+    const is = k => pj(k).p === p;
+    return [
+      ['todos', 'Todos', Object.keys(TODOS).filter(id => tExists(TODOS[id]) && !tDone(TODOS[id]) && is(tKey(id))).length, 'open'],
+      ['email', 'Email', MAIL.filter(m => !m.arch && is('m:' + m.id)).length, 'messages'],
+      ['linear', 'Linear', Object.keys(ISS).filter(l => ISS[l].status !== 'Done' && is('i:' + l)).length, 'open'],
+      ['github', 'GitHub', PRS.filter(x => !x.cleared && is('pr:' + x.id)).length, 'PRs'],
+      ['calendar', 'Calendar', EVENTS.filter(e => is('e:' + e.id)).length + TOMORROW.filter(t => is('e:' + t.id)).length, '2 days'],
+      ['notes', 'Notes', DNB.filter(b => is('dn:' + b.id)).length, 'blocks'],
+    ];
   }
   $('#flt').addEventListener('click', e => { const b = e.target.closest('button[data-f]'); if (!b) return; filter = b.dataset.f; renderFeed(); });
+  $('#pjSecs').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+  // Every Project filter bar (Dashboard and Sections) behaves the same
+  document.addEventListener('click', e => {
+    const bar = e.target.closest('.pflt'); if (!bar) return;
+    const pg = e.target.closest('[data-pg]'); if (pg) { openPage(pg.dataset.pg); return; }
+    if (e.target.closest('[data-pgo=close]')) { closePage(); return; }
+    const b = e.target.closest('[data-pf]'); if (!b) return;
+    const k = b.dataset.pf;
+    if (e.shiftKey && PROJ[k] && k !== 'none') { openPage(k); return; }
+    setPf(k);
+  });
 
   const feedEl = $('#feed');
   feedEl.addEventListener('click', e => {
@@ -1246,36 +1643,37 @@
     i = Math.max(0, Math.min(vis.length - 1, i + d));
     selId = vis[i].id; renderFeed();
     const el = $(`.it[data-id="${selId}"]`, feedEl);
-    if (el) { const r = el.getBoundingClientRect(); if (r.top < 260 || r.bottom > innerHeight - 90) el.scrollIntoView({ block: d > 0 ? 'end' : 'start', behavior: 'smooth' }); }
+    if (el) { const r = el.getBoundingClientRect(); if (r.top < 296 || r.bottom > innerHeight - 90) el.scrollIntoView({ block: d > 0 ? 'end' : 'start', behavior: 'smooth' }); }
   }
 
   $('#meter').addEventListener('click', e => {
     const b = e.target.closest('.mc'); if (!b) return;
     filter = 'all';
-    if (sec !== 'dashboard') go('dashboard');
+    if (sec !== 'dashboard' && sec !== 'project') go('dashboard');
     renderFeed();
     const first = visibleFeed().find(f => f.band === b.dataset.band);
     if (first) selId = first.id;
     renderFeed();
     const el = $('#band-' + b.dataset.band);
-    scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + scrollY - 172 - 6), behavior: 'smooth' });
+    scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + scrollY - 208 - 6), behavior: 'smooth' });
   });
   function renderMeter() {
     $('#meter').innerHTML = BANDS.map(b => {
-      const n = FEED.filter(f => f.band === b.k && !itHidden(f) && !itDone(f)).length;
+      const n = FEED.filter(f => f.band === b.k && !itHidden(f) && !itDone(f) && inPf(fKey(f))).length;
       return `<button class="mc${b.live ? ' live' : ''}${n ? '' : ' zero'}" type="button" data-band="${b.k}" title="${b.name}: ${n} open"><span class="w">${b.short}</span><span class="n">${pad(n)}</span></button>`;
     }).join('');
   }
 
   /* Side column: schedule, Titanus queue, Daily Note entry point */
   function renderSide() {
+    if (sec === 'project') return renderPageSide();
     const H0 = 9, H1 = 18, hr = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--hr')) || 22;
     let tl = '';
     const nmY = (nowMin() - H0 * 60) / 60 * hr;
     for (let h = H0; h < H1; h++) { const y = (h - H0) * hr; tl += `<div class="hl" style="top:${y}px">${Math.abs(y - nmY) < 13 ? '' : `<span>${pad(h)}:00</span>`}</div>`; }
     EVENTS.forEach(e => {
       const top = (toMin(e.s) - H0 * 60) / 60 * hr, ht = Math.max(17, (toMin(e.e) - toMin(e.s)) / 60 * hr);
-      tl += `<div class="ev ${evState(e)}" style="top:${top}px;height:${ht}px" data-ev="${e.id}" title="${esc(e.title)} · ${e.s}–${e.e}"><em>${e.s}</em>${esc(e.title)}</div>`;
+      tl += `<div class="ev ${evState(e)}${inPf('e:' + e.id) ? '' : ' pdim'}" style="top:${top}px;height:${ht}px" data-ev="${e.id}" title="${esc(e.title)} · ${e.s}–${e.e} · ${pName(pj('e:' + e.id).p)}">${badge('e:' + e.id, 'sm')}<em>${e.s}</em>${esc(e.title)}</div>`;
     });
     const nm = nowMin();
     if (nm >= H0 * 60 && nm < H1 * 60) tl += `<div class="now" style="top:${(nm - H0 * 60) / 60 * hr - 1}px"><span>${hhmm(now())}</span></div>`;
@@ -1288,7 +1686,7 @@
       <div class="card sched">
         <div class="lt"><span>Today · Thu 01</span><button type="button" data-go="calendar">CAL-01 ↗</button></div>
         <div class="tl" style="height:${(H1 - H0) * hr}px">${tl}</div>
-        <div class="tmr"><div class="h">Tomorrow · Fri 02</div>${TOMORROW.map(t => `<div class="r"><em>${t.s}</em>${esc(t.title)}</div>`).join('')}</div>
+        <div class="tmr"><div class="h">Tomorrow · Fri 02</div>${TOMORROW.map(t => `<div class="r${inPf('e:' + t.id) ? '' : ' pdim'}">${badge('e:' + t.id, 'sm')}<em>${t.s}</em>${esc(t.title)}</div>`).join('')}</div>
       </div>
       <div class="card tq">
         <div class="lt"><span><i class="led"></i>Titanus · Queue</span><span class="lt-n">TTN-Q · ${pad(n)}</span></div>
@@ -1299,10 +1697,44 @@
       <div class="card dn">
         <div class="lt"><span>Daily Note · today</span><span class="lt-n">DN-2026-274</span></div>
         <div class="dn-b"><div class="wd">Thursday</div><div class="d2">1 October 2026</div>
-          <div class="ex"><b>Morning</b>Slept badly but the head is clear. Big rocks today: get the Commander map moving, unblock Priya on the payments retry work, and decide on the Acme Payments contract before Friday.</div></div>
+          <div class="ex">${badge('dn:d-morning', 'sm')}<b style="margin-left:7px">Morning</b>Slept badly but the head is clear. Big rocks today: get the Commander map moving, unblock Priya on the payments retry work, and decide on the Acme Payments contract before Friday.</div></div>
         <dl><div><dt>Meetings</dt><dd>03</dd></div><div><dt>Open Todos</dt><dd>03</dd></div><div class="t"><dt>From Titanus</dt><dd>${pad(dnSug)}</dd></div></dl>
         <button class="dn-open" type="button" data-go="notes"><span>Open the Daily Note</span><kbd>2</kbd></button>
       </div>`;
+  }
+  /* Project page side column: its schedule, Titanus's suggestions, mapping rules, Daily Note mentions */
+  function renderPageSide() {
+    const p = page, is = k => pj(k).p === p;
+    const today = EVENTS.filter(e => is('e:' + e.id)), tmr = TOMORROW.filter(t => is('e:' + t.id));
+    const evRow = e => { const st = evState(e); return `<button type="button" class="r${st === 'past' ? ' past' : ''}" data-ev="${e.id}"><em>${e.s}</em><span>${esc(e.title)}</span><span class="s${st === 'next' ? ' nx' : ''}">${st === 'past' ? 'Done' : st === 'next' ? 'Next · ' + dur(toMin(e.s) - nowMin()) : st === 'live' ? 'Live' : ''}</span></button>`; };
+    const sched = `<div class="card pjs">
+        <div class="lt"><span>${stamp(p, 'sm')}${pName(p)} · Schedule</span><button type="button" data-go="calendar">CAL ↗</button></div>
+        <div class="h">Today · Thu 01</div>${today.map(evRow).join('') || '<div class="e">Nothing on the calendar today.</div>'}
+        <div class="h">Tomorrow · Fri 02</div>${tmr.map(t => `<button type="button" class="r" data-go="calendar"><em>${t.s}</em><span>${esc(t.title)}</span><span class="s">${esc(pj('e:' + t.id).how === 'rule' ? 'By rule' : '')}</span></button>`).join('') || '<div class="e">Nothing tomorrow.</div>'}
+      </div>`;
+    const sugs = Object.keys(PJ).filter(k => PJ[k].how === 'sug' && PJ[k].sug === p);
+    const sg = sugs.length ? `<div class="card tq pj-sg">
+        <div class="lt"><span><i class="led"></i>Titanus · thinks these are ${PROJ[p].code}</span><span class="lt-n">${pad(sugs.length)}</span></div>
+        ${sugs.map(k => `<div class="sgi"><b>${badge(k, 'sm')}${esc(keyLabel(k))}</b>${esc(k.startsWith('m:') ? mailById(k.slice(2)).subj : '')}${sugHTML(k)}</div>`).join('')}
+      </div>` : '';
+    // every item key across the Sections, to count how each one got here
+    const keys = [...new Set([...FEED.filter(f => !itHidden(f)).map(fKey), ...MAIL.filter(m => !m.arch).map(m => 'm:' + m.id), ...Object.keys(ISS).map(l => 'i:' + l), ...PRS.map(x => 'pr:' + x.id),
+      ...EVENTS.map(e => 'e:' + e.id), ...TOMORROW.map(t => 'e:' + t.id), ...Object.keys(TODOS).filter(id => tExists(TODOS[id])).map(tKey), ...DNB.map(b => 'dn:' + b.id)])].filter(is);
+    const by = h => keys.filter(k => pj(k).how === h).length;
+    const rules = Object.entries(RULES).filter(([, r]) => r.p === p);
+    const ru = `<div class="card rules">
+        <div class="lt"><span>Mapping rules</span><span class="lt-n">${pad(rules.length)} · ${PROJ[p].code}</span></div>
+        ${rules.map(([id, r]) => { const n = keys.filter(k => pj(k).r === id).length; return `<div class="ru">${tagHTML([r.src, ''])}<span>${esc(r.when)} → ${stamp(p, 'sm')}</span><span class="n">${n} item${n === 1 ? '' : 's'}</span></div>`; }).join('') || '<div class="pjs"><div class="e">No rules yet.</div></div>'}
+        <dl class="kv"><div><dt>By rule</dt><dd>${pad(by('rule'))}</dd></div><div><dt>Set by you</dt><dd>${pad(by('you'))}</dd></div><div><dt>Follows its source</dt><dd>${pad(by('from'))}</dd></div><div class="t"><dt>Filed by Titanus</dt><dd>${pad(by('ttn'))}</dd></div></dl>
+        <div class="ft">Rules are set once per Source. Editing them comes later.</div>
+      </div>`;
+    const dns = DNB.filter(b => is('dn:' + b.id));
+    const dn = `<div class="card">
+        <div class="lt"><span>Daily Note · mentions</span><span class="lt-n">${pad(dns.length)}</span></div>
+        ${dns.map(b => `<div class="dnm" data-go="notes"><em>${badge('dn:' + b.id, 'sm')}${esc(b.label)}</em>${esc(b.text)}</div>`).join('') || `<div class="pjs"><div class="e">Nothing in today’s Daily Note is filed under ${pName(p)}.</div></div>`}
+        <button class="dn-open" type="button" data-go="notes"><span>Open the Daily Note</span><kbd>2</kbd></button>
+      </div>`;
+    $('#side').innerHTML = sched + sg + ru + dn;
   }
   $('#side').addEventListener('click', e => {
     const g = e.target.closest('[data-go]'); if (g) return go(g.dataset.go);
@@ -1322,10 +1754,11 @@
     else if (t.origin === 'agent') pill = `<span class="pill agent"><i class="sq"></i>Titanus / ${t.src === 'email' ? 'from email' : 'from note'}</span>`;
     else if (t.origin === 'email') pill = `<span class="pill">Email</span>`;
     else pill = `<span class="pill">${t.due ? esc(t.due) : 'Manual'}</span>`;
-    return `<div class="td${done ? ' done' : ''}${sug ? ' sugg' : ''}" data-t="${id}" data-flash="${id}"><span class="rk">${pad(n, 3)}</span>${ck}${t.lid ? `<span class="lid">${t.lid}</span>` : ''}<span class="tx">${esc(tText(t))}${sug ? `<span class="why2">${esc(t.why)}</span>` : ''}</span>${pill}${sug ? '<span class="sa"><button class="acc" type="button" data-act="tacc">Accept</button><button type="button" data-act="tdis">Dismiss</button></span>' : ''}</div>`;
+    return `<div class="td${done ? ' done' : ''}${sug ? ' sugg' : ''}" data-t="${id}" data-flash="${id}" data-p="${pj(tKey(id)).p}"><span class="rk">${pad(n, 3)}</span>${ck}<span class="pbc" style="height:30px;margin-left:6px">${badge(tKey(id))}</span>${t.lid ? `<span class="lid">${t.lid}</span>` : ''}<span class="tx">${esc(tText(t))}${sug ? `<span class="why2">${esc(t.why)}</span>` : ''}</span>${pill}${sug ? '<span class="sa"><button class="acc" type="button" data-act="tacc">Accept</button><button type="button" data-act="tdis">Dismiss</button></span>' : ''}</div>`;
   }
   function renderTodos() {
-    const ids = TODO_ORDER.filter(id => TODOS[id] && tExists(TODOS[id]));
+    const all = TODO_ORDER.filter(id => TODOS[id] && tExists(TODOS[id]));
+    const ids = all.filter(id => inPf(tKey(id)));
     const groups = [
       ['G1', 'Suggested by Titanus', ids.filter(id => TODOS[id].sug === 'open')],
       ['G2', 'Linear', ids.filter(id => TODOS[id].lid && !tDone(TODOS[id]))],
@@ -1334,10 +1767,11 @@
     ];
     let n = 0;
     $('#todosSheet').innerHTML = `<div class="sh-strip"><span class="eb">Todos</span><span class="pn">TDO-2026-274</span><span>From Linear, Email, the Daily Note and you</span><span class="sp"></span><span>Sheet 03 / 07</span></div>
-      <div class="sec-h"><div><h1>Todos</h1><div class="dt"><b>${openTodos()} open</b> · ${groups[0][2].length} suggested by Titanus · ticks sync to Linear</div></div></div>`
+      <div class="sec-h"><div><h1>Todos</h1><div class="dt"><b>${openTodosIn()} open</b>${pf !== 'all' ? (pf === 'none' ? ' Unfiled' : ' in ' + pName(pf)) + ` (of ${openTodos()})` : ''} · ${groups[0][2].length} suggested by Titanus · ticks sync to Linear</div></div></div>
+      <div class="pflt" data-scope="todos">${pfltHTML(countBy(all.filter(id => !tDone(TODOS[id])), tKey), 'todos')}</div>`
       + groups.map(([no, name, list]) => `<section class="grp"><div class="gh"><span class="bno">${no}</span>${name}<span class="ct">${pad(list.length)}</span></div>
         ${list.map(id => todoRow(id, ++n)).join('') || '<div class="bempty">Nothing here.</div>'}
-        ${no === 'G3' ? '<label class="addrow"><span class="box"></span><input id="addTodo" type="text" placeholder="New Todo…" autocomplete="off"><kbd>↵</kbd></label>' : ''}</section>`).join('')
+        ${no === 'G3' ? `<label class="addrow"><span class="box"></span><input id="addTodo" type="text" placeholder="${pf !== 'all' && pf !== 'none' ? `New Todo in ${pName(pf)}…` : 'New Todo…'}" autocomplete="off">${pf !== 'all' && pf !== 'none' ? stamp(pf) : ''}<kbd>↵</kbd></label>` : ''}</section>`).join('')
       + '<div style="height:120px"></div>';
   }
   $('#todosSheet').addEventListener('click', e => {
@@ -1350,7 +1784,7 @@
   $('#todosSheet').addEventListener('keydown', e => {
     if (e.target.id !== 'addTodo' || e.key !== 'Enter') return;
     const v = e.target.value.trim(); if (!v) return;
-    act(() => { const id = 't' + Date.now(); TODOS[id] = { text: v, origin: 'manual' }; TODO_ORDER.push(id); return `New Todo: <b>${esc(v)}</b>`; });
+    act(() => { const id = 't' + Date.now(); TODOS[id] = { text: v, origin: 'manual' }; if (pf !== 'all' && pf !== 'none') PJ['t:' + id] = YOU(pf); TODO_ORDER.push(id); return `New Todo: <b>${esc(v)}</b>${pf !== 'all' && pf !== 'none' ? ' in ' + pName(pf) : ''}`; });
     requestAnimationFrame(() => { const i = $('#addTodo'); if (i) i.focus(); });
   });
 
@@ -1362,14 +1796,16 @@
     const card = lid => {
       const i = ISS[lid], pr = i.pr ? prById(i.pr) : null, d = i.status === 'Done';
       const tag = pr ? tagHTML(['github', `${pr.repo} #${pr.n}`, pr.ci === 'failing' ? 'fail' : '']) : '';
-      const nt = lid === 'ENG-412' ? '<div class="nt t">Longer than these usually take. Priya might be stuck.</div>' : lid === 'ENG-421' ? '<div class="nt">The rate-limiter PR. It’s almost done.</div>' : '';
-      return `<div class="lc${d ? ' done' : ''}" data-flash="${lid}"><div class="l1"><button type="button" data-lid="${lid}" title="${d ? 'Reopen' : 'Mark Done'}">${statusSvg(i.status)}</button>${lid}${i.note && !d ? `<span style="margin-left:auto">${esc(i.note.replace('In Progress for ', ''))}</span>` : ''}</div><div class="l2">${esc(i.title)}</div>${tag ? `<div class="l3">${tag}</div>` : ''}${d ? '' : nt}</div>`;
+      const nt = lid === 'ENG-412' ? '<div class="nt t">Longer than these usually take. Priya might be stuck.</div>' : lid === 'ENG-421' ? '<div class="nt">The rate-limiter PR. It’s almost done.</div>' : lid === 'TAC-14' ? '<div class="nt t">Board prep is tomorrow at ten. Marcus will ask.</div>' : lid === 'LT-88' ? '<div class="nt">Longtail workspace · Jo’s feedback is about this.</div>' : '';
+      return `<div class="lc${d ? ' done' : ''}" data-flash="${lid}" data-p="${pj('i:' + lid).p}"><div class="l1"><button type="button" data-lid="${lid}" title="${d ? 'Reopen' : 'Mark Done'}">${statusSvg(i.status)}</button>${badge('i:' + lid)}${lid}${i.note && !d ? `<span style="margin-left:auto">${esc(i.note.replace('In Progress for ', ''))}</span>` : ''}</div><div class="l2">${esc(i.title)}</div>${tag ? `<div class="l3">${tag}</div>` : ''}${d ? '' : nt}</div>`;
     };
     const filled = 31;
-    $('#linearSheet').innerHTML = `<div class="sh-strip"><span class="eb">Linear</span><span class="pn">LIN-2026-274</span><span>Northwind workspace · assigned to you</span><span class="sp"></span><span>Sheet 04 / 07</span></div>
-      <div class="cyc"><div class="cn">Cycle 41</div><div class="cb">${Array.from({ length: 50 }, (_, i) => `<i class="${i < filled ? 'f' : ''}"></i>`).join('')}</div><div class="cm"><b>62%</b> complete<br>Ends Tuesday 06 Oct</div></div>
+    const all = Object.keys(ISS);
+    $('#linearSheet').innerHTML = `<div class="sh-strip"><span class="eb">Linear</span><span class="pn">LIN-2026-274</span><span>Northwind and Longtail workspaces · assigned to you</span><span class="sp"></span><span>Sheet 04 / 07</span></div>
+      <div class="pflt" data-scope="linear">${pfltHTML(countBy(all.filter(l => ISS[l].status !== 'Done'), l => 'i:' + l), 'linear')}</div>
+      <div class="cyc"><div class="cn">Cycle 41 <span style="font:600 9.5px/1 var(--mono);letter-spacing:.12em;color:var(--muted);vertical-align:middle;margin-left:6px">ENG</span></div><div class="cb">${Array.from({ length: 50 }, (_, i) => `<i class="${i < filled ? 'f' : ''}"></i>`).join('')}</div><div class="cm"><b>62%</b> complete<br>Ends Tuesday 06 Oct</div></div>
       <div class="board">${cols.map(c => {
-        const list = Object.keys(ISS).filter(l => ISS[l].status === c);
+        const list = all.filter(l => ISS[l].status === c && inPf('i:' + l));
         return `<div class="col${c === 'Done' ? ' done-col' : ''}"><div class="col-h">${statusSvg(c)}${c}<span class="ct">${pad(list.length)}</span></div>${list.map(card).join('') || `<div class="emp">${c === 'Done' ? 'Tick an issue and it lands here.' : 'Nothing here.'}</div>`}</div>`;
       }).join('')}</div>`;
   }
@@ -1387,8 +1823,9 @@
   /* Email Section (built in full)                                       */
   /* ------------------------------------------------------------------ */
   const E = { acct: 'all', bucket: 'reply', sel: 'm-dana', triage: false, tq: [], ti: 0, log: [] };
-  const listFor = (b, acct = E.acct) => MAIL.filter(m => !m.arch && m.b === b && (acct === 'all' || m.a === acct));
-  const extraFor = (b, acct = E.acct) => { const x = EXTRA[b] || {}; return acct === 'all' ? Object.values(x).reduce((a, c) => a + c, 0) : (x[acct] || 0); };
+  const listFor = (b, acct = E.acct, any) => MAIL.filter(m => !m.arch && m.b === b && (acct === 'all' || m.a === acct) && (any || inPf('m:' + m.id)));
+  // Older messages not loaded in this prototype are all Unfiled (newsletters, receipts, notifications)
+  const extraFor = (b, acct = E.acct) => { if (pf !== 'all' && pf !== 'none') return 0; const x = EXTRA[b] || {}; return acct === 'all' ? Object.values(x).reduce((a, c) => a + c, 0) : (x[acct] || 0); };
   const countFor = (b, acct) => listFor(b, acct).length + extraFor(b, acct);
 
   function readerHTML(m) {
@@ -1403,9 +1840,13 @@
         <span class="rid">${m.no} · ${ACCTS[m.a].name}</span></div>
       <div class="rd-in">
         <h2 class="rd-subj">${esc(m.subj)}</h2>
-        <dl class="rd-hd"><div><dt>From</dt><dd>${esc(m.from)}</dd></div><div><dt>To</dt><dd>${esc(m.to || 'You · ' + ACCTS[m.a].name)}</dd></div><div><dt>Account</dt><dd>${ACCTS[m.a].name} · ${ACCTS[m.a].kind}</dd></div><div><dt>Received</dt><dd>${esc(m.at)}</dd></div><div><dt>Bucket</dt><dd>${BUCKETS.find(b => b.k === m.b).name}</dd></div></dl>
+        <dl class="rd-hd"><div><dt>From</dt><dd>${esc(m.from)}</dd></div><div><dt>To</dt><dd>${esc(m.to || 'You · ' + ACCTS[m.a].name)}</dd></div><div><dt>Account</dt><dd>${ACCTS[m.a].name} · ${ACCTS[m.a].kind}</dd></div><div><dt>Received</dt><dd>${esc(m.at)}</dd></div><div><dt>Bucket</dt><dd>${BUCKETS.find(b => b.k === m.b).name}</dd></div>
+          <div><dt>Project</dt><dd style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">${badge('m:' + m.id)}<span>${pj('m:' + m.id).how === 'sug' ? 'Unfiled' : pName(pj('m:' + m.id).p)}</span><span style="color:var(--muted);font-weight:500">${pj('m:' + m.id).how === 'sug' ? 'Titanus has a suggestion below' : esc(howText('m:' + m.id))}</span></dd></div></dl>
         <div class="rd-body">${m.body.map(p => `<p>${esc(p)}</p>`).join('')}</div>
         ${m.att ? `<span class="att"><i></i>${esc(m.att)}</span>` : ''}
+        ${pj('m:' + m.id).how === 'sug' ? (a => `<div class="ac"><div class="ac-head"><span class="ac-tag">T-03</span><span>Titanus thinks</span><span class="ac-src">Project</span></div>
+          <div class="ac-body"><div class="ac-todo">${stamp(a.sug, 'sug')}<span>${pName(a.sug)}</span></div><div class="ac-why" style="margin-left:35px">Titanus thinks: ${PROJ[a.sug].code}. ${esc(a.why)}</div></div>
+          <div class="ac-actions"><button class="ac-accept" type="button" data-pa="confirm" data-pk="m:${m.id}">Confirm</button><button class="ac-dismiss" type="button" data-pa="change" data-pk="m:${m.id}">Change</button></div></div>`)(pj('m:' + m.id)) : ''}
         ${sug ? `<div class="ac"><div class="ac-head"><span class="ac-tag">T-02</span><span>Titanus noticed</span><span class="ac-src">from email</span></div>
           <div class="ac-body"><div class="ac-todo"><span class="bx"></span><span>${esc(sug.text)}</span></div><div class="ac-why">${esc(sug.why)}</div></div>
           <div class="ac-actions"><button class="ac-accept" type="button" data-ea="sacc">Accept</button><button class="ac-dismiss" type="button" data-ea="sdis">Dismiss</button></div></div>`
@@ -1433,7 +1874,7 @@
         <button type="button" data-ea="t-skip"><kbd>S</kbd><span class="l">Skip for now</span></button>
       </div>
       <div class="tri-card" data-flash="${cur.id}">
-        <div class="tc-h"><span class="pn">${cur.no}</span><span>${ACCTS[cur.a].name}</span><span>${esc(cur.age)}</span><span>${bname}</span></div>
+        <div class="tc-h"><span class="pn">${cur.no}</span><span style="gap:8px">${badge('m:' + cur.id)}${pj('m:' + cur.id).how === 'sug' ? 'Titanus thinks ' + PROJ[pj('m:' + cur.id).sug].code : pName(pj('m:' + cur.id).p)}</span><span>${ACCTS[cur.a].name}</span><span>${esc(cur.age)}</span><span>${bname}</span></div>
         <div class="tc-b"><div class="fr">${esc(cur.from)}</div><h2>${esc(cur.subj)}</h2><div class="bd">${cur.body.map(p => `<p>${esc(p)}</p>`).join('')}</div></div>
       </div>
       ${log ? `<div class="tri-log">${log}</div>` : ''}
@@ -1448,19 +1889,20 @@
     let body;
     if (E.triage) body = triageHTML();
     else body = `<div class="ebody"><div class="elist"><div class="el-h"><span>${bname} · ${pad(countFor(E.bucket))}</span><span>Newest first · J K</span></div>
-        ${list.map((m, i) => `<div class="em${m.id === E.sel ? ' sel' : ''}" data-m="${m.id}" data-flash="${m.id}"><span class="rk">${pad(i + 1)}</span>
-          <div class="r1"><span class="fr">${esc(m.from)}</span><span class="ag">${esc(m.age)}</span></div>
+        ${list.map((m, i) => `<div class="em${m.id === E.sel ? ' sel' : ''}" data-m="${m.id}" data-flash="${m.id}" data-p="${pj('m:' + m.id).p}"><span class="rk">${pad(i + 1)}</span>
+          <div class="r1">${badge('m:' + m.id)}<span class="fr">${esc(m.from)}</span><span class="ag">${esc(m.age)}</span></div>
           <div class="sj">${esc(m.subj)}</div>
-          <div class="r3"><span class="tg"><b>${ACCTS[m.a].name}</b></span>${m.sug && TODOS[m.sug].sug === 'open' ? '<span class="tg" data-s="titanus"><b>Ttn</b>Suggests a Todo</span>' : ''}${mailTodo(m) ? '<span class="tg" data-s="todos"><b>Tdo</b>Todo</span>' : ''}<span class="sn">${esc(m.body.find(p => !/^(Hi|Hello)/.test(p)) || m.body[0])}</span></div></div>`).join('')
-        || `<div class="el-empty">${bname} is clear${E.acct === 'all' ? '' : ' for ' + ACCTS[E.acct].name}.</div>`}
+          <div class="r3"><span class="tg"><b>${ACCTS[m.a].name}</b></span>${pj('m:' + m.id).how === 'sug' ? `<span class="tg" data-s="titanus"><b>Ttn</b>Thinks ${PROJ[pj('m:' + m.id).sug].code}</span>` : ''}${m.sug && TODOS[m.sug].sug === 'open' ? '<span class="tg" data-s="titanus"><b>Ttn</b>Suggests a Todo</span>' : ''}${mailTodo(m) ? '<span class="tg" data-s="todos"><b>Tdo</b>Todo</span>' : ''}<span class="sn">${esc(m.body.find(p => !/^(Hi|Hello)\b|^\w+,$/.test(p)) || m.body[0])}</span></div></div>`).join('')
+        || `<div class="el-empty">${bname} is clear${E.acct === 'all' ? '' : ' for ' + ACCTS[E.acct].name}${pf === 'all' ? '' : pf === 'none' ? ' (Unfiled)' : ' in ' + pName(pf)}.</div>`}
         ${extra ? `<div class="el-more">+ ${extra} older in ${bname}. Not loaded in this prototype.</div>` : ''}</div>
         <div class="reader">${readerHTML(E.sel ? mailById(E.sel) : null)}</div></div>`;
     $('#emailSheet').innerHTML = `<div class="sh-strip"><span class="eb">Email</span><span class="pn">EML-2026-274</span><span>3 Accounts · 4 Buckets</span><span class="sp"></span><span>Sheet 05 / 07</span></div>
       <div class="ebar"><span class="lb">ACCT</span>${accts.map(([k, n, kind]) => {
-        const c = k === 'all' ? listFor('reply', 'all').length : listFor('reply', k).length;
+        const c = listFor('reply', k).length;
         return `<button class="acct${E.acct === k ? ' on' : ''}" type="button" data-acct="${k}"><span class="a1">${n}</span><span class="a2">${kind} · <b>${c}</b> need reply</span></button>`;
       }).join('')}<span class="sp"></span><span class="proc"><i class="led"></i>Last pass 11:36 · 47 sorted</span>
         <button class="tri-tg${E.triage ? ' on' : ''}" type="button" data-ea="tri" aria-pressed="${E.triage}"><span class="sw"><i></i></span>Triage<kbd>T</kbd></button></div>
+      <div class="pflt" data-scope="email">${pfltHTML((c => { const x = EXTRA[E.bucket] || {}, ex = E.acct === 'all' ? Object.values(x).reduce((a, v) => a + v, 0) : (x[E.acct] || 0); c.all += ex; c.none += ex; return c; })(countBy(listFor(E.bucket, E.acct, true), m => 'm:' + m.id)), 'email')}</div>
       <div class="bkts">${BUCKETS.map((b, i) => { const c = countFor(b.k); return `<button class="bkt${E.bucket === b.k ? ' on' : ''}${c ? '' : ' z'}" type="button" data-bk="${b.k}"><span class="kk">B${i + 1}</span><span class="w">${b.name}</span><span class="n">${pad(c)}</span></button>`; }).join('')}
         <span class="note">${E.triage ? 'One at a time · X E F S · Esc leaves' : 'Buckets are sorted by Titanus<br>Move a message to teach him'}</span></div>
       ${body}`;
@@ -1474,7 +1916,7 @@
     const m = mailById(E.tq[E.ti]); if (!m) return;
     if (kind === 'todo') {
       if (m.sug && TODOS[m.sug].sug === 'open') TODOS[m.sug].sug = 'accepted';
-      else if (!mailTodo(m)) { const id = 't-' + m.id; TODOS[id] = { text: m.todoText || ('Follow up: ' + m.subj), origin: 'email' }; TODO_ORDER.splice(TODO_ORDER.length - 1, 0, id); m.todo = id; }
+      else if (!mailTodo(m)) { const id = 't-' + m.id; TODOS[id] = { text: m.todoText || ('Follow up: ' + m.subj), origin: 'email' }; PJ['t:' + id] = { from: 'm:' + m.id }; TODO_ORDER.splice(TODO_ORDER.length - 1, 0, id); m.todo = id; }
       E.log.push(['Todo', `${m.from} · ${m.subj}`]);
     }
     if (kind === 'arch') { m.arch = true; E.log.push(['Archived', `${m.from} · ${m.subj}`]); }
@@ -1521,23 +1963,30 @@
     let tl = '';
     const nmY = (nowMin() - H0 * 60) / 60 * hh;
     for (let h = H0; h <= H1; h++) { const y = (h - H0) * hh; tl += `<div class="hl" style="top:${y}px">${Math.abs(y - nmY) < 16 ? '' : `<span>${pad(h)}:00</span>`}</div>`; }
-    EVENTS.forEach(e => {
+    const evs = EVENTS.filter(e => inPf('e:' + e.id));
+    if (!evs.some(e => e.id === C.sel) && evs.length) C.sel = (evs.find(e => evState(e) === 'next') || evs[0]).id;
+    evs.forEach(e => {
       const st = evState(e), top = (toMin(e.s) - H0 * 60) / 60 * hh, ht = Math.max(24, (toMin(e.e) - toMin(e.s)) / 60 * hh);
-      tl += `<button type="button" class="ev ${st}${C.sel === e.id ? ' sel' : ''}" style="top:${top}px;height:${ht}px" data-ev="${e.id}" data-flash="${e.id}"><span class="tm">${e.s}–${e.e}</span><span class="nm">${esc(e.title)}</span><span class="tag">${st === 'past' ? 'Done' : st === 'next' ? 'Next · in ' + dur(toMin(e.s) - nowMin()) : st === 'live' ? 'Live' : ''}</span></button>`;
+      tl += `<button type="button" class="ev ${st}${C.sel === e.id ? ' sel' : ''}" style="top:${top}px;height:${ht}px" data-ev="${e.id}" data-flash="${e.id}">${badge('e:' + e.id)}<span class="tm">${e.s}–${e.e}</span><span class="nm">${esc(e.title)}</span><span class="tag">${st === 'past' ? 'Done' : st === 'next' ? 'Next · in ' + dur(toMin(e.s) - nowMin()) : st === 'live' ? 'Live' : ''}</span></button>`;
     });
     const nm = nowMin();
     tl += `<div class="now" style="top:${(nm - H0 * 60) / 60 * hh - 1}px"><span>${hhmm(now())}</span></div>`;
-    const e = evById(C.sel) || EVENTS[1];
-    const st = evState(e);
+    const e = evs.length ? (evById(C.sel) || evs[0]) : null;
+    const st = e ? evState(e) : '';
+    const tmr = TOMORROW.filter(t => inPf('e:' + t.id));
+    const allEv = EVENTS.map(x => 'e:' + x.id).concat(TOMORROW.map(t => 'e:' + t.id));
     $('#calSheet').innerHTML = `<div class="sh-strip"><span class="eb">Calendar</span><span class="pn">CAL-2026-274</span><span>Northwind · Personal</span><span class="sp"></span><span>Sheet 06 / 07</span></div>
+      <div class="pflt" data-scope="calendar">${pfltHTML(countBy(allEv, k => k), 'calendar')}</div>
       <div class="cal"><div class="cal-day"><div class="ctl" style="height:${(H1 - H0) * hh}px">${tl}</div></div>
       <div class="cal-side">
-        <div class="cal-det"><span class="k">${st === 'past' ? 'Done' : st === 'next' ? 'Next · in ' + dur(toMin(e.s) - nm) : st === 'live' ? 'Live now' : 'Later today'}</span>
+        ${e ? `<div class="cal-det"><span class="k">${st === 'past' ? 'Done' : st === 'next' ? 'Next · in ' + dur(toMin(e.s) - nm) : st === 'live' ? 'Live now' : 'Later today'}</span>
           <h2>${esc(e.title)}</h2><div class="d2">Thursday · ${e.s}–${e.e}</div>
-          <dl><div><dt>With</dt><dd>${esc(e.who)}</dd></div><div><dt>Where</dt><dd>${esc(e.where)}</dd></div><div><dt>Note</dt><dd style="text-transform:none;letter-spacing:0;font:500 13px/1.4 var(--sans)">${esc(e.note)}</dd></div></dl>
+          <dl><div><dt>With</dt><dd>${esc(e.who)}</dd></div><div><dt>Where</dt><dd>${esc(e.where)}</dd></div><div><dt>Note</dt><dd style="text-transform:none;letter-spacing:0;font:500 13px/1.4 var(--sans)">${esc(e.note)}</dd></div>
+            <div><dt>Project</dt><dd style="display:flex;align-items:center;gap:9px;justify-content:flex-end">${badge('e:' + e.id)}${pName(pj('e:' + e.id).p)}</dd></div>
+            <div><dt>How</dt><dd style="color:var(--muted);font-weight:500">${esc(howText('e:' + e.id))}</dd></div></dl>
           ${e.rel.length ? `<div class="rel"><span class="k">Related across Sections</span>${e.rel.map(r => `<button type="button" data-go="${r[2]}" data-t="${r[3]}">${tagHTML([r[0], ''])}${esc(r[1])}</button>`).join('')}</div>` : ''}
-        </div>
-        <div class="tmw"><div class="gh" style="padding-left:22px">Tomorrow · Fri 02<span class="ct">${pad(TOMORROW.length)}</span></div>${TOMORROW.map(t => `<div class="r"><em>${t.s}</em>${esc(t.title)}</div>`).join('')}</div>
+        </div>` : `<div class="cal-det"><span class="k">Today</span><h2>Nothing today</h2><div class="d2">No events ${pf === 'none' ? 'Unfiled' : 'in ' + pName(pf)} today.</div></div>`}
+        <div class="tmw"><div class="gh" style="padding-left:22px">Tomorrow · Fri 02<span class="ct">${pad(tmr.length)}</span></div>${tmr.map(t => `<div class="r">${badge('e:' + t.id)}<em>${t.s}</em><span>${esc(t.title)}</span><span style="margin-left:auto;font:500 8.5px/22px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)">${esc(pj('e:' + t.id).how === 'rule' ? 'By rule' : pj('e:' + t.id).how === 'you' ? 'Set by you' : '')}</span></div>`).join('') || '<div class="r" style="color:var(--faint)">Nothing tomorrow.</div>'}</div>
       </div></div>`;
   }
   $('#calSheet').addEventListener('click', e => {
@@ -1549,24 +1998,28 @@
   /* GitHub Section                                                      */
   /* ------------------------------------------------------------------ */
   function renderGitHub() {
-    const rev = PRS.filter(p => p.kind === 'review' && !p.cleared), mine = PRS.filter(p => p.kind === 'mine');
+    const rev = PRS.filter(p => p.kind === 'review' && !p.cleared && inPf('pr:' + p.id)), mine = PRS.filter(p => p.kind === 'mine' && inPf('pr:' + p.id));
     const waiting = rev.filter(p => !p.reviewed).length;
-    const prRow = (p, i) => `<div class="pr${p.reviewed ? ' done' : ''}" data-flash="${p.id}" data-pr="${p.id}"><span class="rk">${pad(i + 1)}</span>
+    const prRow = (p, i) => `<div class="pr${p.reviewed ? ' done' : ''}" data-flash="${p.id}" data-pr="${p.id}" data-p="${pj('pr:' + p.id).p}"><span class="rk">${pad(i + 1)}</span>
       ${p.kind === 'review' ? `<button class="mkr btn" type="button" data-g="rev" style="height:22px;border:0;background:none;display:grid;place-items:center;cursor:pointer"><span class="box${p.reviewed ? ' on' : ''}">${use('check')}</span></button>` : `<span style="height:22px;display:grid;place-items:center">${GL.pr}</span>`}
-      <div><div class="t1"><em>northwind/${p.repo} #${p.n}</em>${esc(p.title)}</div>
+      <span class="pbc">${badge('pr:' + p.id)}</span>
+      <div><div class="t1"><em>${p.org || 'northwind'}/${p.repo} #${p.n}</em>${esc(p.title)}</div>
       <div class="t2">${p.kind === 'review' ? tagHTML(['github', p.reviewed ? 'Reviewed' : 'Review requested']) : tagHTML(['github', 'Your PR', 'fail'])}${p.lid ? tagHTML(['linear', p.lid]) : ''}${p.by ? `<span class="tg">by ${p.by}</span>` : ''}${p.note ? `<span class="why t">${esc(p.note)}</span>` : ''}</div></div>
       <div class="acts">${p.kind === 'review' ? `<button class="mini" type="button" data-g="rev">${p.reviewed ? 'Undo' : 'Reviewed'}</button><button class="mini" type="button" data-g="clr">Clear</button>` : '<button class="mini" type="button" data-g="ci">See CI</button>'}</div></div>`;
-    $('#ghSheet').innerHTML = `<div class="sh-strip"><span class="eb">GitHub</span><span class="pn">GH-2026-274</span><span>Org northwind · watching 8 repos</span><span class="sp"></span><span>Sheet 07 / 07</span></div>
+    const repoP = r => REPO_P[r] ? RULES[REPO_P[r]].p : 'none';
+    const repos = REPOS.filter(r => pf === 'all' || repoP(r[0]) === pf);
+    $('#ghSheet').innerHTML = `<div class="sh-strip"><span class="eb">GitHub</span><span class="pn">GH-2026-274</span><span>Orgs northwind · longtail · watching 9 repos</span><span class="sp"></span><span>Sheet 07 / 07</span></div>
+      <div class="pflt" data-scope="github">${pfltHTML(countBy(PRS.filter(p => !p.cleared && !(p.kind === 'review' && p.reviewed)), p => 'pr:' + p.id), 'github')}</div>
       <div class="ghx"><div>
         <div class="sum"><span class="k"><i class="led"></i>Titanus · since yesterday</span><p>${esc(GH_SUMMARY)}</p></div>
         <div class="stats"><div><b>14</b><span>PRs merged · 6 repos</span></div><div><b>05</b><span>Opened</span></div><div><b>02</b><span>Releases</span></div><div><b>${pad(waiting)}</b><span>Waiting on you</span></div></div>
         <section class="grp"><div class="gh"><span class="bno">G1</span>Waiting on you<span class="ct">${pad(waiting)}</span></div>${rev.map(prRow).join('') || '<div class="bempty">Nothing waiting on you.</div>'}</section>
-        <section class="grp"><div class="gh"><span class="bno">G2</span>Your open PRs<span class="ct">${pad(mine.length)}</span></div>${mine.map(prRow).join('')}</section>
+        <section class="grp"><div class="gh"><span class="bno">G2</span>Your open PRs<span class="ct">${pad(mine.length)}</span></div>${mine.map(prRow).join('') || '<div class="bempty">No open PRs here.</div>'}</section>
       </div><div>
         <div class="gh" style="padding-left:22px">Releases<span class="ct">02</span></div>
         <div class="rel2"><div class="rr">northwind/api v4.12.0<span>Yesterday</span></div><div class="rr">northwind/web 2026.10.01<span>Today</span></div></div>
-        <div class="gh" style="padding-left:22px;margin-top:22px;border-top:1px solid var(--line)">Repos · merged since yesterday<span class="ct">08</span></div>
-        <div class="repos">${REPOS.map(r => `<div class="rr${r[1] ? '' : ' z'}"><span>${r[0]}</span><span class="bb">${Array.from({ length: r[1] }, () => '<i></i>').join('')}${Array.from({ length: r[2] }, () => '<i class="o"></i>').join('')}</span><b>${pad(r[1])}</b></div>`).join('')}</div>
+        <div class="gh" style="padding-left:22px;margin-top:22px;border-top:1px solid var(--line)">Repos · merged since yesterday<span class="ct">${pad(repos.length)}</span></div>
+        <div class="repos">${repos.map(r => `<div class="rr${r[1] || r[2] ? '' : ' z'}" title="${REPO_P[r[0]] ? 'Mapped by rule: ' + esc(RULES[REPO_P[r[0]]].when) + ' → ' + pName(repoP(r[0])) : 'No rule · items are Unfiled unless you file them'}">${stamp(repoP(r[0]), 'sm')}<span>${r[0]}</span><span class="bb">${Array.from({ length: r[1] }, () => '<i></i>').join('')}${Array.from({ length: r[2] }, () => '<i class="o"></i>').join('')}</span><b>${pad(r[1])}</b></div>`).join('')}</div>
         <div style="padding:10px 22px;font:500 9px/1.5 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)">■ merged · □ opened</div>
       </div></div>`;
   }
@@ -1616,7 +2069,7 @@
     if (q.state !== 'open') return `<li class="qi cleared" data-q="${q.id}"><div class="qn">${pad(i + 1)}</div><div class="qb"><div class="qt">${esc(q.title)}</div>
       <div class="qa"><span class="qs">${q.state === 'done' ? 'Done' : 'Dismissed'} · ${q.at}</span><button class="q-undo" type="button">Undo</button></div></div></li>`;
     return `<li class="qi" data-q="${q.id}"><div class="qn">${pad(i + 1)}</div><div class="qb"><div class="qt">${esc(q.title)}</div><div class="qd">${esc(q.body)}</div>
-      <div class="qa"><button class="q-done" type="button">Done</button><button class="q-dis" type="button">Dismiss</button><button class="q-ref" type="button">↳ ${esc(q.refLabel)}</button></div></div></li>`;
+      <div class="qa"><button class="q-done" type="button">Done</button><button class="q-dis" type="button">Dismiss</button><span class="q-pb">${badge(QUEUE_PK[q.id], 'sm')}</span><button class="q-ref" type="button">↳ ${esc(q.refLabel)}</button></div></div></li>`;
   }
   function renderUpdate() {
     const n = openCount();
@@ -1648,6 +2101,68 @@
   ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(t => addEventListener(t, poke, { passive: true, capture: true }));
 
   /* ------------------------------------------------------------------ */
+  /* Notes Section: the Daily Note's blocks and their Badges             */
+  /* ------------------------------------------------------------------ */
+  function renderNotesBar() {
+    $('#pfltNotes').innerHTML = pfltHTML(countBy(DNB, b => 'dn:' + b.id), 'notes');
+    $('#dnb').innerHTML = `<span class="lb">DN</span>` + DNB.map(b => `<span class="bk${inPf('dn:' + b.id) ? '' : ' dim'}" title="${esc(b.text)}">${badge('dn:' + b.id)}<em>${esc(b.label)}</em><span>${esc(b.text)}</span></span>`).join('')
+      + `<span class="note">Today’s blocks · the Note itself isn’t filtered</span>`;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Badge picker: change an item's Project by hand                      */
+  /* ------------------------------------------------------------------ */
+  const pkEl = $('#pk');
+  let pkKey = null;
+  function openPicker(key, anchor) {
+    pkKey = key;
+    const a = pj(key), cur = a.how === 'sug' ? 'none' : a.p, go2 = a.how === 'sug' ? a.sug : cur;
+    pkEl.innerHTML = `<div class="pk-h"><span>Project</span><span class="id">${esc(keyLabel(key))}</span></div>
+      ${a.how === 'sug' ? `<div class="pk-s"><span class="k">${stamp(a.sug, 'sug')}Titanus thinks: ${PROJ[a.sug].code}.</span>${esc(a.why)}<br><button type="button" class="cf" data-pko="confirm">Confirm ${PROJ[a.sug].code} · ↵</button></div>` : ''}
+      ${PKEYS.map((k, i) => `<button type="button" class="pk-o${cur === k ? ' on' : ''}" data-pko="${k}">${stamp(k)}<span class="nm">${pName(k)}</span><span class="cur">${cur === k ? 'Current' : ''}</span><kbd>${i + 1}</kbd></button>`).join('')}
+      <div class="pk-how">${howText(key, true)}</div>
+      ${go2 !== 'none' ? `<button type="button" class="pk-go" data-pko="page" data-p2="${go2}"><span>Open ${pName(go2)}</span><kbd>O</kbd></button>` : ''}`;
+    pkEl.hidden = false;
+    const r = anchor.getBoundingClientRect(), w = pkEl.offsetWidth, h = pkEl.offsetHeight;
+    const x = Math.min(innerWidth - w - 12, Math.max(12, r.left - 6));
+    let y = r.bottom + 6;
+    if (y + h > innerHeight - 12) y = Math.max(12, r.top - h - 6);
+    pkEl.style.left = x + 'px'; pkEl.style.top = y + 'px';
+    $$('.pb.open').forEach(b => b.classList.remove('open')); anchor.classList.add('open');
+  }
+  function closePicker() { if (!pkEl || pkEl.hidden) return; pkEl.hidden = true; pkKey = null; $$('.pb.open').forEach(b => b.classList.remove('open')); }
+  pkEl.addEventListener('click', e => {
+    const b = e.target.closest('[data-pko]'); if (!b || !pkKey) return;
+    const k = b.dataset.pko, key = pkKey;
+    if (k === 'confirm') return confirmSug(key);
+    if (k === 'page') { closePicker(); return openPage(b.dataset.p2); }
+    setProject(key, k);
+  });
+  function pickFor(el) {
+    if (!el) return;
+    el.scrollIntoView({ block: 'nearest' });
+    openPicker(el.dataset.pk, el);
+  }
+  // Badges and "Titanus thinks" buttons work the same everywhere; handled before any Section's own click handler
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.pb[data-pk]'), pa = e.target.closest('[data-pa]');
+    if (pkEl && !pkEl.hidden && !e.target.closest('#pk') && !b && !pa) closePicker();
+    if (b) {
+      e.stopPropagation(); e.preventDefault();
+      if (!pkEl.hidden && pkKey === b.dataset.pk && b.classList.contains('open')) return closePicker();
+      const it = b.closest('.it');
+      if (it && selId !== it.dataset.id) { selId = it.dataset.id; renderFeed(); return pickFor($(`.it[data-id="${selId}"] .pbc .pb`, feedEl)); }
+      return openPicker(b.dataset.pk, b);
+    }
+    if (pa) {
+      e.stopPropagation(); e.preventDefault();
+      if (pa.dataset.pa === 'confirm') return confirmSug(pa.dataset.pk);
+      return openPicker(pa.dataset.pk, pa);
+    }
+  }, true);
+  addEventListener('scroll', e => { if (!pkEl.hidden && !(e.target instanceof Node && pkEl.contains(e.target))) closePicker(); }, { passive: true, capture: true });
+
+  /* ------------------------------------------------------------------ */
   /* Keyboard                                                            */
   /* ------------------------------------------------------------------ */
   document.addEventListener('keydown', e => {
@@ -1655,16 +2170,36 @@
     if (typing) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if ((k === 'Enter' || k === ' ') && e.target.matches && e.target.matches('.pb[data-pk]')) { e.preventDefault(); openPicker(e.target.dataset.pk, e.target); return; }
+    // Badge picker open: 1–4 picks, Enter confirms Titanus's suggestion, O opens the Project page
+    if (!pkEl.hidden) {
+      const a = pj(pkKey);
+      if (k === 'Escape' || k === 'b') { e.preventDefault(); closePicker(); return; }
+      if (/^[1-4]$/.test(k)) { e.preventDefault(); setProject(pkKey, PKEYS[+k - 1]); return; }
+      if (k === 'Enter' && a.how === 'sug') { e.preventDefault(); confirmSug(pkKey); return; }
+      if (k === 'o') { e.preventDefault(); const p = a.how === 'sug' ? a.sug : a.p; closePicker(); openPage(p); return; }
+      closePicker();
+    }
+    // P then 0–4: filter by Project; P then O: open that Project's page
+    if (pArm) {
+      armP(false);
+      if (/^[0-4]$/.test(k)) { e.preventDefault(); setPf(k === '0' ? 'all' : PKEYS[+k - 1]); return; }
+      if (k === 'o') { e.preventDefault(); if (pf === 'lt' || pf === 'tl' || pf === 'tx') openPage(pf); else toast('Pick a Project first: <b>P</b> then <b>1</b>–<b>3</b>.'); return; }
+      if (k === 'Escape') { e.preventDefault(); return; }
+    }
+    if (k === 'p') { e.preventDefault(); armP(true); return; }
     if (k === 'Enter' && e.target.tagName === 'BUTTON') return;
     if (k === 'u') { e.preventDefault(); toggleUpdate(); return; }
     if (k === 'Escape') {
       if (!upd.hidden) { e.preventDefault(); closeUpdate(); return; }
       if (sec === 'email' && E.triage) { e.preventDefault(); stopTriage(); return; }
+      if (sec === 'project') { e.preventDefault(); closePage(); return; }
       return;
     }
     if (/^[1-7]$/.test(k)) { e.preventDefault(); go(SECTIONS[+k - 1].id); return; }
-    if (sec === 'dashboard') {
+    if (sec === 'dashboard' || sec === 'project') {
       const f = FEED.find(x => x.id === selId);
+      if (k === 'b') { e.preventDefault(); pickFor($('.it.sel .pbc .pb', feedEl)); return; }
       if (k === 'j' || k === 'ArrowDown') { e.preventDefault(); moveSel(1); }
       else if (k === 'k' || k === 'ArrowUp') { e.preventDefault(); moveSel(-1); }
       else if (k === 'Enter') { e.preventDefault(); doFeed('open', f); }
@@ -1672,6 +2207,7 @@
       else if (k === 'e') { e.preventDefault(); doFeed('clear', f); }
     } else if (sec === 'email') {
       if (k === 't') { e.preventDefault(); E.triage ? stopTriage() : startTriage(); }
+      else if (k === 'b') { e.preventDefault(); pickFor(E.triage ? $('.tri-card .pb') : $('.em.sel .pb')); }
       else if (E.triage) {
         const map = { x: 'todo', e: 'arch', f: 'fyi', s: 'skip' };
         if (map[k]) { e.preventDefault(); triageDo(map[k]); }
@@ -1753,7 +2289,7 @@
   // Rulers mark where the selected feed row sits (column A, its grid row)
   function markSel() {
     colCells.forEach(c => c.classList.remove('on')); rowCells.forEach(c => c.classList.remove('on'));
-    const el = sec === 'dashboard' ? $('.it.sel', feedEl) : sec === 'email' ? $('.em.sel') : null;
+    const el = sec === 'dashboard' || sec === 'project' ? $('.it.sel', feedEl) : sec === 'email' ? $('.em.sel') : null;
     if (!el) return;
     const g = gridWrap.getBoundingClientRect(), r = el.getBoundingClientRect(), cy = r.top + 21;
     if (cy < g.top || cy > g.bottom) return;
@@ -1762,17 +2298,19 @@
     if (rowCells[rw]) rowCells[rw].classList.add('on');
   }
   addEventListener('scroll', () => requestAnimationFrame(markSel), { passive: true });
-  addEventListener('resize', () => { drawGrid(); renderAll(); });
+  addEventListener('resize', () => { closePicker(); drawGrid(); renderAll(); });
 
   /* ------------------------------------------------------------------ */
   function renderAll() {
     renderTabs(); renderMeter(); renderTitanus();
-    if (sec === 'dashboard') { renderFeed(); renderSide(); }
+    if (sec === 'dashboard' || sec === 'project') { renderFeed(); renderSide(); }
+    if (sec === 'notes') renderNotesBar();
     if (sec === 'todos') renderTodos();
     if (sec === 'linear') renderLinear();
     if (sec === 'email') renderEmail();
     if (sec === 'calendar') renderCalendar();
     if (sec === 'github') renderGitHub();
+    paintArm();
     requestAnimationFrame(markSel);
   }
 
@@ -1780,20 +2318,28 @@
   setInterval(() => {
     const d = now();
     $('#clock').textContent = hhmm(d) + ':' + pad(d.getSeconds());
-    if (!away && Date.now() - lastInput >= AWAY_MS) { away = true; awaySince = new Date(T0 + (lastInput - R0)); renderTitanus(); if (sec === 'dashboard') renderSide(); }
+    if (!away && Date.now() - lastInput >= AWAY_MS) { away = true; awaySince = new Date(T0 + (lastInput - R0)); renderTitanus(); if (sec === 'dashboard' || sec === 'project') renderSide(); }
     const m = nowMin();
-    if (m !== lastMin) { lastMin = m; $('#rankedAt').textContent = `Ranked by Titanus · ${hhmm(new Date(T0 + (Date.now() - R0) - 120000))}`; if (sec === 'dashboard' || sec === 'calendar') renderAll(); }
+    if (m !== lastMin) { lastMin = m; $('#rankedAt').textContent = `Ranked by Titanus · ${hhmm(new Date(T0 + (Date.now() - R0) - 120000))}`; if (sec === 'dashboard' || sec === 'project' || sec === 'calendar') renderAll(); }
   }, 1000);
 
-  // Deep links for review: #email, #email/triage, #calendar ...
+  // Deep links for review: #email, #email/triage, #calendar, #project/lt, #todos/p=tx, #dashboard/pick ...
   const hash = location.hash.slice(1).split('/');
-  if (SECTIONS.some(s => s.id === hash[0])) {
+  const hp = hash.find(x => x.startsWith('p='));
+  if (hp && (PROJ[hp.slice(2)] || hp === 'p=all')) pf = hp.slice(2);
+  if (hash[0] === 'project' && PROJ[hash[1]] && hash[1] !== 'none') openPage(hash[1]);
+  else if (SECTIONS.some(s => s.id === hash[0])) {
     go(hash[0]);
     if (hash[0] === 'email' && hash[1] === 'triage') startTriage();
     if (hash[0] === 'dashboard' && hash[1] === 'update') openUpdate();
   } else go('dashboard');
   drawGrid();
-  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { drawGrid(); markSel(); });
+  const hs = hash.find(x => x.startsWith('sel='));
+  if (hs && FEED.some(f => f.id === hs.slice(4))) { selId = hs.slice(4); renderAll(); const el = $('.it.sel', feedEl); if (el) el.scrollIntoView({ block: 'center' }); }
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
+    drawGrid(); markSel();
+    if (hash.includes('pick')) pickFor(sec === 'email' ? $('.em.sel .pb') : $('.it.sel .pbc .pb', feedEl));
+  });
 })();
 </script>
 <script>document.addEventListener('keydown',e=>{if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&!(e.target.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)))parent.postMessage({type:'proto-key',key:e.key},'*')});</script>
