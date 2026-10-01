@@ -1,0 +1,1417 @@
+<!--
+  PROTOTYPE — throwaway. Round 2, variant RAW: Raw brutalist.
+  Design intent: a severe black-and-white control surface on an exposed column grid, with enormous expanded grotesk dates, thick rules, and one acid green that belongs only to Titanus.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commander · Daily Notes · RAW</title>
+<script>document.documentElement.dataset.theme = new URLSearchParams(location.search).get('theme') === 'light' ? 'light' : 'dark';</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --rail:72px;
+    --hang:clamp(168px,13vw,216px);
+    --margin:clamp(304px,24vw,400px);
+    --hdr:84px;
+    --title:clamp(74px,6.6vw,112px);
+    --upd-w:clamp(380px,30vw,480px);
+    --acid:#C6FF00;
+    --acid-hi:#D7FF4D;
+  }
+  html[data-theme=dark]{
+    color-scheme:dark;
+    --bg:#000; --bg2:#0f0f0f; --bg3:#1b1b1b;
+    --fg:#fff; --fg2:#adadad; --fg3:#787878;
+    --rule:#fff; --rule2:#262626; --grid:#111;
+    --caret:var(--acid); --slab-bd:0px; --ti-line:var(--acid);
+  }
+  html[data-theme=light]{
+    color-scheme:light;
+    --bg:#fff; --bg2:#f0f0f0; --bg3:#e4e4e4;
+    --fg:#000; --fg2:#4d4d4d; --fg3:#808080;
+    --rule:#000; --rule2:#d8d8d8; --grid:#f1f1f1;
+    --caret:#000; --slab-bd:3px; --ti-line:#000;
+  }
+  *{box-sizing:border-box;border-radius:0}
+  html,body{margin:0}
+  html{background:var(--bg);scrollbar-color:var(--fg3) var(--bg)}
+  body{
+    background:var(--bg);color:var(--fg);
+    font-family:'Archivo',ui-sans-serif,system-ui,sans-serif;font-stretch:100%;
+    font-size:16px;line-height:26px;font-weight:400;letter-spacing:-.003em;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    overflow-x:hidden;
+  }
+  :focus{outline:none}
+  :focus-visible{outline:3px solid var(--fg);outline-offset:-3px}
+  .ti-btn:focus-visible{outline-color:#000;outline-offset:-8px}
+  .ti-btn[aria-expanded=true]:focus-visible{outline-color:var(--acid)}
+  .agent-card button:focus-visible,.upd button:focus-visible{outline-color:#000;outline-offset:2px}
+  .upd-x:focus-visible,.ui-done:focus-visible,.ac-accept:focus-visible{outline-color:var(--acid);outline-offset:-5px}
+  .content:focus-visible{outline:none}
+  ::selection{background:var(--acid);color:#000}
+  button{font:inherit;color:inherit;border-radius:0}
+  .i{width:1em;height:1em;flex:none;display:block}
+  .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  /* the one label style: uppercase, expanded, spaced */
+  .lab,.eb,.ds-main .c,.ds-ti,.hmeta,.pill,.dbtn .w,.wkc .lab,.wkc .rng,.presence,.queue .q1,.ti-btn .l,
+  .legend .lt,.legend .k > span:last-child,.stream-end,.ac-head,.ac-lab,.ac-actions button,.ac-ok,
+  .upd-lab,.ui-act button,.acpop .ah,.toast button,.ri span,.tsw button,.collapsed-tag{
+    font-size:10.5px;line-height:14px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;font-stretch:112%;
+  }
+  kbd{
+    font:inherit;font-size:10.5px;font-weight:800;letter-spacing:.02em;line-height:1;text-transform:none;font-stretch:100%;
+    min-width:20px;height:20px;padding:0 5px;border:1px solid currentColor;display:inline-grid;place-items:center;
+  }
+
+  /* ---------- Exposed grid ---------- */
+  .gl{position:fixed;top:0;bottom:0;left:var(--rail);right:0;z-index:0;pointer-events:none}
+  .gl .c{
+    position:absolute;top:0;bottom:0;left:var(--hang);right:var(--margin);
+    border-left:1px solid var(--rule2);border-right:1px solid var(--rule2);
+    background:repeating-linear-gradient(to right,var(--grid) 0 1px,transparent 1px calc(100% / 6));
+  }
+
+  /* ---------- Section rail ---------- */
+  .rail{
+    position:fixed;inset:0 auto 0 0;width:var(--rail);z-index:30;
+    background:var(--bg);border-right:4px solid var(--rule);
+    display:flex;flex-direction:column;
+  }
+  .brand{
+    flex:none;height:var(--hdr);background:var(--fg);color:var(--bg);border-bottom:4px solid var(--rule);
+    display:flex;flex-direction:column;justify-content:space-between;padding:9px 10px 8px;
+  }
+  .brand b{font-weight:900;font-stretch:125%;font-size:36px;line-height:.78;letter-spacing:-.03em}
+  .brand span{font-size:8.5px;line-height:1;font-weight:800;letter-spacing:.16em;font-stretch:112%}
+  .rail nav{flex:1;display:flex;flex-direction:column;min-height:0}
+  .ri{
+    flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:10px;
+    padding:10px 0 13px;border-bottom:1px solid var(--rule2);color:var(--fg2);text-decoration:none;
+  }
+  .ri i{font-style:normal;font-size:10px;line-height:1;font-weight:800;letter-spacing:.04em;color:var(--fg3);font-variant-numeric:tabular-nums}
+  .ri span{writing-mode:vertical-rl;transform:rotate(180deg);font-stretch:92%;letter-spacing:.16em;line-height:1}
+  .ri:hover{background:var(--bg2);color:var(--fg)}
+  .ri.on{background:var(--fg);color:var(--bg);border-bottom-color:var(--fg)}
+  .ri.on i{color:var(--bg)}
+  .tsw{flex:none;display:grid;grid-template-rows:1fr 1fr;height:58px;border-top:4px solid var(--rule)}
+  .tsw button{border:0;background:none;color:var(--fg3);cursor:pointer;padding:0;font-size:9.5px;letter-spacing:.12em}
+  .tsw button + button{border-top:1px solid var(--rule2)}
+  .tsw button:hover{color:var(--fg);background:var(--bg2)}
+  .tsw button.on{background:var(--fg);color:var(--bg);cursor:default}
+  .me{flex:none;height:50px;display:grid;place-items:center;border-top:1px solid var(--rule2);font-weight:850;font-stretch:115%;font-size:12px;letter-spacing:.06em}
+
+  /* ---------- Header ---------- */
+  main{margin-left:var(--rail);position:relative;z-index:1}
+  .top{
+    position:sticky;top:0;z-index:20;height:var(--hdr);background:var(--bg);border-bottom:4px solid var(--rule);
+    display:grid;grid-template-columns:var(--hang) minmax(0,1fr) var(--margin);
+  }
+  .wkc{border-right:1px solid var(--rule2);padding:10px 14px 9px 16px;display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto 1fr;column-gap:10px}
+  .wkc .lab{color:var(--fg2)}
+  .wkc .rng{justify-self:end;color:var(--fg3);letter-spacing:.06em;font-variant-numeric:tabular-nums}
+  .wkc .big{grid-column:1/-1;align-self:end;font-weight:900;font-stretch:125%;font-size:40px;line-height:.78;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .days{display:flex;min-width:0}
+  .dbtn{
+    flex:1 1 0;min-width:0;position:relative;border:0;border-right:1px solid var(--rule2);background:none;color:var(--fg);
+    padding:10px 10px 9px 12px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;cursor:pointer;
+  }
+  .dbtn .w{color:var(--fg2)}
+  .dbtn .n{font-weight:900;font-stretch:125%;font-size:32px;line-height:.78;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .dbtn .tag{position:absolute;top:10px;right:9px;font-size:8.5px;line-height:1;font-weight:800;letter-spacing:.08em;text-transform:uppercase;font-stretch:100%}
+  .dbtn.has:not(.today) .tag::before{content:'';display:block;width:8px;height:8px;background:var(--fg)}
+  .dbtn.today .tag{background:var(--fg);color:var(--bg);padding:3px 3px 2px}
+  .dbtn.empty .w,.dbtn.empty .n{color:var(--fg3)}
+  .dbtn.empty.past .tag{color:var(--fg3)}
+  .dbtn:hover{background:var(--bg2)}
+  .dbtn.active{background:var(--fg);color:var(--bg)}
+  .dbtn.active .w{color:var(--bg)}
+  .dbtn.active .tag::before{background:var(--bg) !important}
+  .dbtn.active.today .tag{background:var(--bg);color:var(--fg)}
+  .todaybtn{
+    flex:0 0 clamp(60px,4.6vw,74px);border:0;background:none;color:var(--fg);cursor:pointer;padding:10px 12px 9px;
+    display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;
+  }
+  .todaybtn .a{font-weight:900;font-size:26px;line-height:.8}
+  .todaybtn:hover{background:var(--bg2)}
+
+  .ti{display:flex;min-width:0}
+  .ti-info{flex:1;min-width:0;padding:10px 12px 9px 16px;display:flex;flex-direction:column;justify-content:space-between}
+  .presence{display:flex;align-items:center;gap:8px;color:var(--fg)}
+  .presence i{flex:none;width:9px;height:9px;background:var(--acid);box-shadow:0 0 0 calc(var(--slab-bd) / 3) #000}
+  .presence.away{color:var(--fg3)}
+  .presence.away i{background:transparent;box-shadow:inset 0 0 0 2px var(--fg3)}
+  .queue{display:flex;flex-direction:column;gap:3px}
+  .queue .q1{color:var(--fg2)}
+  .queue .q2{font-size:clamp(14px,1.18vw,18px);line-height:1;font-weight:850;font-stretch:115%;text-transform:uppercase;letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ti-btn{
+    flex:0 0 clamp(106px,8.4vw,134px);border:0;background:var(--acid);color:#000;
+    box-shadow:inset 0 0 0 var(--slab-bd) #000;
+    padding:10px 12px 9px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;cursor:pointer;
+  }
+  .ti-btn .l{font-weight:850;max-width:9em}
+  .ti-btn:hover{background:var(--acid-hi)}
+  .ti-btn[aria-expanded=true]{background:#000;color:var(--acid);box-shadow:inset 0 0 0 2px var(--acid)}
+
+  /* ---------- Stream / day ---------- */
+  .cols{display:grid;grid-template-columns:minmax(0,1fr) var(--margin)}
+  .stream{grid-column:1;min-width:0;padding-bottom:calc(100vh - 300px)}
+  .day{position:relative}
+  .day + .day{margin-top:104px}
+  .day + .day::before{content:'';position:absolute;left:0;top:0;height:4px;width:calc(100% + var(--margin));background:var(--rule);z-index:1}
+  .title{
+    margin:0;display:grid;grid-template-columns:var(--hang) minmax(0,1fr);align-items:end;
+    padding:34px 0 18px;font-weight:900;font-stretch:125%;font-size:var(--title);line-height:.8;letter-spacing:-.025em;
+    text-transform:uppercase;color:var(--fg);
+  }
+  .title .dn{padding-left:12px;font-variant-numeric:tabular-nums;letter-spacing:-.04em}
+  .title .wd{padding-left:14px;white-space:nowrap;overflow:hidden}
+  .day:not(.today) .title{font-size:calc(var(--title) * .58);padding-top:44px;padding-bottom:14px}
+  .dstrip{
+    position:relative;z-index:1;display:grid;grid-template-columns:var(--hang) minmax(0,1fr) var(--margin);
+    width:calc(100% + var(--margin));height:36px;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);background:var(--bg);
+  }
+  .dstrip > *{display:flex;align-items:center;min-width:0;height:100%}
+  .eb{padding:0 16px;color:var(--fg2);border-right:1px solid var(--rule2)}
+  .day.today .eb{background:var(--fg);color:var(--bg);border-right-color:var(--fg)}
+  .ds-main .c{padding:0 14px;height:100%;display:flex;align-items:center;border-right:1px solid var(--rule2);color:var(--fg2);white-space:nowrap}
+  .ds-main .meta{margin-left:auto;display:flex;height:100%}
+  .ds-main .meta .c{border-right:0;border-left:1px solid var(--rule2);color:var(--fg)}
+  .ds-ti{padding:0 16px;gap:9px;color:var(--fg3);border-left:1px solid var(--rule2);white-space:nowrap;overflow:hidden}
+  .ds-ti.on{background:var(--acid);color:#000;border-left-color:var(--rule)}
+  .ds-ti.on i{flex:none;width:8px;height:8px;background:#000}
+
+  .outline{position:relative;z-index:1;counter-reset:sec}
+
+  /* ---------- Bands: every top-level block is a ruled row ---------- */
+  .outline > .blk{position:relative;border-bottom:1px solid var(--rule2);counter-increment:sec}
+  .outline > .blk:not([data-type=heading]){padding:9px 42px 9px calc(var(--hang) + 12px)}
+  .outline > .blk:not([data-type=heading])::before{
+    content:counter(sec,decimal-leading-zero);position:absolute;left:16px;top:14px;height:20px;min-width:30px;padding:0 6px;
+    border:1px solid var(--rule2);color:var(--fg3);display:grid;place-items:center;
+    font-size:10.5px;line-height:1;font-weight:800;letter-spacing:.06em;font-variant-numeric:tabular-nums;
+  }
+  .outline > .blk[data-type=heading]{display:grid;grid-template-columns:var(--hang) minmax(0,1fr)}
+  .outline > .blk[data-type=heading] > .row{
+    grid-column:1;grid-row:1;align-self:start;flex-wrap:wrap;align-content:flex-start;
+    padding:14px 12px 18px 16px;position:sticky;top:var(--hdr);
+  }
+  .outline > .blk[data-type=heading] > .row > .bullet{
+    flex:none;height:20px;min-width:30px;padding:0 6px;margin:0 0 10px;border:1px solid var(--fg3);color:var(--fg);
+  }
+  .outline > .blk[data-type=heading] > .row > .bullet i{display:none}
+  .outline > .blk[data-type=heading] > .row > .bullet::before{content:counter(sec,decimal-leading-zero);font-size:10.5px;line-height:1;font-weight:800;letter-spacing:.06em;font-variant-numeric:tabular-nums}
+  .outline > .blk[data-type=heading] > .row > .bullet:hover{border-color:var(--fg);background:var(--bg2)}
+  .outline > .blk.collapsed[data-type=heading] > .row > .bullet{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+  .outline > .blk[data-type=heading] > .row > .content{
+    flex:1 1 100%;padding:0;font-size:clamp(15px,1.32vw,21px);line-height:1.08;font-weight:900;font-stretch:125%;
+    text-transform:uppercase;letter-spacing:-.005em;color:var(--fg);
+  }
+  .outline > .blk[data-type=heading] > .row > .hmeta{display:block;flex:1 1 100%;margin-top:9px;color:var(--fg3)}
+  .outline > .blk[data-type=heading] > .row:focus-within{background:transparent}
+  .outline > .blk[data-type=heading] > .row:focus-within > .content{box-shadow:0 3px 0 var(--fg)}
+  .outline > .blk[data-type=heading] > .kids{grid-column:2;grid-row:1;margin:0;padding:12px 42px 14px 12px;border:0}
+  .outline > .blk.collapsed[data-type=heading]::after{
+    content:attr(data-fold);grid-column:2;grid-row:1;align-self:start;padding:19px 24px 0 40px;color:var(--fg3);
+    font-size:10.5px;line-height:14px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;font-stretch:112%;
+  }
+
+  /* ---------- Blocks ---------- */
+  .blk{position:relative}
+  .row{position:relative;display:flex;align-items:flex-start;min-height:30px}
+  .row:focus-within{background:var(--bg2)}
+  .bullet{flex:0 0 28px;height:30px;display:grid;place-items:center;cursor:pointer}
+  .bullet i{width:6px;height:6px;background:var(--fg3)}
+  .row:hover > .bullet i{background:var(--fg2)}
+  .blk.has-kids > .row > .bullet i{background:var(--fg)}
+  .row:focus-within > .bullet i{background:var(--fg);width:8px;height:8px}
+  .blk.collapsed > .row > .bullet i{background:var(--fg);outline:2px solid var(--fg);outline-offset:2px}
+  .blk.collapsed > .row::after{
+    content:'+' attr(data-n);flex:none;align-self:flex-start;margin:4px 0 0 14px;height:22px;padding:0 7px;display:inline-flex;align-items:center;
+    border:1px solid var(--fg3);background:var(--bg);color:var(--fg2);font-size:10.5px;font-weight:800;letter-spacing:.06em;line-height:1;font-variant-numeric:tabular-nums;
+  }
+  .outline > .blk.collapsed[data-type=heading] > .row::after{display:none}
+  .tog{display:none !important}
+  .content{
+    flex:1;min-width:0;outline:none;padding:2px 0;line-height:26px;
+    white-space:pre-wrap;overflow-wrap:anywhere;caret-color:var(--caret);
+  }
+  .content:empty:not(:focus)::before{content:attr(data-ph);color:var(--fg3);pointer-events:none}
+  .kids{margin-left:13px;padding-left:15px;border-left:1px solid var(--rule2)}
+  .kids:empty,.blk.collapsed > .kids{display:none}
+  .hmeta{display:none}
+
+  .wl{font-weight:650;color:var(--fg);cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px;text-decoration-color:var(--fg3)}
+  .wl:hover{text-decoration-color:var(--fg)}
+  .mk{color:var(--fg3);font-weight:400}
+  .content:not(:focus) .mk{display:none}
+  .lbl{font-weight:800;color:var(--fg)}
+  strong{font-weight:800}
+
+  /* nested headings (after Tab) */
+  .blk[data-type=heading] > .row .content{font-size:15px;font-weight:850;font-stretch:118%;text-transform:uppercase;letter-spacing:.01em}
+
+  /* meetings */
+  .chip{
+    flex:none;margin:4px 12px 0 0;height:22px;padding:0 8px;display:inline-flex;align-items:center;
+    background:var(--fg);color:var(--bg);font-size:12.5px;line-height:1;font-weight:750;letter-spacing:.02em;
+    font-variant-numeric:tabular-nums;cursor:pointer;user-select:none;
+  }
+  .chip:hover{background:var(--fg2)}
+  .blk[data-type=meeting] > .row .content{font-weight:650}
+
+  /* todos */
+  .check{flex:0 0 28px;height:30px;padding:0;border:0;background:none;display:grid;place-items:center;cursor:pointer}
+  .box,.sq{width:16px;height:16px;border:2px solid var(--fg2);display:grid;place-items:center;color:var(--bg)}
+  .box .i,.sq .i{width:12px;height:12px;opacity:0}
+  .check:hover .box,.check:hover .sq{border-color:var(--fg)}
+  .blk.done > .row .box{background:var(--fg);border-color:var(--fg)}
+  .blk.done > .row .box .i{opacity:1}
+  .sq.todo{border-color:var(--fg3)}
+  .sq.prog{border-color:var(--fg);padding:2px;background:linear-gradient(to right,var(--fg) 50%,transparent 0) content-box}
+  .sq.done{background:var(--fg);border-color:var(--fg)}
+  .sq.done .i{opacity:1}
+  .blk.done > .row > .content{color:var(--fg3);text-decoration:line-through;text-decoration-thickness:2px;text-decoration-color:var(--fg3)}
+  .lid{flex:none;margin-right:10px;padding-top:2px;line-height:26px;font-size:12.5px;font-weight:800;letter-spacing:.03em;color:var(--fg2);font-variant-numeric:tabular-nums;user-select:none;cursor:pointer}
+  .blk.done > .row > .lid{color:var(--fg3)}
+  .pill{
+    flex:none;margin:4px 0 0 16px;height:22px;padding:0 8px;display:inline-flex;align-items:center;gap:6px;
+    border:1px solid var(--fg3);color:var(--fg2);white-space:nowrap;user-select:none;cursor:default;line-height:1;
+  }
+  .pill .sep{opacity:.5}
+  .pill.lin{border-color:var(--fg);color:var(--fg);cursor:pointer}
+  .pill.lin:hover{background:var(--fg);color:var(--bg)}
+  .pill.man{border-color:var(--fg3);color:var(--fg2)}
+  .pill.agent{background:var(--acid);color:#000;border-color:var(--acid);box-shadow:inset 0 0 0 calc(var(--slab-bd) / 3) #000}
+  .blk.done > .row > .pill{opacity:.55}
+
+  /* acid flips: a row Titanus is pointing at, or one that just arrived */
+  .row.ac-hl,.blk.flash > .row{
+    background:var(--acid) !important;--fg:#000;--fg2:#000;--fg3:#333;--bg:var(--acid);--rule2:#000;color:#000;
+  }
+  .blk.flash > .row .content,.row.ac-hl .content{color:#000}
+
+  /* ---------- Titanus margin ---------- */
+  .gutter{position:absolute;top:0;left:100%;width:var(--margin);height:100%;pointer-events:none;z-index:2}
+  svg.links{position:absolute;left:0;top:0;width:calc(100% + var(--margin));height:100%;overflow:visible;pointer-events:none;z-index:0;shape-rendering:crispEdges}
+  svg.links path{fill:none;stroke:var(--ti-line);stroke-width:1}
+  svg.links rect{fill:var(--ti-line)}
+  svg.links path.hot{stroke-width:3}
+  svg.links path.br{stroke-width:2}
+  svg.links path.br.hot{stroke-width:4}
+  .agent-card{
+    position:absolute;left:0;width:100%;pointer-events:auto;background:var(--acid);color:#000;
+    box-shadow:inset 0 0 0 var(--slab-bd) #000;
+  }
+  body.ready .agent-card{transition:top .2s cubic-bezier(.7,0,.2,1)}
+  .ac-head{display:flex;align-items:center;justify-content:space-between;height:34px;padding:0 16px;border-bottom:2px solid #000;font-weight:850}
+  .ac-head .ac-src{opacity:.62}
+  .ac-lab{padding:13px 16px 0;opacity:.62}
+  .ac-todo{padding:3px 16px 0;font-size:19px;line-height:23px;font-weight:800;font-stretch:104%;letter-spacing:-.012em}
+  .ac-why{padding:8px 16px 16px;font-size:14px;line-height:20px}
+  .ac-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 16px 16px}
+  .ac-actions button{height:38px;border:2px solid #000;background:none;color:#000;text-align:left;padding:0 12px;cursor:pointer;font-weight:850}
+  .ac-actions .ac-accept{background:#000;color:var(--acid)}
+  .ac-actions .ac-accept:hover{background:#262626}
+  .ac-actions .ac-dismiss:hover{background:#000;color:var(--acid)}
+  .ac-ok{grid-column:1/-1;height:38px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#000;color:var(--acid);font-weight:850}
+  .ac-ok .i{width:12px;height:12px}
+  .agent-card.gone{display:none}
+  .agent-card.ping{outline:4px solid var(--fg);outline-offset:4px}
+
+  .legend{position:absolute;left:0;width:100%;pointer-events:auto;color:var(--fg2)}
+  .legend .lt{display:flex;justify-content:space-between;align-items:center;height:36px;padding:0 16px;border-bottom:1px solid var(--rule2);color:var(--fg)}
+  .legend .lt span + span{color:var(--fg3)}
+  .legend .k{display:grid;grid-template-columns:clamp(100px,7.4vw,118px) 1fr;align-items:center;min-height:31px;border-bottom:1px solid var(--rule2)}
+  .legend .k > span:first-child{padding-left:16px;display:flex;gap:4px;color:var(--fg)}
+  .legend .k > span:last-child{color:var(--fg2);padding-right:12px;font-size:10px;letter-spacing:.08em}
+  .legend .k.ti-k > span:first-child kbd{background:var(--acid);color:#000;border-color:var(--acid);box-shadow:inset 0 0 0 calc(var(--slab-bd) / 3) #000}
+
+  .ti-col{position:absolute;left:0;top:0;width:100%;padding:0 16px 18px;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;pointer-events:none}
+  .tc-n{font-weight:900;font-stretch:125%;font-size:30px;line-height:.8;letter-spacing:-.02em;text-transform:uppercase;color:var(--fg3)}
+  .tc-s{display:flex;flex-direction:column;font-size:10px;line-height:14px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;font-stretch:112%;color:var(--fg3)}
+  .stream-end{margin-top:104px;border-top:4px solid var(--rule);width:calc(100% + var(--margin));padding:16px 16px 0 calc(var(--hang) + 12px);color:var(--fg3);position:relative}
+  .stream-end b{color:var(--fg2);font-weight:850}
+
+  /* ---------- Titanus update ---------- */
+  .upd{
+    position:fixed;top:var(--hdr);right:0;bottom:0;width:var(--upd-w);z-index:25;
+    background:var(--acid);color:#000;display:flex;flex-direction:column;outline:none;
+    border-left:calc(var(--slab-bd) + 1px) solid #000;
+    clip-path:inset(0 0 100% 0);visibility:hidden;
+    transition:clip-path .22s cubic-bezier(.7,0,.2,1),visibility 0s linear .22s;
+  }
+  html[data-theme=dark] .upd{border-left:0}
+  .upd.open{clip-path:inset(0);visibility:visible;transition:clip-path .22s cubic-bezier(.7,0,.2,1)}
+  .upd-lab{flex:none;display:flex;align-items:stretch;height:36px;border-bottom:2px solid #000;font-weight:850}
+  .upd-lab > span{display:flex;align-items:center;padding:0 16px;border-right:2px solid #000}
+  .upd-lab > span.cnt{border-right:0;opacity:.62}
+  .upd-x{margin-left:auto;border:0;background:#000;color:var(--acid);padding:0 14px;display:flex;align-items:center;gap:10px;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit}
+  .upd-x kbd{border-color:var(--acid)}
+  .upd-x:hover{background:#1d1d1d}
+  .upd-title{flex:none;padding:20px 20px 0;font-weight:900;font-stretch:125%;font-size:60px;line-height:.82;letter-spacing:-.03em;text-transform:uppercase}
+  .upd-lede{flex:none;margin:0;padding:12px 20px 18px;font-size:15px;line-height:21px;border-bottom:4px solid #000;text-wrap:pretty}
+  .upd-list{list-style:none;margin:0;padding:0;overflow:auto;flex:1;min-height:0;scrollbar-color:#000 transparent}
+  .ui{display:grid;grid-template-columns:62px minmax(0,1fr);border-bottom:2px solid #000;padding-bottom:16px}
+  .ui-n{padding:16px 0 0 20px;font-weight:900;font-stretch:125%;font-size:24px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .ui-b{padding:16px 20px 0 0}
+  .ui h3{margin:0;font-size:17px;line-height:22px;font-weight:850;letter-spacing:-.01em}
+  .ui p{margin:5px 0 0;font-size:14px;line-height:20px}
+  .ui-act{grid-column:2;display:flex;align-items:center;gap:6px;margin:12px 20px 0 0}
+  .ui-act button{height:32px;border:2px solid #000;background:none;color:#000;padding:0 12px;cursor:pointer;font-weight:850}
+  .ui-act .ui-done{background:#000;color:var(--acid)}
+  .ui-act .ui-done:hover{background:#262626}
+  .ui-act .ui-dis:hover{background:#000;color:var(--acid)}
+  .ui-act .ui-see{margin-left:auto;border-color:transparent;padding:0 2px;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
+  .ui-act .ui-see .ar{font-size:15px;letter-spacing:0;font-stretch:100%;vertical-align:-1px}
+  .ui-act .ui-see:hover{text-decoration-thickness:3px}
+  .upd-cl{display:flex;justify-content:space-between;align-items:center;height:36px;padding:0 20px;border-bottom:2px solid #000;font-size:10.5px;line-height:14px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;font-stretch:112%}
+  .upd-cl span + span{opacity:.62}
+  .uc{display:grid;grid-template-columns:42px minmax(0,1fr) auto auto;align-items:center;column-gap:12px;min-height:40px;padding:0 20px;border-bottom:1px solid rgba(0,0,0,.28)}
+  .uc .n{font-weight:900;font-stretch:125%;font-size:15px;line-height:1;opacity:.55}
+  .uc .h{font-size:14px;line-height:20px;text-decoration:line-through;text-decoration-thickness:2px;opacity:.55;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .uc .st,.uc button{font-size:10px;line-height:14px;font-weight:850;letter-spacing:.1em;text-transform:uppercase;font-stretch:112%}
+  .uc .st{opacity:.55}
+  .uc button{border:0;background:none;color:#000;padding:0;cursor:pointer;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:3px}
+  .upd-foot{flex:none;border-top:4px solid #000;height:56px;display:flex;align-items:center;gap:12px;padding:0 20px;cursor:not-allowed;user-select:none}
+  .upd-foot .pr{font-weight:900;font-size:18px;line-height:1;opacity:.45}
+  .upd-foot .ph{font-size:15px;opacity:.5}
+  .upd-foot .soon{margin-left:auto;font-size:10px;line-height:14px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;font-stretch:112%;opacity:.5}
+
+  /* ---------- Toast / autocomplete ---------- */
+  .toast{
+    position:fixed;left:var(--rail);bottom:0;z-index:40;max-width:330px;
+    background:var(--fg);color:var(--bg);font-size:13.5px;line-height:19px;font-weight:500;padding:14px 16px;
+    display:flex;align-items:center;gap:16px;transform:translateY(100%);transition:transform .16s cubic-bezier(.7,0,.2,1);pointer-events:none;
+  }
+  .toast.show{transform:none;pointer-events:auto}
+  .toast b{font-weight:850}
+  .toast button{flex:none;border:1px solid var(--bg);background:none;color:var(--bg);height:28px;padding:0 10px;cursor:pointer}
+  .toast button:hover{background:var(--bg);color:var(--fg)}
+  .acpop{position:fixed;z-index:50;min-width:250px;background:var(--bg);border:2px solid var(--fg);font-size:14px;line-height:20px}
+  .acpop .ah{padding:8px 12px;color:var(--fg3);border-bottom:1px solid var(--rule2)}
+  .acpop .opt{display:flex;align-items:center;gap:10px;padding:7px 12px;cursor:pointer;color:var(--fg)}
+  .acpop .opt .pg{width:22px;font-size:10.5px;font-weight:850;color:var(--fg3)}
+  .acpop .opt.sel{background:var(--fg);color:var(--bg)}
+  .acpop .opt.sel .pg{color:var(--bg)}
+
+  @media (max-height:780px){
+    .ri i{display:none}
+    .ri{justify-content:center;padding:8px 0}
+    .ri span{letter-spacing:.12em}
+  }
+  @media (max-height:860px){
+    :root{--hdr:76px}
+    .wkc .big{font-size:34px}
+    .dbtn .n{font-size:28px}
+    .upd-title{font-size:40px;padding-top:14px}
+    .upd-lede{padding:8px 20px 12px;font-size:14px;line-height:19px}
+    .ui{grid-template-columns:62px minmax(0,1fr);padding-bottom:11px}
+    .ui-n{padding-top:11px;font-size:21px}
+    .ui-b{padding-top:11px}
+    .ui h3{font-size:16px;line-height:20px}
+    .ui p{margin-top:3px;font-size:13.5px;line-height:19px}
+    .ui-act{margin-top:8px}
+    .ui-act button{height:28px}
+    .upd-foot{height:44px}
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 12 12"><path d="M2.2 6.3 4.8 8.9 9.9 3.3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="square"/></symbol>
+</svg>
+
+<div class="gl" aria-hidden="true"><div class="c"></div></div>
+
+<aside class="rail" aria-label="Sections">
+  <div class="brand" title="Commander"><b>C</b><span>CMDR</span></div>
+  <nav>
+    <a class="ri" href="#" data-section="Dashboard"><i>01</i><span>Dashboard</span></a>
+    <a class="ri" href="#" data-section="Linear"><i>02</i><span>Linear</span></a>
+    <a class="ri" href="#" data-section="Email"><i>03</i><span>Email</span></a>
+    <a class="ri" href="#" data-section="Calendar"><i>04</i><span>Calendar</span></a>
+    <a class="ri" href="#" data-section="GitHub"><i>05</i><span>GitHub</span></a>
+    <a class="ri on" href="#" aria-current="page"><i>06</i><span>Notes</span></a>
+    <a class="ri" href="#" data-section="Todos"><i>07</i><span>Todos</span></a>
+  </nav>
+  <div class="tsw" role="group" aria-label="Theme">
+    <button type="button" data-t="dark" aria-pressed="false">Dark</button>
+    <button type="button" data-t="light" aria-pressed="false">Light</button>
+  </div>
+  <div class="me" title="Seth">ST</div>
+</aside>
+
+<main>
+  <header class="top" id="strip">
+    <div class="wkc"><span class="lab">Week</span><span class="rng">28.09–04.10</span><span class="big">40</span></div>
+    <nav class="days" id="days" aria-label="Jump to day"></nav>
+    <div class="ti" aria-label="Titanus">
+      <div class="ti-info">
+        <div class="presence" id="presence"><i></i><span>You’re here</span></div>
+        <div class="queue" id="queue"></div>
+      </div>
+      <button class="ti-btn" id="askBtn" type="button" aria-expanded="false" aria-controls="upd"></button>
+    </div>
+  </header>
+  <div class="cols">
+    <div class="stream" id="stream"></div>
+  </div>
+</main>
+
+<aside class="upd" id="upd" tabindex="-1" aria-label="Update from Titanus" aria-hidden="true">
+  <div class="upd-lab"><span>Titanus</span><span class="cnt" id="updCount"></span><button class="upd-x" id="updClose" type="button">Close <kbd>Esc</kbd></button></div>
+  <div class="upd-title" id="updTitle"></div>
+  <p class="upd-lede" id="updLede"></p>
+  <ol class="upd-list" id="updList"></ol>
+  <div class="upd-foot" aria-disabled="true" title="Talking to Titanus comes later"><span class="pr">›</span><span class="ph">Ask Titanus…</span><span class="soon">Coming later</span></div>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="acpop" id="acpop" hidden></div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const escA = s => esc(s).replace(/"/g, '&quot;');
+  const use = n => `<svg class="i i-${n}"><use href="#i-${n}"/></svg>`;
+  const CE = (() => { try { const d = document.createElement('div'); d.contentEditable = 'plaintext-only'; return d.contentEditable === 'plaintext-only' ? 'plaintext-only' : 'true'; } catch (e) { return 'true'; } })();
+  const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+  const params = new URLSearchParams(location.search);
+
+  /* ------------------------------------------------------------------ */
+  /* Sample content (shared CONTENT.md + CONTENT-ROUND2.md)              */
+  /* ------------------------------------------------------------------ */
+  const DATA = [
+    { key: '2026-10-01', weekday: 'Thursday', date: '1 October 2026', dn: '01', month: 'October 2026', doy: 274, eyebrow: 'Today', today: true, blocks: [
+      { t: 'heading', text: 'Morning', role: 'morning', children: [
+        { text: 'Slept badly but the head is clear. Big rocks today: get the Commander map moving, unblock Priya on the payments retry work, and decide on the Acme Payments contract before Friday.' },
+      ]},
+      { t: 'heading', text: 'Meetings', role: 'meetings', children: [
+        { t: 'meeting', time: '09:30–09:45', text: 'Eng standup' },
+        { t: 'meeting', time: '13:00–13:30', text: '1:1 with Priya', children: [
+          { text: 'Webhook retries are hammering Acme during their outages. She wants exponential backoff with jitter, capped at 1h.' },
+          { text: 'Decision: ship backoff behind a flag this sprint; no queue rewrite yet.' },
+          { id: 'b-followup', text: 'Follow-up: she needs read access to the Acme sandbox dashboard.' },
+          { text: "She's interested in leading the Q4 reliability push. Talk to Marcus." },
+        ]},
+        { t: 'meeting', id: 'b-acme', time: '16:00–16:45', text: 'Vendor call: Acme Payments' },
+      ]},
+      { t: 'heading', text: 'Todos', role: 'todos', id: 'b-todos', children: [
+        { t: 'todo', origin: 'manual', done: true, text: "Review Priya's backoff design doc" },
+        { t: 'todo', id: 'b-eng412', origin: 'linear', lid: 'ENG-412', status: 'In Progress', text: 'Fix webhook retry backoff' },
+        { t: 'todo', origin: 'linear', lid: 'ENG-418', status: 'Todo', text: 'Rotate Acme sandbox API keys' },
+        { t: 'todo', origin: 'manual', text: 'Buy a birthday gift for Sam' },
+      ]},
+      { t: 'heading', text: 'Ideas', role: 'ideas', children: [
+        { text: '[[Commander]]: Buckets could learn from what I archive without reading.' },
+        { text: 'The Daily Note should be where I think; everything else feeds it.' },
+      ]},
+      { text: 'Links: [[Q4 planning]], [[Acme Payments]], [[Priya]]', role: 'links' },
+      { t: 'heading', text: 'Evening', role: 'evening', children: [
+        { text: '', ph: 'Nothing yet. How did today go?' },
+      ]},
+    ]},
+    { key: '2026-09-30', weekday: 'Wednesday', date: '30 September 2026', dn: '30', month: 'September 2026', doy: 273, eyebrow: 'Yesterday', blocks: [
+      { text: 'Mapped out Commander with Claude; research running on Gmail, Outlook, Linear, GitHub APIs.' },
+      { t: 'todo', origin: 'linear', lid: 'ENG-405', status: 'Done', done: true, text: 'Upgrade Postgres minor version' },
+      { text: 'Note to self: block mornings for deep work.' },
+    ]},
+    { key: '2026-09-29', weekday: 'Tuesday', date: '29 September 2026', dn: '29', month: 'September 2026', doy: 272, eyebrow: '2 days ago', blocks: [
+      { text: 'Offsite planning call with Dana. Lisbon or Porto?' },
+      { t: 'todo', origin: 'manual', done: true, text: 'Submit expense report' },
+      { text: 'Read: "Local-first software" essay again.' },
+    ]},
+  ];
+
+  // Titanus's margin suggestions (Agent suggestions in code; Titanus on screen)
+  const SUGGESTIONS = [
+    { id: 's-priya', day: '2026-10-01', anchor: 'b-followup', src: 'note', srcLabel: 'From this note',
+      text: 'Give Priya Acme sandbox access', why: 'You wrote this down in your 1:1. It isn’t a Todo yet.', state: 'open' },
+    { id: 's-dana', day: '2026-10-01', anchor: 'b-todos', src: 'email', srcLabel: 'From email',
+      text: 'Reply to Dana about the Q4 offsite dates', why: 'Dana emailed to ask which dates work. You haven’t replied.', state: 'open' },
+  ];
+
+  // What Titanus is holding until the User asks for an update
+  const QUEUE = [
+    { id: 'q1', n: '01', head: 'Dana is waiting on you.', body: 'She asked which dates work for the Q4 offsite. You haven’t answered yet. It’s a short reply.', see: { card: 's-dana', text: 'Reply to Dana' }, state: 'open' },
+    { id: 'q2', n: '02', head: 'Priya still can’t get into the Acme sandbox.', body: 'You wrote it down in your 1:1. Nobody has done it yet. It takes a minute.', see: { block: 'b-followup' }, state: 'open' },
+    { id: 'q3', n: '03', head: 'The Acme decision is due Friday.', body: 'Your call with them is at four today. If you decide on the call, you’re done early.', see: { block: 'b-acme' }, state: 'open' },
+    { id: 'q4', n: '04', head: 'ENG-412 has been In Progress for six days.', body: 'That’s longer than these usually take. Priya might be stuck. Worth a quick question.', see: { block: 'b-eng412' }, state: 'open' },
+  ];
+
+  const WEEK = [
+    { key: '2026-09-28', wd: 'Mon', n: 28, full: 'Monday 28 September' },
+    { key: '2026-09-29', wd: 'Tue', n: 29, full: 'Tuesday 29 September' },
+    { key: '2026-09-30', wd: 'Wed', n: 30, full: 'Wednesday 30 September' },
+    { key: '2026-10-01', wd: 'Thu', n: 1, full: 'Thursday 1 October', today: true },
+    { key: '2026-10-02', wd: 'Fri', n: 2, full: 'Friday 2 October', future: true },
+    { key: '2026-10-03', wd: 'Sat', n: 3, full: 'Saturday 3 October', future: true },
+    { key: '2026-10-04', wd: 'Sun', n: 4, full: 'Sunday 4 October', future: true },
+  ];
+
+  /* ------------------------------------------------------------------ */
+  /* Rendering                                                           */
+  /* ------------------------------------------------------------------ */
+  const LABEL_RE = /^([A-Z][A-Za-z\- ]{1,18}:)(?=\s)/;
+  function render(text, type) {
+    let out = '', rest = text, m;
+    if (type === 'text' && (m = LABEL_RE.exec(text))) { out += `<span class="lbl">${esc(m[1])}</span>`; rest = text.slice(m[1].length); }
+    const re = /\[\[([^\[\]\n]*)\]\]|\*\*([^*\n]+)\*\*/g;
+    let i = 0;
+    while ((m = re.exec(rest))) {
+      out += esc(rest.slice(i, m.index));
+      if (m[1] !== undefined) out += `<span class="wl" data-page="${escA(m[1])}"><span class="mk">[[</span>${esc(m[1])}<span class="mk">]]</span></span>`;
+      else out += `<span class="mk">**</span><strong>${esc(m[2])}</strong><span class="mk">**</span>`;
+      i = re.lastIndex;
+    }
+    out += esc(rest.slice(i));
+    if (text.endsWith('\n')) out += '<br>';
+    return out;
+  }
+
+  function statusSq(s) {
+    const cls = s === 'Done' ? 'done' : s === 'In Progress' ? 'prog' : 'todo';
+    return `<span class="sq ${cls}">${use('check')}</span>`;
+  }
+  const linPill = b => `Linear<span class="sep">/</span>${esc(b.dataset.status)}`;
+  const checkInner = b => b.dataset.origin === 'linear' ? statusSq(b.dataset.status) : `<span class="box">${use('check')}</span>`;
+
+  let uid = 0;
+  function mk(s) {
+    const b = document.createElement('div');
+    b.className = 'blk';
+    b.dataset.id = s.id || 'b' + (++uid);
+    b.dataset.type = s.t || 'text';
+    for (const k of ['origin', 'lid', 'status', 'time', 'role', 'src', 'ph']) if (s[k]) b.dataset[k] = s[k];
+    if (s.done) b.classList.add('done');
+    b.append(buildRow(b, s.text || ''));
+    const k = document.createElement('div'); k.className = 'kids';
+    (s.children || []).forEach(ch => k.append(mk(ch)));
+    b.append(k);
+    b.classList.toggle('has-kids', k.children.length > 0);
+    return b;
+  }
+  function buildRow(b, text) {
+    const t = b.dataset.type, o = b.dataset.origin;
+    const r = document.createElement('div'); r.className = 'row';
+    let h = '<button class="tog" tabindex="-1" aria-label="Fold or unfold"></button>';
+    h += t === 'todo'
+      ? `<button class="check" tabindex="-1" role="checkbox" aria-label="Toggle done">${checkInner(b)}</button>`
+      : '<span class="bullet" title="Click to fold"><i></i></span>';
+    if (t === 'meeting') h += `<span class="chip" title="From Calendar">${esc(b.dataset.time)}</span>`;
+    if (t === 'todo' && o === 'linear') h += `<span class="lid">${esc(b.dataset.lid)}</span>`;
+    h += '<div class="content" spellcheck="false"></div>';
+    if (t === 'heading') h += '<span class="hmeta"></span>';
+    if (t === 'todo' && o === 'linear') h += `<span class="pill lin" title="Linear issue ${escA(b.dataset.lid)}">${linPill(b)}</span>`;
+    if (t === 'todo' && o === 'manual') h += '<span class="pill man" title="A Todo you wrote">Manual</span>';
+    if (t === 'todo' && o === 'agent') h += `<span class="pill agent" title="Suggested by Titanus">Titanus<span class="sep">/</span>${b.dataset.src === 'email' ? 'from email' : 'from note'}</span>`;
+    r.innerHTML = h;
+    const c = $('.content', r);
+    c.contentEditable = CE;
+    if (b.dataset.ph) c.dataset.ph = b.dataset.ph;
+    c.innerHTML = render(text, t);
+    return r;
+  }
+
+  const row = b => b.firstElementChild;
+  const content = b => row(b).querySelector('.content');
+  const kids = b => b.lastElementChild;
+  const parentBlk = b => b.parentElement.closest('.blk');
+  const dayOf = b => b.closest('.day');
+  const isHidden = b => !!b.parentElement.closest('.blk.collapsed');
+  const visible = root => $$('.blk', root).filter(x => !isHidden(x));
+  function prevVisible(b, sameDay) { const l = visible(sameDay ? dayOf(b) : stream); return l[l.indexOf(b) - 1] || null; }
+  function nextVisible(b, sameDay) { const l = visible(sameDay ? dayOf(b) : stream); return l[l.indexOf(b) + 1] || null; }
+
+  /* ------------------------------------------------------------------ */
+  /* Build page                                                          */
+  /* ------------------------------------------------------------------ */
+  const stream = $('#stream');
+  const strip = $('#strip');
+  DATA.forEach(d => {
+    const sec = document.createElement('section');
+    sec.className = 'day' + (d.today ? ' today' : '');
+    sec.dataset.key = d.key; sec.id = 'd-' + d.key;
+    sec.innerHTML = `<svg class="links" aria-hidden="true"></svg>
+      <h2 class="title"><span class="dn" aria-hidden="true">${d.dn}</span><span class="wd">${d.weekday}<span class="sr">, ${d.date}</span></span></h2>
+      <div class="dstrip">
+        <div class="eb">${d.eyebrow}</div>
+        <div class="ds-main"><span class="c">${d.month}</span><span class="c">Week 40</span><span class="c">Day ${d.doy}</span><span class="meta"></span></div>
+        <div class="ds-ti"></div>
+      </div>
+      <div class="outline"></div>
+      <div class="gutter"></div>`;
+    const ol = $('.outline', sec);
+    d.blocks.forEach(s => ol.append(mk(s)));
+    stream.append(sec);
+  });
+  const end = document.createElement('div');
+  end.className = 'stream-end';
+  end.innerHTML = '<b>Monday 28 September</b> has no Daily Note. That’s the start of the week.';
+  stream.append(end);
+
+  // Outliner legend in today's margin
+  const todaySec = $('.day.today');
+  const todayGutter = $('.gutter', todaySec);
+  const legend = document.createElement('div');
+  legend.className = 'legend';
+  legend.innerHTML = `<div class="lt"><span>Outliner</span><span>Every line is a block</span></div>
+    <div class="k"><span><kbd>↵</kbd></span><span>New block</span></div>
+    <div class="k"><span><kbd>Tab</kbd><kbd>⇧ Tab</kbd></span><span>Indent / outdent</span></div>
+    <div class="k"><span><kbd>■</kbd></span><span>Click a bullet to fold</span></div>
+    <div class="k"><span><kbd>[ ]</kbd></span><span>Start a line: Todo</span></div>
+    <div class="k"><span><kbd>${MOD} ↵</kbd></span><span>Make a Todo / tick it</span></div>
+    <div class="k"><span><kbd>[[</kbd></span><span>Link a note</span></div>
+    <div class="k ti-k"><span><kbd>U</kbd></span><span>Ask Titanus for an update</span></div>`;
+  todayGutter.append(legend);
+  const tiCol = document.createElement('div');
+  tiCol.className = 'ti-col';
+  tiCol.innerHTML = '<div class="tc-n">Titanus</div><div class="tc-s"><span>Speaks only when you ask</span><span>Never interrupts</span></div>';
+  todayGutter.append(tiCol);
+
+  // Titanus margin cards
+  function cardHTML(s) {
+    return `<div class="ac-head"><span>Titanus noticed</span><span class="ac-src">${esc(s.srcLabel)}</span></div>
+      <div class="ac-lab">Suggested Todo</div>
+      <div class="ac-todo">${esc(s.text)}</div>
+      <div class="ac-why">${esc(s.why)}</div>
+      <div class="ac-actions"><button class="ac-accept" type="button">Accept</button><button class="ac-dismiss" type="button">Dismiss</button></div>`;
+  }
+  SUGGESTIONS.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'agent-card'; card.dataset.sid = s.id; card.dataset.anchor = s.anchor;
+    card.innerHTML = cardHTML(s);
+    $('#d-' + s.day + ' .gutter').append(card);
+  });
+
+  // Week strip
+  const daysNav = $('#days');
+  const hasNote = new Set(DATA.map(d => d.key));
+  WEEK.forEach(w => {
+    const btn = document.createElement('button');
+    const has = hasNote.has(w.key);
+    btn.className = 'dbtn' + (has ? ' has' : ' empty') + (w.today ? ' today' : '') + (w.future ? ' future' : (!has ? ' past' : ''));
+    btn.dataset.key = w.key;
+    btn.title = w.full + (has ? '' : w.future ? ' · no Daily Note yet' : ' · no Daily Note');
+    btn.innerHTML = `<span class="w">${w.wd}</span><span class="n">${String(w.n).padStart(2, '0')}</span><span class="tag">${w.today ? 'Today' : (!has && !w.future ? '—' : '')}</span>`;
+    daysNav.append(btn);
+  });
+  const tb = document.createElement('button');
+  tb.className = 'todaybtn'; tb.id = 'todayBtn'; tb.title = 'Back to today';
+  tb.innerHTML = '<span class="a">↑</span><span class="lab">Today</span>';
+  daysNav.append(tb);
+
+  /* ------------------------------------------------------------------ */
+  /* Caret helpers                                                       */
+  /* ------------------------------------------------------------------ */
+  function selOffsets(el) {
+    const s = getSelection(); if (!s.rangeCount) return [0, 0];
+    const r = s.getRangeAt(0);
+    if (!el.contains(r.startContainer)) return [0, 0];
+    const pre = document.createRange(); pre.selectNodeContents(el);
+    pre.setEnd(r.startContainer, r.startOffset); const a = pre.toString().length;
+    pre.setEnd(r.endContainer, r.endOffset); const z = pre.toString().length;
+    return [a, z];
+  }
+  const caretOffset = el => selOffsets(el)[0];
+  function setCaret(el, off) {
+    const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    let n, acc = 0;
+    const s = getSelection(), r = document.createRange();
+    while ((n = w.nextNode())) {
+      const len = n.nodeValue.length;
+      if (acc + len >= off) { r.setStart(n, Math.max(0, off - acc)); r.collapse(true); s.removeAllRanges(); s.addRange(r); return; }
+      acc += len;
+    }
+    r.selectNodeContents(el); r.collapse(false); s.removeAllRanges(); s.addRange(r);
+  }
+  function setText(c, text) { c.innerHTML = render(text, c.closest('.blk').dataset.type); }
+  function ensureVisible(el) {
+    const r = el.getBoundingClientRect();
+    if (r.top < strip.offsetHeight + 16 || r.bottom > innerHeight - 110) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+  function focusAt(b, off) {
+    const c = content(b);
+    c.focus({ preventScroll: true });
+    setCaret(c, off === 'end' ? c.textContent.length : off);
+    ensureVisible(c);
+  }
+  function caretRect() {
+    const s = getSelection(); if (!s.rangeCount) return null;
+    const r = s.getRangeAt(0).cloneRange(); r.collapse(true);
+    const rects = r.getClientRects();
+    return rects.length ? rects[rects.length - 1] : null;
+  }
+  function onFirstLine(c) {
+    const r = caretRect(); if (!r || !r.height) return caretOffset(c) === 0;
+    return r.top < c.getBoundingClientRect().top + 18;
+  }
+  function onLastLine(c) {
+    const r = caretRect(); if (!r || !r.height) return caretOffset(c) === c.textContent.length;
+    return r.bottom > c.getBoundingClientRect().bottom - 18;
+  }
+  function caretFromPoint(x, y) {
+    if (document.caretPositionFromPoint) {
+      const p = document.caretPositionFromPoint(x, y); if (!p) return null;
+      const r = document.createRange(); r.setStart(p.offsetNode, p.offset); r.collapse(true); return r;
+    }
+    return document.caretRangeFromPoint ? document.caretRangeFromPoint(x, y) : null;
+  }
+  function focusAtX(b, x, edge) {
+    const c = content(b);
+    c.focus({ preventScroll: true });
+    ensureVisible(c);
+    const cr = c.getBoundingClientRect();
+    const y = edge === 'bottom' ? cr.bottom - 14 : cr.top + 14;
+    const r = (y > 0 && y < innerHeight) ? caretFromPoint(Math.min(Math.max(x, cr.left + 1), cr.right - 1), y) : null;
+    if (r && c.contains(r.startContainer)) { const s = getSelection(); s.removeAllRanges(); s.addRange(r); }
+    else setCaret(c, edge === 'bottom' ? c.textContent.length : 0);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Text undo (per block, in memory)                                    */
+  /* ------------------------------------------------------------------ */
+  const undoStack = []; let lastSnap = 0, lastSnapEl = null;
+  function snapshot(c, force) {
+    const now = Date.now();
+    if (force || now - lastSnap > 800 || lastSnapEl !== c) {
+      undoStack.push({ c, text: c.textContent, off: caretOffset(c) });
+      if (undoStack.length > 300) undoStack.shift();
+    }
+    lastSnap = now; lastSnapEl = c;
+  }
+  function doUndo() {
+    while (undoStack.length) {
+      const s = undoStack.pop();
+      if (s.c.isConnected) { setText(s.c, s.text); s.c.focus(); setCaret(s.c, s.off); lastSnapEl = null; afterChange(); return; }
+    }
+    toast('Nothing left to undo in this Daily Note');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Structure operations                                                */
+  /* ------------------------------------------------------------------ */
+  function refresh() {
+    $$('.blk', stream).forEach(b => {
+      const k = kids(b), has = k.children.length > 0;
+      b.classList.toggle('has-kids', has);
+      if (has) {
+        const n = $$('.blk', k).length;
+        b.dataset.n = n;
+        b.dataset.fold = `${n} block${n === 1 ? '' : 's'} folded · click the number to open`;
+      } else { delete b.dataset.n; delete b.dataset.fold; }
+    });
+    afterChange();
+  }
+  function afterChange() { updateMeta(); scheduleLayout(); }
+
+  function convert(b, type, origin) {
+    const c = content(b), text = c.textContent, off = caretOffset(c);
+    b.dataset.type = type;
+    if (origin) b.dataset.origin = origin; else delete b.dataset.origin;
+    if (type !== 'todo') { b.classList.remove('done'); delete b.dataset.src; delete b.dataset.lid; delete b.dataset.status; }
+    if (type !== 'heading') delete b.dataset.role;
+    b.replaceChild(buildRow(b, text), row(b));
+    focusAt(b, Math.min(off, text.length));
+    refresh();
+  }
+  function indent(b) {
+    const prev = b.previousElementSibling;
+    if (!prev || !prev.classList.contains('blk')) return;
+    const off = caretOffset(content(b));
+    if (prev.classList.contains('collapsed')) prev.classList.remove('collapsed');
+    kids(prev).append(b);
+    refresh(); focusAt(b, off);
+  }
+  function outdent(b) {
+    const p = parentBlk(b); if (!p) return;
+    const off = caretOffset(content(b));
+    p.after(b);
+    refresh(); focusAt(b, off);
+  }
+  function moveBlock(b, dir) {
+    const off = caretOffset(content(b));
+    if (dir < 0) { const p = b.previousElementSibling; if (!p) return; p.before(b); }
+    else { const n = b.nextElementSibling; if (!n) return; n.after(b); }
+    refresh(); focusAt(b, off);
+  }
+  function toggleFold(b, force) {
+    if (!b.classList.contains('has-kids')) return;
+    const collapse = force === undefined ? !b.classList.contains('collapsed') : force;
+    if (collapse === b.classList.contains('collapsed')) return;
+    const a = document.activeElement;
+    b.classList.toggle('collapsed', collapse);
+    if (collapse && a && kids(b).contains(a)) focusAt(b, 'end');
+    scheduleLayout();
+  }
+  function toggleDone(b) {
+    const done = !b.classList.contains('done');
+    b.classList.toggle('done', done);
+    if (b.dataset.origin === 'linear') {
+      if (done) { b.dataset.prev = b.dataset.status; b.dataset.status = 'Done'; }
+      else b.dataset.status = b.dataset.prev && b.dataset.prev !== 'Done' ? b.dataset.prev : 'Todo';
+      $('.check', row(b)).innerHTML = checkInner(b);
+      $('.pill.lin', row(b)).innerHTML = linPill(b);
+      toast(`<b>${esc(b.dataset.lid)}</b> moved to ${esc(b.dataset.status)} in Linear`);
+    }
+    updateMeta();
+  }
+
+  function onEnter(b, c) {
+    const type = b.dataset.type, origin = b.dataset.origin;
+    const text = c.textContent; const [s, e] = selOffsets(c);
+    const splittable = type === 'text' || (type === 'todo' && origin !== 'linear');
+    if (type === 'todo' && origin !== 'linear' && text.trim() === '') { convert(b, 'text'); return; }
+    if (type === 'text' && text === '' && parentBlk(b) && !b.nextElementSibling) { outdent(b); return; }
+    const todoish = type === 'todo' || b.dataset.role === 'todos';
+    const spec = t => todoish ? { t: 'todo', origin: 'manual', text: t } : { text: t };
+    if (s === 0 && e === 0 && text.length > 0) {
+      const nb = mk(type === 'todo' ? spec('') : { text: '' });
+      b.before(nb); refresh(); focusAt(b, 0); return;
+    }
+    let carry = '';
+    if (splittable) { snapshot(c, true); carry = text.slice(e); setText(c, text.slice(0, s)); }
+    const nb = mk(spec(carry));
+    if (b.classList.contains('has-kids') && !b.classList.contains('collapsed')) kids(b).prepend(nb);
+    else if (type === 'heading' && !b.classList.contains('has-kids')) kids(b).append(nb);
+    else b.after(nb);
+    refresh(); focusAt(nb, 0);
+  }
+  function onBackspace(ev, b, c) {
+    const [s, e] = selOffsets(c); if (s !== 0 || e !== 0) return;
+    const type = b.dataset.type, origin = b.dataset.origin;
+    ev.preventDefault();
+    if (type === 'todo' && origin !== 'linear') { convert(b, 'text'); return; }
+    if (type === 'heading') { convert(b, 'text'); return; }
+    const p = prevVisible(b, true);
+    if (type === 'meeting' || origin === 'linear') { if (p) focusAt(p, 'end'); return; }
+    if (!p) return;
+    const text = c.textContent;
+    const pLocked = p.dataset.type === 'meeting' || p.dataset.origin === 'linear';
+    if (text !== '' && (pLocked || b.classList.contains('has-kids'))) { focusAt(p, 'end'); return; }
+    if (b.classList.contains('has-kids')) [...kids(b).children].forEach(k => b.before(k));
+    const pc = content(p), pt = pc.textContent;
+    snapshot(pc, true);
+    if (text !== '') setText(pc, pt + text);
+    b.remove(); refresh(); focusAt(p, pt.length);
+  }
+  function onDelete(ev, b, c) {
+    const text = c.textContent; const [s, e] = selOffsets(c);
+    if (s !== text.length || e !== text.length) return;
+    ev.preventDefault();
+    const n = nextVisible(b, true);
+    const locked = b.dataset.type === 'meeting' || b.dataset.type === 'heading' || b.dataset.origin === 'linear';
+    if (!n || locked || n.dataset.type !== 'text' || n.classList.contains('has-kids')) return;
+    snapshot(c, true);
+    setText(c, text + content(n).textContent); n.remove(); refresh(); focusAt(b, text.length);
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* [[ autocomplete                                                     */
+  /* ------------------------------------------------------------------ */
+  const pop = $('#acpop');
+  let ac = null;
+  function allPages(c, q) {
+    const set = new Set(['Commander', 'Q4 planning', 'Acme Payments', 'Priya']);
+    $$('.wl', stream).forEach(w => {
+      const p = w.dataset.page.trim();
+      if (p && !(w.closest('.content') === c && p === q)) set.add(p);
+    });
+    return [...set];
+  }
+  function updateAC(c) {
+    const text = c.textContent, off = caretOffset(c);
+    const m = /\[\[([^\[\]\n]*)$/.exec(text.slice(0, off));
+    const after = text.slice(off);
+    if (!m || !/^[^\[\]\n]*\]\]/.test(after)) return closeAC();
+    const q = m[1].trim().toLowerCase();
+    const pages = allPages(c, m[1].trim());
+    let items = pages.filter(p => p.toLowerCase().includes(q) && p.toLowerCase() !== q).map(p => ({ name: p }));
+    const exact = pages.find(p => p.toLowerCase() === q);
+    if (exact) items.unshift({ name: exact });
+    if (q && !exact) items.push({ name: m[1].trim(), isNew: true });
+    items = items.slice(0, 6);
+    if (!items.length) return closeAC();
+    ac = { c, items, sel: 0, qs: off - m[1].length, qe: off + after.indexOf(']]') };
+    drawAC();
+  }
+  function drawAC() {
+    const r = caretRect() || ac.c.getBoundingClientRect();
+    pop.innerHTML = '<div class="ah">Link a note</div>' + ac.items.map((it, i) =>
+      `<div class="opt${i === ac.sel ? ' sel' : ''}${it.isNew ? ' new' : ''}" data-i="${i}"><span class="pg">${it.isNew ? '+' : '[['}</span>${it.isNew ? 'New note “' + esc(it.name) + '”' : esc(it.name)}</div>`).join('');
+    pop.hidden = false;
+    const left = Math.min(r.left - 8, innerWidth - pop.offsetWidth - 12);
+    let top = r.bottom + 8;
+    if (top + pop.offsetHeight > innerHeight - 12) top = r.top - pop.offsetHeight - 8;
+    pop.style.left = left + 'px'; pop.style.top = top + 'px';
+  }
+  function pickAC(i) {
+    const it = ac.items[i], c = ac.c, text = c.textContent;
+    snapshot(c, true);
+    setText(c, text.slice(0, ac.qs) + it.name + text.slice(ac.qe));
+    c.focus(); setCaret(c, ac.qs + it.name.length + 2);
+    closeAC(); afterChange();
+  }
+  function closeAC() { ac = null; pop.hidden = true; }
+  pop.addEventListener('mousedown', e => {
+    e.preventDefault();
+    const o = e.target.closest('.opt'); if (o && ac) pickAC(+o.dataset.i);
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Events: editing                                                     */
+  /* ------------------------------------------------------------------ */
+  const contentOf = t => t && t.closest ? t.closest('.content') : null;
+
+  stream.addEventListener('beforeinput', e => {
+    const c = contentOf(e.target); if (!c) return;
+    if (e.inputType === 'historyUndo') { e.preventDefault(); doUndo(); return; }
+    if (e.inputType === 'historyRedo' || e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak' || e.inputType.startsWith('format')) { e.preventDefault(); return; }
+    snapshot(c);
+  });
+
+  function afterEdit(c, e) {
+    const b = c.closest('.blk');
+    let text = c.textContent, off = caretOffset(c);
+    if (e.inputType === 'insertText' && e.data === '[' && text.slice(off - 2, off) === '[[' && text.slice(off, off + 2) !== ']]') {
+      text = text.slice(0, off) + ']]' + text.slice(off);
+    }
+    const tm = b.dataset.type === 'text' && /^\[ ?\] /.exec(text);
+    if (tm) {
+      b.dataset.type = 'todo'; b.dataset.origin = 'manual';
+      b.replaceChild(buildRow(b, text.slice(tm[0].length)), row(b));
+      focusAt(b, Math.max(0, off - tm[0].length)); refresh(); return;
+    }
+    const html = render(text, b.dataset.type);
+    if (c.innerHTML !== html) { c.innerHTML = html; setCaret(c, off); }
+    updateAC(c); afterChange();
+  }
+  stream.addEventListener('input', e => {
+    const c = contentOf(e.target); if (!c || e.isComposing) return;
+    afterEdit(c, e);
+  });
+  stream.addEventListener('compositionend', e => { const c = contentOf(e.target); if (c) afterEdit(c, {}); });
+  stream.addEventListener('paste', e => {
+    const c = contentOf(e.target); if (!c) return;
+    e.preventDefault();
+    const t = (e.clipboardData.getData('text/plain') || '').replace(/\r?\n+/g, ' ');
+    document.execCommand('insertText', false, t);
+  });
+  stream.addEventListener('drop', e => { if (contentOf(e.target)) e.preventDefault(); });
+
+  stream.addEventListener('keydown', e => {
+    const c = contentOf(e.target); if (!c || e.isComposing) return;
+    const b = c.closest('.blk');
+    const mod = e.metaKey || e.ctrlKey;
+
+    if (ac) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); ac.sel = (ac.sel + (e.key === 'ArrowDown' ? 1 : -1) + ac.items.length) % ac.items.length; drawAC(); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pickAC(ac.sel); return; }
+      if (e.key === 'Escape') { e.preventDefault(); closeAC(); return; }
+    }
+    if (mod && (e.key === 'z' || e.key === 'Z' || e.key === 'y')) {
+      e.preventDefault();
+      if (e.key === 'z' && !e.shiftKey) doUndo();
+      return;
+    }
+    if (mod && /^[biu]$/i.test(e.key)) { e.preventDefault(); return; }
+    if (e.key === 'Enter' && mod) {
+      e.preventDefault();
+      if (b.dataset.type === 'todo') toggleDone(b);
+      else if (b.dataset.type === 'text') convert(b, 'todo', 'manual');
+      return;
+    }
+    if (e.key === 'Enter' && e.shiftKey) {
+      e.preventDefault();
+      const text = c.textContent, [s, z] = selOffsets(c);
+      snapshot(c, true);
+      setText(c, text.slice(0, s) + '\n' + text.slice(z)); setCaret(c, s + 1); afterChange();
+      return;
+    }
+    if (e.key === 'Enter') { e.preventDefault(); onEnter(b, c); return; }
+    if (e.key === 'Tab') { e.preventDefault(); e.shiftKey ? outdent(b) : indent(b); return; }
+    if (e.key === 'Backspace') { onBackspace(e, b, c); return; }
+    if (e.key === 'Delete') { onDelete(e, b, c); return; }
+    if (e.key === 'Escape') { e.preventDefault(); c.blur(); getSelection().removeAllRanges(); return; }
+
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.altKey && e.shiftKey) { e.preventDefault(); moveBlock(b, e.key === 'ArrowUp' ? -1 : 1); return; }
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && mod) { e.preventDefault(); toggleFold(b, e.key === 'ArrowUp'); return; }
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.altKey) {
+      const up = e.key === 'ArrowUp';
+      if (up ? onFirstLine(c) : onLastLine(c)) {
+        const t = up ? prevVisible(b) : nextVisible(b);
+        if (t) { e.preventDefault(); const r = caretRect(); focusAtX(t, r ? r.left : c.getBoundingClientRect().left, up ? 'bottom' : 'top'); }
+      }
+      return;
+    }
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.shiftKey && !mod && !e.altKey) {
+      const [s, z] = selOffsets(c); if (s !== z) return;
+      if (e.key === 'ArrowLeft' && s === 0) { const t = prevVisible(b); if (t) { e.preventDefault(); focusAt(t, 'end'); } }
+      if (e.key === 'ArrowRight' && s === c.textContent.length) { const t = nextVisible(b); if (t) { e.preventDefault(); focusAt(t, 0); } }
+    }
+  });
+
+  stream.addEventListener('focusin', e => { if (contentOf(e.target)) scheduleLayout(); });
+  stream.addEventListener('focusout', e => {
+    const c = contentOf(e.target); if (!c) return;
+    closeAC();
+    const b = c.closest('.blk');
+    if (b) { const html = render(c.textContent, b.dataset.type); if (c.innerHTML !== html) c.innerHTML = html; }
+    scheduleLayout();
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Events: clicks                                                      */
+  /* ------------------------------------------------------------------ */
+  function openPage(page) {
+    const n = $$('.wl', stream).filter(w => w.dataset.page === page).length;
+    toast(`<b>${esc(page)}</b> is linked from ${n} block${n === 1 ? '' : 's'}. The note itself opens in Notes (not in this prototype).`);
+  }
+  stream.addEventListener('mousedown', e => {
+    const wl = e.target.closest('.wl');
+    if (wl) { const c = wl.closest('.content'); if (document.activeElement !== c && !e.shiftKey) { e.preventDefault(); openPage(wl.dataset.page); return; } }
+    if (e.target.closest('.bullet, .tog, .check, .chip, .pill, .lid')) e.preventDefault();
+  });
+  stream.addEventListener('click', e => {
+    const t = e.target;
+    const bl = t.closest('.bullet, .tog');
+    if (bl) { const b = bl.closest('.blk'); if (b.classList.contains('has-kids')) toggleFold(b); else focusAt(b, 'end'); return; }
+    const ck = t.closest('.check'); if (ck) { toggleDone(ck.closest('.blk')); return; }
+    const chip = t.closest('.chip'); if (chip) { toast(`<b>${esc(chip.textContent)}</b> comes from Calendar and opens in the Calendar Section.`); return; }
+    const lp = t.closest('.pill.lin, .lid'); if (lp) { const b = lp.closest('.blk'); toast(`<b>${esc(b.dataset.lid)}</b> · ${esc(b.dataset.status)} · opens in the Linear Section.`); return; }
+    const acc = t.closest('.ac-accept'); if (acc) { accept(acc.closest('.agent-card')); return; }
+    const dis = t.closest('.ac-dismiss'); if (dis) { dismiss(dis.closest('.agent-card')); return; }
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Titanus suggestions (margin)                                        */
+  /* ------------------------------------------------------------------ */
+  const sugById = id => SUGGESTIONS.find(s => s.id === id);
+  function accept(card) {
+    const s = sugById(card.dataset.sid); if (s.state !== 'open') return;
+    s.state = 'accepted'; setHot(null);
+    const todos = $('.blk[data-role=todos]', $('#d-' + s.day));
+    const nb = mk({ t: 'todo', origin: 'agent', src: s.src, text: s.text });
+    if (todos) { toggleFold(todos, false); kids(todos).append(nb); } else $('#d-' + s.day + ' .outline').append(nb);
+    nb.classList.add('flash'); setTimeout(() => nb.classList.remove('flash'), 1400);
+    $('.ac-actions', card).innerHTML = `<span class="ac-ok">${use('check')} Added to today’s Todos</span>`;
+    setTimeout(() => { if (s.state === 'accepted') { card.classList.add('gone'); scheduleLayout(); } }, 900);
+    refresh();
+    toast('Added to today’s Todos.', () => { nb.remove(); restore(card, s); });
+  }
+  function dismiss(card) {
+    const s = sugById(card.dataset.sid); if (s.state !== 'open') return;
+    s.state = 'dismissed'; setHot(null);
+    card.classList.add('gone');
+    afterChange();
+    toast('Dismissed. Titanus won’t raise it again today.', () => restore(card, s));
+  }
+  function restore(card, s) {
+    s.state = 'open';
+    card.innerHTML = cardHTML(s);
+    card.classList.remove('gone');
+    refresh();
+  }
+  let hotSid = null;
+  function setHot(sid) {
+    hotSid = sid;
+    $$('.row.ac-hl').forEach(r => r.classList.remove('ac-hl'));
+    if (sid) { const a = anchorFor(sugById(sid).anchor); if (a) row(a).classList.add('ac-hl'); }
+    scheduleLayout();
+  }
+  stream.addEventListener('mouseover', e => {
+    const card = e.target.closest('.agent-card');
+    const sid = card && !card.classList.contains('gone') ? card.dataset.sid : null;
+    if (sid !== hotSid) setHot(sid);
+  });
+  stream.addEventListener('mouseleave', () => { if (hotSid) setHot(null); });
+
+  function anchorFor(id) {
+    let a = $(`.blk[data-id="${id}"]`, stream);
+    if (!a) return null;
+    while (a && isHidden(a)) a = parentBlk(a);
+    return a;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Margin layout (cards + orthogonal connectors)                       */
+  /* ------------------------------------------------------------------ */
+  let raf = 0;
+  function scheduleLayout() { cancelAnimationFrame(raf); raf = requestAnimationFrame(layoutCards); }
+  function textEnd(c) {
+    const r = document.createRange(); r.selectNodeContents(c);
+    const rects = [...r.getClientRects()].filter(x => x.width > 0);
+    if (!rects.length) { const cr = c.getBoundingClientRect(); return { x: cr.left, y: cr.top + 15 }; }
+    let last = rects[0];
+    for (const x of rects) if (x.bottom > last.bottom + 2 || (Math.abs(x.bottom - last.bottom) <= 2 && x.right > last.right)) last = x;
+    return { x: last.right, y: last.top + last.height / 2 };
+  }
+  const isBand = a => a.dataset.type === 'heading' && a.parentElement.classList.contains('outline');
+  function layoutCards() {
+    $$('.day', stream).forEach(day => {
+      const svg = $('svg.links', day);
+      const dr = day.getBoundingClientRect();
+      const ol = $('.outline', day);
+      let minTop = ol.offsetTop;
+      const leg = $('.legend', day);
+      if (leg) { leg.style.top = ol.offsetTop + 'px'; minTop = ol.offsetTop + leg.offsetHeight + 28; }
+      const tc = $('.ti-col', day);
+      if (tc) tc.style.height = $('.dstrip', day).offsetTop + 'px';
+      const items = $$('.agent-card:not(.gone)', day).map(card => {
+        const a = anchorFor(card.dataset.anchor);
+        if (!a) return { card, y: parseFloat(card.style.top) || 0, end: null };
+        let end;
+        if (isBand(a)) {
+          // a whole Section: bracket its rows on the right edge
+          const br = a.getBoundingClientRect(), y1 = br.top + 12, y2 = br.bottom - 12;
+          end = { x: null, band: true, y1: y1 - dr.top, y2: y2 - dr.top, y: (y1 + y2) / 2 };
+        }
+        else end = textEnd(content(a));
+        return { card, a, y: end.y - dr.top, end };
+      }).sort((p, q) => p.y - q.y);
+      const GAP = 16, clusters = [];
+      for (const it of items) {
+        it.h = it.card.offsetHeight; it.want = it.y - 17; it.off = 0;
+        clusters.push({ items: [it], h: it.h, top: Math.max(minTop, it.want) });
+        while (clusters.length > 1) {
+          const b = clusters[clusters.length - 1], a = clusters[clusters.length - 2];
+          if (a.top + a.h + GAP <= b.top) break;
+          a.items.push(...b.items); clusters.pop();
+          let off = 0, sum = 0;
+          for (const x of a.items) { x.off = off; sum += x.want - off; off += x.h + GAP; }
+          a.h = off - GAP; a.top = Math.max(minTop, sum / a.items.length);
+        }
+      }
+      let paths = '';
+      const colR = Math.round(dr.width);
+      const f = n => (Math.round(n) + .5).toFixed(1);
+      const lanes = [[], []]; // two vertical lanes in the outline's right gutter; never share a line
+      for (const cl of clusters) for (const it of cl.items) {
+        const top = Math.round(cl.top + it.off);
+        it.card.style.top = top + 'px';
+        if (!it.end) continue;
+        const cy = top + 17;
+        const lo = Math.min(it.end.band ? it.end.y1 : it.y, cy) - 6, hi = Math.max(it.end.band ? it.end.y2 : it.y, cy) + 6;
+        let li = lanes.findIndex(l => l.every(([a, b]) => hi < a || lo > b));
+        if (li < 0) li = 0;
+        lanes[li].push([lo, hi]);
+        const ex = colR - 13 - li * 12;
+        const hot = it.card.dataset.sid === hotSid;
+        if (it.end.band) {
+          const { y1, y2 } = it.end, jy = Math.min(Math.max(cy, y1), y2);
+          paths += `<path class="br${hot ? ' hot' : ''}" d="M${f(ex - 7)},${f(y1)} H${f(ex)} V${f(y2)} H${f(ex - 7)}"/>`;
+          paths += `<path${hot ? ' class="hot"' : ''} d="M${f(ex)},${f(jy)} V${f(cy)} H${colR}"/>`;
+          continue;
+        }
+        const ay = it.y, ax = Math.min(it.end.x - dr.left + 12, colR - 44);
+        paths += `<path${hot ? ' class="hot"' : ''} d="M${f(ax)},${f(ay)} H${f(ex)} V${f(cy)} H${colR}"/><rect x="${Math.round(ax) - 3}" y="${Math.round(ay) - 3}" width="7" height="7"/>`;
+      }
+      svg.innerHTML = paths;
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Meta strips, week strip, toast                                      */
+  /* ------------------------------------------------------------------ */
+  function updateHeads() {
+    $$('.outline > .blk[data-type=heading]', stream).forEach(b => {
+      const hm = $('.hmeta', row(b)); if (!hm) return;
+      const all = $$('.blk', kids(b));
+      const todos = all.filter(x => x.dataset.type === 'todo');
+      const meets = all.filter(x => x.dataset.type === 'meeting');
+      let s;
+      if (meets.length) s = `${meets.length} from Calendar`;
+      else if (todos.length) { const dn = todos.filter(x => x.classList.contains('done')).length; s = `${todos.length - dn} open · ${dn} done`; }
+      else if (!all.length || all.every(x => content(x).textContent.trim() === '')) s = 'Empty';
+      else s = `${all.length} block${all.length === 1 ? '' : 's'}`;
+      if (hm.textContent !== s) hm.textContent = s;
+    });
+  }
+  function updateMeta() {
+    $$('.day', stream).forEach(day => {
+      const isToday = day.classList.contains('today');
+      const mt = $$('.blk[data-type=meeting]', day).length;
+      const all = $$('.blk[data-type=todo]', day).length, dn = $$('.blk[data-type=todo].done', day).length;
+      const cells = [mt ? `${mt} meeting${mt === 1 ? '' : 's'}` : 'No meetings'];
+      if (isToday) cells.push(`${all - dn} open Todo${all - dn === 1 ? '' : 's'}`);
+      else cells.push(!all ? 'No Todos' : dn === all ? `${all} Todo${all === 1 ? '' : 's'} done` : `${dn} of ${all} Todos done`);
+      const html = cells.map(c => `<span class="c">${c}</span>`).join('');
+      const m = $('.meta', day); if (m.innerHTML !== html) m.innerHTML = html;
+      const sug = SUGGESTIONS.filter(s => s.day === day.dataset.key && s.state === 'open').length;
+      const ti = $('.ds-ti', day);
+      ti.classList.toggle('on', sug > 0);
+      const th = sug ? `<i></i>${sug} suggestion${sug === 1 ? '' : 's'} from Titanus` : 'Nothing from Titanus';
+      if (ti.innerHTML !== th) ti.innerHTML = th;
+    });
+    updateHeads();
+  }
+
+  function scrollToDay(key) {
+    const sec = $('#d-' + key); if (!sec) return;
+    if (sec === todaySec) { scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    const y = sec.getBoundingClientRect().top + scrollY - strip.offsetHeight;
+    scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+  }
+  daysNav.addEventListener('click', e => {
+    if (e.target.closest('#todayBtn')) { scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    const btn = e.target.closest('.dbtn'); if (!btn) return;
+    const w = WEEK.find(x => x.key === btn.dataset.key);
+    if (hasNote.has(w.key)) scrollToDay(w.key);
+    else toast(w.future ? `No Daily Note for <b>${w.full}</b> yet. It starts that morning.` : `There is no Daily Note for <b>${w.full}</b>.`);
+  });
+  function spy() {
+    let active = null;
+    const days = $$('.day', stream);
+    const lim = strip.offsetHeight + 160;
+    for (const d of days) if (d.getBoundingClientRect().top <= lim) active = d;
+    if (!active) active = days[0];
+    if (innerHeight + scrollY >= document.documentElement.scrollHeight - 4) active = days[days.length - 1];
+    $$('.dbtn', daysNav).forEach(b => b.classList.toggle('active', b.dataset.key === active.dataset.key));
+  }
+  addEventListener('scroll', () => { spy(); if (ac) closeAC(); }, { passive: true });
+  addEventListener('resize', () => { scheduleLayout(); spy(); });
+  new ResizeObserver(scheduleLayout).observe(stream);
+
+  let toastTimer = 0;
+  const toastEl = $('#toast');
+  function toast(msg, undo) {
+    toastEl.innerHTML = `<span>${msg}</span>` + (undo ? '<button type="button">Undo</button>' : '');
+    if (undo) toastEl.querySelector('button').onclick = () => { undo(); hideToast(); };
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, undo ? 5200 : 3200);
+  }
+  function hideToast() { toastEl.classList.remove('show'); }
+
+  $$('.rail .ri[data-section]').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    toast(`The <b>${a.dataset.section}</b> Section isn’t part of this prototype.`);
+  }));
+  $('.rail .ri.on').addEventListener('click', e => e.preventDefault());
+
+  /* ------------------------------------------------------------------ */
+  /* Titanus: presence, queue, update                                    */
+  /* ------------------------------------------------------------------ */
+  const pres = $('#presence'), qEl = $('#queue'), askBtn = $('#askBtn');
+  const upd = $('#upd'), updList = $('#updList');
+  let updOpen = false, away = false, lastInput = Date.now();
+  const IDLE = (+params.get('idle') || 45) * 1000;
+
+  function renderTitanus() {
+    const open = QUEUE.filter(q => q.state === 'open');
+    const n = open.length, s = n === 1 ? '' : 's';
+    pres.classList.toggle('away', away);
+    $('span', pres).textContent = away ? 'You’re away' : 'You’re here';
+    qEl.innerHTML = !n
+      ? '<span class="q1">Titanus has</span><span class="q2">Nothing for you</span>'
+      : `<span class="q1">${away ? 'Titanus is holding' : 'Titanus has'}</span><span class="q2">${n} thing${s} for you</span>`;
+    askBtn.innerHTML = updOpen
+      ? '<span class="l">Close the update</span><kbd>Esc</kbd>'
+      : '<span class="l">Ask for an update</span><kbd>U</kbd>';
+    askBtn.setAttribute('aria-expanded', String(updOpen));
+    askBtn.title = updOpen ? 'Close the update (Esc)' : 'Ask Titanus for an update (U)';
+    $('#updCount').textContent = n ? `${n} queued` : 'Nothing queued';
+    $('#updTitle').textContent = n ? `${n} thing${s}` : 'All clear';
+    $('#updLede').textContent = n
+      ? 'I kept these until you asked. Take them in any order.'
+      : 'That’s everything for now. I’ll keep anything new until you ask.';
+    updList.innerHTML = open.map(q => `<li class="ui" data-q="${q.id}">
+        <div class="ui-n">${q.n}</div>
+        <div class="ui-b"><h3>${esc(q.head)}</h3><p>${esc(q.body)}</p></div>
+        <div class="ui-act"><button class="ui-done" type="button">Done</button><button class="ui-dis" type="button">Dismiss</button><button class="ui-see" type="button">See it <span class="ar">→</span></button></div>
+      </li>`).join('');
+    const cleared = QUEUE.filter(q => q.state !== 'open');
+    if (cleared.length) updList.innerHTML += `<li class="upd-cl"><span>Cleared</span><span>${cleared.length} of ${QUEUE.length}</span></li>` +
+      cleared.map(q => `<li class="uc" data-q="${q.id}"><span class="n">${q.n}</span><span class="h">${esc(q.head)}</span><span class="st">${q.state === 'done' ? 'Done' : 'Dismissed'}</span><button class="uc-back" type="button">Bring back</button></li>`).join('');
+  }
+  function setPanel(open) {
+    updOpen = open;
+    upd.classList.toggle('open', open);
+    upd.setAttribute('aria-hidden', String(!open));
+    renderTitanus();
+    if (open) upd.focus({ preventScroll: true });
+  }
+  askBtn.addEventListener('click', () => setPanel(!updOpen));
+  $('#updClose').addEventListener('click', () => { setPanel(false); askBtn.focus(); });
+  function resolveQ(q, how) {
+    q.state = how; renderTitanus();
+    const left = QUEUE.filter(x => x.state === 'open').length;
+    const tail = left ? `Titanus has ${left} thing${left === 1 ? '' : 's'} left.` : 'Nothing left in the queue.';
+    toast(`${how === 'done' ? 'Marked done.' : 'Dismissed.'} ${tail}`, () => { q.state = 'open'; renderTitanus(); });
+    if (updOpen) upd.focus({ preventScroll: true });
+  }
+  function seeIt(q) {
+    let el = null;
+    if (q.see.card) { const s = sugById(q.see.card); if (s && s.state === 'open') el = $(`.agent-card[data-sid="${q.see.card}"]`); }
+    if (!el && q.see.text) el = $$('.blk[data-type=todo]', stream).find(b => content(b).textContent.startsWith(q.see.text)) || null;
+    if (!el && q.see.block) el = $(`.blk[data-id="${q.see.block}"]`, stream);
+    if (!el) { toast('That isn’t in your Daily Note any more.'); return; }
+    setPanel(false);
+    if (el.classList.contains('blk')) {
+      let p = parentBlk(el); while (p) { if (p.classList.contains('collapsed')) toggleFold(p, false); p = parentBlk(p); }
+      el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1600);
+      row(el).scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } else {
+      el.classList.add('ping'); setTimeout(() => el.classList.remove('ping'), 1600);
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }
+  updList.addEventListener('click', e => {
+    const li = e.target.closest('.ui'); if (!li) return;
+    const q = QUEUE.find(x => x.id === li.dataset.q);
+    if (e.target.closest('.ui-done')) resolveQ(q, 'done');
+    else if (e.target.closest('.ui-dis')) resolveQ(q, 'dismissed');
+    else if (e.target.closest('.ui-see')) seeIt(q);
+  });
+  updList.addEventListener('click', e => {
+    const b = e.target.closest('.uc-back'); if (!b) return;
+    const q = QUEUE.find(x => x.id === b.closest('.uc').dataset.q);
+    q.state = 'open'; renderTitanus(); upd.focus({ preventScroll: true });
+  });
+
+  // Presence: you're here while there is input; away after ~45s without any
+  const onAct = () => { lastInput = Date.now(); if (away) { away = false; renderTitanus(); } };
+  ['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart'].forEach(t => addEventListener(t, onAct, { passive: true, capture: true }));
+  setInterval(() => { if (!away && Date.now() - lastInput > IDLE) { away = true; renderTitanus(); } }, 1000);
+
+  const isTyping = el => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  document.addEventListener('keydown', e => {
+    if (e.defaultPrevented || isTyping(e.target)) return;
+    if ((e.key === 'u' || e.key === 'U') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); setPanel(!updOpen); }
+    else if (e.key === 'Escape' && updOpen) { e.preventDefault(); setPanel(false); askBtn.focus(); }
+  });
+
+  /* ------------------------------------------------------------------ */
+  /* Theme                                                               */
+  /* ------------------------------------------------------------------ */
+  function applyTheme(t, byUser) {
+    if (t !== 'dark' && t !== 'light') return;
+    document.documentElement.dataset.theme = t;
+    $$('.tsw button').forEach(b => { const on = b.dataset.t === t; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); });
+    if (byUser) parent.postMessage({ type: 'proto-theme-changed', theme: t }, '*');
+    scheduleLayout();
+  }
+  $$('.tsw button').forEach(b => b.addEventListener('click', () => { if (document.documentElement.dataset.theme !== b.dataset.t) applyTheme(b.dataset.t, true); }));
+  addEventListener('message', e => { const d = e.data || {}; if (d.type === 'proto-theme') applyTheme(d.theme); });
+  applyTheme(document.documentElement.dataset.theme);
+
+  /* ------------------------------------------------------------------ */
+  refresh(); renderTitanus(); spy(); layoutCards();
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => {
+    layoutCards();
+    requestAnimationFrame(() => document.body.classList.add('ready'));
+  });
+})();
+</script>
+<script>document.addEventListener('keydown',e=>{if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&!(e.target.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)))parent.postMessage({type:'proto-key',key:e.key},'*')});</script>
+</body>
+</html>
