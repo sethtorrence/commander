@@ -20,7 +20,7 @@ Sub-questions from the ticket:
 
 ## Short answer
 
-- **Graph is the only full path.** It covers mail and calendar for both personal and work Accounts. IMAP/POP have no calendar ([S64]). Exchange Online starts switching EWS off for tenants in October 2026, so from today EWS is not an option ([S69]).
+- **Graph is the only full path.** It covers mail and calendar for both personal and work Accounts. IMAP/POP have no calendar ([S64]). Exchange Online starts switching EWS off for tenants in October 2026 (tenants that never set `EWSEnabled` get it flipped to `False`), with the remaining hybrid exceptions running only to April 2027, so from today EWS is not an option ([S69]).
 - **Registration is easy.** Commander needs one app registration: a public client (no secret), with the audience "Any Entra ID tenant + Personal Microsoft accounts" and a `http://localhost` loopback redirect ([S2], [S16], [S17]). It must live in an Entra tenant, because registering with only a personal account was stopped in June 2024 ([S4]). The client ID is not a secret, so it can sit in the public repo.
 - **Personal (outlook.com) Accounts work out of the box.** The User consents to their own mailbox and calendar. Every scope Commander needs is marked "available for consent in personal Microsoft accounts" ([S1]).
 - **Work/school Accounts are the hard constraint.** Since October–November 2025, Microsoft's managed default consent policy stops users from consenting to third-party apps that ask for `Mail.ReadWrite`, `Calendars.ReadWrite`, `MailboxSettings.ReadWrite` or `IMAP.AccessAsUser.All` ([S7], [S11]).
@@ -38,7 +38,7 @@ Sub-questions from the ticket:
   - IMAP IDLE gives near-real-time Inbox signals ([S64]), but it needs separate consent and on outlook.com the User has to turn IMAP on ([S68]).
 - **Labels become categories (or folders).** An Outlook message sits in exactly one folder but can carry many categories ([S44], [S45]). Categories are the closest match to Gmail labels and to Buckets: many per message, colored, and they don't move mail. Folders suit "file it away". Use immutable IDs so moves don't change message IDs ([S42]).
 - **Throttling is generous for one User.** Limits are 10,000 requests per 10 minutes, 4 concurrent requests, and 150 MB of uploads per 5 minutes, all per app per mailbox ([S51]). A batch holds at most 20 requests ([S53]). On 429, honor `Retry-After` ([S52]).
-- **IMAP/SMTP with OAuth works for both Account types, but it is not a real alternative.** It has no calendar and no categories (secondary sources: [S74]), and no CONDSTORE/QRESYNC (observed, see below). IMAP is off by default on outlook.com ([S68]), Microsoft recommends tenants turn SMTP AUTH off ([S65]), and the IMAP scope is gated behind admin consent just like Graph's ([S7]).
+- **IMAP/SMTP with OAuth works for both Account types, but it is not a real alternative.** It has no calendar and no categories (secondary sources: [S74]), and no CONDSTORE/QRESYNC (observed, see below). IMAP is off by default on outlook.com ([S68]) and in Exchange Online tenants that use security defaults ([S64]), Microsoft recommends tenants turn SMTP AUTH off ([S65]), and the IMAP scope is gated behind admin consent just like Graph's ([S7]).
 
 ## 1. App registration, publisher verification, admin consent
 
@@ -77,7 +77,7 @@ Sub-questions from the ticket:
 
 - **What the managed policy says now:** "End users can consent for any user consentable delegated permissions EXCEPT" the list above. It is "also the default for a new tenant" ([S7]).
 - **Not in the blocked list:** `Mail.Send`, `User.Read`, `offline_access`, `Contacts.Read`, `SMTP.Send` ([S7]).
-- **Existing consents keep working.** The change only blocks new consents ([S11], [S12]).
+- **Existing consents keep working.** The change only blocks new consents ([S11], [S12]). But MC1163922 adds that "new users, or apps requesting new or broader permissions, will require admin approval", so one colleague's earlier consent does not let the next User in the same tenant in ([S11]).
 - **Allowlisted mail apps.** A companion policy, `microsoft-user-default-allow-consent-apps`, is enabled by default. It lets users consent to the mail scopes for a fixed list of mail clients only ([S7]):
   - Apple Mail
   - Spark
@@ -86,7 +86,7 @@ Sub-questions from the ticket:
   - Android-Mail
   - Thunderbird
 
-  I found no documented way to apply to join that list.
+  I found no documented way to apply to join that list. (The page names this policy both `microsoft-user-default-allow-consent-apps` and `microsoft-user-allow-default-consent-apps`; same policy.)
 - **Publisher verification doesn't solve it.**
   - It requires a Microsoft AI Cloud Partner Program account that has passed Partner Center verification and is the "partner global account" for the developer's organization ([S5]).
   - The app must be registered with a work account, in a tenant tied to that partner account ([S5]).
@@ -102,7 +102,8 @@ Sub-questions from the ticket:
   - "Applications that require users to be assigned to the application must have their permissions consented by an administrator" regardless of policy ([S6]).
 - **Bring-your-own registration (open question).** Each User could register their own single-tenant app inside their work tenant, if "Users can register applications" is still on ([S14]).
   - `microsoft-user-default-low` explicitly allows apps "registered in your tenant" ([S6]).
-  - The Microsoft-managed policy page and the Message Center notices talk about "third-party apps" ([S7], [S11]), but **I found no statement on whether a same-tenant (first-party) app is exempt** from the mail/calendar exclusions. This needs a test in a real tenant.
+  - The Message Center notices talk about "third-party apps" ([S11], [S12]). The managed-policy text itself has no such qualifier: it says end users can consent to anything "EXCEPT" the listed scopes ([S7]). **I found no statement on whether a same-tenant app is exempt** from the mail/calendar exclusions. This needs a test in a real tenant; read literally, the policy text suggests it is not exempt.
+  - Two documented hooks do favour same-tenant apps: risk-based step-up only applies to consent "from users in tenants that aren't the tenant where the app is registered" ([S5]), and app consent policies can include a "created in this tenant" condition ([S7]). The second still needs an admin to write a custom policy.
 - **Other tenant controls that can block Commander regardless of consent:**
   - Conditional Access that requires a compliant or Entra-joined device. Microsoft's Linux device-compliance path runs through the Linux broker on Ubuntu/RHEL only ([S23]).
   - Sign-in frequency policies, which force periodic interactive sign-in ([S24]).
@@ -152,7 +153,7 @@ Graph mail only reaches cloud (Exchange Online) mailboxes. It cannot reach in-pl
   - The MSAL Node broker plugin is "currently only supported on Windows" ([S21]).
   - "Microsoft single sign-on for Linux" (the `microsoft-identity-broker` package) supports Ubuntu 24.04/26.04 and RHEL 9/10 only, Entra (work) accounts only, and SSO for MSAL .NET and MSAL Python apps ([S23]).
   - **So on Arch/Hyprland: system browser + loopback, no broker.**
-- **Token cache.** `@azure/msal-node-extensions` persists the cache using DPAPI on Windows, Keychain on macOS, and libsecret ("Secret Service") on Linux ([S22]).
+- **Token cache.** `@azure/msal-node-extensions` (5.5.1, published 2026-09-15, Node >= 20 [S79]) persists the cache using DPAPI on Windows, Keychain on macOS, and libsecret ("Secret Service") on Linux ([S22]).
   - On Linux it can fall back to plaintext (`usePlaintextFileOnLinux`, default `false`) ([S22]).
   - On Windows and Linux the cache is readable by every app running as that user ([S22]).
   - Hyprland has no Secret Service provider out of the box. The User needs gnome-keyring, KWallet or similar running. This is an inference from the libsecret dependency.
@@ -163,7 +164,7 @@ Graph mail only reaches cloud (Exchange Online) mailboxes. It cannot reach in-pl
 | Token | Lifetime | Source |
 |---|---|---|
 | Access token (default) | Random 60–90 min (avg 75) | [S24] |
-| Access token, CAE-capable client | "Long lived, up to 28 hours"; revoked by critical events instead of expiry. The app must handle 401 claims challenges. MSAL refreshes it proactively. | [S26], [S27] |
+| Access token, CAE-capable client | "Long lived, up to 28 hours" (the access-token page gives the range as 20–28 hours [S24]); CAE is a Microsoft Entra Conditional Access feature [S27], so don't count on it for personal accounts; revoked by critical events instead of expiry. The app must handle 401 claims challenges. MSAL refreshes it proactively. | [S26], [S27] |
 | Refresh token | 90 days (24 h for SPAs). Replaced with a fresh one on every use. Revoked on password change, admin action, and similar. | [S25] |
 | Sign-in frequency (Conditional Access) | Tenant-defined. Forces interactive re-auth regardless of the above. | [S24] |
 
@@ -192,7 +193,7 @@ Graph mail only reaches cloud (Exchange Online) mailboxes. It cannot reach in-pl
   - `410 Gone` means "restart with a full synchronization" ([S29]).
   - Commander must always be able to fall back to a full resync of a folder.
 - **Replays and deletes.**
-  - The same item can appear more than once in one delta round ([S29]).
+  - Replays: the same change can appear again in subsequent responses, so applying a change must be idempotent ([S29]).
   - Deletes come back as `@removed` with reason `changed` (recoverable) or `deleted` ([S29]).
 - **Immutable IDs.** Send `Prefer: IdType="ImmutableId"` on every request, delta included. A message's ID then survives moves between folders. Without it, "their IDs change … if the item is moved" ([S42]).
 - **Budget.** At 10,000 requests per 10 minutes per mailbox ([S51]), polling 30 folders plus 3 calendars every 60 s costs about 330 requests per 10 minutes. Microsoft does say continuous polling makes throttling more likely and recommends change tracking and notifications ([S52]). Delta is that change tracking.
@@ -221,7 +222,7 @@ Graph mail only reaches cloud (Exchange Online) mailboxes. It cannot reach in-pl
   - **Worth a prototype before relying on it.** It is new and thinly documented.
 - **IMAP IDLE (see §7).** "If the IMAP4 client supports the IMAP4 IDLE command, email transfers to and from the Exchange Online mailbox might occur in nearly real time" ([S64]). It could serve as a wake-up signal that triggers a Graph delta pull of the Inbox. It costs:
   - an extra consent (`IMAP.AccessAsUser.All`, admin-gated in managed tenants) ([S7])
-  - IMAP being enabled (off by default on outlook.com) ([S68])
+  - IMAP being enabled (off by default on outlook.com [S68], and off in Exchange Online tenants with security defaults [S64])
   - one connection per watched folder
 
 **Recommendation:** delta polling with adaptive cadence, for example:
@@ -318,7 +319,7 @@ Treat push (Web Push or IMAP IDLE) as an optional later optimization.
   - So Buckets couldn't be written back as categories over IMAP.
 - **Off by default in places.**
   - Outlook.com: "POP & IMAP access is disabled by default". The User must enable it in Outlook.com settings ([S68]).
-  - Exchange Online: IMAP is on by default per user, but admins can disable it ([S64]).
+  - Exchange Online: IMAP is on by default per user, but admins can disable it, and "if you've enabled security defaults in your organization, POP3 and IMAP4 are automatically disabled" ([S64]).
   - Microsoft "highly recommend[s] that you disable SMTP AUTH" org-wide ([S65]), and with security defaults on, SMTP AUTH is already off ([S65]).
 - **Same consent wall.** `IMAP.AccessAsUser.All` is in the Microsoft-managed exclusion list ([S7]).
 - **Latency.** Each Exchange Online IMAP access goes through a proxy hop that adds "a delay of several seconds" ([S64]).
@@ -338,7 +339,7 @@ Treat push (Web Push or IMAP IDLE) as an optional later optimization.
   - `sendMail` (JSON or MIME), or create a draft and then send ([S76]).
   - Reply, reply-all and forward are supported, both directly and as drafts (`createReply`, `createReplyAll`, `createForward`) ([S77]).
   - Attachments: up to 150 MB via upload sessions on Exchange ([S54]); Outlook.com caps attachments at 25 MB ([S70]).
-- **Signatures.** I found no Graph API for Outlook's own signatures. Plan for Commander-local signatures.
+- **Signatures.** I found no Graph API for Outlook's own (roaming) signatures; Microsoft Q&A answers say the same (secondary, [S80]). The new `userConfiguration` API (preview/beta, reads and writes folder-associated items, `MailboxConfigItem.*` scopes) is a generic store, not a signatures API ([S81]). Plan for Commander-local signatures.
 - **Search.**
   - Server `$search` returns at most 1,000 results and doesn't work with delta ([S55], [S30]).
   - In-place archive mailboxes aren't reachable ([S43]).
@@ -472,6 +473,9 @@ Dates are the page's `ms.date` / last `updated_at` as served on 2026-10-01, wher
 - [S76] user: sendMail. https://learn.microsoft.com/en-us/graph/api/user-sendmail
 - [S77] message: createReply. https://learn.microsoft.com/en-us/graph/api/message-createreply
 - [S78] Create messageRule: permissions (MailboxSettings.ReadWrite). https://learn.microsoft.com/en-us/graph/api/mailfolder-post-messagerules
+- [S79] `@azure/msal-node-extensions` on npm: 5.5.1, published 2026-09-15, `engines.node >= 20`. https://www.npmjs.com/package/@azure/msal-node-extensions
+- [S80] Microsoft Q&A, "Get email signature saved to an Outlook account via API". Secondary (community Q&A). https://learn.microsoft.com/en-us/answers/questions/1315401/get-email-signature-saved-to-an-outlook-account-vi
+- [S81] Overview of the user configuration API in Microsoft Graph (preview). https://learn.microsoft.com/en-us/graph/user-configuration-concept-overview
 - Direct observation: `printf 'a1 CAPABILITY\r\n' | openssl s_client -quiet -connect outlook.office365.com:993` on 2026-10-01 (pre-auth capability list quoted in §7).
 
 [S1]: https://learn.microsoft.com/en-us/graph/permissions-reference
@@ -552,3 +556,48 @@ Dates are the page's `ms.date` / last `updated_at` as served on 2026-10-01, wher
 [S76]: https://learn.microsoft.com/en-us/graph/api/user-sendmail
 [S77]: https://learn.microsoft.com/en-us/graph/api/message-createreply
 [S78]: https://learn.microsoft.com/en-us/graph/api/mailfolder-post-messagerules
+[S79]: https://www.npmjs.com/package/@azure/msal-node-extensions
+[S80]: https://learn.microsoft.com/en-us/answers/questions/1315401/get-email-signature-saved-to-an-outlook-account-vi
+[S81]: https://learn.microsoft.com/en-us/graph/user-configuration-concept-overview
+
+## Verification
+
+Adversarial fact-check on 2026-10-01. Each load-bearing claim was checked against the live page (fetched that day), not against search snippets.
+
+**Confirmed against the primary source, wording and numbers as stated:**
+
+- Consent: the managed policy's full "EXCEPT" list, including `Mail.ReadWrite`, `Calendars.ReadWrite`, `MailBoxSettings.ReadWrite`, `People.Read`, the Tasks/Contacts write scopes, and Exchange `IMAP/POP/EWS/EAS.AccessAsUser.All`. "Also the default for a new tenant". The six allowlisted mail apps with their app IDs ([S7]). Dates and scope lists of MC1097272, MC1163922 and MC1304287 on the Message Center mirror ([S10]–[S12]). Step-up for multi-tenant apps registered after 8 Nov 2020, and `AADSTS90094` ([S5], [S8]). `microsoft-user-default-low` wording ([S6]). Publisher-verification requirements: CPP partner global account, work-account registration, no `*.onmicrosoft.com` publisher domain, free ([S5]).
+- Registration: the "registered in a directory" change of June 2024 ([S4]). 30 permissions per resource, and no wildcards or query strings for the personal+work audience ([S3], [S17]). Localhost port is ignored, `[::1]` isn't supported, and an `http://127.0.0.1` redirect needs a manifest edit ([S17]). `http://localhost` for system-browser desktop apps, and MSAL Node for Electron is "Public preview" ([S16]). Users can register apps by default ([S14]).
+- Auth: `acquireTokenInteractive` "handles both legs" ([S18]). The broker is "currently only supported on Windows" ([S21]). The Linux SSO broker covers Ubuntu 24.04/26.04 and RHEL 9/10, for MSAL .NET/Python ([S23]). The cache uses libsecret on Linux, `usePlaintextFileOnLinux` defaults to false, and the cache is readable session-wide ([S22]). msal-node 7.0.0 was published 2026-09-23 with Node >= 20 (npm registry). Access tokens last 60–90 min, averaging 75 ([S24]). CAE tokens last up to 28 h ([S26], [S27]). Refresh tokens last 90 days, 24 h for SPAs, and replace themselves on every use ([S25]).
+- Sync: delta is per folder, and its `$filter`, `$orderby` and `changeType` limits are as stated ([S30]). Per-calendar and unbounded event delta exist only in beta. v1.0 lists only `/me/calendarView/delta` and `/users/{id}/calendarView/delta` ([S31]–[S33]). Delta token lifetime for Outlook entities "isn't fixed", and 410 Gone forces a resync ([S29]). Immutable IDs survive folder moves ([S42]). Webhooks need a public HTTPS endpoint and a 2xx reply within 3 s ([S36]). Event Hubs need an Azure subscription ([S37]). Outlook subscriptions last 10,080 min, or 1,440 with resource data ([S38]). The limit is 1,000 subscriptions per mailbox ([S35], [S39]). Web Push (RFC 8291) and `getVapidPublicKey` are listed under "August 2026: New and generally available" ([S41]). The known push origins (`*.push.apple.com`, `fcm.googleapis.com`, `updates.push.services.mozilla.com`) are named on [S38].
+- Categories: names are unique and can't be changed after creation, and there are 25 preset colors ([S45]). Managing the master list needs `MailboxSettings.ReadWrite`, including for personal accounts ([S46]). Search folders expire after 45 days ([S48]). Focused-inbox corrections train the classifier ([S49]).
+- Throttling: Outlook allows 10,000 requests per 10 min, 4 concurrent requests, and 150 MB uploaded per 5 min, all per app ID × mailbox. The global limit is 130,000 requests per 10 s. Open extensions allow 455 requests per 10 s per app per tenant, and messages are covered ([S51]). A batch holds at most 20 requests ([S53]). Honour Retry-After, and back off exponentially when it's missing ([S52]). `$search` returns up to 1,000 results ([S55]). Attachments: under 3 MB in one POST, 3–150 MB through an upload session ([S54]). Exchange Online sending: 10,000 recipients per day, 30 messages per minute, recipient limit customizable up to 1,000. Message size: 35/36 MB by default, up to 150/112 MB. Up to 10,000 direct child folders. Inbox rules: 256 KB ([S50]). Outlook.com sending: 5,000/500/1,000, with a 25 MB attachment limit ([S70]).
+- Calendar: `getSchedule` and `findMeetingTimes` are "Not supported" for personal accounts ([S57], [S58]). `transactionId` ([S59]). calendarPermission supports personal accounts ([S62]). `sendMail` returns 202 Accepted ([S76]).
+- IMAP/SMTP: OAuth is "available for both Microsoft 365 … and Outlook.com users", over XOAUTH2 ([S63]). IDLE, "don't offer rich email, calendaring", and the several-second proxy delay ([S64]). IMAP is "disabled by default" on outlook.com ([S68]). Microsoft "highly recommend[s]" disabling SMTP AUTH ([S65]). Outlook.com dropped Basic auth on 16 Sep 2024 ([S67]). The SMTP AUTH timeline was revised on 1/27/2026 ([S66]). I re-ran the pre-auth `CAPABILITY` probe against `outlook.office365.com:993` and got the identical list: no CONDSTORE or QRESYNC.
+- EWS: phased disablement in Exchange Online begins October 2026, and tenants with `EWSEnabled` unset are flipped to `False` ([S69]).
+
+**Corrected or tightened in place:**
+
+- Delta replays: the source says a change can reappear "in subsequent responses", not within one round. Reworded to require idempotent apply ([S29]).
+- Exchange Online IMAP: added that security defaults automatically disable POP3/IMAP4 ([S64]). This affects the IMAP alternative and the IDLE wake-up idea, and is reflected in the short answer, §4 and §7.
+- BYO registration (§1): the "third-party" wording comes from the Message Center notices, not from the managed-policy page, whose text has no same-tenant exemption. Added the two documented same-tenant hooks: the step-up exemption and the "created in this tenant" policy condition.
+- Existing consents: added MC1163922's point that new users in a tenant still need admin approval.
+- CAE: added the 20–28 h range from [S24], and noted that CAE is an Entra Conditional Access feature.
+- EWS: added the April 2027 end of hybrid EWS exceptions ([S69]).
+- Added the msal-node-extensions version ([S79]). Added the second policy ID spelling used on [S7].
+- Signatures: added secondary corroboration ([S80]), and noted that the preview `userConfiguration` API ([S81]) is not a signatures API.
+
+**Could not confirm (still open):**
+
+- Everything in "Open questions" above remains unconfirmed. I found no primary source for any of these items:
+  - same-tenant exemption from the managed policy
+  - friction on personal-account consent to an unverified app
+  - desktop receipt of Web Push
+  - v1.0 per-calendar delta
+  - Graph deferred send
+  - personal sign-in with `Mail.*.Shared`
+  - IMAP connection limits
+- "No categories over IMAP" still rests on third-party sources only ([S74]).
+- The Message Center items are read from a third-party mirror ([S10]–[S12]). The originals sit behind tenant admin sign-in.
+- Hyprland needing a separate Secret Service provider is an inference, not documented.
+
