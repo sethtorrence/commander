@@ -1,0 +1,1494 @@
+<!-- PROTOTYPE — throwaway. Dashboard variant PANEL: Control panel. -->
+<!--
+  Intent: the Dashboard is an instrument panel, one fixed module per Section bolted to the A–H / 01–24 drawing grid, all visible at once; every Section is a sheet with the same spec / sheet / margin layout; Linear is the fully built Section.
+-->
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commander · Dashboard · PANEL Control panel</title>
+<script>(function(){var t=new URLSearchParams(location.search).get('theme');document.documentElement.dataset.theme=t==='light'?'light':'dark';})();</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --rail:72px; --rul:22px; --hdr:64px; --top:86px; --left:94px; --in:7px; --mh:28px;
+    --sans:'Archivo', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --mono:'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  }
+  html[data-theme=dark]{
+    color-scheme:dark;
+    --bg:#141516; --sheet:#1B1C1E; --raise:#25262A;
+    --ink:#EEECE7; --text:#D3D1CB; --muted:#8F8D87; --faint:#5E5D59;
+    --line:rgba(238,236,231,.15); --line2:rgba(238,236,231,.075);
+    --grid:rgba(238,236,231,.065); --grid2:rgba(238,236,231,.026); --cross:rgba(238,236,231,.28);
+    --hatch:rgba(238,236,231,.08);
+    --org:#FF5F00; --on-org:#141414; --org-ink:#FF5F00; --org-soft:rgba(255,95,0,.14); --focus:rgba(255,95,0,.06); --sel:rgba(255,95,0,.32);
+  }
+  html[data-theme=light]{
+    color-scheme:light;
+    --bg:#D8D5CE; --sheet:#E9E7E2; --raise:#F3F1ED;
+    --ink:#1C1D1F; --text:#2A2B2D; --muted:#67645F; --faint:#9B978F;
+    --line:rgba(28,29,31,.21); --line2:rgba(28,29,31,.095);
+    --grid:rgba(28,29,31,.085); --grid2:rgba(28,29,31,.035); --cross:rgba(28,29,31,.36);
+    --hatch:rgba(28,29,31,.1);
+    --org:#E65600; --on-org:#141414; --org-ink:#B24200; --org-soft:rgba(230,86,0,.13); --focus:rgba(230,86,0,.075); --sel:rgba(230,86,0,.28);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:var(--sans); font-size:14px; line-height:1.5; letter-spacing:-.003em;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; overflow:hidden;
+  }
+  ::selection{background:var(--sel)}
+  button{font:inherit;color:inherit;border-radius:0}
+  button:focus-visible,a:focus-visible{outline:2px solid var(--org);outline-offset:-2px}
+  .i{width:1em;height:1em;flex:none;display:block}
+  .led{display:inline-block;flex:none;width:7px;height:7px;background:var(--org)}
+  kbd{
+    font:600 10px/1 var(--mono); letter-spacing:.02em; min-width:20px; height:19px; padding:0 5px;
+    border:1px solid var(--line); color:var(--ink); display:inline-flex; align-items:center; justify-content:center; white-space:nowrap;
+  }
+  .hatch{background-image:repeating-linear-gradient(-45deg,var(--hatch) 0 1px,transparent 1px 6px)}
+
+  /* ================= exposed grid ================= */
+  .gridwrap{position:fixed;left:var(--left);top:var(--top);right:0;bottom:0;z-index:0;pointer-events:none}
+  .gridwrap svg{display:block;width:100%;height:100%}
+  .gridwrap .gc{stroke:var(--grid);stroke-width:1;fill:none}
+  .gridwrap .gr{stroke:var(--grid2);stroke-width:1;fill:none}
+  .gridwrap .gx{stroke:var(--cross);stroke-width:1;fill:none}
+
+  /* ================= Section rail ================= */
+  .rail{position:fixed;inset:0 auto 0 0;width:var(--rail);z-index:30;background:var(--bg);border-right:1px solid var(--line);display:flex;flex-direction:column}
+  .brand{height:var(--hdr);flex:none;border-bottom:1px solid var(--line);display:grid;place-items:center}
+  .brand .mark{width:36px;height:36px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font:800 18px/1 var(--sans);font-stretch:125%;letter-spacing:-.02em;position:relative}
+  .brand .mark::after{content:'';position:absolute;right:0;bottom:0;width:7px;height:7px;background:var(--org)}
+  .rail-cap{height:var(--rul);flex:none;border-bottom:1px solid var(--line);font:600 8.5px/var(--rul) var(--mono);letter-spacing:.16em;color:var(--faint);text-align:center;text-transform:uppercase}
+  .rail nav{display:flex;flex-direction:column}
+  .ri{
+    position:relative;height:58px;flex:none;border:0;border-bottom:1px solid var(--line2);background:none;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:0;
+    color:var(--muted);text-decoration:none;cursor:pointer;width:100%;
+  }
+  .ri .ix{position:absolute;left:6px;top:5px;font:500 8px/1 var(--mono);color:var(--faint);letter-spacing:.04em}
+  .ri .ct{position:absolute;right:5px;top:4px;font:600 8.5px/1 var(--mono);color:var(--ink);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .ri .ct:empty{display:none}
+  .ri svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:square;stroke-linejoin:miter}
+  .ri .cd{font:600 8.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase}
+  .ri:hover{color:var(--ink);background:var(--raise)}
+  .ri.on{background:var(--ink);color:var(--bg)}
+  .ri.on .ix,.ri.on .ct{color:var(--bg)}
+  .ri.on .ix{opacity:.55}
+  .ri::after{
+    content:attr(data-tip);position:absolute;left:calc(100% + 1px);top:50%;transform:translateY(-50%);
+    background:var(--ink);color:var(--bg);font:600 10px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;
+    padding:8px 10px;white-space:nowrap;opacity:0;pointer-events:none;z-index:5;
+  }
+  .ri:hover::after,.ri:focus-visible::after{opacity:1}
+  .rail .spacer{flex:1}
+  .ri.thm{border-top:1px solid var(--line)}
+  .avatar{height:58px;flex:none;border-top:1px solid var(--line2);display:grid;place-items:center}
+  .avatar span{width:30px;height:30px;border:1px solid var(--line);display:grid;place-items:center;font:600 10px/1 var(--mono);letter-spacing:.06em;color:var(--ink)}
+
+  /* ================= Header ================= */
+  .hdr{position:fixed;top:0;left:var(--rail);right:0;height:var(--hdr);z-index:26;background:var(--bg);border-bottom:1px solid var(--line);display:grid;grid-template-columns:var(--rul) repeat(8,minmax(0,1fr))}
+  .hdr > *{border-left:1px solid var(--line);min-width:0}
+  .hdr > .h-corner{border-left:0;position:relative}
+  .h-corner::before,.h-corner::after{content:'';position:absolute;background:var(--faint)}
+  .h-corner::before{left:6px;right:6px;top:50%;height:1px}
+  .h-corner::after{top:calc(50% - 5px);height:11px;left:50%;width:1px}
+  .h-id{padding:11px 14px 0;display:flex;flex-direction:column;gap:4px}
+  .h-sec{font:500 8.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .h-title{font:800 13px/1 var(--sans);font-stretch:112%;letter-spacing:.02em;text-transform:uppercase;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .h-clock{display:flex;align-items:center;gap:7px;font:500 10.5px/1 var(--mono);color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:.04em;margin-top:2px}
+  .h-clock .led{width:6px;height:6px}
+  .h-clock small{font-size:8.5px;color:var(--muted);letter-spacing:.14em}
+  .h-wk{padding:11px 14px 0;display:flex;flex-direction:column;gap:6px}
+  .h-wkn{font:700 13px/1 var(--sans);font-stretch:112%;letter-spacing:.02em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+  .h-wkr{font:500 9.5px/1.3 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .h-mid{grid-column:4 / 7;display:grid;grid-template-columns:2fr 1fr}
+  .hm{display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 14px;min-width:0;border-left:1px solid var(--line2);background:none;border-top:0;border-right:0;border-bottom:0;text-align:left;cursor:default}
+  .hm:first-child{border-left:0}
+  button.hm{cursor:pointer}
+  button.hm:hover{background:var(--raise)}
+  .hm .k{display:flex;align-items:center;gap:7px;font:500 8.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .hm .k .led{width:6px;height:6px}
+  .hm .v{font:650 14px/1.15 var(--sans);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.005em}
+  .hm .v small{font:500 10px/1 var(--mono);letter-spacing:.08em;color:var(--org-ink);margin-left:6px;text-transform:uppercase}
+  .hm .v .m{font:500 10px/1 var(--mono);letter-spacing:.08em;color:var(--muted);margin-left:6px;text-transform:uppercase}
+  .gauge{display:flex;gap:2px;height:8px}
+  .gauge i{flex:1;border:1px solid var(--muted)}
+  .gauge i.f{background:var(--ink);border-color:var(--ink)}
+  .gauge i.me{background:var(--ink);border-color:var(--ink);box-shadow:inset 0 -3px 0 var(--bg)}
+  .gauge i.o{background-image:repeating-linear-gradient(-45deg,var(--hatch) 0 1px,transparent 1px 4px)}
+
+  /* Titanus status module */
+  .ttn{grid-column:7 / 10;display:grid;grid-template-columns:78px minmax(0,1fr) auto;position:relative}
+  .ttn::before{content:'';position:absolute;left:-1px;top:0;bottom:0;width:3px;background:var(--org)}
+  .t-count{display:flex;flex-direction:column;justify-content:center;padding-left:16px;border-right:1px solid var(--line2)}
+  .t-count b{font:800 33px/.9 var(--sans);font-stretch:125%;color:var(--org-ink);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+  .t-count span{font:500 8px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+  .ttn.empty .t-count b{color:var(--faint)}
+  .t-info{padding:0 14px;display:flex;flex-direction:column;justify-content:center;gap:6px;min-width:0}
+  .t-l1{display:flex;align-items:center;gap:10px;overflow:hidden;font:600 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+  .t-l1 .pres{display:flex;align-items:center;gap:6px;color:var(--muted);font-weight:500;padding-left:10px;border-left:1px solid var(--line)}
+  .t-l1 .pres .led{width:6px;height:6px}
+  .ttn.away .pres .led{background:transparent;box-shadow:inset 0 0 0 1px var(--muted)}
+  .t-l2{font:500 14px/1.2 var(--sans);color:var(--text);letter-spacing:-.005em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ask-btn{border:0;border-left:1px solid var(--line);background:none;padding:0 16px 0 15px;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;font:600 10px/1.3 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+  .ask-btn kbd{border-color:currentColor;color:inherit;min-width:22px;height:22px}
+  .ask-btn:hover,.ask-btn[aria-expanded=true]{background:var(--org);color:var(--on-org)}
+
+  /* ================= Rulers ================= */
+  .rul-x{position:fixed;top:var(--hdr);left:var(--rail);right:0;height:var(--rul);z-index:20;background:var(--bg);border-bottom:1px solid var(--line);display:grid;grid-template-columns:var(--rul) repeat(8,minmax(0,1fr))}
+  .rul-x .k{font:600 8px/var(--rul) var(--mono);color:var(--faint);text-align:center;letter-spacing:.04em}
+  .rul-x .c{
+    position:relative;border-left:1px solid var(--line);font:600 9.5px/1 var(--mono);color:var(--muted);padding:4px 0 0 6px;
+    background-image:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 10%),linear-gradient(var(--line),var(--line));
+    background-size:100% 4px,1px 8px;background-position:0 100%,50% 100%;background-repeat:no-repeat;
+  }
+  .rul-y{position:fixed;top:var(--top);left:var(--rail);bottom:0;width:var(--rul);z-index:20;background:var(--bg);border-right:1px solid var(--line);display:grid;grid-template-rows:repeat(24,minmax(0,1fr))}
+  .rul-y .r{
+    position:relative;border-top:1px solid var(--line);font:600 8px/1 var(--mono);color:var(--muted);padding:4px 0 0 3px;letter-spacing:.02em;
+    background-image:repeating-linear-gradient(180deg,var(--line) 0 1px,transparent 1px 25%);background-size:4px 100%;background-position:100% 0;background-repeat:no-repeat;
+  }
+  .rul-y .r:first-child{border-top:0}
+  .rul-x .c.hv,.rul-y .r.hv{color:var(--ink);background-color:var(--raise)}
+  .rul-x .c.hv::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;background:var(--ink)}
+  .rul-y .r.hv::after{content:'';position:absolute;top:0;bottom:0;right:0;width:2px;background:var(--ink)}
+  .mk{position:absolute;display:none;pointer-events:none}
+  .rul-x .mk{top:0;bottom:0;width:1px;left:0}
+  .rul-y .mk{left:0;right:0;height:1px;top:0}
+  .mk.m{background:var(--ink);opacity:.45}
+
+  /* ================= View grid (every view sits on the A–H / 01–24 sheet) ================= */
+  .view{
+    position:fixed;left:var(--left);top:var(--top);right:0;bottom:0;z-index:1;
+    display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(24,minmax(0,1fr));
+  }
+  .view[hidden]{display:none}
+
+  /* ================= Dashboard modules ================= */
+  .mod{
+    margin:var(--in);min-width:0;min-height:0;background:var(--sheet);border:1px solid var(--line);
+    display:flex;flex-direction:column;position:relative;overflow:hidden;
+  }
+  .mod:hover{border-color:var(--muted)}
+  .mod.ttm::before{content:'';position:absolute;left:0;right:0;top:0;height:3px;background:var(--org);z-index:2}
+  .mh{
+    flex:none;height:var(--mh);display:flex;align-items:stretch;border-bottom:1px solid var(--line);
+    font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap;cursor:pointer;
+  }
+  .mh > span{display:flex;align-items:center;padding:0 10px;border-right:1px solid var(--line2);min-width:0}
+  .mh .mtag{background:var(--ink);color:var(--sheet);border-right:0}
+  .ttm .mh .mtag{background:var(--org);color:var(--on-org)}
+  .mh .mt{color:var(--ink);font-weight:600}
+  .mh .mpn{font-weight:500}
+  .mh .sp{flex:1;border-right:0;padding:0}
+  .mh .mco{color:var(--faint);font-weight:500;border-left:1px solid var(--line2)}
+  .mh .mgo{border:0;border-left:1px solid var(--line);background:none;display:flex;align-items:center;gap:8px;padding:0 6px 0 10px;cursor:pointer;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--ink)}
+  .mh .mgo kbd{height:17px;min-width:17px;font-size:9px}
+  .mh:hover .mgo,.mh .mgo:hover{background:var(--ink);color:var(--sheet)}
+  .mh:hover .mgo kbd{border-color:currentColor;color:inherit}
+  .mb{flex:1;min-height:0;display:flex;flex-direction:column;position:relative}
+  .lab{font:500 8.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+
+  /* generic item row */
+  .it{
+    display:flex;align-items:center;gap:9px;min-height:26px;padding:0 10px;border-bottom:1px solid var(--line2);
+    font-size:13px;line-height:18px;color:var(--text);cursor:pointer;min-width:0;position:relative;
+  }
+  .it:hover{background:var(--raise)}
+  .it .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}
+  .it .id{flex:none;font:500 11px/1 var(--mono);color:var(--muted);letter-spacing:.02em}
+  .it .ag{flex:none;font:500 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .tag{flex:none;height:18px;padding:0 6px;display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);font:500 8.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .tag.inv{background:var(--ink);border-color:var(--ink);color:var(--sheet);font-weight:600}
+  .tag.ttn-t{border-color:var(--org);color:var(--org-ink)}
+  .tag.ttn-t .sq{width:6px;height:6px;background:currentColor}
+  .tag.warn{border-style:dashed;border-color:var(--ink);color:var(--ink)}
+  .flash{animation:flash 1.8s steps(12,end)}
+  @keyframes flash{0%,40%{background:var(--org-soft);box-shadow:0 0 0 3px var(--org-soft)}100%{background:transparent;box-shadow:0 0 0 3px transparent}}
+
+  /* checks + status glyphs */
+  .check{flex:none;width:18px;height:18px;padding:0;border:0;background:none;display:grid;place-items:center;cursor:pointer;color:var(--ink)}
+  .check .box{width:14px;height:14px;border:1.5px solid var(--muted);display:grid;place-items:center;color:var(--sheet)}
+  .check .box .i{width:10px;height:10px;opacity:0}
+  .check:hover .box{border-color:var(--ink)}
+  .done .check .box{background:var(--ink);border-color:var(--ink)}
+  .done .check .box .i{opacity:1}
+  .check .sbx{width:13px;height:13px;border:1.5px dashed var(--org)}
+  .st{width:15px;height:15px;color:var(--ink);flex:none;display:block}
+  .st .o{fill:none;stroke:currentColor;stroke-width:1.5}
+  .st .od{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2.4 1.6}
+  .st .ob{fill:none;stroke:var(--faint);stroke-width:1.5;stroke-dasharray:1 2.2}
+  .st .f{fill:currentColor}
+  .st .k{fill:none;stroke:var(--sheet);stroke-width:1.8}
+  .done .tt,.it.done .tt{color:var(--faint);text-decoration:line-through;text-decoration-thickness:1px}
+  .mini{height:20px;padding:0 8px;border:1px solid var(--line);background:none;cursor:pointer;font:600 8.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink);flex:none}
+  .mini:hover{background:var(--raise);border-color:var(--ink)}
+  .mini.acc{border-color:var(--org);color:var(--org-ink)}
+  .mini.acc:hover{background:var(--org);color:var(--on-org)}
+  .mini + .mini{margin-left:-5px}
+
+  /* --- Calendar module --- */
+  .cal{display:grid;grid-template-columns:minmax(0,1fr) minmax(200px,26%);flex:1;min-height:0}
+  .tl{position:relative;margin:0 16px 0 14px;min-width:0}
+  .tl-scale{position:absolute;left:0;right:0;top:0;height:18px;border-bottom:1px solid var(--line)}
+  .tl-scale span{position:absolute;top:5px;transform:translateX(-50%);font:500 8.5px/1 var(--mono);color:var(--muted);letter-spacing:.04em}
+  .tl-scale span::after{content:'';position:absolute;left:50%;top:9px;width:1px;height:4px;background:var(--line)}
+  .tl-track{position:absolute;left:0;right:0;top:18px;height:26px;border-bottom:1px solid var(--line)}
+  .tl-track .past{position:absolute;left:0;top:0;bottom:0;background-image:repeating-linear-gradient(-45deg,var(--hatch) 0 1px,transparent 1px 6px)}
+  .tl-track .hr{position:absolute;top:0;bottom:0;width:1px;background:var(--line2)}
+  .ev{position:absolute;top:5px;bottom:5px;border:1.5px solid var(--ink);background:var(--sheet);cursor:pointer;min-width:6px}
+  .ev:hover{background:var(--ink)}
+  .ev.past{border-color:var(--faint);background:var(--raise)}
+  .ev.next{border-color:var(--org);background:var(--org-soft)}
+  .ev.live{border-color:var(--org);background:var(--org)}
+  .evl{position:absolute;top:50px;overflow:hidden;cursor:pointer;white-space:nowrap;padding-left:7px;border-left:1px solid var(--line)}
+  .evl .a{font:500 9.5px/1 var(--mono);letter-spacing:.06em;color:var(--muted);display:flex;gap:0;align-items:center;white-space:nowrap;overflow:hidden}
+  .evl .a b{margin-left:8px}
+  .evl .a b{font-weight:600;color:var(--org-ink);letter-spacing:.14em}
+  .evl .b{font:600 12.5px/1.25 var(--sans);color:var(--ink);overflow:hidden;text-overflow:ellipsis;margin-top:4px}
+  .evl.past .b{color:var(--muted);font-weight:500}
+  .evl.next{border-left-color:var(--org)}
+  .evl:hover .b{text-decoration:underline;text-underline-offset:3px}
+  .now{position:absolute;top:0;height:44px;width:2px;margin-left:-1px;background:var(--org);z-index:2}
+  .now span{position:absolute;left:2px;top:0;background:var(--org);color:var(--on-org);font:600 8.5px/12px var(--mono);padding:0 4px;letter-spacing:.06em}
+  .tmr{border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+  .tmr .th{height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;border-bottom:1px solid var(--line2)}
+  .tmr .it{border-bottom:1px solid var(--line2);font-size:12.5px}
+  .tmr .it:last-child{border-bottom:0}
+  .tmr .it .id{width:38px}
+
+  /* --- Titanus module --- */
+  .tq{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;padding:12px 12px 10px 14px;border-bottom:1px solid var(--line2);cursor:pointer}
+  .tq:hover{background:var(--raise)}
+  .tq b{font:800 46px/.85 var(--sans);font-stretch:125%;color:var(--org-ink);letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .tq.empty b{color:var(--faint)}
+  .slots{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:7px}
+  .slots i{height:16px;border:1px solid var(--org);background:var(--org-soft);font:600 8.5px/14px var(--mono);font-style:normal;color:var(--org-ink);text-align:center;letter-spacing:.04em}
+  .slots i.c{background:transparent;border-color:var(--line);color:var(--faint);background-image:repeating-linear-gradient(-45deg,var(--hatch) 0 1px,transparent 1px 4px)}
+  .tq .lab{display:block}
+  .tq-ask{flex:none;margin:10px 12px 0;height:34px;border:1px solid var(--ink);background:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0 6px 0 12px;font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink)}
+  .tq-ask kbd{border-color:currentColor;color:inherit}
+  .tq-ask:hover,.tq-ask[aria-expanded=true]{background:var(--org);border-color:var(--org);color:var(--on-org)}
+  .chan-h{display:flex;justify-content:space-between;align-items:center;margin:12px 12px 0;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .chan{margin:0 12px;list-style:none;padding:0}
+  .chan li{display:grid;grid-template-columns:10px 76px minmax(0,1fr) auto;align-items:center;gap:7px;height:23px;border-bottom:1px solid var(--line2);font:500 10px/1 var(--mono);letter-spacing:.04em;color:var(--muted);white-space:nowrap}
+  .chan li .led{width:6px;height:6px}
+  .chan li b{font-weight:600;color:var(--ink);letter-spacing:.08em;text-transform:uppercase;font-size:9.5px}
+  .chan li span{overflow:hidden;text-overflow:ellipsis}
+  .chan li em{font-style:normal;color:var(--faint);font-variant-numeric:tabular-nums}
+  .t-hint{margin:auto 12px 12px;height:32px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 10px;color:var(--faint);cursor:not-allowed;font-size:13px}
+  .t-hint .lab{color:var(--faint)}
+
+  /* --- Todos module: origin matrix --- */
+  .og{display:grid;grid-template-columns:84px minmax(0,1fr);border-bottom:1px solid var(--line)}
+  .og:last-child{border-bottom:0}
+  .og-l{border-right:1px solid var(--line2);padding:7px 0 7px 10px;display:flex;flex-direction:column;gap:5px}
+  .og-l b{font:800 20px/1 var(--sans);font-stretch:125%;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .og-l.t b,.og-l.t .lab{color:var(--org-ink)}
+  .og-r .it:last-child{border-bottom:0}
+  .og-r .it{padding-left:8px}
+
+  /* --- Email module --- */
+  .ctrs{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line);flex:none}
+  .ctr{padding:9px 10px 8px;border-left:1px solid var(--line2);cursor:pointer;background:none;border-top:0;border-right:0;border-bottom:0;text-align:left;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .ctr:first-child{border-left:0}
+  .ctr:hover{background:var(--raise)}
+  .ctr b{font:800 30px/.9 var(--sans);font-stretch:125%;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+  .ctr.dim b{color:var(--muted);font-weight:600}
+  .ctr.hot{background:var(--ink)}
+  .ctr.hot b,.ctr.hot .lab{color:var(--sheet)}
+  .sub{flex:none;height:22px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;border-bottom:1px solid var(--line2)}
+  .acct{display:flex;gap:12px;color:var(--muted)}
+  .acct span{display:flex;align-items:center;gap:5px}
+  .acct i{width:5px;height:5px;background:var(--muted)}
+  .em .fr{flex:none;width:30%;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .em .tt{color:var(--text)}
+  .em.replied .fr,.em.replied .tt{color:var(--faint);text-decoration:line-through;text-decoration-thickness:1px}
+  .em{min-height:30px}
+  .em .ft{flex:1;min-width:0;display:flex;align-items:center;gap:9px}
+  .bbar{flex:none;display:flex;gap:2px;height:7px;margin:7px 10px;}
+  .bbar i{display:block;min-width:2px;border:1px solid var(--muted)}
+  .bbar i.r{background:var(--ink);border-color:var(--ink)}
+  .bbar i.f{background:var(--muted);border-color:var(--muted)}
+  .bbar i.n{background-image:repeating-linear-gradient(-45deg,var(--hatch) 0 1px,transparent 1px 4px)}
+  @media (min-height:961px){
+    .it{min-height:30px;font-size:13.5px}
+    .em{min-height:46px}
+    .em .ft{flex-direction:column;align-items:stretch;gap:3px}
+    .em .fr{width:auto}
+    .ls .it{min-height:31px}
+    .og-r .it{min-height:31px}
+    .tmr .it{min-height:30px}
+    .bbar{height:9px;margin:9px 10px}
+  }
+
+  /* --- Linear module --- */
+  .cyc{flex:none;padding:9px 10px 9px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;cursor:pointer}
+  .cyc:hover{background:var(--raise)}
+  .cyc .cn{font:700 12.5px/1.1 var(--sans);font-stretch:112%;text-transform:uppercase;letter-spacing:.03em;color:var(--ink);white-space:nowrap}
+  .cyc .cn small{display:block;font:500 8.5px/1 var(--mono);letter-spacing:.14em;color:var(--muted);margin-top:4px}
+  .cyc .pc{font:800 22px/1 var(--sans);font-stretch:125%;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .cyc .gauge{height:14px}
+  .ls{display:grid;grid-template-columns:120px minmax(0,1fr)}
+  .ls .sl{display:flex;align-items:center;gap:8px;padding-left:10px;border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .ls .sl b{margin-left:auto;margin-right:9px;color:var(--ink);font-weight:600}
+  .ls .it{padding-left:10px}
+
+  /* --- GitHub module --- */
+  .say{flex:none;margin:10px 10px 0;display:grid;grid-template-columns:auto minmax(0,1fr);border:1px solid var(--line)}
+  .say .who{background:var(--org);color:var(--on-org);font:600 8.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;writing-mode:vertical-rl;transform:rotate(180deg);padding:8px 5px;text-align:center}
+  .say p{margin:0;padding:8px 11px 9px;font:500 13.5px/1.42 var(--sans);color:var(--ink);letter-spacing:-.006em}
+  .ghs{flex:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:10px 10px 0;border:1px solid var(--line2)}
+  .ghs div{padding:6px 8px;border-left:1px solid var(--line2);display:flex;align-items:baseline;gap:7px;min-width:0}
+  .ghs div:first-child{border-left:0}
+  .ghs b{font:800 17px/1 var(--sans);font-stretch:125%;color:var(--ink);font-variant-numeric:tabular-nums}
+  .ghs .lab{overflow:hidden;text-overflow:ellipsis}
+  .ghl{margin-top:10px;border-top:1px solid var(--line)}
+  .pr .id{width:116px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* --- Daily Note module --- */
+  .dn-t{flex:none;padding:12px 12px 10px;border-bottom:1px solid var(--line);display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+  .dn-t .wd{font:800 30px/.9 var(--sans);font-stretch:125%;text-transform:uppercase;letter-spacing:-.015em;color:var(--ink)}
+  .dn-t .dt{font:300 14px/1.2 var(--sans);color:var(--muted);margin-top:6px}
+  .dn-t .live{display:flex;align-items:center;gap:6px;font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--org-ink)}
+  .dn-t .live .led{width:6px;height:6px}
+  .dn-x{flex:1;min-height:0;overflow:hidden;position:relative;padding:6px 12px 0 0;cursor:pointer}
+  .dn-x::after{content:'';position:absolute;left:0;right:0;bottom:0;height:36px;background:linear-gradient(transparent,var(--sheet))}
+  .dr{display:grid;grid-template-columns:38px minmax(0,1fr);align-items:baseline;font-size:12.5px;line-height:18px;padding:2px 0;color:var(--text)}
+  .dr .n{font:500 8.5px/18px var(--mono);color:var(--faint);text-align:right;padding-right:10px}
+  .dr.h{margin-top:7px;padding-top:6px;border-top:1px solid var(--line2)}
+  .dr.h:first-child{margin-top:0;border-top:0}
+  .dr.h .x{font:700 10.5px/18px var(--sans);font-stretch:118%;letter-spacing:.07em;text-transform:uppercase;color:var(--ink)}
+  .dr.h .n{color:var(--muted)}
+  .dr .ch{font:500 10px/1 var(--mono);border:1px solid var(--line);padding:1px 4px;margin-right:6px;color:var(--ink)}
+  .dr .ch.nx{border-color:var(--org)}
+  .dr .wl{color:var(--ink);font-weight:600;text-decoration:underline;text-decoration-color:var(--muted);text-underline-offset:3px}
+  .dr .ph{color:var(--faint)}
+  .dn-open{flex:none;margin:8px 12px 12px;height:34px;border:1px solid var(--ink);background:var(--ink);color:var(--sheet);cursor:pointer;display:flex;align-items:center;justify-content:space-between;padding:0 6px 0 12px;font:600 10px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase}
+  .dn-open kbd{border-color:currentColor;color:inherit}
+  .dn-open:hover{background:var(--org);border-color:var(--org);color:var(--on-org)}
+
+  /* --- bottom band: key + title block --- */
+  .band{margin:var(--in);min-width:0;min-height:0;border:1px solid var(--line);background:var(--bg);display:flex;font:500 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);overflow:hidden}
+  .band.key{grid-column:1 / 3;grid-row:23 / 25;flex-direction:column;justify-content:center;gap:5px;padding:0 12px}
+  .band.key div{display:flex;align-items:center;gap:7px;white-space:nowrap}
+  .band.key kbd{height:17px;min-width:17px;font-size:9px}
+  .band.key .t kbd{border-color:var(--org);color:var(--org-ink)}
+  .band.tb{grid-column:7 / 9;grid-row:23 / 25;display:grid;grid-template-columns:1.5fr 1fr 1fr;grid-template-rows:1fr 1fr}
+  .band.tb div{border-left:1px solid var(--line2);border-top:1px solid var(--line2);padding:0 8px;display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0;white-space:nowrap}
+  .band.tb div:nth-child(3n+1){border-left:0}
+  .band.tb div:nth-child(-n+3){border-top:0}
+  .band.tb small{font-size:7.5px;color:var(--faint);letter-spacing:.14em}
+  .band.tb b{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
+
+  /* ================= Section sheets (spec | sheet | margin) ================= */
+  .spec{grid-column:1;grid-row:1 / 23;margin:var(--in) 12px 0 14px;container-type:inline-size;font-family:var(--mono);min-height:0;overflow:hidden}
+  .sp-pn{display:flex;justify-content:space-between;align-items:center;gap:6px;padding-bottom:8px;border-bottom:2px solid var(--ink);font:600 10px/1 var(--mono);letter-spacing:.08em;color:var(--ink);white-space:nowrap;min-width:0}
+  .sp-pn > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .sp-live{flex:none}
+  .sp-live{display:inline-flex;align-items:center;gap:5px;color:var(--org-ink);font-size:9px;letter-spacing:.14em;text-transform:uppercase}
+  .sp-live .led{width:6px;height:6px}
+  .sp-num{font:800 min(96px,58cqw)/.8 var(--sans);font-stretch:125%;letter-spacing:-.04em;color:transparent;-webkit-text-stroke:1.25px var(--ink);margin:14px 0 10px -.03em;font-variant-numeric:tabular-nums}
+  .sp-mo{font:500 9.5px/1.3 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .sp-tab{margin:0}
+  .sp-tab div{display:flex;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line2);font:500 9px/1.2 var(--mono);letter-spacing:.1em;text-transform:uppercase}
+  .sp-tab dt{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sp-tab dd{margin:0;color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .sp-tab .ttnrow dd,.sp-tab .ttnrow dt{color:var(--org-ink)}
+  .sp-foot{margin-top:9px;font:500 8.5px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+  .sp-views{margin-top:18px;display:flex;flex-direction:column}
+  .sp-views .lab{margin-bottom:6px}
+  .sp-views button{height:28px;border:1px solid var(--line);border-top:0;background:var(--bg);text-align:left;padding:0 9px;cursor:pointer;font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center}
+  .sp-views .lab + button{border-top:1px solid var(--line)}
+  .sp-views button:hover{color:var(--ink)}
+  .sp-views button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+
+  .sheet{grid-column:2 / 6;grid-row:1 / 23;margin:var(--in);min-width:0;min-height:0;background:var(--sheet);border:1px solid var(--line);display:flex;flex-direction:column}
+  .sh-strip{flex:none;display:flex;align-items:stretch;height:30px;border-bottom:1px solid var(--line);font:500 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .sh-strip > span{display:flex;align-items:center;padding:0 12px;border-right:1px solid var(--line2);white-space:nowrap}
+  .sh-strip > span.sp{flex:1;border-right:0}
+  .sh-strip > span:last-child{border-right:0;border-left:1px solid var(--line2)}
+  .sh-strip .eb{background:var(--ink);color:var(--sheet);font-weight:600}
+  .sh-strip .pn{color:var(--ink);font-weight:600}
+  .sh-body{flex:1;min-height:0;overflow:auto;scrollbar-width:thin;position:relative}
+  .sh-title{padding:20px 22px 18px 46px;border-bottom:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:18px}
+  .sh-title .wd{display:block;font:800 44px/.9 var(--sans);font-stretch:125%;text-transform:uppercase;letter-spacing:-.015em;color:var(--ink)}
+  .sh-title .dt{display:block;margin-top:9px;font:300 19px/1.15 var(--sans);letter-spacing:-.01em;color:var(--muted)}
+  .sh-title .big{font:800 44px/.9 var(--sans);font-stretch:125%;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.03em;text-align:right}
+  .sh-title .big small{display:block;font:500 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:8px}
+  .cycbar{padding:12px 22px 14px 46px;border-bottom:1px solid var(--line)}
+  .cycbar .gauge{height:18px;gap:3px}
+  .cycbar .lg{display:flex;gap:16px;margin-top:9px;flex-wrap:wrap}
+  .cycbar .lg span{display:flex;align-items:center;gap:6px}
+  .cycbar .lg i{width:10px;height:8px;border:1px solid var(--muted)}
+  .cycbar .lg i.f{background:var(--ink);border-color:var(--ink)}
+  .cycbar .lg i.me{background:var(--ink);border-color:var(--ink);box-shadow:inset 0 -3px 0 var(--bg)}
+  .cycbar .lg i.mo{border:1.5px solid var(--ink)}
+  .cycbar .lg i.o{background-image:repeating-linear-gradient(-45deg,var(--hatch) 0 1px,transparent 1px 4px)}
+  .gauge i.mo{border:1.5px solid var(--ink)}
+
+  /* section rows */
+  .sgh{display:flex;align-items:center;gap:10px;height:34px;padding:4px 22px 0 46px;border-top:1px solid var(--line);position:relative;font:700 12.5px/1 var(--sans);font-stretch:118%;letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+  .sgh:first-child{border-top:0}
+  .sgh .bn,.srow .bn{position:absolute;left:8px;width:28px;text-align:right;font:500 9px/1 var(--mono);color:var(--faint);letter-spacing:.02em;font-variant-numeric:tabular-nums}
+  .sgh .bn{color:var(--muted);top:16px}
+  .sgh .c{margin-left:auto;font:500 9.5px/1 var(--mono);letter-spacing:.12em;color:var(--muted)}
+  .sgh .st{width:14px;height:14px}
+  .srow{position:relative;display:flex;align-items:center;gap:11px;min-height:34px;padding:0 22px 0 46px;border-top:1px solid var(--line2);cursor:pointer;font-size:14px;line-height:20px;color:var(--ink)}
+  .srow .bn{top:13px}
+  .srow:hover{background:var(--raise)}
+  .srow.sel{background:var(--focus);box-shadow:inset 3px 0 0 var(--org)}
+  .srow.sel .bn{color:var(--org-ink);font-weight:600}
+  .srow .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srow .id{flex:none;font:500 11.5px/1 var(--mono);color:var(--muted);letter-spacing:.02em;width:66px}
+  .srow .ag{flex:none;font:500 9.5px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+  .srow.done .tt{color:var(--faint);text-decoration:line-through;text-decoration-thickness:1px}
+  .srow .sub2{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .srow.tall{min-height:50px;padding-top:6px;padding-bottom:6px}
+  .srow.tall .bn{top:15px}
+  .empty-row{padding:10px 22px 12px 46px;font-size:13px;color:var(--faint);border-top:1px solid var(--line2)}
+
+  .side{grid-column:6 / 9;grid-row:1 / 23;margin:var(--in);min-width:0;min-height:0;display:flex;flex-direction:column;gap:14px;overflow:auto;scrollbar-width:thin}
+  .pane{background:var(--sheet);border:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .pane.grow{flex:1}
+  .pane .ph{flex:none;height:28px;display:flex;align-items:stretch;border-bottom:1px solid var(--line);font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+  .pane .ph > span{display:flex;align-items:center;padding:0 10px;border-right:1px solid var(--line2)}
+  .pane .ph .eb{background:var(--ink);color:var(--sheet);font-weight:600;border-right:0}
+  .pane .ph .pn{color:var(--ink);font-weight:600}
+  .pane .ph .sp{flex:1;border-right:0;padding:0}
+  .pane .ph > span:last-child:not(.sp){border-right:0;border-left:1px solid var(--line2)}
+  .pane.ttp{border-color:var(--org)}
+  .pane.ttp .ph .eb{background:var(--org);color:var(--on-org)}
+  .pane .pb{padding:14px 16px 16px}
+
+  /* Linear detail pane */
+  .d-id{display:flex;align-items:center;gap:10px;font:600 11px/1 var(--mono);letter-spacing:.06em;color:var(--muted)}
+  .d-t{margin:10px 0 0;font:750 24px/1.12 var(--sans);font-stretch:108%;letter-spacing:-.012em;color:var(--ink)}
+  .props{margin:16px 0 0;border-top:1px solid var(--line)}
+  .props div{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--line2);align-items:center}
+  .props dt{font:500 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .props dd{margin:0;font-size:13.5px;color:var(--ink);display:flex;align-items:center;gap:8px;min-width:0}
+  .d-desc{margin:14px 0 0;flex:none;font-size:14px;line-height:21px;color:var(--text)}
+  .d-sec{margin-top:16px;flex:none}
+  .side .pb > .stsel{margin-top:auto}
+  .side .pb > :nth-last-child(2){margin-bottom:16px}
+  .d-sec .lab{display:block;padding-bottom:6px;border-bottom:1px solid var(--line)}
+  .lnk{display:flex;align-items:center;gap:9px;min-height:30px;border-bottom:1px solid var(--line2);font-size:13px;color:var(--ink);cursor:pointer;padding:0 2px}
+  .lnk:hover{background:var(--raise)}
+  .lnk .id{font:500 10.5px/1 var(--mono);color:var(--muted);flex:none}
+  .lnk .tt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .stsel{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));margin-top:auto;position:relative;top:0;flex:none;border:1px solid var(--line)}
+  .stsel button{height:34px;border:0;border-left:1px solid var(--line2);background:none;cursor:pointer;font:600 8.5px/1.15 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:0 2px}
+  .stsel button:first-child{border-left:0}
+  .stsel button .st{width:12px;height:12px;color:currentColor}
+  .stsel button:hover{color:var(--ink);background:var(--raise)}
+  .stsel button.on{background:var(--ink);color:var(--sheet)}
+  .stsel button.on .st .k{stroke:var(--ink)}
+  .t-held{margin-top:16px;display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--org);font-size:13px;color:var(--text);cursor:pointer}
+  .t-held .led{width:6px;height:6px}
+  .t-held b{font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--org-ink)}
+  .t-held kbd{margin-left:auto;border-color:var(--org);color:var(--org-ink)}
+  .t-held:hover{background:var(--org-soft)}
+
+  /* Titanus cards (Todos Section margin) */
+  .agent-card{background:var(--sheet);border:1px solid var(--line)}
+  .agent-card:hover{border-color:var(--org)}
+  .ac-head{display:flex;align-items:center;gap:9px;height:28px;padding-right:10px;border-bottom:1px solid var(--line2);font:600 9px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--org-ink);white-space:nowrap}
+  .ac-tag{align-self:stretch;display:grid;place-items:center;padding:0 8px;background:var(--org);color:var(--on-org)}
+  .ac-src{margin-left:auto;color:var(--muted);font-weight:500}
+  .ac-body{padding:12px 14px 2px}
+  .ac-todo{display:flex;gap:10px;font:600 15px/20px var(--sans);color:var(--ink);letter-spacing:-.008em}
+  .ac-todo .bx{flex:none;width:13px;height:13px;margin-top:3px;border:1.5px dashed var(--org)}
+  .ac-why{margin:6px 0 0 23px;font-size:13px;line-height:19px;color:var(--muted)}
+  .ac-actions{display:grid;grid-template-columns:1fr 1fr;margin-top:13px;border-top:1px solid var(--line2);min-height:34px}
+  .ac-actions button{height:34px;border:0;background:none;cursor:pointer;font:600 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase}
+  .ac-accept{color:var(--org-ink)}
+  .ac-accept:hover{background:var(--org);color:var(--on-org)}
+  .ac-dismiss{border-left:1px solid var(--line2) !important;color:var(--muted)}
+  .ac-dismiss:hover{background:var(--raise);color:var(--ink)}
+  .ac-ok{grid-column:1 / -1;display:flex;align-items:center;gap:8px;padding:0 14px;font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+
+  .bigq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+  .bigq button{border:0;border-left:1px solid var(--line2);border-bottom:1px solid var(--line2);background:none;padding:14px 14px 12px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:8px}
+  .bigq button:nth-child(odd){border-left:0}
+  .bigq button:hover{background:var(--raise)}
+  .bigq b{font:800 40px/.85 var(--sans);font-stretch:125%;color:var(--ink);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+  .bigq button.dim b{color:var(--muted)}
+  .note{padding:12px 16px;font-size:13px;line-height:19px;color:var(--muted)}
+  .quote{margin:0;padding:16px 18px 18px;font:500 19px/1.35 var(--sans);letter-spacing:-.01em;color:var(--ink)}
+  .hcal{position:relative;margin:0 22px 18px 46px}
+  .hcal .hrow{height:44px;border-top:1px solid var(--line2);position:relative}
+  .hcal .hrow span{position:absolute;left:-40px;top:4px;font:500 9px/1 var(--mono);color:var(--muted);width:32px;text-align:right}
+  .hcal .hev{position:absolute;left:0;right:0;border:1.5px solid var(--ink);background:var(--sheet);padding:5px 10px;cursor:pointer;display:flex;gap:12px;align-items:flex-start;overflow:hidden;font-size:13.5px;color:var(--ink);font-weight:600;line-height:16px}
+  .hcal .hev .id{font:500 10px/16px var(--mono);color:var(--muted);font-weight:500}
+  .hcal .hev.past{border-color:var(--faint);color:var(--muted);background:var(--raise)}
+  .hcal .hev.next{border-color:var(--org);background:var(--org-soft)}
+  .hcal .hev.next .id{color:var(--org-ink)}
+  .hcal .hev.sel{box-shadow:inset 3px 0 0 var(--org)}
+  .hcal .hnow{position:absolute;left:-6px;right:0;height:2px;background:var(--org);z-index:2}
+  .hcal .hnow span{position:absolute;left:-40px;top:-6px;background:var(--org);color:var(--on-org);font:600 8.5px/12px var(--mono);padding:0 3px}
+
+  /* Notes Section: the reference Daily Note, mounted under our own rail and header */
+  .notes{position:fixed;left:var(--rail);top:var(--hdr);right:0;bottom:0;z-index:22;overflow:hidden;background:var(--bg)}
+  .notes[hidden]{display:none}
+  .notes iframe{position:absolute;left:calc(-1 * var(--rail));top:calc(-1 * var(--hdr));width:calc(100% + var(--rail));height:calc(100% + var(--hdr));border:0;display:block}
+
+  /* ================= Titanus update panel ================= */
+  .upd{position:fixed;z-index:25;top:var(--hdr);bottom:0;right:0;left:calc(var(--left) + (100% - var(--left)) * .625);background:var(--sheet);border-left:1px solid var(--line);display:flex;flex-direction:column}
+  .upd[hidden]{display:none}
+  .upd::before{content:'';position:absolute;left:-1px;right:0;top:0;height:3px;background:var(--org);z-index:2}
+  .upd.in{animation:wipe .2s steps(5,end)}
+  @keyframes wipe{from{clip-path:inset(0 0 100% 0)}to{clip-path:inset(0)}}
+  .upd-in{flex:1;min-height:0;overflow:auto;padding:0 28px 0 40px;scrollbar-width:thin}
+  .upd-head{position:sticky;top:0;z-index:1;background:var(--sheet);height:48px;display:flex;align-items:center;justify-content:space-between;margin:0 -28px 0 -40px;padding:3px 14px 0 40px;border-bottom:1px solid var(--line);font:600 10px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+  .uh-t{display:flex;align-items:center;gap:9px}
+  .uh-t .sl{color:var(--faint)}
+  .uh-x{border:1px solid var(--line);background:none;height:28px;padding:0 6px 0 10px;display:flex;align-items:center;gap:8px;cursor:pointer;font:600 9.5px/1 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .uh-x kbd{height:18px;min-width:0;font-size:9px}
+  .uh-x:hover{color:var(--ink);border-color:var(--ink)}
+  .upd-meta{display:flex;flex-wrap:wrap;margin-top:14px;font:500 9px/1.6 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .upd-meta span + span{border-left:1px solid var(--line);padding-left:10px;margin-left:10px}
+  .upd-meta b{color:var(--ink);font-weight:600}
+  .upd-say{margin:14px 0 20px;font:500 24px/1.22 var(--sans);letter-spacing:-.012em;color:var(--ink);max-width:22em}
+  .upd-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+  .qi{display:grid;grid-template-columns:48px minmax(0,1fr);padding:15px 0 16px;border-bottom:1px solid var(--line2)}
+  .qn{font:800 22px/1 var(--sans);font-stretch:125%;color:var(--org-ink);padding-top:1px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+  .qt{font:650 16.5px/22px var(--sans);color:var(--ink);letter-spacing:-.008em}
+  .qd{margin-top:4px;font-size:14px;line-height:21px;color:var(--text)}
+  .qa{display:flex;align-items:center;margin-top:11px}
+  .qa button{height:28px;padding:0 12px;border:1px solid var(--line);background:none;cursor:pointer;font:600 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+  .qa .q-done{background:var(--ink);border-color:var(--ink);color:var(--sheet)}
+  .qa .q-done:hover{background:var(--org);border-color:var(--org);color:var(--on-org)}
+  .qa .q-dis{border-left:0}
+  .qa .q-dis:hover{background:var(--raise)}
+  .qa .q-ref{margin-left:auto;border:0;padding:0 0 0 10px;color:var(--muted);letter-spacing:.08em;font-weight:500}
+  .qa .q-ref:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+  .qi.cleared{padding:11px 0 12px}
+  .qi.cleared .qn{color:var(--faint);font-size:16px;padding-top:3px}
+  .qi.cleared .qt{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1px;font-weight:500;font-size:15px}
+  .qi.cleared .qa{margin-top:5px}
+  .qs{font:500 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .qa .q-undo{border:0;height:22px;padding:0 0 0 12px;color:var(--ink);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+  .upd-ask{flex:none;margin:12px 28px 18px 40px;height:44px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 14px;color:var(--faint);cursor:not-allowed;user-select:none}
+  .ua-p{font:400 14px/1 var(--sans)}
+  .ua-l{font:500 8.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+
+  /* ================= Toast ================= */
+  .toast{
+    position:fixed;left:calc(var(--left) + 12px);bottom:16px;z-index:40;max-width:min(400px,calc(50vw - 350px));
+    background:var(--ink);color:var(--bg);font-size:13px;line-height:18px;padding:10px 12px 10px 14px;
+    display:flex;align-items:center;gap:14px;border-left:4px solid var(--org);
+    opacity:0;transform:translateY(8px);pointer-events:none;transition:opacity .15s,transform .15s;
+  }
+  .toast.show{opacity:1;transform:none;pointer-events:auto}
+  .toast b{font-weight:700}
+  .toast button{border:1px solid currentColor;background:none;color:inherit;font:600 9.5px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;height:26px;padding:0 10px;cursor:pointer;flex:none}
+  .toast button:hover{background:var(--org);border-color:var(--org);color:var(--on-org)}
+
+  /* ================= Smaller sheets (1280 x 800) ================= */
+  @media (max-height:880px){
+    :root{--in:6px;--mh:25px}
+    .tq{padding:9px 12px 8px 14px}
+    .tq b{font-size:38px}
+    .tq-ask{height:30px;margin-top:8px}
+    .chan-h{margin-top:9px}
+    .chan li{height:20px}
+    .t-hint{display:none}
+    .it{min-height:24px;font-size:12.5px}
+    .em{min-height:26px}
+    .og-l{padding-top:5px;gap:4px}
+    .og-l b{font-size:17px}
+    .ctr{padding:7px 10px 6px;gap:5px}
+    .ctr b{font-size:24px}
+    .cyc{padding:6px 10px}
+    .say{margin-top:7px}
+    .say p{font-size:12.5px;line-height:1.36;padding:6px 10px 7px}
+    .ghs{margin-top:7px}
+    .ghs div{padding:4px 8px}
+    .ghl{margin-top:7px}
+    .dn-t{padding:9px 12px 8px}
+    .dn-t .wd{font-size:24px}
+    .dn-open{height:30px;margin:6px 12px 10px}
+    .evl{top:46px}
+    .tl-track{height:22px}
+    .now{height:40px}
+    .sh-title{padding:14px 22px 12px 46px}
+    .sh-title .wd,.sh-title .big{font-size:34px}
+    .sh-title .dt{font-size:16px;margin-top:6px}
+    .srow{min-height:30px;font-size:13.5px}
+    .srow .bn{top:11px}
+    .sgh{height:30px}
+    .sgh .bn{top:14px}
+    .d-t{font-size:20px}
+    .props div{padding:5px 0}
+    .d-desc{font-size:13px;line-height:19px;margin-top:10px}
+    .d-sec{margin-top:12px}
+    .lnk{min-height:27px}
+    .t-held{margin-top:12px;padding:7px 10px}
+    .pane .pb{padding:11px 14px 12px}
+    .sp-num{margin:10px 0 8px}
+    .hcal .hrow{height:34px}
+    .upd-meta{margin-top:10px}
+    .upd-say{margin:8px 0 12px;font-size:21px}
+    .qi{padding:10px 0 11px}
+    .qd{margin-top:2px;font-size:13.5px;line-height:20px}
+    .qa{margin-top:7px}
+    .qa button{height:26px}
+    .upd-ask{margin-top:8px;margin-bottom:14px;height:40px}
+  }
+  @media (max-height:960px){
+    .t-hint{display:none}
+    .band.key{gap:2px;font-size:8.5px}
+    .band.key kbd{height:13px;min-width:14px;font-size:8.5px;padding:0 3px}
+    .ghl .og-l{flex-direction:row;align-items:center;gap:6px;padding:0 0 0 10px}
+    .ghl .og-l b{font-size:15px}
+  }
+  @media (max-width:1440px){
+    .mod.narrow .mh .mco{display:none}
+    .it.lt .ag{display:none}
+    .em .fr{width:auto;min-width:30%;max-width:52%}
+    .sp-views button{font-size:8.5px;letter-spacing:.06em;padding:0 7px;white-space:nowrap}
+    .it .src{display:none}
+    .ls{grid-template-columns:104px minmax(0,1fr)}
+    .pr .id{width:100px}
+    .ghs .lab{font-size:7.5px;letter-spacing:.1em}
+    .hm .v{font-size:13px}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs><clipPath id="lin-clip"><circle cx="8" cy="8" r="7"/></clipPath></defs>
+  <symbol id="i-linear" viewBox="0 0 16 16"><g clip-path="url(#lin-clip)" fill="currentColor"><path d="M-10 -40 L26 -4 L26 27.2 L-10 -8.8Z"/><path d="M-10 -7.5 L26 28.5 L26 30.4 L-10 -5.6Z"/><path d="M-10 -4.3 L26 31.7 L26 33.3 L-10 -2.7Z"/><path d="M-10 -1.5 L26 34.5 L26 36 L-10 0Z"/></g></symbol>
+  <symbol id="i-check" viewBox="0 0 12 12"><path d="M2.4 6.2l2.3 2.3 4.9-5.1" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="square" stroke-linejoin="miter"/></symbol>
+</svg>
+
+<div class="gridwrap" id="gridwrap" aria-hidden="true"><svg id="gridbg"></svg></div>
+
+<aside class="rail" aria-label="Sections">
+  <div class="brand" title="Commander"><span class="mark">C</span></div>
+  <div class="rail-cap">Sec</div>
+  <nav id="railNav"></nav>
+  <div class="spacer"></div>
+  <button class="ri thm" id="thmBtn" type="button" data-tip="Switch light / dark" aria-label="Switch light or dark theme"><span class="ix">TH</span><svg viewBox="0 0 24 24"><rect x="4.5" y="4.5" width="15" height="15"/><path d="M4.5 19.5 19.5 4.5V19.5Z" fill="currentColor"/></svg><span class="cd" id="thmLbl">Drk</span></button>
+  <div class="avatar" title="Seth"><span>ST</span></div>
+</aside>
+
+<header class="hdr">
+  <div class="h-corner" aria-hidden="true"></div>
+  <div class="h-id">
+    <div class="h-sec" id="hSec">Sec 01 / Dashboard</div>
+    <div class="h-title" id="hTitle">Dashboard</div>
+    <div class="h-clock"><i class="led"></i><span id="clock">11:40:00</span><small>Local</small></div>
+  </div>
+  <div class="h-wk">
+    <div class="h-wkn">Thu 01 Oct</div>
+    <div class="h-wkr">Week 40 · 2026<br>D 274/365</div>
+  </div>
+  <div class="h-mid" id="hMid"></div>
+  <section class="ttn" id="ttn" aria-label="Titanus">
+    <div class="t-count" title="Things Titanus is holding for you"><b id="tCount">04</b><span>Queued</span></div>
+    <div class="t-info">
+      <div class="t-l1"><span>Titanus</span><span class="pres" id="tPres"></span></div>
+      <div class="t-l2" id="tLine"></div>
+    </div>
+    <button class="ask-btn" id="askBtn" type="button" aria-expanded="false" aria-controls="upd" title="Ask Titanus for an update (U)"><span>Ask for<br>an update</span><kbd>U</kbd></button>
+  </section>
+</header>
+
+<div class="rul-x" id="rulX" aria-hidden="true">
+  <div class="k">0</div>
+  <div class="c">A</div><div class="c">B</div><div class="c">C</div><div class="c">D</div><div class="c">E</div><div class="c">F</div><div class="c">G</div><div class="c">H</div>
+  <i class="mk m" id="mX"></i>
+</div>
+<div class="rul-y" id="rulY" aria-hidden="true"><i class="mk m" id="mY"></i></div>
+
+<main class="view" id="view"></main>
+<div class="notes" id="notes" hidden></div>
+
+<aside class="upd" id="upd" hidden aria-label="Update from Titanus">
+  <div class="upd-in">
+    <div class="upd-head"><span class="uh-t"><i class="led"></i>Titanus <span class="sl">/</span> Update</span><button class="uh-x" id="updClose" type="button">Close <kbd>Esc</kbd></button></div>
+    <div class="upd-meta" id="updMeta"></div>
+    <p class="upd-say" id="updSay"></p>
+    <ol class="upd-list" id="updList"></ol>
+  </div>
+  <div class="upd-ask" aria-disabled="true" title="Talking to Titanus comes later"><span class="ua-p">Ask Titanus…</span><span class="ua-l">Coming later</span></div>
+</aside>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const use = n => `<svg class="i i-${n}"><use href="#i-${n}"/></svg>`;
+  const pad = (n, w = 2) => String(n).padStart(w, '0');
+  const COLS = 'ABCDEFGH';
+
+  /* ------------------------------------------------------------------ */
+  /* Fictional clock: Thursday 1 October 2026, starting at 11:40         */
+  /* ------------------------------------------------------------------ */
+  const BASE = new Date(2026, 9, 1, 11, 40, 0).getTime(), T0 = Date.now();
+  const now = () => new Date(BASE + (Date.now() - T0));
+  const hhmm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
+  const mins = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+  const nowMin = () => { const d = now(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; };
+  const dur = m => { m = Math.max(0, Math.round(m)); const h = Math.floor(m / 60); return h ? `${h}h ${pad(m % 60)}m` : `${m}m`; };
+
+  /* ------------------------------------------------------------------ */
+  /* Content (CONTENT.md). State lives in memory only.                   */
+  /* ------------------------------------------------------------------ */
+  const SECS = [
+    { k: 'dashboard', n: 'Dashboard', cd: 'Dsh', pn: 'DSH', svg: '<rect x="4" y="4" width="6.5" height="6.5"/><rect x="13.5" y="4" width="6.5" height="6.5"/><rect x="4" y="13.5" width="6.5" height="6.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5"/>' },
+    { k: 'notes', n: 'Notes', cd: 'Nts', pn: 'NTS', svg: '<path d="M5.5 3.5h9l4 4v13h-13z"/><path d="M14.5 3.5v4h4M8.5 11.5h7M8.5 15h7"/>' },
+    { k: 'todos', n: 'Todos', cd: 'Tdo', pn: 'TDO', svg: '<rect x="4" y="4" width="16" height="16"/><path d="m8.2 12.2 2.6 2.6 5-5.4"/>' },
+    { k: 'linear', n: 'Linear', cd: 'Lin', pn: 'LIN', svg: '<circle cx="12" cy="12" r="8.2"/><path d="M4.6 14.2l5.2 5.2M4.1 10.6l9.3 9.3M5.6 7.4l11 11"/>' },
+    { k: 'email', n: 'Email', cd: 'Eml', pn: 'EML', svg: '<rect x="3.5" y="5.5" width="17" height="13"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/>' },
+    { k: 'calendar', n: 'Calendar', cd: 'Cal', pn: 'CAL', svg: '<rect x="3.8" y="5.2" width="16.4" height="15"/><path d="M3.8 10h16.4M8.5 3.4v3.4M15.5 3.4v3.4"/>' },
+    { k: 'github', n: 'GitHub', cd: 'Git', pn: 'GIT', svg: '<rect x="5" y="3.8" width="3.6" height="3.6"/><rect x="5" y="16.6" width="3.6" height="3.6"/><rect x="15.4" y="16.6" width="3.6" height="3.6"/><path d="M6.8 7.4v9.2M17.2 16.6V10h-6.4"/><path d="m12.6 8-2 2 2 2"/>' },
+  ];
+  const secIdx = k => SECS.findIndex(s => s.k === k);
+  const keyOf = k => secIdx(k) + 1;
+
+  const STATES = ['Backlog', 'Todo', 'In Progress', 'In Review', 'Done'];
+  const ORDER = ['In Progress', 'In Review', 'Todo', 'Backlog', 'Done'];
+  const S = {
+    view: 'dashboard', selIssue: 'ENG-412', linView: 'assigned', selEvent: 'e-priya', flash: null,
+    issues: [
+      { id: 'ENG-412', title: 'Fix webhook retry backoff', state: 'In Progress', since: '6 days', cycle: true, todo: true,
+        desc: 'Webhook retries are hammering Acme during their outages. Exponential backoff with jitter, capped at 1h. Ship it behind a flag this sprint; no queue rewrite yet.',
+        with: 'Priya', act: [['Fri 25 Sep', 'Moved to In Progress'], ['Today', 'Discussed in your 1:1 notes with Priya'], ['Today', 'api #2198 opened; CI is failing']], links: [{ sec: 'github', id: 'pr-2198', k: 'api #2198', t: 'Webhook retries with jitter', tag: 'CI failing' }, { sec: 'notes', k: 'DN-274 · 005', t: '1:1 with Priya (notes)' }] },
+      { id: 'ENG-421', title: 'Review rate-limiter PR', state: 'In Review', since: '1 day', cycle: true, todo: true,
+        desc: 'The sliding-window rate limiter for the public API is up for review. It is almost done and waiting on you.',
+        act: [['Yesterday', 'api #2213 asked for your review'], ['Today', 'Titanus: almost done, needs your review']],
+        links: [{ sec: 'github', id: 'pr-2213', k: 'api #2213', t: 'Rate limiter: sliding window', tag: 'Review requested' }] },
+      { id: 'ENG-418', title: 'Rotate Acme sandbox API keys', state: 'Todo', since: '3 days', cycle: true, todo: true,
+        desc: 'Rotate the API keys for the Acme Payments sandbox.',
+        act: [['Mon 28 Sep', 'Added to Cycle 41']],
+        links: [{ sec: 'calendar', id: 'e-acme', k: '16:00', t: 'Vendor call: Acme Payments' }] },
+      { id: 'ENG-399', title: 'Retire legacy billing cron', state: 'Backlog', since: '3 weeks', cycle: false, todo: false,
+        desc: 'Turn off the old billing cron once nothing depends on it.', links: [] },
+      { id: 'ENG-405', title: 'Upgrade Postgres minor version', state: 'Done', since: 'Yesterday', cycle: true, todo: false,
+        desc: 'Done yesterday. The next step is the major bump in infra #340.',
+        links: [{ sec: 'github', id: 'pr-340', k: 'infra #340', t: 'Bump Postgres to 17.6', tag: 'Review requested' }] },
+    ],
+    cycleOthers: { done: 7, open: 2 },
+    todos: [
+      { id: 't412', origin: 'linear', issue: 'ENG-412' },
+      { id: 't418', origin: 'linear', issue: 'ENG-418' },
+      { id: 't421', origin: 'linear', issue: 'ENG-421' },
+      { id: 'tdana', origin: 'titanus', no: 'T-01', text: 'Reply to Dana about the Q4 offsite dates', src: 'from email', why: 'Dana emailed about the Q4 offsite dates. She’s waiting on a reply.', sug: 'open', done: false },
+      { id: 'tpriya', origin: 'titanus', no: 'T-02', text: 'Give Priya Acme sandbox access', src: 'from the Daily Note', why: 'You wrote a follow-up in your 1:1. Nobody has done it yet.', sug: 'open', done: false },
+      { id: 'tacme', origin: 'manual', text: 'Decide on the Acme Payments contract', due: 'Due Fri', done: false },
+      { id: 'tsam', origin: 'manual', text: 'Buy a birthday gift for Sam', done: false },
+      { id: 'tdoc', origin: 'manual', text: 'Review Priya’s backoff design doc', done: true },
+    ],
+    accounts: [
+      { k: 'Personal', n: 'Personal', full: 'Gmail · personal' },
+      { k: 'Northwind', n: 'Northwind', full: 'Google Workspace · Northwind' },
+      { k: 'Outlook', n: 'Outlook', full: 'Outlook.com' },
+    ],
+    mail: [
+      { id: 'm-dana', from: 'Dana Whitfield', subj: 'Q4 offsite: which dates work?', acct: 'Northwind', age: '2h ago', replied: false },
+      { id: 'm-acme', from: 'Acme Payments (Leo Park)', subj: 'Contract redlines, v3', acct: 'Northwind', age: '5h ago', replied: false },
+      { id: 'm-mum', from: 'Mum', subj: 'Sunday lunch?', acct: 'Personal', age: 'Yesterday', replied: false },
+    ],
+    buckets: { fyi: 12, news: 28, rcpt: 4 },
+    events: [
+      { id: 'e-standup', s: '09:30', e: '09:45', t: 'Eng standup' },
+      { id: 'e-priya', s: '13:00', e: '13:30', t: '1:1 with Priya' },
+      { id: 'e-acme', s: '16:00', e: '16:45', t: 'Vendor call: Acme Payments' },
+    ],
+    tomorrow: [
+      { id: 'e-board', s: '10:00', t: 'Board prep with Marcus' },
+      { id: 'e-int', s: '15:00', t: 'Interview: Staff engineer' },
+    ],
+    reviews: [
+      { id: 'pr-2213', repo: 'northwind/api', n: 2213, t: 'Rate limiter: sliding window', done: false },
+      { id: 'pr-981', repo: 'northwind/web', n: 981, t: 'Billing settings redesign', done: false },
+      { id: 'pr-340', repo: 'northwind/infra', n: 340, t: 'Bump Postgres to 17.6', done: false },
+    ],
+    mine: [{ id: 'pr-2198', repo: 'northwind/api', n: 2198, t: 'Webhook retries with jitter', ci: 'CI failing' }],
+    releases: [{ id: 'rel-api', repo: 'northwind/api', v: 'v4.12.0' }, { id: 'rel-web', repo: 'northwind/web', v: '2026.10.01' }],
+    gh: { merged: 14, opened: 5, releases: 2, repos: 6, watching: 8 },
+    summary: 'Quiet day yesterday. Most of the work was in api and web. The rate limiter is almost done and needs your review. Infra is waiting on you for the Postgres bump. Nothing is on fire.',
+  };
+  const QUEUE = [
+    { id: 'q1', title: 'Dana is waiting on you.', body: 'She asked which dates work for the Q4 offsite. You haven’t answered yet. It’s a short reply.', sec: 'email', ref: 'm-dana', refLabel: 'Email · Dana' },
+    { id: 'q2', title: 'Priya still can’t get into the Acme sandbox.', body: 'You wrote it down in your 1:1. Nobody has done it yet. It takes a minute.', sec: 'todos', ref: 'tpriya', refLabel: 'Todos · Priya' },
+    { id: 'q3', title: 'The Acme decision is due Friday.', body: 'Your call with them is at four today. If you decide on the call, you’re done early.', sec: 'calendar', ref: 'e-acme', refLabel: 'Calendar · 16:00' },
+    { id: 'q4', title: 'ENG-412 has been In Progress for six days.', body: 'That’s longer than these usually take. Priya might be stuck. Worth a quick question.', sec: 'linear', ref: 'ENG-412', refLabel: 'Linear · ENG-412' },
+  ].map(q => ({ ...q, state: 'open', at: '' }));
+
+  /* ------------------------------------------------------------------ */
+  /* Derived values                                                      */
+  /* ------------------------------------------------------------------ */
+  const issue = id => S.issues.find(i => i.id === id);
+  const todoText = t => t.origin === 'linear' ? issue(t.issue).title : t.text;
+  const todoDone = t => t.origin === 'linear' ? issue(t.issue).state === 'Done' : t.done;
+  const todoLive = t => !(t.origin === 'titanus' && t.sug === 'dismissed');
+  const openTodos = () => S.todos.filter(t => todoLive(t) && !todoDone(t));
+  const needsReply = () => S.mail.filter(m => !m.replied);
+  const openIssues = () => S.issues.filter(i => i.state !== 'Done');
+  const openReviews = () => S.reviews.filter(r => !r.done);
+  const evState = e => { const m = nowMin(); return mins(e.e) <= m ? 'past' : mins(e.s) <= m ? 'live' : 'later'; };
+  const nextEvent = () => S.events.find(e => mins(e.s) > nowMin());
+  const evStates = () => { let nx = false; return S.events.map(e => { let s = evState(e); if (s === 'later' && !nx) { s = 'next'; nx = true; } return s; }); };
+  const leftToday = () => S.events.filter(e => evState(e) !== 'past').length;
+  function cycle() {
+    const mineC = S.issues.filter(i => i.cycle);
+    const mineDone = mineC.filter(i => i.state === 'Done').length;
+    const total = S.cycleOthers.done + S.cycleOthers.open + mineC.length;
+    const done = S.cycleOthers.done + mineDone;
+    return { total, done, pct: Math.round(done / total * 100), mineC };
+  }
+  function gaugeHTML() {
+    const c = cycle(); let h = '';
+    for (let i = 0; i < S.cycleOthers.done; i++) h += '<i class="f" title="Done"></i>';
+    c.mineC.filter(i => i.state === 'Done').forEach(i => h += `<i class="me" title="${i.id} · Done (yours)"></i>`);
+    c.mineC.filter(i => i.state !== 'Done').forEach(i => h += `<i class="mo" title="${i.id} · ${i.state} (yours)"></i>`);
+    for (let i = 0; i < S.cycleOthers.open; i++) h += '<i class="o" title="Open"></i>';
+    return `<div class="gauge">${h}</div>`;
+  }
+  function statusSvg(s) {
+    if (s === 'Done') return '<svg class="st" viewBox="0 0 16 16"><rect class="f" x="1" y="1" width="14" height="14"/><path class="k" d="M4.4 8.1l2.4 2.4 4.8-5"/></svg>';
+    if (s === 'In Review') return '<svg class="st" viewBox="0 0 16 16"><rect class="o" x="1.75" y="1.75" width="12.5" height="12.5"/><rect class="f" x="4" y="4" width="8" height="8"/></svg>';
+    if (s === 'In Progress') return '<svg class="st" viewBox="0 0 16 16"><rect class="o" x="1.75" y="1.75" width="12.5" height="12.5"/><rect class="f" x="4" y="4" width="4" height="8"/></svg>';
+    if (s === 'Backlog') return '<svg class="st" viewBox="0 0 16 16"><rect class="ob" x="1.75" y="1.75" width="12.5" height="12.5"/></svg>';
+    return '<svg class="st" viewBox="0 0 16 16"><rect class="od" x="1.75" y="1.75" width="12.5" height="12.5"/></svg>';
+  }
+  const box = '<span class="box">' + use('check') + '</span>';
+
+  /* ------------------------------------------------------------------ */
+  /* Shared bits                                                         */
+  /* ------------------------------------------------------------------ */
+  const area = (c0, c1, r0, r1) => `style="grid-column:${c0} / ${c1 + 1};grid-row:${r0} / ${r1 + 1}" data-c="${c0}-${c1}" data-r="${r0}-${r1}"`;
+  const coord = (c0, c1, r0, r1) => `${COLS[c0 - 1]}${pad(r0)}–${COLS[c1 - 1]}${pad(r1)}`;
+  function mh(tag, title, pn, sec, c) {
+    const k = keyOf(sec);
+    return `<div class="mh" data-act="go" data-sec="${sec}" title="Open the ${SECS[k - 1].n} Section (${k})"><span class="mtag">${tag}</span><span class="mt">${title}</span><span class="mpn">${pn}</span><span class="sp"></span><span class="mco">${coord(...c)}</span><button class="mgo" type="button" data-act="go" data-sec="${sec}">Open<kbd>${k}</kbd></button></div>`;
+  }
+  function band(view) {
+    const k = keyOf(view);
+    const extra = view === 'linear' ? '<div><kbd>↑</kbd><kbd>↓</kbd> Select issue</div>' : view === 'dashboard' ? '<div>Click any line to open it</div>' : '<div><kbd>1</kbd> Back to Dashboard</div>';
+    return `<div class="band key" aria-label="Keys"><div><kbd>1</kbd>–<kbd>7</kbd> Sections</div><div class="t"><kbd>U</kbd> Update from Titanus</div>${extra}</div>
+      <div class="band tb" aria-label="Title block">
+        <div><small>Drawing</small><b>CMD-${SECS[k - 1].pn}-${pad(k, 3)}</b></div><div><small>Sheet</small><b>${pad(k)} / 07</b></div><div><small>Scale</small><b>1:1</b></div>
+        <div><small>Rev</small><b>2026-10-01</b></div><div><small>Drawn</small><b>ST</b></div><div><small>Read by</small><b>Titanus</b></div>
+      </div>`;
+  }
+  function spec(o) {
+    return `<aside class="spec" ${area(1, 1, 1, 22)} aria-label="${esc(o.aria || 'Section details')}">
+      <div class="sp-pn"><span>${o.pn}</span>${o.live ? '<span class="sp-live"><i class="led"></i>Live</span>' : ''}</div>
+      <div class="sp-num">${o.num}</div>
+      <div class="sp-mo">${o.mo}</div>
+      <dl class="sp-tab">${o.rows.map(r => `<div${r[2] ? ` class="${r[2]}"` : ''}><dt>${r[0]}</dt><dd>${r[1]}</dd></div>`).join('')}</dl>
+      ${o.extra || ''}
+      <div class="sp-foot">${o.foot}</div>
+    </aside>`;
+  }
+  const strip = (eb, pn, mid, right) => `<div class="sh-strip"><span class="eb">${eb}</span><span class="pn">${pn}</span>${mid ? `<span>${mid}</span>` : ''}<span class="sp"></span><span>${right}</span></div>`;
+
+  /* ------------------------------------------------------------------ */
+  /* DASHBOARD: the instrument panel                                     */
+  /* ------------------------------------------------------------------ */
+  const L = {
+    cal: [1, 6, 1, 4], ttn: [7, 8, 1, 9], tdo: [1, 3, 5, 13], eml: [4, 6, 5, 12],
+    lin: [1, 3, 14, 22], git: [4, 6, 13, 22], dn: [7, 8, 10, 22],
+  };
+  function modCalendar() {
+    const c = L.cal, A = 8 * 60, B = 20 * 60, X = m => ((m - A) / (B - A) * 100).toFixed(3) + '%';
+    const st = evStates(); let scale = '', hrs = '';
+    for (let h = 8; h <= 20; h++) { scale += `<span style="left:${X(h * 60)}">${pad(h)}</span>`; if (h > 8 && h < 20) hrs += `<i class="hr" style="left:${X(h * 60)}"></i>`; }
+    const nm = nowMin();
+    const evs = S.events.map((e, i) => `<div class="ev ${st[i]}" data-act="go" data-sec="calendar" data-id="${e.id}" style="left:${X(mins(e.s))};width:${(((mins(e.e) - mins(e.s)) / (B - A)) * 100).toFixed(3)}%" title="${esc(e.s + '–' + e.e + ' ' + e.t)}"></div>`).join('');
+    const labels = S.events.map((e, i) => {
+      const s = st[i], nxt = S.events[i + 1], room = (((nxt ? mins(nxt.s) : B) - mins(e.s)) / (B - A) * 100).toFixed(3);
+      const tag = s === 'next' ? `<b data-countdown="${e.id}">Next in ${dur(mins(e.s) - nm)}</b>` : s === 'live' ? `–${e.e} <b>Live</b>` : s === 'past' ? `–${e.e} · Done` : `–${e.e}`;
+      return `<div class="evl ${s}" data-act="go" data-sec="calendar" data-id="${e.id}" data-item="${e.id}" style="left:${X(mins(e.s))};max-width:calc(${room}% - 10px)"><div class="a">${e.s}${tag}</div><div class="b">${esc(e.t)}</div></div>`;
+    }).join('');
+    return `<section class="mod" ${area(...c)} aria-label="Calendar">${mh('M-06', 'Calendar', 'CAL-TODAY', 'calendar', c)}
+      <div class="mb cal">
+        <div class="tl">
+          <div class="tl-scale">${scale}</div>
+          <div class="tl-track"><div class="past" id="calPast" style="width:${X(Math.min(Math.max(nm, A), B))}"></div>${hrs}${evs}</div>
+          <div class="now" id="calNow" style="left:${X(Math.min(Math.max(nm, A), B))}"><span id="calNowT">${hhmm(now())}</span></div>
+          ${labels}
+        </div>
+        <div class="tmr"><div class="th"><span class="lab">Tomorrow · Fri 02</span><span class="lab">${pad(S.tomorrow.length)}</span></div>
+          ${S.tomorrow.map(e => `<div class="it" data-act="go" data-sec="calendar" data-id="${e.id}"><span class="id">${e.s}</span><span class="tt">${esc(e.t)}</span></div>`).join('')}
+        </div>
+      </div></section>`;
+  }
+  function modTitanus() {
+    const c = L.ttn, n = openCount();
+    const slots = QUEUE.map((q, i) => `<i class="${q.state === 'open' ? '' : 'c'}" title="${q.state === 'open' ? 'Held until you ask' : 'Cleared'}">${pad(i + 1)}</i>`).join('');
+    return `<section class="mod ttm narrow" ${area(...c)} aria-label="Titanus">
+      <div class="mh" data-act="ask" title="Ask Titanus for an update (U)"><span class="mtag">TTN</span><span class="mt">Titanus</span><span class="mpn">Agent · Local</span><span class="sp"></span><span class="mco">${coord(...c)}</span></div>
+      <div class="mb">
+        <div class="tq${n ? '' : ' empty'}" data-act="ask" title="Ask for an update (U)"><b>${pad(n)}</b><div><span class="lab">${n ? 'Queued · held until you ask' : 'Nothing queued'}</span><div class="slots">${slots}</div></div></div>
+        <button class="tq-ask" type="button" data-act="ask" aria-expanded="${!upd.hidden}">Ask for an update<kbd>U</kbd></button>
+        <div class="chan-h"><span class="lab">Reading now</span><span class="lab">Last pass</span></div>
+        <ul class="chan">
+          <li><i class="led"></i><b>Email</b><span>3 Accounts · 47 sorted</span><em>11:38</em></li>
+          <li><i class="led"></i><b>Calendar</b><span>5 events · 2 days</span><em>11:30</em></li>
+          <li><i class="led"></i><b>Linear</b><span>Northwind · ${pad(openIssues().length)} yours</span><em>11:36</em></li>
+          <li><i class="led"></i><b>GitHub</b><span>${S.gh.watching} repos · 19 PRs read</span><em>11:35</em></li>
+          <li><i class="led"></i><b>Daily Note</b><span>DN-274 · 21 blocks</span><em>11:39</em></li>
+        </ul>
+        <div class="t-hint" aria-disabled="true" title="Talking to Titanus comes later"><span>Ask Titanus…</span><span class="lab">Coming later</span></div>
+      </div></section>`;
+  }
+  function todoRowDash(t) {
+    const d = todoDone(t), txt = esc(todoText(t));
+    if (t.origin === 'titanus' && t.sug === 'open') {
+      return `<div class="it" data-item="${t.id}" data-act="go" data-sec="todos" data-id="${t.id}"><span class="check" aria-hidden="true"><span class="sbx"></span></span><span class="tt" title="${txt}">${txt}</span><span class="ag src">${t.src}</span><button class="mini acc" type="button" data-act="accept" data-id="${t.id}">Accept</button><button class="mini" type="button" data-act="dismiss" data-id="${t.id}">Dismiss</button></div>`;
+    }
+    if (t.origin === 'linear') {
+      const is = issue(t.issue);
+      return `<div class="it lt${d ? ' done' : ''}" data-item="${t.id}" data-act="go" data-sec="linear" data-id="${is.id}"><button class="check" type="button" role="checkbox" aria-checked="${d}" data-act="tick" data-id="${t.id}" title="Tick: moves ${is.id} to Done in Linear">${statusSvg(is.state)}</button><span class="id">${is.id}</span><span class="tt">${txt}</span>${is.id === 'ENG-412' && !d ? `<span class="tag warn">${is.since}</span>` : ''}<span class="ag">${is.state}</span></div>`;
+    }
+    return `<div class="it${d ? ' done' : ''}" data-item="${t.id}" data-act="go" data-sec="todos" data-id="${t.id}"><button class="check" type="button" role="checkbox" aria-checked="${d}" data-act="tick" data-id="${t.id}">${box}</button><span class="tt">${txt}</span>${t.origin === 'titanus' ? '<span class="tag ttn-t"><i class="sq"></i>Titanus</span>' : ''}${t.due ? `<span class="tag inv">${t.due}</span>` : ''}</div>`;
+  }
+  function modTodos() {
+    const c = L.tdo, groups = [
+      ['linear', 'Linear', ''], ['titanus', 'Titanus', 't'], ['manual', 'Manual', ''],
+    ];
+    const body = groups.map(([o, n, cls]) => {
+      const list = S.todos.filter(t => t.origin === o && todoLive(t));
+      const open = list.filter(t => !todoDone(t)).length;
+      const lab = o === 'titanus' ? (list.some(t => t.sug === 'open') ? 'Suggested' : 'From') : 'Open';
+      return `<div class="og"><div class="og-l ${cls}"><b>${pad(open)}</b><span class="lab">${n}</span><span class="lab" style="color:var(--faint)">${lab}</span></div><div class="og-r">${list.length ? list.map(todoRowDash).join('') : '<div class="it" style="cursor:default"><span class="tt" style="color:var(--faint)">Nothing here</span></div>'}</div></div>`;
+    }).join('');
+    return `<section class="mod" ${area(...c)} aria-label="Todos">${mh('M-03', 'Todos', `${pad(openTodos().length)} open · by origin`, 'todos', c)}<div class="mb">${body}</div></section>`;
+  }
+  function modEmail() {
+    const c = L.eml, nr = needsReply().length;
+    const ctr = (k, n, v, cls) => `<button class="ctr ${cls}" type="button" data-act="go" data-sec="email" data-id="${k}"><b>${pad(v)}</b><span class="lab">${n}</span></button>`;
+    return `<section class="mod" ${area(...c)} aria-label="Email">${mh('M-05', 'Email', 'Buckets · 3 Accounts', 'email', c)}
+      <div class="mb">
+        <div class="ctrs">${ctr('reply', 'Needs reply', nr, nr ? 'hot' : 'dim')}${ctr('fyi', 'FYI', S.buckets.fyi, '')}${ctr('news', 'Newsletters', S.buckets.news, 'dim')}${ctr('rcpt', 'Receipts', S.buckets.rcpt, 'dim')}</div>
+        <div class="bbar" title="Today’s mail by Bucket">${[['reply', nr, 'r'], ['fyi', S.buckets.fyi, 'f'], ['news', S.buckets.news, 'n'], ['rcpt', S.buckets.rcpt, 'c']].map(b => `<i class="${b[2]}" style="flex:${b[1]}"></i>`).join('')}</div>
+        <div class="sub"><span class="lab">Needs reply</span><span class="acct lab">${S.accounts.map(a => `<span><i></i>${a.n}</span>`).join('')}</span></div>
+        ${S.mail.map(m => `<div class="it em${m.replied ? ' replied' : ''}" data-item="${m.id}" data-act="go" data-sec="email" data-id="${m.id}"><span class="ft"><span class="fr">${esc(m.from)}</span><span class="tt">${esc(m.subj)}</span></span><span class="tag">${m.acct}</span><span class="ag">${m.replied ? 'Replied' : m.age}</span></div>`).join('')}
+      </div></section>`;
+  }
+  function modLinear() {
+    const c = L.lin, cy = cycle();
+    const rows = ORDER.map(st => {
+      const list = S.issues.filter(i => i.state === st && (st !== 'Done' || i.cycle));
+      return `<div class="sl">${statusSvg(st)}${st}</div><div>${list.map(i => `<div class="it${st === 'Done' ? ' done' : ''}" data-item="${i.id}" data-act="go" data-sec="linear" data-id="${i.id}"><span class="id">${i.id}</span><span class="tt">${esc(i.title)}</span>${i.id === 'ENG-412' && st === 'In Progress' ? `<span class="tag warn">${i.since}</span>` : `<span class="ag">${i.since}</span>`}</div>`).join('') || '<div class="it" style="cursor:default"><span class="tt" style="color:var(--faint)">Nothing here</span></div>'}</div>`;
+    }).join('');
+    return `<section class="mod" ${area(...c)} aria-label="Linear">${mh('M-04', 'Linear', `${pad(openIssues().length)} yours · Northwind`, 'linear', c)}
+      <div class="mb">
+        <div class="cyc" data-act="go" data-sec="linear"><div class="cn">Cycle 41<small>Ends Tue · ${cy.done}/${cy.total}</small></div>${gaugeHTML()}<div class="pc">${cy.pct}%</div></div>
+        <div class="ls">${rows}</div>
+      </div></section>`;
+  }
+  function modGitHub() {
+    const c = L.git;
+    return `<section class="mod" ${area(...c)} aria-label="GitHub">${mh('M-07', 'GitHub', `northwind · ${S.gh.watching} repos`, 'github', c)}
+      <div class="mb">
+        <div class="say"><span class="who">Titanus</span><p>${esc(S.summary)}</p></div>
+        <div class="ghs"><div title="PRs merged since yesterday"><b>${S.gh.merged}</b><span class="lab">Merged</span></div><div title="Repos with merged work"><b>${pad(S.gh.repos)}</b><span class="lab">Repos</span></div><div title="PRs opened since yesterday"><b>${pad(S.gh.opened)}</b><span class="lab">Opened</span></div></div>
+        <div class="ghl">
+          <div class="og"><div class="og-l"><b>${pad(openReviews().length)}</b><span class="lab">Reviews</span></div><div class="og-r">${S.reviews.map(r => `<div class="it pr${r.done ? ' done' : ''}" data-item="${r.id}" data-act="go" data-sec="github" data-id="${r.id}"><span class="id">${r.repo.split('/')[1]} #${r.n}</span><span class="tt">${esc(r.t)}</span>${r.done ? '<span class="ag">Reviewed</span>' : ''}</div>`).join('')}</div></div>
+          <div class="og"><div class="og-l"><b>${pad(S.mine.length)}</b><span class="lab">Yours</span></div><div class="og-r">${S.mine.map(p => `<div class="it pr" data-item="${p.id}" data-act="go" data-sec="github" data-id="${p.id}"><span class="id">${p.repo.split('/')[1]} #${p.n}</span><span class="tt">${esc(p.t)}</span><span class="tag warn">✕ ${p.ci}</span></div>`).join('')}</div></div>
+          <div class="og"><div class="og-l"><b>${pad(S.releases.length)}</b><span class="lab">Releases</span></div><div class="og-r"><div class="it pr" data-item="rel-api" data-act="go" data-sec="github" data-id="rel-api"><span class="tt">${S.releases.map(r => `<span class="id" style="margin-right:6px">${r.repo.split('/')[1]}</span>${r.v}`).join('<span style="color:var(--faint);margin:0 10px">·</span>')}</span></div></div></div>
+        </div>
+      </div></section>`;
+  }
+  function modDaily() {
+    const c = L.dn, st = evStates();
+    const tdone = 1, ttotal = 4;
+    const chip = (e, i) => `<span class="ch${st[i] === 'next' ? ' nx' : ''}">${e.s}</span>`;
+    return `<section class="mod narrow" ${area(...c)} aria-label="Daily Note">${mh('M-02', 'Daily Note', 'DN-2026-274', 'notes', c)}
+      <div class="mb">
+        <div class="dn-t"><div><div class="wd">Thursday</div><div class="dt">1 October 2026</div></div><span class="live"><i class="led"></i>Live</span></div>
+        <div class="dn-x" data-act="go" data-sec="notes" title="Open the Daily Note">
+          <div class="dr h"><span class="n">001</span><span class="x">Morning</span></div>
+          <div class="dr"><span class="n">002</span><span>Slept badly but the head is clear. Big rocks today: get the Commander map moving, unblock Priya on the payments retry work, and decide on the Acme Payments contract before Friday.</span></div>
+          <div class="dr h"><span class="n">003</span><span class="x">Meetings</span></div>
+          ${S.events.map((e, i) => `<div class="dr"><span class="n">${['004', '005', '010'][i]}</span><span>${chip(e, i)}${esc(e.t)}${i === 1 ? ' <span class="ph">+4</span>' : ''}</span></div>`).join('')}
+          <div class="dr h"><span class="n">011</span><span class="x">Todos <span class="ph">· ${tdone}/${ttotal} done</span></span></div>
+          <div class="dr h"><span class="n">016</span><span class="x">Ideas</span></div>
+          <div class="dr"><span class="n">017</span><span><span class="wl">Commander</span>: Buckets could learn from what I archive without reading.</span></div>
+          <div class="dr"><span class="n">018</span><span>The Daily Note should be where I think; everything else feeds it.</span></div>
+          <div class="dr h"><span class="n">020</span><span class="x">Evening</span></div>
+          <div class="dr"><span class="n">021</span><span class="ph">Nothing yet. How did today go?</span></div>
+        </div>
+        <button class="dn-open" type="button" data-act="go" data-sec="notes">Open today’s Daily Note<kbd>2</kbd></button>
+      </div></section>`;
+  }
+  function viewDashboard() {
+    return modCalendar() + modTitanus() + modTodos() + modEmail() + modLinear() + modGitHub() + modDaily() + band('dashboard');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* LINEAR Section (fully built)                                        */
+  /* ------------------------------------------------------------------ */
+  function linList() {
+    return S.issues.filter(i => S.linView === 'assigned' ? true : i.cycle);
+  }
+  function viewLinear() {
+    const cy = cycle(), list = linList();
+    if (!list.find(i => i.id === S.selIssue)) S.selIssue = list[0] && list[0].id;
+    const counts = ORDER.map(st => [st, pad(S.issues.filter(i => i.state === st).length)]);
+    const sp = spec({
+      pn: 'LIN-NW-041', live: false, num: pad(openIssues().length), mo: 'Open · yours<br>Northwind', aria: 'Linear details',
+      rows: counts.concat([['Held by Titanus', QUEUE.find(q => q.id === 'q4').state === 'open' ? '01' : '00', 'ttnrow']]),
+      extra: `<div class="sp-views"><span class="lab">View</span><button type="button" class="${S.linView === 'assigned' ? 'on' : ''}" data-act="linview" data-id="assigned">Assigned to you<span>${pad(S.issues.length)}</span></button><button type="button" class="${S.linView === 'cycle' ? 'on' : ''}" data-act="linview" data-id="cycle">Cycle 41<span>${pad(S.issues.filter(i => i.cycle).length)}</span></button></div>`,
+      foot: 'Synced 11:36 · Titanus',
+    });
+    let n = 0;
+    const groups = ORDER.map(st => {
+      const g = list.filter(i => i.state === st);
+      if (!g.length && st === 'Backlog' && S.linView === 'cycle') return '';
+      const head = `<div class="sgh"><span class="bn">${pad(++n, 3)}</span>${statusSvg(st)}${st}<span class="c">${pad(g.length)}</span></div>`;
+      const rows = g.length ? g.map(i => `<div class="srow${i.id === S.selIssue ? ' sel' : ''}${st === 'Done' ? ' done' : ''}" data-item="${i.id}" data-act="sel" data-id="${i.id}"><span class="bn">${pad(++n, 3)}</span><span class="id">${i.id}</span><span class="tt">${esc(i.title)}</span>${i.cycle ? '<span class="tag">Cycle 41</span>' : '<span class="tag" style="border-style:dashed">No cycle</span>'}${i.id === 'ENG-412' && st === 'In Progress' ? `<span class="tag warn">${i.since}</span>` : `<span class="ag">${i.since}</span>`}</div>`).join('')
+        : '<div class="empty-row">Nothing in this state.</div>';
+      return head + rows;
+    }).join('');
+    const sheet = `<article class="sheet" ${area(2, 5, 1, 22)} aria-label="Issues">
+      ${strip('Linear', 'LIN-NW-041', S.linView === 'assigned' ? 'Assigned to you' : 'Cycle 41', 'Sheet 04 / 07')}
+      <div class="sh-body">
+        <div class="sh-title"><div><span class="wd">Cycle 41</span><span class="dt">Ends Tuesday 6 October · Northwind workspace</span></div><div class="big">${cy.pct}%<small>${cy.done} of ${cy.total} done</small></div></div>
+        <div class="cycbar">${gaugeHTML()}<div class="lg lab"><span><i class="f"></i>Done</span><span><i class="me"></i>Done · yours</span><span><i class="mo"></i>Open · yours</span><span><i class="o"></i>Open · others</span><span style="margin-left:auto">4 days left</span></div></div>
+        ${groups}
+      </div></article>`;
+    return sp + sheet + linDetail() + band('linear');
+  }
+  function linDetail() {
+    const i = issue(S.selIssue);
+    if (!i) return `<aside class="side" ${area(6, 8, 1, 22)}><div class="pane grow"><div class="note">Pick an issue.</div></div></aside>`;
+    const q4open = i.id === 'ENG-412' && QUEUE.find(q => q.id === 'q4').state === 'open';
+    const todo = S.todos.find(t => t.issue === i.id);
+    return `<aside class="side" ${area(6, 8, 1, 22)} aria-label="Issue detail">
+      <div class="pane grow">
+        <div class="ph"><span class="eb">Detail</span><span class="pn">${i.id}</span><span class="sp"></span><span>${i.state}</span></div>
+        <div class="pb" style="overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column">
+          <div class="d-id">${use('linear')}Northwind / ${i.id}</div>
+          <h2 class="d-t">${esc(i.title)}</h2>
+          <dl class="props">
+            <div><dt>State</dt><dd>${statusSvg(i.state)}${i.state}</dd></div>
+            <div><dt>Assignee</dt><dd>You${i.with ? ` <span class="ag" style="font:500 10px/1 var(--mono);letter-spacing:.1em;color:var(--muted);text-transform:uppercase">with ${i.with}</span>` : ''}</dd></div>
+            <div><dt>Cycle</dt><dd>${i.cycle ? 'Cycle 41 · ends Tue' : '<span style="color:var(--muted)">None</span>'}</dd></div>
+            <div><dt>In this state</dt><dd>${i.since}${i.id === 'ENG-412' && i.state === 'In Progress' ? ' <span class="tag warn">Longer than usual</span>' : ''}</dd></div>
+            <div><dt>Todo</dt><dd>${todo ? (todoDone(todo) ? 'Ticked' : 'On today’s Todos') : '<span style="color:var(--muted)">Not a Todo</span>'}</dd></div>
+          </dl>
+          <p class="d-desc">${esc(i.desc)}</p>
+          ${i.links.length ? `<div class="d-sec"><span class="lab">Linked</span>${i.links.map(l => `<div class="lnk" data-act="go" data-sec="${l.sec}" data-id="${l.id || ''}"><span class="id">${l.k}</span><span class="tt">${esc(l.t)}</span>${l.tag ? `<span class="tag${/fail/i.test(l.tag) ? ' warn' : ''}">${l.tag}</span>` : ''}</div>`).join('')}</div>` : ''}
+          ${q4open ? '<div class="t-held" data-act="ask" title="Titanus is holding this until you ask"><i class="led"></i><span><b>Titanus</b> is holding a note about this issue.</span><kbd>U</kbd></div>' : ''}
+          ${i.act ? `<div class="d-sec"><span class="lab">Activity</span>${i.act.map(a => `<div class="lnk" style="cursor:default"><span class="id" style="width:64px">${a[0]}</span><span class="tt" style="color:var(--text)">${esc(a[1])}</span></div>`).join('')}</div>` : ''}
+          <div class="stsel" role="group" aria-label="Move to state">${STATES.map(s => `<button type="button" class="${s === i.state ? 'on' : ''}" data-act="state" data-id="${i.id}" data-state="${s}">${statusSvg(s)}${s}</button>`).join('')}</div>
+        </div>
+      </div></aside>`;
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Other Sections: same sheet frame, simpler                           */
+  /* ------------------------------------------------------------------ */
+  function viewTodos() {
+    const ot = openTodos();
+    const sp = spec({ pn: 'TDO-2026-274', live: true, num: pad(ot.length), mo: 'Open Todos<br>Thu 01 Oct', aria: 'Todos details',
+      rows: [['Linear', pad(S.todos.filter(t => t.origin === 'linear' && !todoDone(t)).length)], ['Manual', pad(S.todos.filter(t => t.origin === 'manual' && !todoDone(t)).length)], ['Titanus · accepted', pad(S.todos.filter(t => t.origin === 'titanus' && t.sug === 'accepted' && !t.done).length)], ['Suggested', pad(S.todos.filter(t => t.sug === 'open').length), 'ttnrow'], ['Done', pad(S.todos.filter(t => todoLive(t) && todoDone(t)).length)]],
+      foot: 'Every Todo lives in a Daily Note' });
+    let n = 0;
+    const row = t => {
+      const d = todoDone(t), is = t.origin === 'linear' ? issue(t.issue) : null;
+      return `<div class="srow${d ? ' done' : ''}" data-item="${t.id}" data-act="${is ? 'go' : 'none'}" data-sec="linear" data-id="${is ? is.id : ''}"><span class="bn">${pad(++n, 3)}</span><button class="check" type="button" role="checkbox" aria-checked="${d}" data-act="tick" data-id="${t.id}">${is ? statusSvg(is.state) : box}</button>${is ? `<span class="id">${is.id}</span>` : ''}<span class="tt">${esc(todoText(t))}</span>${is ? `<span class="tag">${use('linear')}Linear / ${is.state}</span>` : t.origin === 'titanus' ? `<span class="tag ttn-t"><i class="sq"></i>Titanus / ${t.src}</span>` : '<span class="tag">Manual</span>'}${t.due ? `<span class="tag inv">${t.due}</span>` : ''}</div>`;
+    };
+    const pending = S.todos.filter(t => t.sug === 'open').length;
+    const grp = (title, list, emptyMsg) => `<div class="sgh"><span class="bn">${pad(++n, 3)}</span>${title}<span class="c">${pad(list.length)}</span></div>` + (list.length ? list.map(row).join('') : `<div class="empty-row">${emptyMsg || 'Nothing here.'}</div>`);
+    const live = S.todos.filter(t => todoLive(t) && !(t.origin === 'titanus' && t.sug === 'open'));
+    const sheet = `<article class="sheet" ${area(2, 5, 1, 22)}>${strip('Today', 'TDO-2026-274', 'By origin', 'Sheet 03 / 07')}
+      <div class="sh-body"><div class="sh-title"><div><span class="wd">Todos</span><span class="dt">Thursday 1 October 2026</span></div><div class="big">${pad(ot.length)}<small>Open</small></div></div>
+      ${grp('From Linear', live.filter(t => t.origin === 'linear'))}${grp('From Titanus', live.filter(t => t.origin === 'titanus'), pending ? `Nothing accepted yet. Titanus has ${pending} suggestion${pending === 1 ? '' : 's'} in the margin.` : 'Nothing from Titanus today.')}${grp('Manual', live.filter(t => t.origin === 'manual'))}
+      </div></article>`;
+    const sugs = S.todos.filter(t => t.origin === 'titanus' && t.sug !== 'dismissed');
+    const side = `<aside class="side" ${area(6, 8, 1, 22)} aria-label="Suggested by Titanus">
+      ${sugs.map(t => `<div class="agent-card" data-item="${t.id}"><div class="ac-head"><span class="ac-tag">${t.no}</span><span>Titanus noticed</span><span class="ac-src">${t.src}</span></div>
+        <div class="ac-body"><div class="ac-todo"><span class="bx"></span><span>${esc(t.text)}</span></div><div class="ac-why">${esc(t.why)}</div></div>
+        <div class="ac-actions">${t.sug === 'open' ? `<button class="ac-accept" type="button" data-act="accept" data-id="${t.id}">Accept</button><button class="ac-dismiss" type="button" data-act="dismiss" data-id="${t.id}">Dismiss</button>` : '<span class="ac-ok">Added to today’s Todos</span>'}</div></div>`).join('')}
+      ${sugs.length ? '' : '<div class="pane"><div class="note">No suggestions from Titanus right now.</div></div>'}
+      </aside>`;
+    return sp + sheet + side + band('todos');
+  }
+  function viewEmail() {
+    const nr = needsReply().length;
+    const sp = spec({ pn: 'EML-BKT-04', live: true, num: pad(nr), mo: 'Needs reply<br>3 Accounts', aria: 'Email details',
+      rows: S.accounts.map(a => [a.full, pad(S.mail.filter(m => m.acct === a.k && !m.replied).length)]).concat([['Sorted today', '47', 'ttnrow']]),
+      foot: 'Titanus sorts into Buckets' });
+    let n = 0;
+    const sheet = `<article class="sheet" ${area(2, 5, 1, 22)}>${strip('Triage', 'EML-BKT-04', 'Bucket / Needs reply', 'Sheet 05 / 07')}
+      <div class="sh-body"><div class="sh-title"><div><span class="wd">Needs reply</span><span class="dt">Across all 3 Accounts</span></div><div class="big">${pad(nr)}<small>Waiting on you</small></div></div>
+      <div class="sgh"><span class="bn">${pad(++n, 3)}</span>Needs reply<span class="c">${pad(nr)}</span></div>
+      ${S.mail.map(m => `<div class="srow tall${m.replied ? ' done' : ''}" data-item="${m.id}" data-act="none"><span class="bn">${pad(++n, 3)}</span><span class="tt"><b style="font-weight:650">${esc(m.from)}</b><span class="sub2">${esc(m.subj)}</span></span><span class="tag">${m.acct}</span><span class="ag">${m.replied ? 'Replied' : m.age}</span><button class="mini" type="button" data-act="reply" data-id="${m.id}">${m.replied ? 'Undo' : 'Mark replied'}</button></div>`).join('')}
+      <div class="sgh"><span class="bn">${pad(++n, 3)}</span>Other Buckets<span class="c">${pad(S.buckets.fyi + S.buckets.news + S.buckets.rcpt)}</span></div>
+      ${[['fyi', 'FYI', S.buckets.fyi, 'Read when you like. Nothing in here asks for anything.'], ['news', 'Newsletters', S.buckets.news, 'Kept out of the way. Nothing needs you.'], ['rcpt', 'Receipts', S.buckets.rcpt, 'Filed. Nothing needs you.']].map(b => `<div class="srow tall" data-item="${b[0]}" data-act="none"><span class="bn">${pad(++n, 3)}</span><span class="tt"><b style="font-weight:650">${b[1]}</b><span class="sub2">${b[3]}</span></span><span class="ag">${pad(b[2])} messages</span></div>`).join('')}
+      </div></article>`;
+    const side = `<aside class="side" ${area(6, 8, 1, 22)}>
+      <div class="pane"><div class="ph"><span class="eb">Buckets</span><span class="pn">Now</span><span class="sp"></span><span>4</span></div>
+        <div class="bigq"><button type="button" data-act="none"><b>${pad(nr)}</b><span class="lab">Needs reply</span></button><button type="button" data-act="none"><b>${pad(S.buckets.fyi)}</b><span class="lab">FYI</span></button><button type="button" class="dim" data-act="none"><b>${pad(S.buckets.news)}</b><span class="lab">Newsletters</span></button><button type="button" class="dim" data-act="none"><b>${pad(S.buckets.rcpt)}</b><span class="lab">Receipts</span></button></div></div>
+      <div class="pane"><div class="ph"><span class="eb">Accounts</span><span class="sp"></span><span>03</span></div>${S.accounts.map(a => `<div class="lnk" style="padding:0 12px"><i class="led" style="width:6px;height:6px"></i><span class="tt">${a.full}</span><span class="id">Synced 11:38</span></div>`).join('')}</div>
+      </aside>`;
+    return sp + sheet + side + band('email');
+  }
+  function viewCalendar() {
+    const st = evStates(), nx = nextEvent();
+    const sp = spec({ pn: 'CAL-2026-274', live: true, num: pad(leftToday()), mo: 'Left today<br>Thu 01 Oct', aria: 'Calendar details',
+      rows: [['Meetings today', pad(S.events.length)], ['Done', pad(S.events.length - leftToday())], ['Tomorrow', pad(S.tomorrow.length)]], foot: 'Read by Titanus · 11:30' });
+    const A = 8, B = 19, H = innerHeight <= 880 ? 34 : 44;
+    let hours = ''; for (let h = A; h < B; h++) hours += `<div class="hrow"><span>${pad(h)}:00</span></div>`;
+    const y = m => ((m - A * 60) / 60 * H).toFixed(1);
+    const evs = S.events.map((e, i) => `<div class="hev ${st[i]}${S.selEvent === e.id ? ' sel' : ''}" data-item="${e.id}" data-act="selev" data-id="${e.id}" style="top:${y(mins(e.s))}px;height:${Math.max(22, (mins(e.e) - mins(e.s)) / 60 * H).toFixed(1)}px"><span class="id">${e.s}–${e.e}</span>${esc(e.t)}${st[i] === 'next' ? `<span class="id" style="margin-left:auto" data-countdown="${e.id}">Next · in ${dur(mins(e.s) - nowMin())}</span>` : ''}</div>`).join('');
+    const sheet = `<article class="sheet" ${area(2, 5, 1, 22)}>${strip('Today', 'CAL-2026-274', 'Thursday 1 October', 'Sheet 06 / 07')}
+      <div class="sh-body"><div class="sh-title"><div><span class="wd">Thursday</span><span class="dt">${nx ? `Next: ${nx.s} ${esc(nx.t)}` : 'Nothing else today'}</span></div><div class="big">${pad(leftToday())}<small>Left today</small></div></div>
+      <div class="hcal" style="margin-top:14px">${hours}${evs}<div class="hnow" id="hNow" style="top:${y(nowMin())}px"><span>${hhmm(now())}</span></div></div></div></article>`;
+    const sel = S.events.concat(S.tomorrow).find(e => e.id === S.selEvent) || S.events[1];
+    const isAcme = sel.id === 'e-acme';
+    const side = `<aside class="side" ${area(6, 8, 1, 22)}>
+      <div class="pane"><div class="ph"><span class="eb">Event</span><span class="pn">${sel.s}${sel.e ? '–' + sel.e : ''}</span></div><div class="pb"><h2 class="d-t">${esc(sel.t)}</h2>
+        <dl class="props"><div><dt>When</dt><dd>${S.tomorrow.includes(sel) ? 'Tomorrow' : 'Today'} · ${sel.s}${sel.e ? '–' + sel.e : ''}</dd></div><div><dt>Daily Note</dt><dd>${S.tomorrow.includes(sel) ? 'Starts tomorrow morning' : 'DN-2026-274'}</dd></div>${isAcme ? '<div><dt>Related</dt><dd>Decide on the Acme Payments contract <span class="tag inv">Due Fri</span></dd></div>' : ''}</dl>
+        ${S.tomorrow.includes(sel) ? '' : '<div class="d-sec"><div class="lnk" data-act="go" data-sec="notes"><span class="id">DN-274</span><span class="tt">Open in today’s Daily Note</span></div></div>'}</div></div>
+      <div class="pane"><div class="ph"><span class="eb">Tomorrow</span><span class="pn">Fri 02 Oct</span><span class="sp"></span><span>${pad(S.tomorrow.length)}</span></div>${S.tomorrow.map(e => `<div class="lnk" style="padding:0 12px" data-act="selev" data-id="${e.id}" data-item="${e.id}"><span class="id">${e.s}</span><span class="tt">${esc(e.t)}</span></div>`).join('')}</div>
+      </aside>`;
+    return sp + sheet + side + band('calendar');
+  }
+  function viewGitHub() {
+    const sp = spec({ pn: 'GIT-NW-008', live: false, num: pad(openReviews().length), mo: 'Waiting on you<br>org: northwind', aria: 'GitHub details',
+      rows: [['Watching', pad(S.gh.watching) + ' repos'], ['Merged', pad(S.gh.merged)], ['Opened', pad(S.gh.opened)], ['Releases', pad(S.gh.releases)], ['Active repos', pad(S.gh.repos)]], foot: 'Since yesterday · read by Titanus' });
+    let n = 0;
+    const sheet = `<article class="sheet" ${area(2, 5, 1, 22)}>${strip('Northwind', 'GIT-NW-008', 'Since yesterday', 'Sheet 07 / 07')}
+      <div class="sh-body"><div class="sh-title"><div><span class="wd">GitHub</span><span class="dt">${S.gh.merged} merged across ${S.gh.repos} repos · ${S.gh.opened} opened</span></div><div class="big">${pad(openReviews().length)}<small>Reviews for you</small></div></div>
+      <div class="sgh"><span class="bn">${pad(++n, 3)}</span>Waiting on you<span class="c">${pad(openReviews().length)}</span></div>
+      ${S.reviews.map(r => `<div class="srow${r.done ? ' done' : ''}" data-item="${r.id}" data-act="none"><span class="bn">${pad(++n, 3)}</span><span class="id" style="width:170px;white-space:nowrap">${r.repo} #${r.n}</span><span class="tt">${esc(r.t)}</span><button class="mini" type="button" data-act="review" data-id="${r.id}">${r.done ? 'Undo' : 'Mark reviewed'}</button></div>`).join('')}
+      <div class="sgh"><span class="bn">${pad(++n, 3)}</span>Your open PRs<span class="c">${pad(S.mine.length)}</span></div>
+      ${S.mine.map(p => `<div class="srow" data-item="${p.id}" data-act="go" data-sec="linear" data-id="ENG-412"><span class="bn">${pad(++n, 3)}</span><span class="id" style="width:170px;white-space:nowrap">${p.repo} #${p.n}</span><span class="tt">${esc(p.t)}</span><span class="tag">ENG-412</span><span class="tag warn">✕ ${p.ci}</span></div>`).join('')}
+      <div class="sgh"><span class="bn">${pad(++n, 3)}</span>Releases<span class="c">${pad(S.releases.length)}</span></div>
+      ${S.releases.map(r => `<div class="srow" data-item="${r.id}" data-act="none"><span class="bn">${pad(++n, 3)}</span><span class="id" style="width:170px;white-space:nowrap">${r.repo}</span><span class="tt">${r.v}</span></div>`).join('')}
+      </div></article>`;
+    const side = `<aside class="side" ${area(6, 8, 1, 22)}>
+      <div class="pane ttp"><div class="ph"><span class="eb">Titanus</span><span class="pn">Summary</span><span class="sp"></span><span>Since yesterday</span></div><p class="quote">${esc(S.summary)}</p></div>
+      <div class="pane"><div class="ph"><span class="eb">Counts</span><span class="sp"></span><span>${S.gh.watching} repos</span></div><div class="bigq"><button type="button" data-act="none"><b>${S.gh.merged}</b><span class="lab">PRs merged</span></button><button type="button" data-act="none"><b>${pad(S.gh.opened)}</b><span class="lab">PRs opened</span></button><button type="button" data-act="none" class="dim"><b>${pad(S.gh.releases)}</b><span class="lab">Releases</span></button><button type="button" data-act="none" class="dim"><b>${pad(S.gh.repos)}</b><span class="lab">Repos active</span></button></div></div>
+      </aside>`;
+    return sp + sheet + side + band('github');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Header middle (per view)                                            */
+  /* ------------------------------------------------------------------ */
+  function headMid() {
+    const nx = nextEvent(), cy = cycle();
+    if (S.view === 'linear') return `<div class="hm"><span class="k">Cycle 41 · ends Tue · ${cy.done}/${cy.total}</span>${gaugeHTML()}</div><div class="hm"><span class="k">Complete</span><span class="v">${cy.pct}%</span></div>`;
+    if (S.view === 'notes') return `<div class="hm"><span class="k"><i class="led"></i>Daily Note · Live</span><span class="v">Thursday 1 October <span class="m">DN-2026-274</span></span></div><div class="hm"><span class="k">Week 40</span><span class="v">3 notes</span></div>`;
+    const nxt = nx ? `<button class="hm" type="button" data-act="go" data-sec="calendar" data-id="${nx.id}"><span class="k"><i class="led"></i>Next</span><span class="v">${nx.s} ${esc(nx.t)}<small data-countdown="${nx.id}">in ${dur(mins(nx.s) - nowMin())}</small></span></button>` : '<div class="hm"><span class="k">Next</span><span class="v">Nothing else today</span></div>';
+    return nxt + '<button class="hm" type="button" data-act="go" data-sec="todos" data-id="tacme"><span class="k">Due Friday</span><span class="v">Acme contract</span></button>';
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Render                                                              */
+  /* ------------------------------------------------------------------ */
+  const view = $('#view'), notes = $('#notes'), upd = $('#upd');
+  const railNav = $('#railNav');
+  function railCounts() {
+    return { todos: openTodos().length, linear: openIssues().length, email: needsReply().length, calendar: leftToday(), github: openReviews().length };
+  }
+  function renderRail() {
+    const c = railCounts();
+    railNav.innerHTML = SECS.map((s, i) => {
+      const n = c[s.k];
+      return `<a class="ri${S.view === s.k ? ' on' : ''}" href="#${s.k}" data-act="go" data-sec="${s.k}" data-tip="${pad(i + 1)} · ${s.n}${n != null ? ' · ' + n : ''}" ${S.view === s.k ? 'aria-current="page"' : ''}><span class="ix">${pad(i + 1)}</span><span class="ct">${n != null && n > 0 ? pad(n) : ''}</span><svg viewBox="0 0 24 24">${s.svg}</svg><span class="cd">${s.cd}</span></a>`;
+    }).join('');
+  }
+  let notesFrame = null;
+  function render() {
+    const k = keyOf(S.view), sec = SECS[k - 1];
+    $('#hSec').textContent = `Sec ${pad(k)} / ${sec.n}`;
+    $('#hTitle').textContent = S.view === 'dashboard' ? 'Dashboard' : S.view === 'notes' ? 'Daily Notes' : sec.n;
+    $('#hMid').innerHTML = headMid();
+    renderRail();
+    renderTitanus();
+    if (S.view === 'notes') {
+      view.hidden = true; notes.hidden = false;
+      if (!notesFrame) {
+        notesFrame = document.createElement('iframe');
+        notesFrame.title = 'Daily Note';
+        notesFrame.addEventListener('load', () => notesFrame.contentWindow.postMessage({ type: 'proto-theme', theme: document.documentElement.dataset.theme }, '*'));
+        notesFrame.src = `_reference-daily-note.html?signal=FF5F00&auto=1&theme=${document.documentElement.dataset.theme}`;
+        notes.append(notesFrame);
+      }
+    } else {
+      notes.hidden = true; view.hidden = false;
+      const html = { dashboard: viewDashboard, linear: viewLinear, todos: viewTodos, email: viewEmail, calendar: viewCalendar, github: viewGitHub }[S.view]();
+      view.className = 'view v-' + S.view;
+      view.innerHTML = html;
+    }
+    if (S.flash) {
+      const el = view.querySelector(`[data-item="${CSS.escape(S.flash)}"]`);
+      if (el) { el.scrollIntoView({ block: 'nearest' }); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+      S.flash = null;
+    }
+  }
+  function go(sec, id) {
+    if (secIdx(sec) < 0) return;
+    if (sec === 'linear' && id && issue(id)) { S.selIssue = id; if (S.linView === 'cycle' && !issue(id).cycle) S.linView = 'assigned'; }
+    if (sec === 'calendar' && id && S.events.concat(S.tomorrow).some(e => e.id === id)) S.selEvent = id;
+    S.view = sec; S.flash = id || null;
+    render();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* Actions (event delegation)                                          */
+  /* ------------------------------------------------------------------ */
+  function tick(id) {
+    const t = S.todos.find(x => x.id === id); if (!t) return;
+    if (t.origin === 'linear') {
+      const is = issue(t.issue);
+      if (is.state !== 'Done') { is.prev = is.state; is.state = 'Done'; }
+      else is.state = is.prev && is.prev !== 'Done' ? is.prev : 'Todo';
+      toast(`<b>${is.id}</b> moved to ${is.state} in Linear.`, () => { tick(id); });
+    } else { t.done = !t.done; }
+    render();
+  }
+  function accept(id) {
+    const t = S.todos.find(x => x.id === id); if (!t || t.sug !== 'open') return;
+    t.sug = 'accepted'; render();
+    toast('Added to today’s Todos.', () => { t.sug = 'open'; render(); });
+  }
+  function dismiss(id) {
+    const t = S.todos.find(x => x.id === id); if (!t || t.sug !== 'open') return;
+    t.sug = 'dismissed'; render();
+    toast('Dismissed. Titanus won’t raise it again today.', () => { t.sug = 'open'; render(); });
+  }
+  function setState(id, st) {
+    const is = issue(id); if (!is || is.state === st) return;
+    const was = is.state; is.prev = was; is.state = st; render();
+    toast(`<b>${is.id}</b> moved to ${st} in Linear.`, () => { is.state = was; render(); });
+  }
+  document.addEventListener('click', e => {
+    const t = e.target.closest('[data-act]'); if (!t) return;
+    const act = t.dataset.act, id = t.dataset.id;
+    if (act === 'none') return;
+    e.preventDefault(); e.stopPropagation();
+    if (act === 'go') { if (!upd.hidden && t.closest('.upd')) closeUpdate(); go(t.dataset.sec, id); }
+    else if (act === 'tick') tick(id);
+    else if (act === 'accept') accept(id);
+    else if (act === 'dismiss') dismiss(id);
+    else if (act === 'ask') upd.hidden ? openUpdate() : closeUpdate();
+    else if (act === 'sel') { S.selIssue = id; render(); }
+    else if (act === 'selev') { S.selEvent = id; render(); }
+    else if (act === 'state') setState(id, t.dataset.state);
+    else if (act === 'linview') { S.linView = id; render(); }
+    else if (act === 'reply') { const m = S.mail.find(x => x.id === id); m.replied = !m.replied; render(); if (m.replied) toast(`Marked <b>${esc(m.from)}</b> as replied.`, () => { m.replied = false; render(); }); }
+    else if (act === 'review') { const r = S.reviews.find(x => x.id === id); r.done = !r.done; render(); }
+  });
+
+  /* ruler highlight for whatever module or sheet the pointer is over */
+  const rulX = $('#rulX'), rulY = $('#rulY');
+  for (let i = 1; i <= 24; i++) { const r = document.createElement('div'); r.className = 'r'; r.textContent = pad(i); rulY.insertBefore(r, $('#mY')); }
+  const colCells = $$('.c', rulX), rowCells = $$('.r', rulY);
+  let hovered = null;
+  view.addEventListener('mouseover', e => {
+    const m = e.target.closest('[data-c]');
+    if (m === hovered) return; hovered = m;
+    colCells.forEach(c => c.classList.remove('hv')); rowCells.forEach(c => c.classList.remove('hv'));
+    if (!m) return;
+    const [c0, c1] = m.dataset.c.split('-').map(Number), [r0, r1] = m.dataset.r.split('-').map(Number);
+    for (let i = c0; i <= c1; i++) colCells[i - 1].classList.add('hv');
+    for (let j = r0; j <= r1; j++) rowCells[j - 1].classList.add('hv');
+  });
+  view.addEventListener('mouseleave', () => { hovered = null; colCells.forEach(c => c.classList.remove('hv')); rowCells.forEach(c => c.classList.remove('hv')); });
+
+  /* ------------------------------------------------------------------ */
+  /* Toast                                                               */
+  /* ------------------------------------------------------------------ */
+  let toastTimer = 0;
+  const toastEl = $('#toast');
+  function toast(msg, undo) {
+    toastEl.innerHTML = `<span>${msg}</span>` + (undo ? '<button type="button">Undo</button>' : '');
+    if (undo) toastEl.querySelector('button').onclick = ev => { ev.stopPropagation(); undo(); hideToast(); };
+    toastEl.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, undo ? 5200 : 3200);
+  }
+  function hideToast() { toastEl.classList.remove('show'); }
+
+  /* ------------------------------------------------------------------ */
+  /* Theme (URL ?theme=, parent switcher, own toggle; forwarded to Notes) */
+  /* ------------------------------------------------------------------ */
+  const thmLbl = $('#thmLbl');
+  function applyTheme(t, announce) {
+    t = t === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = t;
+    thmLbl.textContent = t === 'dark' ? 'Drk' : 'Lgt';
+    $('#thmBtn').setAttribute('data-tip', t === 'dark' ? 'Switch to light' : 'Switch to dark');
+    if (notesFrame && notesFrame.contentWindow) notesFrame.contentWindow.postMessage({ type: 'proto-theme', theme: t }, '*');
+    if (announce) { try { parent.postMessage({ type: 'proto-theme-changed', theme: t }, '*'); } catch (e) {} }
+  }
+  applyTheme(new URLSearchParams(location.search).get('theme'));
+  addEventListener('message', e => {
+    const d = e.data || {};
+    if (d.type === 'proto-theme' && (d.theme === 'dark' || d.theme === 'light')) applyTheme(d.theme);
+    // the embedded Daily Note forwards ← → to us; pass them on to the switcher
+    if (d.type === 'proto-key' && notesFrame && e.source === notesFrame.contentWindow && parent !== window) parent.postMessage(d, '*');
+  });
+  $('#thmBtn').addEventListener('click', () => applyTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark', true));
+
+  /* ------------------------------------------------------------------ */
+  /* Titanus: presence, queue, update (never opens on his own)           */
+  /* ------------------------------------------------------------------ */
+  const ttn = $('#ttn'), tCount = $('#tCount'), tLine = $('#tLine'), tPres = $('#tPres'), askBtn = $('#askBtn');
+  const updList = $('#updList');
+  const AWAY_MS = 45000;
+  let lastInput = Date.now(), away = false, awaySince = null, askedAt = null;
+  function openCount() { return QUEUE.filter(q => q.state === 'open').length; }
+  const things = n => `${n} thing${n === 1 ? '' : 's'}`;
+  function renderTitanus() {
+    const n = openCount();
+    tCount.textContent = pad(n);
+    ttn.classList.toggle('empty', n === 0);
+    ttn.classList.toggle('away', away);
+    tPres.innerHTML = away ? `<i class="led"></i>Away · since ${hhmm(awaySince)}` : '<i class="led"></i>You’re here';
+    tLine.textContent = !n ? 'Titanus has nothing for you right now' : away ? `Titanus is holding ${things(n)} for you` : `Titanus has ${things(n)} for you`;
+    if (!upd.hidden) renderUpdate();
+  }
+  const SAY = [
+    'That’s everything. I’ll hold anything new until you ask.',
+    'One thing left.',
+    'Two things left. Both are quick.',
+    'Three things left. None of them take long.',
+    'Four things. None of them take long.',
+  ];
+  function itemHTML(q, i) {
+    if (q.state !== 'open') {
+      return `<li class="qi cleared" data-q="${q.id}"><div class="qn">${pad(i + 1)}</div><div class="qb"><div class="qt">${esc(q.title)}</div>
+        <div class="qa"><span class="qs">${q.state === 'done' ? 'Done' : 'Dismissed'} · ${q.at}</span><button class="q-undo" type="button">Undo</button></div></div></li>`;
+    }
+    return `<li class="qi" data-q="${q.id}"><div class="qn">${pad(i + 1)}</div><div class="qb">
+      <div class="qt">${esc(q.title)}</div><div class="qd">${esc(q.body)}</div>
+      <div class="qa"><button class="q-done" type="button">Done</button><button class="q-dis" type="button">Dismiss</button><button class="q-ref" type="button" title="Open it in its Section">↳ ${esc(q.refLabel)}</button></div>
+      </div></li>`;
+  }
+  function renderUpdate() {
+    const n = openCount();
+    $('#updSay').textContent = SAY[n];
+    $('#updMeta').innerHTML = `<span>Asked <b>${askedAt}</b></span><span>Queued <b>${pad(n)}</b></span><span>Cleared <b>${pad(QUEUE.length - n)}</b></span>`;
+    updList.innerHTML = QUEUE.map(itemHTML).join('');
+  }
+  function syncAsk() {
+    askBtn.setAttribute('aria-expanded', String(!upd.hidden));
+    $$('.tq-ask').forEach(b => b.setAttribute('aria-expanded', String(!upd.hidden)));
+  }
+  function openUpdate() {
+    askedAt = hhmm(now());
+    upd.hidden = false;
+    upd.classList.remove('in'); void upd.offsetWidth; upd.classList.add('in');
+    renderUpdate(); syncAsk();
+  }
+  function closeUpdate() { upd.hidden = true; syncAsk(); }
+  askBtn.addEventListener('click', e => { e.stopPropagation(); upd.hidden ? openUpdate() : closeUpdate(); });
+  $('#updClose').addEventListener('click', closeUpdate);
+  updList.addEventListener('click', e => {
+    const li = e.target.closest('.qi'); if (!li) return;
+    const q = QUEUE.find(x => x.id === li.dataset.q);
+    const before = openCount();
+    if (e.target.closest('.q-done')) { q.state = 'done'; q.at = hhmm(now()); }
+    else if (e.target.closest('.q-dis')) { q.state = 'dismissed'; q.at = hhmm(now()); }
+    else if (e.target.closest('.q-undo')) { q.state = 'open'; q.at = ''; }
+    else if (e.target.closest('.q-ref')) { closeUpdate(); go(q.sec, q.ref); return; }
+    if (openCount() !== before) render();
+  });
+
+  /* keys: 1–7 Sections, U update, Esc close, ↑↓ in Linear */
+  document.addEventListener('keydown', e => {
+    const typing = e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    if (typing || e.metaKey || e.ctrlKey || e.altKey || e.isComposing) return;
+    if (/^[1-7]$/.test(e.key)) { e.preventDefault(); go(SECS[+e.key - 1].k); return; }
+    if (e.key === 'u' || e.key === 'U') { e.preventDefault(); upd.hidden ? openUpdate() : closeUpdate(); return; }
+    if (e.key === 'Escape' && !upd.hidden) { e.preventDefault(); closeUpdate(); return; }
+    if (S.view === 'linear' && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'j' || e.key === 'k')) {
+      e.preventDefault();
+      const order = ORDER.flatMap(st => linList().filter(i => i.state === st)).map(i => i.id);
+      const ix = order.indexOf(S.selIssue), d = (e.key === 'ArrowDown' || e.key === 'j') ? 1 : -1;
+      S.selIssue = order[Math.max(0, Math.min(order.length - 1, ix + d))];
+      render();
+      const sel = view.querySelector('.srow.sel'); if (sel) sel.scrollIntoView({ block: 'nearest' });
+    }
+  });
+  function poke() { lastInput = Date.now(); if (away) { away = false; renderTitanus(); } }
+  ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(t => addEventListener(t, poke, { passive: true, capture: true }));
+
+  /* ------------------------------------------------------------------ */
+  /* Live: clock, countdowns, now-lines                                  */
+  /* ------------------------------------------------------------------ */
+  let lastMin = -1;
+  function everySecond() {
+    const d = now();
+    $('#clock').textContent = hhmm(d) + ':' + pad(d.getSeconds());
+    if (!away && Date.now() - lastInput >= AWAY_MS) { away = true; awaySince = new Date(BASE + (lastInput - T0)); renderTitanus(); }
+    const m = d.getHours() * 60 + d.getMinutes();
+    if (m !== lastMin) {
+      lastMin = m;
+      const nm = nowMin();
+      $$('[data-countdown]').forEach(el => { const ev = S.events.find(x => x.id === el.dataset.countdown); if (ev) el.textContent = el.textContent.replace(/in .*$/, 'in ' + dur(mins(ev.s) - nm)); });
+      const X = ((Math.min(Math.max(nm, 480), 1200) - 480) / 720 * 100).toFixed(3) + '%';
+      const cn = $('#calNow'); if (cn) { cn.style.left = X; $('#calPast').style.width = X; $('#calNowT').textContent = hhmm(d); }
+    }
+  }
+  setInterval(everySecond, 1000);
+
+  /* ------------------------------------------------------------------ */
+  /* Exposed grid + pointer markers                                      */
+  /* ------------------------------------------------------------------ */
+  const gridWrap = $('#gridwrap'), gridSvg = $('#gridbg');
+  function drawGrid() {
+    const w = gridWrap.clientWidth, h = gridWrap.clientHeight; if (!w || !h) return;
+    gridSvg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const cw = w / 8, rh = h / 24; let c = '', r = '', x = '';
+    for (let i = 1; i < 8; i++) { const X = Math.round(i * cw) + .5; c += `M${X} 0V${h}`; }
+    for (let j = 1; j < 24; j++) { const Y = Math.round(j * rh) + .5; r += `M0 ${Y}H${w}`; }
+    for (let i = 0; i <= 8; i++) for (let j = 0; j <= 24; j++) {
+      const X = Math.round(i * cw) + .5, Y = Math.round(j * rh) + .5;
+      x += `M${X - 4} ${Y}H${X + 4}M${X} ${Y - 4}V${Y + 4}`;
+    }
+    gridSvg.innerHTML = `<path class="gr" d="${r}"/><path class="gc" d="${c}"/><path class="gx" d="${x}"/>`;
+  }
+  const mX = $('#mX'), mY = $('#mY');
+  let mouse = null, mRaf = 0;
+  addEventListener('pointermove', e => { mouse = { x: e.clientX, y: e.clientY }; if (!mRaf) mRaf = requestAnimationFrame(placeMouse); }, { passive: true });
+  document.documentElement.addEventListener('pointerleave', () => { mouse = null; placeMouse(); });
+  function placeMouse() {
+    mRaf = 0;
+    const g = gridWrap.getBoundingClientRect();
+    const inX = mouse && mouse.x >= g.left && mouse.x <= g.right, inY = mouse && mouse.y >= g.top && mouse.y <= g.bottom;
+    mX.style.display = inX ? 'block' : 'none'; mY.style.display = inY ? 'block' : 'none';
+    if (inX) mX.style.transform = `translateX(${mouse.x - rulX.getBoundingClientRect().left}px)`;
+    if (inY) mY.style.transform = `translateY(${mouse.y - g.top}px)`;
+  }
+  let rT = 0;
+  addEventListener('resize', () => { drawGrid(); clearTimeout(rT); rT = setTimeout(() => { if (S.view === 'calendar') render(); }, 120); });
+
+  /* ------------------------------------------------------------------ */
+  const q = new URLSearchParams(location.search);
+  const start = (q.get('section') || '').toLowerCase();
+  if (secIdx(start) >= 0) S.view = start;
+  else if (secIdx(location.hash.slice(1)) >= 0) S.view = location.hash.slice(1);
+  render(); drawGrid(); everySecond();
+  if (q.get('update') === '1') openUpdate();
+})();
+</script>
+<script>document.addEventListener('keydown',e=>{if((e.key==='ArrowLeft'||e.key==='ArrowRight')&&!(e.target.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)))parent.postMessage({type:'proto-key',key:e.key},'*')});</script>
+</body>
+</html>

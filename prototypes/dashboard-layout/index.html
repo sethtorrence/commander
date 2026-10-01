@@ -1,0 +1,96 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Lives only on the prototype/dashboard-section-layout branch, never on main.
+  Question: how do the Dashboard and the notebook-style Sections look and behave?
+  Plan: three structurally different Dashboards in the locked Daily Note look (Industrial, international orange, light + dark),
+  each with working Section navigation, switchable via ?variant=PANEL|FEED|HUB and &theme=dark|light.
+  Run: open this file in a browser. Switch with the bottom bar or ← → ; flip the theme with the ◐ button.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Dashboard and Section layout</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+  #proto-bar {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 4px; padding: 5px;
+    background: #ff3d7f; color: #fff; border-radius: 999px;
+    font: 600 13px/1 system-ui, sans-serif; letter-spacing: .01em;
+    box-shadow: 0 6px 24px rgba(0,0,0,.35), 0 0 0 2px rgba(255,255,255,.85);
+    z-index: 2147483647; user-select: none;
+  }
+  #proto-bar button {
+    all: unset; cursor: pointer; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 16px; background: rgba(0,0,0,.18);
+  }
+  #proto-bar button:hover { background: rgba(0,0,0,.32); }
+  #proto-label { padding: 0 12px; min-width: 280px; text-align: center; white-space: nowrap; }
+  #proto-label small { opacity: .8; font-weight: 500; }
+</style>
+</head>
+<body>
+<iframe id="stage" title="Variant"></iframe>
+<div id="proto-bar" role="toolbar" aria-label="Prototype variant switcher">
+  <button id="prev" aria-label="Previous variant">‹</button>
+  <div id="proto-label"></div>
+  <button id="next" aria-label="Next variant">›</button>
+  <button id="theme" aria-label="Toggle light and dark" title="Toggle light / dark">◐</button>
+</div>
+<script>
+  const VARIANTS = [
+    { key: 'PANEL', name: 'Control panel', file: 'variants/panel.html' },
+    { key: 'FEED', name: 'One ranked feed', file: 'variants/feed.html' },
+    { key: 'HUB', name: 'Daily Note as hub', file: 'variants/hub.html' },
+  ];
+  const stage = document.getElementById('stage');
+  const label = document.getElementById('proto-label');
+  const params = new URLSearchParams(location.search);
+  let i = Math.max(0, VARIANTS.findIndex(v => v.key === (params.get('variant') || 'PANEL').toUpperCase()));
+  let theme = params.get('theme') === 'light' ? 'light' : 'dark';
+
+  function sync() {
+    const url = new URL(location.href);
+    url.searchParams.set('variant', VARIANTS[i].key);
+    url.searchParams.set('theme', theme);
+    history.replaceState(null, '', url);
+  }
+  function show() {
+    const v = VARIANTS[i];
+    stage.src = `${v.file}?theme=${theme}`;
+    label.innerHTML = `${v.key} <small>(${v.name}) · ${theme} · ${i + 1}/${VARIANTS.length}</small>`;
+    document.title = `PROTOTYPE · dashboard · ${v.name}`;
+    sync();
+  }
+  function step(d) { i = (i + d + VARIANTS.length) % VARIANTS.length; show(); }
+  function setTheme(t) {
+    theme = t;
+    stage.contentWindow && stage.contentWindow.postMessage({ type: 'proto-theme', theme }, '*');
+    label.innerHTML = `${VARIANTS[i].key} <small>(${VARIANTS[i].name}) · ${theme} · ${i + 1}/${VARIANTS.length}</small>`;
+    sync();
+  }
+
+  document.getElementById('prev').onclick = () => step(-1);
+  document.getElementById('next').onclick = () => step(1);
+  document.getElementById('theme').onclick = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+  const isTyping = el => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  document.addEventListener('keydown', e => {
+    if (isTyping(e.target)) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+  // Variants forward ← → here, and report theme changes made with their own toggle.
+  addEventListener('message', e => {
+    const d = e.data || {};
+    if (d.type === 'proto-key') step(d.key === 'ArrowLeft' ? -1 : 1);
+    if (d.type === 'proto-theme-changed' && (d.theme === 'dark' || d.theme === 'light')) {
+      theme = d.theme;
+      label.innerHTML = `${VARIANTS[i].key} <small>(${VARIANTS[i].name}) · ${theme} · ${i + 1}/${VARIANTS.length}</small>`;
+      sync();
+    }
+  });
+  show();
+</script>
+</body>
+</html>
