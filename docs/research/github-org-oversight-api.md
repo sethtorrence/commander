@@ -42,10 +42,10 @@ Sub-questions from the ticket:
 | | GitHub App (user access token) | OAuth App | Fine-grained PAT | Classic PAT |
 |---|---|---|---|---|
 | One credential across many orgs | Yes, but private data only from orgs where the app is **installed** | Yes, but private data only from orgs that **approved** the app, if restrictions are on | **No**: one resource owner per token | Yes |
-| Who must act in an org the User doesn't own | Org owner installs, or a repo admin installs on repos they admin | Org owner approves, if OAuth restrictions are on (default for new orgs) | Org owner approves the token (default on) | Nobody, unless the org blocks classic PATs |
+| Who must act in an org the User doesn't own | Org owner installs, or a repo admin installs on repos they admin | Org owner approves, if OAuth restrictions are on (default for new orgs) | Org owner approves the token (default on) | Nobody, unless the org blocks classic PATs or sets a maximum lifetime the token exceeds |
 | Read-only private access possible | Yes (per-permission read) | No (`repo` is full read/write) | Yes | No (`repo` is full read/write) |
 | Ships a secret in the app | No, with device flow | Device flow needs no secret | n/a (User pastes token) | n/a |
-| Token lifetime | 8 h access / 6 months refresh (opt-out possible) | Long-lived by default; expiring tokens available since 2026-08-14 | Up to the org's max lifetime (default policy 366 days) | No expiry required |
+| Token lifetime | 8 h access / 6 months refresh (opt-out possible) | Long-lived by default; expiring tokens available since 2026-08-14 | Up to the org's max lifetime (default policy 366 days) | No expiry required by GitHub, but an org may enforce a maximum lifetime |
 | Notifications API | Not supported | Worked with an OAuth app token (Observed; the docs name only classic PATs) | Not supported | Supported |
 | Rate limit | User's shared 5,000/h | User's shared 5,000/h | User's shared 5,000/h | User's shared 5,000/h |
 
@@ -58,8 +58,8 @@ Sources for each row are given in the subsections below.
   - Public data is readable without an install: GitHub Apps "have implicit permissions to read public resources when acting on behalf of a user" ([choosing permissions](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/choosing-permissions-for-a-github-app)).
 - **Who can install.** "Organization owners can install GitHub Apps on their organization". Repository admins can install only if the app requests no organization permissions and no repository administration permission, and then "only … with access to the repositories that they admin". The "app manager" role cannot install ([installing a third-party app](https://docs.github.com/en/apps/using-github-apps/installing-a-github-app-from-a-third-party)).
   - The installer chooses "All repositories" or "Only select repositories" (same source). That choice is an org-side scope control Commander must respect.
-- **Requesting an install.** "Organization members can request installation of a GitHub App for their organization", and the owner is emailed ([requesting an app](https://docs.github.com/en/apps/using-github-apps/requesting-a-github-app-from-your-organization-owner)).
-  - **New, in public preview since 2025-12-22:** orgs can limit app requests to "Members only" or "Disable app access requests". This applies to GitHub Apps and OAuth apps alike ([changelog](https://github.blog/changelog/2025-12-22-control-who-can-request-apps-for-your-organization/)). In such orgs the User may not even be able to ask.
+- **Requesting an install.** "Organization members can request installation of a GitHub App for their organization", and the owner is emailed. By default outside collaborators can request too (see the request controls below) ([requesting an app](https://docs.github.com/en/apps/using-github-apps/requesting-a-github-app-from-your-organization-owner)).
+  - **New: public preview on 2025-12-22, generally available since 2026-01-12:** the default is "Members and outside collaborators", and orgs can limit app requests to "Members only" or "Disable app access requests". This applies to GitHub Apps and OAuth apps alike ([preview changelog](https://github.blog/changelog/2025-12-22-control-who-can-request-apps-for-your-organization/), [GA changelog](https://github.blog/changelog/2026-01-12-controlling-who-can-request-apps-for-your-organization-is-now-generally-available/)). The setting is under Member Privileges, "App access requests". In such orgs the User may not even be able to ask.
 - **GitHub Apps ignore OAuth app policies.** "GitHub Apps aren't subject to organization application policies. A GitHub App only has access to the repositories an organization owner has granted" ([differences between app types](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/differences-between-github-apps-and-oauth-apps)).
 - **The app must be public.**
   - A private app "can only be installed on the account that owns the app", and "Only members of the organization that owns it can authorize it" ([public or private apps](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/making-a-github-app-public-or-private)).
@@ -84,7 +84,7 @@ Sources for each row are given in the subsections below.
 - **Discovering the User's orgs.**
   - `GET /user/orgs` returns "a 200 Success response with an empty list" for fine-grained access tokens ([orgs REST](https://docs.github.com/en/rest/orgs/orgs)).
   - With a GitHub App, use `GET /user/installations` and `GET /user/installations/{id}/repositories`. These list the installations and repos that the user "has explicit permission … to access" ([installations REST](https://docs.github.com/en/rest/apps/installations)).
-  - **Unverified:** how to list orgs the User belongs to where the app is *not* installed, so Commander can prompt an install request. Spike `viewer { organizations }` with a user token.
+  - **Unverified:** how to list orgs the User belongs to where the app is *not* installed, so Commander can prompt an install request. `GET /user/orgs` and `GET /user/memberships/orgs` are both listed as available to GitHub App user access tokens with no permission required ([endpoints for user access tokens](https://docs.github.com/en/rest/authentication/endpoints-available-for-github-app-user-access-tokens)), but the docs do not say whether they are filtered to installed orgs. Spike those two and `viewer { organizations }` with a user token. Note that the per-org `GET /user/memberships/orgs/{org}` needs the organization "Members" permission, which would close the repo-admin install path.
 - **Permissions to request.** Map each endpoint to its permission ([GitHub App permissions](https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps)):
   - Metadata: read (repo lists, repo events).
   - Contents: read (commits, releases).
@@ -103,7 +103,7 @@ Sources for each row are given in the subsections below.
   - Device flow needs only `client_id`.
   - Loopback redirects to `127.0.0.1` on any port are documented for "native applications running on a desktop computer".
   - Limit: "ten tokens … per user/application/scope combination" ([authorizing OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)).
-- **Recent change (2026-08-14).** OAuth apps can now get expiring tokens (8 h access, 6-month refresh) via the `offline_access` scope, and "Short-lived tokens are enabled by default for all new applications" ([changelog](https://github.blog/changelog/2026-08-14-multiple-redirect-uris-and-token-refresh-for-oauth-apps/)). A newly registered Commander OAuth app would therefore have to handle refresh too.
+- **Recent change (2026-08-14).** OAuth apps can now get expiring tokens (8 h access; the refresh token "expires after six months without use" per [authorizing OAuth apps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)) via the `offline_access` scope, and "Short-lived tokens are enabled by default for all new applications" ([changelog](https://github.blog/changelog/2026-08-14-multiple-redirect-uris-and-token-refresh-for-oauth-apps/)). A newly registered Commander OAuth app would therefore have to handle refresh too. As with GitHub Apps, the OAuth refresh call needs `client_secret` "unless the token was generated using the device flow" (same source), so refresh stays secret-free.
 - **Verdict.** Approval friction similar to a GitHub App's, but broader write power and no per-repo selection. No advantage for Commander, except that OAuth tokens can call the Notifications API (see section 4).
 
 ### Fine-grained PAT
@@ -121,7 +121,7 @@ Sources for each row are given in the subsections below.
 
 - **Restrictions.**
   - Org owners can block classic PATs.
-  - Classic PATs are not subject to approval and have no required expiry ([PAT policy](https://docs.github.com/en/organizations/managing-programmatic-access-to-your-organization/setting-a-personal-access-token-policy-for-your-organization)).
+  - Classic PATs are not subject to approval, and GitHub itself requires no expiry. However, "Organization owners can set maximum lifetime allowances for both fine-grained personal access tokens and personal access tokens (classic)", and a non-compliant token held by a member is then blocked from that org ([PAT policy](https://docs.github.com/en/organizations/managing-programmatic-access-to-your-organization/setting-a-personal-access-token-policy-for-your-organization)).
   - In SAML orgs a classic PAT must be authorized for SSO after it is created ([PAT SSO](https://docs.github.com/en/enterprise-cloud@latest/authentication/authenticating-with-single-sign-on/authorizing-a-personal-access-token-for-use-with-single-sign-on)).
 - **Lowest friction.** One token sees every org and repo the User can see, with no owner involvement. The costs: full write scope, a long-lived secret on disk, and the User has to create and paste it.
 - **Reusing `gh`.** If the User already has the GitHub CLI, `gh auth token` "outputs the authentication token for an account" ([gh auth token](https://cli.github.com/manual/gh_auth_token)). That token carries `repo`, `read:org` and `gist` ([gh auth login](https://cli.github.com/manual/gh_auth_login)). This is a quick path for the author's own machine. Commander's traffic would then run under the GitHub CLI's OAuth grant, so it is not a product auth design.
@@ -173,8 +173,9 @@ Sources for each row are given in the subsections below.
     | REST `advanced_search=true` | 0 |
 
     `(org:cli OR org:github)` returned 4,160 under `ISSUE_ADVANCED` and 0 under `ISSUE`.
-  - **Decision-relevant:** always pin the search type explicitly. Either issue one query per org, or use `ISSUE_ADVANCED` with explicit `OR`.
-- **Semantic and hybrid issue search** went GA on 2026-04-02 (`ISSUE_SEMANTIC`, `ISSUE_HYBRID`, rate limited to 10/min) ([changelog](https://github.blog/changelog/2026-04-02-improved-search-for-github-issues-is-now-generally-available/)). This is not needed for oversight.
+  - **Context (secondary source):** during 2025 the REST API attached a deprecation notice to legacy issue searches: "… is deprecated. It is scheduled to be removed on Thu, 04 Sep 2025 00:00:00 GMT" ([Azure/azure-rest-api-specs#33424](https://github.com/Azure/azure-rest-api-specs/issues/33424)). **Observed (verifier, 2026-10-01):** a legacy `/search/issues` call returned no `Deprecation`, `Sunset` or `Warning` header, and in the live schema neither `ISSUE` nor `ISSUE_ADVANCED` is marked deprecated. The switch was announced, then evidently not carried out; GitHub has published no new date that I could find. Expect it to flip without much notice.
+  - **Decision-relevant:** always pin the search type explicitly. Either issue one query per org, or use `ISSUE_ADVANCED` with explicit `OR`. `ISSUE_ADVANCED` is the forward-safe choice, since it matches the announced future default.
+- **Semantic and hybrid issue search** went GA on 2026-04-02 (`ISSUE_SEMANTIC`, `ISSUE_HYBRID`, rate limited to 10/min) ([changelog](https://github.blog/changelog/2026-04-02-improved-search-for-github-issues-is-now-generally-available/)). The changelog describes the GraphQL side as a `searchType` argument with `SEMANTIC`/`HYBRID`, but the live schema has no such argument; it exposes them as `SearchType` values `ISSUE_SEMANTIC`/`ISSUE_HYBRID` on the existing `type` argument (introspection, 2026-10-01). This is not needed for oversight.
 
 ### Per-org and per-repo list endpoints ("since a timestamp")
 
@@ -234,7 +235,7 @@ Sources for each row are given in the subsections below.
 | 10 aliased repos × (commits since ×50, 20 PRs × 5 reviews, 5 releases) | 2 (dry run) | 1,750 | not run |
 | 25 repos × open PR/issue `totalCount` | 1 | — | 200 OK, 1.6 s |
 | 25 repos × `history(since:, first: 20)` | 1 | — | 200 OK, 2.1 s |
-| 100 repos × open PR/issue `totalCount` + latest release | 1 | 200 | 200 OK, **8.3 s** (close to the 10 s timeout) |
+| 100 repos × open PR/issue `totalCount` + latest release | 1 | 200 | 200 OK, **8.3 s** (close to the 10 s timeout). Verifier re-run: 6.1 s, `nodeCount` 100 |
 | 100 repos × the above + `history(since:) { totalCount }` | 1 (dry run) | 200 | **502 after about 10.7 s, twice** |
 
 **Lessons:**
@@ -343,7 +344,7 @@ All the variants cost the same: 1 point together.
 
 **Scope controls. Who chooses the orgs and repos depends on the auth decision:**
 
-- **GitHub App.** Effective scope is three things combined: the org owner's install choice (all or selected repos), the User's own access, and Commander's picker. The picker can be filled from `/user/installations` and `/user/installations/{id}/repositories`. An org without an install needs a "request install from your org owner" flow. Some orgs now disable such requests (public preview since 2025-12-22).
+- **GitHub App.** Effective scope is three things combined: the org owner's install choice (all or selected repos), the User's own access, and Commander's picker. The picker can be filled from `/user/installations` and `/user/installations/{id}/repositories`. An org without an install needs a "request install from your org owner" flow. Some orgs now disable such requests (GA since 2026-01-12).
 - **Classic PAT.** Every org and repo the User can see is available immediately. Commander's picker is the only scope control.
 - **Fine-grained PAT.** The token *is* the scope: one org per token, chosen when the User creates it.
 
@@ -439,6 +440,7 @@ All the variants cost the same: 1 point together.
 - 2025-08-08, Events API payload changes (effective 2025-10-07): https://github.blog/changelog/2025-08-08-upcoming-changes-to-github-events-api-payloads/
 - 2025-09-01, GraphQL resource limits: https://github.blog/changelog/2025-09-01-graphql-api-resource-limits/
 - 2025-12-22, Control who can request apps (public preview): https://github.blog/changelog/2025-12-22-control-who-can-request-apps-for-your-organization/
+- 2026-01-12, Control who can request apps (generally available): https://github.blog/changelog/2026-01-12-controlling-who-can-request-apps-for-your-organization-is-now-generally-available/
 - 2026-03-12, REST API version 2026-03-10: https://github.blog/changelog/2026-03-12-rest-api-version-2026-03-10-is-now-available/
 - 2026-04-02, Improved (semantic) issue search GA: https://github.blog/changelog/2026-04-02-improved-search-for-github-issues-is-now-generally-available/
 - 2026-08-14, OAuth app token refresh and multiple redirect URIs: https://github.blog/changelog/2026-08-14-multiple-redirect-uris-and-token-refresh-for-oauth-apps/
@@ -448,3 +450,86 @@ All the variants cost the same: 1 point together.
 - GitHub staff statement on the advanced-search default date, community discussion #148716: https://github.com/orgs/community/discussions/148716
 - RFC 9110 (HTTP Semantics), ETag: https://www.rfc-editor.org/rfc/rfc9110#name-etag
 - Observed results: read-only calls made by this research against `api.github.com` on 2026-10-01, using a GitHub CLI OAuth token (classic scopes). Results come from one account on one day.
+
+## Verification
+
+An adversarial fact-check was run on 2026-10-01. It re-opened every cited primary source (docs.github.com pages, read as Markdown through the docs API, and the github.blog changelog entries) and repeated the key live checks with the same GitHub CLI OAuth token.
+
+**Confirmed against the primary source (wording and numbers match):**
+
+- GitHub App user tokens:
+  - Device-flow polling needs only `client_id`, `device_code` and `grant_type`, and the device code lasts 900 s.
+  - `expires_in` is always 28800, and the refresh token lasts 15897600 s.
+  - Refreshing needs `client_secret` "unless the user access token was generated using the device flow".
+  - "Enable Device Flow", "Expire user authorization tokens" (strongly recommended) and the webhook **Active** toggle are all registration settings.
+  - "Any account" vs "Only on this account".
+- Private apps: install and authorize are limited to the owning org. The 2025-06-24 changelog enforces the sign-in rule.
+- Installing: owners can install; repo admins only when the app requests no org permissions and no repo administration; app managers cannot. Members can request an install. The request controls (preview 2025-12-22) cover GitHub Apps and OAuth apps.
+- Best-practices quotes: never ship the private key; PKCE is preferred over device flow; device-flow phishing; public clients "have to ship the client secret". PKCE is S256-only and optional (changelog 2025-07-14).
+- OAuth apps:
+  - Restrictions are on by default for new orgs.
+  - Unapproved apps get no private org API access.
+  - `repo` is full read/write.
+  - Loopback `127.0.0.1` redirects may use any port.
+  - Ten tokens per user/app/scope.
+  - Expiring tokens and `offline_access` (changelog 2026-08-14).
+- Fine-grained PATs:
+  - GA on 2025-03-18, with approval on by default.
+  - One owner per token, and no outside-collaborator use.
+  - Default 366-day maximum lifetime.
+  - Created with SSO authorization; classic PATs are authorized after creation.
+- SSO: an active SSO session is needed when authorizing an OAuth app or GitHub App.
+- REST limits: 5,000/h per user, shared with every app and PAT acting for that user, and 15,000 for apps owned by an Enterprise Cloud org. Installations get at most 12,500. Secondary limits are 100 concurrent requests, 900 REST and 2,000 GraphQL points per minute, and 90 s of CPU per 60 s; point values are 1 and 5.
+- GraphQL limits:
+  - 5,000 points/h (10,000 for Enterprise Cloud).
+  - 500,000 nodes, and `first`/`last` of 1–100.
+  - Cost is divided by 100 and rounded, with a minimum of 1.
+  - 10 s timeout, after which "additional points will be deducted". Timeouts have counted against the primary limit since 2025-07-21; resource limits apply since 2025-09-01.
+- Events:
+  - 300 events and 30 days; latency "30s to 6h" is still on the page.
+  - The retention cut from 90 to 30 days took effect on 2025-01-30.
+  - The payload slimming of 2025-10-07 removed commit summaries and counts, and the changelog claims events are now near-immediate.
+  - The org dashboard endpoint needs the organization "Events" (read) permission.
+- Search:
+  - 30 requests/min, and 10/min for semantic and hybrid.
+  - 1,000 results per search.
+  - GitHub App user tokens get a 422 without `is:issue`/`is:pull-request`.
+  - `advanced_search` param; semantic search GA on 2026-04-02.
+- Notifications: "only support authentication using a personal access token (classic)", and the page says they do not work with GitHub App or fine-grained tokens.
+- Conditional requests: a correctly authorized `304` "does not count against your primary rate limit".
+- REST version: `2026-03-10` (changelog 2026-03-12). `2022-11-28` stays the default and is supported for at least 24 months. The singular `assignee` and `merge_commit_sha` are removed.
+- `GET /user/orgs` returns an empty list for fine-grained tokens. `/user/installations` returns the installations the user has "explicit permission" to access.
+- `filter=all` on the org issues endpoint, `sort=pushed` on org repos, and `since`/`sha` on commits are as stated.
+
+**Re-run live checks (verifier, 2026-10-01):**
+
+- `GET /notifications` with the `gho_` token returned `200`, with `X-Poll-Interval: 60` and `Last-Modified`.
+- An `If-None-Match` request on `/orgs/cli/repos?sort=pushed` returned `304` twice, with `x-ratelimit-remaining` unchanged.
+- `/orgs/cli/issues` returned `404` for a non-member org.
+- The three-search open-work query cost 1 point with `nodeCount` 150.
+- Search syntax: `is:pr is:open org:cli org:github` gave 4,168 results under `ISSUE` and REST default, and 0 under `ISSUE_ADVANCED` and REST `advanced_search=true`. The parenthesised `OR` form gave the reverse. This reproduces the finding; the counts differ only because of time.
+- The 100-repo `totalCount` + `latestRelease` query cost 1 point and took 6.1 s, still slow relative to the 10 s timeout.
+- The live schema shows `SearchType` = `ISSUE`, `ISSUE_ADVANCED`, `ISSUE_SEMANTIC`, `ISSUE_HYBRID`, …, none deprecated. `IssueFilters.since` and `RepositoryOrderField.PUSHED_AT` exist.
+
+**Corrected or added in place:**
+
+- Classic PATs: orgs *can* enforce a maximum lifetime on classic PATs. The original said they have "no required expiry", which holds only at GitHub level. Updated in the comparison table and in the classic PAT section.
+- App install requests: by default outside collaborators can request too, not only members. The default is "Members and outside collaborators".
+- App request controls: the original called them public preview. They went **generally available on 2026-01-12** ([GA changelog](https://github.blog/changelog/2026-01-12-controlling-who-can-request-apps-for-your-organization-is-now-generally-available/)). Updated everywhere.
+- OAuth apps: the refresh token lasts six months *without use*. Refreshing a device-flow token needs no client secret.
+- Advanced search: added the 2025 deprecation notice ("scheduled to be removed on Thu, 04 Sep 2025", secondary source). Also added the observation that no `Deprecation`/`Sunset` header is sent today, and a recommendation to prefer `ISSUE_ADVANCED`.
+- Semantic search: the changelog's GraphQL description (`searchType: SEMANTIC/HYBRID`) does not match the live schema (`type: ISSUE_SEMANTIC/ISSUE_HYBRID`). Noted.
+- Org discovery spike: named `GET /user/orgs` and `GET /user/memberships/orgs` as candidates. Both are available to user access tokens with no permission. Also noted that the per-org membership endpoint needs an org permission.
+- Observed-cost table: added the verifier's re-run timing.
+
+**Could not confirm:**
+
+- The timeouts (502s) on the 100-repo query that adds `history { totalCount }`, and the ~22 points they cost. These were not re-run, to avoid burning points; the amount of the penalty is undocumented.
+- Anything that needs a registered GitHub App:
+  - GraphQL `search` restrictions with a user token.
+  - Org discovery without an install.
+  - Loopback callbacks on a random port.
+  - The behaviour of `/orgs/{org}/issues` and `organization.repositories` under install boundaries.
+- Whether `304`s count toward secondary per-minute points.
+- Which PR and review actions bump `updatedAt`.
+- The Events latency contradiction (docs say up to 6 h, changelog says near-immediate) remains unresolved by GitHub.
