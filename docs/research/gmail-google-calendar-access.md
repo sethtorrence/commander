@@ -16,9 +16,9 @@ What does Google require for a desktop app that runs entirely on the User's mach
 
 ## Short answer
 
-- **Every way of reading Gmail is restricted.** A full client needs `gmail.modify`, a restricted scope. It covers read, send, drafts, label, archive, trash and search. The only scopes that are not restricted are `gmail.labels` (non-sensitive) and `gmail.send` (sensitive), and neither can read mail. IMAP, SMTP and POP all need `https://mail.google.com/`, which is also restricted, so IMAP is not a way around this [1][2][6]. **Calendar scopes are not on Google's restricted list.** Reading calendar events is Google's own example of a *sensitive* scope [2][4].
+- **Every way of reading Gmail is restricted.** A full client needs `gmail.modify`, a restricted scope. It covers read, send, drafts, label, archive, trash and search. Outside the `gmail.addons.*` scopes, which work only inside a Google Workspace Add-on and so are no use to a desktop app, the only scopes that are not restricted are `gmail.labels` (non-sensitive) and `gmail.send` (sensitive), and neither can read mail. IMAP, SMTP and POP all need `https://mail.google.com/`, which is also restricted, so IMAP is not a way around this [1][2][6]. **Calendar scopes are not on Google's restricted list.** Reading calendar events is Google's own example of a *sensitive* scope [2][4].
 - **Author and testers (up to about 100 people the author knows personally):** no verification is needed. This falls under Google's "personal use" exception. Users see an "unverified app" warning, and the project has a lifetime cap of 100 users that can never be reset [5][6][11][12]. Do **not** leave the app in "Testing" status: tokens there expire 7 days after consent, so every tester would have to sign in again each week. Publishing the project "In production" without verification avoids the weekly expiry and keeps the same warning and the same 100-user cap [12][14].
-- **Paying Users:** the app needs brand verification and restricted-scope verification. That means a homepage and privacy policy on a verified domain, a YouTube demo video, a permitted use case ("built-in and web email clients that allow users to compose, send, read, and process email via a user interface" is on the approved list), and Limited Use compliance. Google estimates about 6 weeks [5][6][7]. **Plan on an annual paid CASA security assessment.** Google's text says the assessment is triggered when restricted data is stored on, transmitted to, or reachable through a server [5]. But two 2026 developer reports **(secondary)** say Google required CASA from apps that had no server at all [60][61]. Separately, Commander's hybrid mode (the User's own cloud AI key) would send mail content to a third-party server anyway. CASA is now done by an accredited lab at assurance level AL1 or AL2, chosen by Google, and must be redone every year [9][10]. One lab lists AL1 at $675–$855 **(secondary)** [62].
+- **Paying Users:** the app needs brand verification and restricted-scope verification. That means a homepage and privacy policy on a verified domain, a YouTube demo video, a permitted use case ("built-in and web email clients that allow users to compose, send, read, and process email via a user interface" is on the approved list), and Limited Use compliance. Google estimates about 6 weeks [5][6][7]. **Plan on an annual paid CASA security assessment.** Google's own pages disagree about whether an app with no server needs it. The restricted-scope verification guide says the assessment is triggered when restricted data is stored on, transmitted to, or reachable through a server [5]. But the Security Assessment help page says apps requesting restricted scopes "must undergo an annual security assessment", with no server condition [9], and the Workspace consent-screen guide lists "Security assessment" as a requirement of every restricted scope [63]. Two 2026 developer reports **(secondary)** say Google required CASA from apps that had no server at all [60][61]. Separately, Commander's hybrid mode (the User's own cloud AI key) would send mail content to a third-party server anyway. CASA is now done by an accredited lab at assurance level AL1 or AL2, chosen by Google, and must be redone every year [9][10]. One lab lists AL1 at $675–$855 **(secondary)** [62].
 - **Desktop OAuth:** open the system browser, use a loopback redirect (`http://127.0.0.1:<port>`), and use PKCE with S256. Custom URI schemes and the copy/paste (OOB) flow are no longer supported for this use [15]. Google says a desktop app's client secret "is obviously not treated as a secret", and the current page marks `client_secret` as optional in the token exchange [14][15]. **But Google's OAuth policy says client credentials must never be committed to a public repository** [16]. Commander's repo is public, so the client ID and secret have to be injected at build time or supplied by the User.
 - **Change detection without a server means polling.** For Gmail, Google itself says installed apps should use poll-based sync (`history.list`, 2 quota units per call), not push [19]. Gmail push goes through Cloud Pub/Sub and is built for a backend [19][20]. Calendar push channels need a public HTTPS webhook with a valid certificate, which a local app cannot provide, so Calendar is also polled, using `syncToken` [22][23].
 - **Quotas changed on 2026-05-01, and projects created after that date get the new limits.** Gmail allows 6,000 units per minute per user (it was 15,000), and `messages.get` now costs 20 units (it was 5). The first full download of a mailbox is therefore roughly 10× slower than before: at most about 300 messages per minute per Account. Each project also has a daily "billing threshold" (Gmail 80M units, Calendar 1M requests). Google plans to start charging for use above it "later in 2026" [24][25][26][27]. All Users who share Commander's OAuth client share that project's quotas, and **Calendar polling is the tightest limit at scale** (see the worked numbers below).
@@ -88,8 +88,9 @@ The approved Gmail uses include "built-in and web email clients that allow users
 
 ### Does keeping data on the device change anything?
 
-- **Official text:** "If you store or transmit restricted scope data on servers, then you need to complete a security assessment." Also: "Every app that requests access to Google users' restricted data and has the ability to access data from or through a third-party server must go through a security assessment." [5] In 2019 Google's developer blog advised architecting apps so that user data "is only ever stored client-side on the user's device" in order to avoid the assessment [59].
-- **Recent practice (secondary, conflicts with the docs):**
+- **Official text that ties CASA to servers:** "If you store or transmit restricted scope data on servers, then you need to complete a security assessment." Also: "Every app that requests access to Google users' restricted data and has the ability to access data from or through a third-party server must go through a security assessment." [5] In 2019 Google's developer blog advised architecting apps so that user data "is only ever stored client-side on the user's device" in order to avoid the assessment [59].
+- **Official text that does not:** the Security Assessment help page says apps requesting "restricted scopes must undergo an annual security assessment" and draws no line between on-device and server apps [9]. The Workspace guide's scope table gives restricted scopes three requirements, "Basic app verification + Additional app verification + Security assessment", again with no server condition [63]. So Google's primary pages contradict each other, and the newer, broader wording matches what developers report.
+- **Recent practice (secondary, consistent with the broader wording):**
   - In March 2026, a developer of a local-only iOS Gmail app reported being denied because "a security assessment was now mandatory". The community manager's reply was explicitly generated with Gemini, so it is not authoritative [60].
   - In July 2026, a developer of a serverless mobile Drive app received a request from Google's "Third Party Data Safety Team" for CASA AL1 and concluded that the requirement is "decided by the scope tier, not by trigger conditions" [61].
 - **Commander-specific trigger:** the hybrid AI mode, where a User adds a cloud API key, would transmit restricted Gmail data to a third-party server. That fits the documented trigger and also counts as a "transfer" under Limited Use (see below) [5][8].
@@ -112,7 +113,7 @@ The approved Gmail uses include "built-in and web email clients that allow users
 You do not need verification for [5][11]:
 
 - **Personal use:** "you are the only user of your app or ... used by only a few users, all of whom are known personally to you". The help center puts this at "fewer than 100 users".
-- **Development, testing or staging projects.**
+- **Development, testing or staging projects.** The restricted-scope guide says this applies to projects kept in "Testing" publishing status [5].
 - **Internal apps:** only members of the developer's own Google Workspace organization, with the user type set to Internal.
 
 Personal-use and testing apps still show the unverified-app or tester warning and are still subject to the 100-user cap [5][12].
@@ -147,7 +148,7 @@ Housekeeping:
 
 - **Redirect:** use a loopback IP address, `http://127.0.0.1:<port>` or `http://[::1]:<port>`, with a listener on any free port. Google calls this "the recommended mechanism" for desktop apps [15].
   - The copy/paste out-of-band (OOB) flow "is no longer supported" [15].
-  - Custom URI schemes are "no longer supported on Android and Chrome apps" [15].
+  - Custom URI schemes are "no longer supported on Android and Chrome apps", and elsewhere the page says they "are no longer supported due to the risk of app impersonation" [15]. Loopback is the only option Google recommends for Linux, macOS and Windows desktop apps.
   - Creating a Desktop client needs no redirect registration [17].
 - **Browser:** the request must open in the system browser. Sending it to "an embedded user-agent under the developer's control" (a webview) is forbidden by policy [16][15].
 - **PKCE:** supported, with S256 recommended. The verifier is 43–128 characters [15].
@@ -191,6 +192,7 @@ On **2026-05-01** Google introduced a "standardized tiering model" for Workspace
 - Projects created on or after that date get the new quotas. Projects that used the API between November 2025 and April 2026 keep their old quotas for at least 60 days.
 - "Later in 2026, following 90 days of notice", quota increases will require billing, and "API usage over standard daily thresholds will generate charges" [27].
 - Prices have not been published.
+- Timing check: the "at least 60 days" protection for older projects has run since 2026-06-30, so it can now end at any time. And if charges are to start "later in 2026" with 90 days' notice, notice would have to go out by about 2026-10-02. Neither the quota pages nor the tools-safety page (last updated 2026-09-03) show such a notice; it may come by email to project owners instead.
 
 ### Gmail API (projects created from 2026-05-01) [24]
 
@@ -227,7 +229,7 @@ CalDAV shares the same quotas [39].
 
 These are illustrative calculations from the figures above, not Google numbers. Per-user limits apply to each Account separately, because each Account is a separate Google user. Project-wide limits are shared by every User of Commander's OAuth client.
 
-- **Gmail first sync:** 6,000 ÷ 20 gives at most about **300 `messages.get` per minute per Account**, or about 18,000 messages per hour. Under the 2025 limits it was 3,000 per minute [25]. A 50,000-message mailbox needs at least about 2.8 hours. Initial download has to be gradual (newest messages first, then backfill).
+- **Gmail first sync:** 6,000 ÷ 20 gives at most about **300 `messages.get` per minute per Account**, or about 18,000 messages per hour. This is a ceiling. One open-source client reported in September 2026 that Gmail in practice throttles at 2–4 `messages.get` per second per user, below what the old published quota allowed **(secondary)** [68]. Under the 2025 limits it was 3,000 per minute [25]. A 50,000-message mailbox needs at least about 2.8 hours. Initial download has to be gradual (newest messages first, then backfill).
 - **Gmail steady state, per Account per day**, assuming polling every 30 s, 300 new messages, 100 label changes and 10 sends:
   - 5,760 units for polling
   - 6,000 units for fetching new messages
@@ -259,7 +261,8 @@ Gmail's IMAP extensions (`X-GM-EXT-1`) provide [34]:
 
 - **Verification:** the scope is still the restricted `https://mail.google.com/`. "To be approved, your app must show full utilization", and IMAP apps that don't need permanent delete "will need to migrate to the Gmail API" [6][33]. Using SMTP only to send violates the minimum-scope rule; the app should use `gmail.send` instead [6].
 - **Sessions:** IMAP sessions authenticated with OAuth last "approximately the validity period of the access token used (usually 1 hour)", after which Gmail disconnects [32]. IDLE watches only one folder per connection.
-- **Limits:** 15 simultaneous client connections per account [36]. Workspace accounts are limited to 2,500 MB/day of IMAP downloads and 500 MB/day of uploads [35].
+- **Limits:** Gmail can be added "to up to 15 email clients at a time per account" [36], which in practice limits simultaneous IMAP connections, shared with any other mail apps the User runs. Workspace accounts are limited to 2,500 MB/day of IMAP downloads and 500 MB/day of uploads [35].
+- **Resync:** Gmail's IMAP server advertises CONDSTORE but not QRESYNC, so a reconnecting client can fetch flag changes since a known mod-sequence but has to find expunged messages by comparing UID lists **(secondary: Thunderbird developer, Mozilla bug 1747311, about 2022)** [69]. Google's own IMAP pages do not list either extension [32][34].
 - **Model mismatch:** labels-as-folders means the same message appears in several folders. Per-label "Show in IMAP" settings and "Folder Size Limits" can hide messages. Google says the admin-only `gmail.imap_admin` scope ignores these settings, which implies normal IMAP respects them [33].
 - **No Calendar:** IMAP does not cover Calendar, so OAuth and a Google Cloud project are needed anyway.
 
@@ -292,7 +295,7 @@ Google's Workspace MCP servers are not a way around any of this. They are hosted
    - Testers click through the unverified-app warning. The project can never have more than 100 users in total [6][12].
    - Keep the client ID and secret out of the repo [16].
 2. **Paying Users** need one of these:
-   - **(a)** Full restricted-scope verification plus annual CASA. This needs a domain, homepage, privacy policy and demo video, takes about 6 weeks or more, and costs a lab fee every year [5][6][9][62]. Plan for CASA even though Commander has no server [60][61].
+   - **(a)** Full restricted-scope verification plus annual CASA. This needs a domain, homepage, privacy policy and demo video, takes about 6 weeks or more, and costs a lab fee every year [5][6][9][62]. Plan for CASA even though Commander has no server [9][60][61][63].
    - **(b)** Bring-your-own Google Cloud project for each User. There is no verification, no CASA and no shared quotas, but setup is heavy (create a project, enable the APIs, configure consent, create a Desktop client, publish it). A guided setup wizard could reduce that.
    - **(c)** Ship Calendar first. Calendar scopes are not restricted, so they need only about 10 business days of sensitive-scope verification [2][4][6]. Gmail would stay on (b) until CASA is done.
 
@@ -358,11 +361,11 @@ Google's Workspace MCP servers are not a way around any of this. They are hosted
 
 ## Could not answer / open items
 
-- **Whether Google would waive CASA for Commander's on-device design today.** The official docs tie CASA to servers [5]. Two 2026 reports say on-device apps were required to do it anyway [60][61]. Only a real verification submission settles this.
+- **Whether Google would waive CASA for Commander's on-device design today.** One official page ties CASA to servers [5]; two others require it for all restricted scopes [9][63]. Two 2026 reports say on-device apps were required to do it anyway [60][61]. Only a real verification submission settles this.
 - **The exact classification of each Calendar scope.** It appears only in the Cloud Console's Data Access page [5]. The public docs establish only that no Calendar scope is restricted [2] and that reading events is sensitive [4].
 - **How much use above the daily thresholds will cost.** Google says only "later in 2026", with 90 days' notice [27].
 - **An official CASA price.** Google publishes none [6]. The figures here come from a lab and a blog **(secondary)** [61][62].
-- **Whether Google's IMAP supports CONDSTORE/QRESYNC** for efficient IMAP resync. Not checked, because the IMAP path is not recommended.
+- **Gmail's current IMAP CAPABILITY list.** Secondary sources say CONDSTORE yes, QRESYNC no [69]. Google does not document it; confirm with a live `CAPABILITY` command if the IMAP path is ever pursued.
 - **The date the prompt-injection requirement [7] and DPoP support [15] were added.** Neither page dates them.
 
 ## Sources
@@ -436,3 +439,46 @@ Primary sources unless marked **(secondary)**.
 65. Google, Gmail API `users.settings.sendAs.update`. https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.sendAs/update
 66. Google, Gmail API `users.settings.sendAs.create`. https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.sendAs/create
 67. Google, Gmail API `users.settings.updateVacation`. https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings/updateVacation
+68. **(secondary)** muitneliss/undercroft PR #85, "fix(google): pace Gmail at the rate it enforces" (merged 2026-09-21). https://github.com/muitneliss/undercroft/pull/85
+69. **(secondary)** Mozilla Bugzilla, bug 1747311 "Add support for imap extension QRESYNC and improvements for CONDSTORE", comment 3. https://bugzilla.mozilla.org/show_bug.cgi?id=1747311
+
+## Verification
+
+Adversarial fact-check on 2026-10-01. Each load-bearing claim was re-read against the cited page as it stands today.
+
+**Confirmed against primary sources:**
+
+- Gmail quotas for projects created from 2026-05-01: 1,200,000 units/min per project, 6,000 per user, 80M/day threshold, and every per-method cost in the table (`messages.get` 20, `history.list` 2, `threads.get` 40, `messages.send` 100, and so on); 500 recipients; page updated 2026-09-10 [24]. The pre-change 15,000 units/min and 5-unit `messages.get` could not be re-fetched from the Internet Archive (blocked), but several 2026 secondary write-ups give the same old figures.
+- Calendar quotas: 10,000/min per project, 600/min per user, 1M/day; "anti-pattern" polling quote; ±25% jitter; updated 2026-09-11 [26].
+- The tools-safety page: 2026-05-01 change, "at least 60 days" for existing projects, billing "later in 2026" after 90 days' notice, no prices; updated 2026-09-03 [27]. The 2026-05-01 blog post confirms quotas for new projects only and the Workspace MCP public developer preview [28].
+- Restricted list: seven Gmail scopes plus `mail.google.com` ("includes any usage of IMAP, SMTP, and POP3"); no Calendar scope [2]. Gmail scope classifications [1].
+- Testing: 100 test users; authorizations and refresh tokens expire seven days after consent. Unverified production: 100 new users over the project's lifetime, "cannot be reset or changed" [12]. Refresh-token rules, including 100 tokens per account per client [14].
+- Personal use "(fewer than 100 users)", with the unverified screen and the 100-user cap still applying [11].
+- Verification durations (2–3 business days, 10 business days, 6 weeks plus assessment), "personalized models include any models run exclusively on-device", the IMAP and SMTP migration rules, and the "Tier 2" wording [6].
+- AL1 and AL2 are both lab-tested, Google picks the level, and apps are revalidated yearly; ADA page updated 2026-06-27 [10].
+- Native-app page (updated 2026-09-14): loopback recommended, OOB unsupported, PKCE 43–128 characters, `client_secret` Optional, DPoP optional with hardware-backed keys, no incremental authorization, and refresh tokens always returned [15]. Policies: never commit client credentials to public repositories, no embedded user-agents, separate projects per tier, 6-month inactive-client deletion, and a changelog with entries dated 2025-10-27, 2025-12-15 and 2026-08-05 [16].
+- Gmail push and sync quotes [18][19]. Calendar push requires HTTPS with a valid certificate, and channels don't auto-renew [23]. Calendar sync returns 410, always includes deleted entries, and restricts query parameters [22].
+- IMAP OAuth sessions last about 1 hour [32]; CalDAV accepts OAuth only, Basic gets a 401, and it shares the Calendar quota (updated 2026-09-03) [39]; the app-password facts [37]; less secure apps were turned off on 2025-03-14 with an app-password exception [38]; IMAP has been always on since January 2025 [36].
+- The Workspace user-data policy: the restricted Gmail definition, approved uses including email clients and "generative AI summaries", and the security measures including the Model Armor / prompt-injection item (updated 2026-09-03, no changelog) [7]. "Reading events stored in Google Calendar" is given as a sensitive example [4].
+- Calendar release notes: MCP developer preview on 2026-04-22 and the Meet-code reuse warning on 2026-02-17 [57]. The Workspace admin text on unverified Gmail apps with more than 100 users [42].
+- Secondary sources: TAC Security lists AL1 at $675 (Basic) and $855 (Premium), and AL2 at $5,400 [62]. The yurudeep post (2026-07-17) is about a serverless Drive app, quotes "~$540/year" at TAC, and says the free self-scan is gone [61]. The community thread (2026-03-24/25) has a Gemini-sourced moderator reply [60]. The 2019 blog quote on client-side storage [59].
+- Worked numbers recomputed: Gmail steady state about 13.3k units per Account per day, about 1,500 Users per 80M; Calendar 17,280 requests per User per day at 1-minute polling, giving about 57 Users, and 3,456 at 5-minute polling, giving about 289.
+
+**Corrected in place:**
+
+- The claim that `gmail.labels` and `gmail.send` are the only non-restricted Gmail scopes left out the `gmail.addons.*` scopes. Those are non-sensitive or sensitive but usable only inside Workspace Add-ons [1]. The conclusion is unchanged.
+- **CASA on-device framing.** The file presented "Google's docs" as tying CASA to servers, with only secondary reports disagreeing. In fact two primary Google pages require an annual assessment for every restricted scope with no server condition: the Security Assessment help page [9] and the Workspace consent-screen guide [63]. The docs therefore contradict each other, and the "plan on CASA" recommendation now rests on primary sources too.
+- The development and testing exemption is tied to "Testing" publishing status [5].
+- The custom URI scheme wording now includes the broader "no longer supported due to the risk of app impersonation" sentence [15].
+- The 15-connection IMAP limit is reworded to Google's actual phrasing, "15 email clients at a time per account" [36].
+- Added a secondary report that Gmail's real throttle (2–4 `messages.get` per second per user) can sit below the published quota [68].
+- Filled the CONDSTORE/QRESYNC gap: CONDSTORE is supported and QRESYNC is not (secondary) [69].
+- Added a timing note on the 60-day grandfathering and 90-day billing notice.
+
+**Could not confirm:**
+
+- The 2025 Gmail quota values from the cited Internet Archive snapshot: the fetch was blocked, and only secondary agreement was found.
+- When the prompt-injection requirement and DPoP were added: neither page dates them.
+- The per-scope Calendar classifications: these are shown only in the Console.
+- Whether Google has sent billing notice to project owners by email.
+- Gmail's live IMAP CAPABILITY list: there is no Google documentation.
