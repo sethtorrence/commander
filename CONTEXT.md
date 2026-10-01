@@ -60,6 +60,10 @@ _Avoid_: Task, action item
 The single note for one calendar day, in the Notes Section.
 _Avoid_: Journal, entry, page
 
+**Block**:
+One line of a Daily Note; Blocks nest under one another, and each belongs to a Project (inherited from its parent unless set) and can become a Todo.
+_Avoid_: Line, paragraph, bullet, node
+
 ## Processing
 
 **Agent**:
