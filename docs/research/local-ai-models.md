@@ -19,7 +19,7 @@ The ticket asks for:
 ## Short answer
 
 - **One engine sits under almost everything: llama.cpp.** Ollama, LM Studio, Lemonade, node-llama-cpp and Docker Model Runner all run GGUF models through it [16][20][23][25][29]. It is MIT-licensed [88]. It ships prebuilt Vulkan, ROCm, CUDA and Metal binaries [4]. Its `llama-server` exposes OpenAI-compatible endpoints (chat completions, JSON-schema output, tools, embeddings) and an Anthropic-compatible `/v1/messages` endpoint [1]. vLLM is a server-class engine: Linux-only on ROCm and pinned to Python 3.12 wheels [22]. It is the wrong fit for a desktop app.
-- **Strix Halo works well today through Vulkan (Mesa RADV).** AMD's ROCm 10.0.0 (2026-08-25) officially supports gfx1151, but only on Ubuntu 26.04 and 24.04.4 [31]. Arch ships ROCm 7.2.4 [37]. Community benchmarks show Vulkan as the simpler default. ROCm is faster at prompt processing (about +20%) and slower at generation (about −25%), and which wins depends on the model [38][39]. The Agent's jobs are prompt-heavy (long input, short JSON output), so ROCm's prefill edge matters. Measure both.
+- **Strix Halo works well today through Vulkan (Mesa RADV).** AMD's ROCm 10.0.0 (compatibility matrix dated 2026-08-25, release notes dated 2026-08-26) officially supports gfx1151, but on Linux only on Ubuntu 26.04 and 24.04.4 (Windows 11 25H2 is also listed) [31][32]. Arch ships ROCm 7.2.4 [37]. Community benchmarks show Vulkan as the simpler default. ROCm is faster at prompt processing (about +20%) and slower at generation (about −25% on a 30B MoE, but only about −7% on a 122B MoE), and which wins depends on the model [38][39]. The Agent's jobs are prompt-heavy (long input, short JSON output), so ROCm's prefill edge matters. Measure both.
 - **The author's machine is capped by a kernel default, not by the hardware.** It currently exposes 4 GiB of VRAM carve-out plus 29.2 GiB of GTT to the GPU **(observed)**. AMD recommends a small BIOS carve-out and raising the TTM/GTT limit with `amd-ttm` [33]. Without that change, about 33 GiB is GPU-addressable.
 - **Models (all Apache-2.0 unless noted).**
   - Author's machine: Qwen3.6-35B-A3B (22 GB Q4) or Gemma-4-26B-A4B (17 GB Q4). Both are MoE models generating about 53–60 tok/s with about 1,000–1,200 tok/s prompt processing on Strix Halo [38]. They come out roughly as fast as a 4B dense model and much stronger.
@@ -49,8 +49,8 @@ The ticket asks for:
 | **llama.cpp / `llama-server`** | MIT [88] | C/C++ inference engine and HTTP server for GGUF models | Vulkan works on any Vulkan driver. The prebuilt Linux ROCm binary includes `gfx1151` in its GPU targets [6] | OpenAI-compatible `/v1/chat/completions`, `/v1/responses`, `/v1/embeddings`, Anthropic-compatible `/v1/messages`, rerank, router mode for several models, sleep-on-idle [1] | Yes. Prebuilt binaries: Linux Vulkan 30 MiB, Linux CPU 16 MiB, macOS arm64 11 MiB, Linux ROCm 231 MiB, Linux CUDA 145 MiB plus a 419 MiB CUDA runtime [4] |
 | **Ollama** | MIT [88] | Model manager and server wrapping llama.cpp (and MLX on Apple Silicon) [15][16] | Lists "Ryzen AI Max+ 395" under ROCm. Needs the ROCm v7 driver on Linux. Vulkan is "enabled by default when the backend is installed" [7] | Native API, OpenAI-compatible, Anthropic-compatible `/v1/messages` [13]. Structured outputs through a JSON schema in `format` [8]. Tool calling [9] | Possible, but on Linux it installs as a systemd service [12]. Usually a separate install |
 | **LM Studio** | Proprietary. Licensed for "personal and / or internal business purposes" [17] | Desktop app plus headless daemon `llmster` (from 0.4.0) [21] | Not documented in system requirements [18] | REST, `lmstudio-js`, `lmstudio-python`, OpenAI- and Anthropic-compatible endpoints, structured output, tool use, JIT load with idle TTL [19][21] | **No.** Terms forbid distributing it and forbid integrating "other than through Company published interfaces" [17]. Commander may only talk to a copy the User installed |
-| **vLLM** | Apache-2.0 [88] | High-throughput serving engine | ROCm build lists "Ryzen AI MAX / AI 300 Series (gfx1151/1150)" and needs ROCm 7.0.2+. Linux-only. ROCm wheels only for Python 3.12 [22] | OpenAI-compatible | Not sensible for a desktop app |
-| **Lemonade Server** | Apache-2.0 [88] (sponsored by AMD [23]) | Local server bundling llama.cpp (Vulkan/ROCm), FastFlowLM (NPU), whisper.cpp and more | Explicitly targets Ryzen AI. XDNA2 NPU support on Linux [23] | OpenAI-compatible at `localhost:13305/v1` [23] | Separate install |
+| **vLLM** | Apache-2.0 [88] | High-throughput serving engine | ROCm build lists "Ryzen AI MAX / AI 300 Series (gfx1151/1150)" and needs ROCm 7.2.1+. Linux-only. ROCm wheels only for Python 3.12 [22] | OpenAI-compatible | Not sensible for a desktop app |
+| **Lemonade Server** | Apache-2.0 [88] (sponsored by AMD [23]) | Local server bundling llama.cpp (Vulkan/ROCm), FastFlowLM (NPU), whisper.cpp and more | Explicitly targets Ryzen AI. XDNA2 NPU support on Linux [23] | OpenAI-compatible at `localhost:13305/v1` [23] | Separate install (packaged in Arch `extra` as `lemonade-server` 2026.40.0, 2026-09-30 [37]) |
 | **FastFlowLM** | MIT orchestration. NPU kernels are binaries, "free for any use, including commercial use" [24] | LLMs on Ryzen AI XDNA2 NPUs. Linux since March 2026 [24] | Supports Strix Halo's NPU [24] | Through Lemonade [24] | Niche. Small model list [24] |
 | **node-llama-cpp** | MIT [88] | Node.js bindings to llama.cpp. v3.22.1, 2026-09-28 [25][27] | Prebuilt `linux-x64-vulkan`. **No ROCm prebuilt** [27] | In-process JS API. JSON-schema grammar, function calling, embeddings [25] | Yes, in-process. Electron: main process only, and the binaries must stay outside the asar [26] |
 | **Docker Model Runner** | Part of Docker | llama.cpp and vLLM behind Docker [29] | Linux CPU, CUDA, ROCm, Vulkan [29] | OpenAI- and Ollama-compatible [29] | Needs Docker Desktop or Engine. Not a tester-friendly dependency |
@@ -77,9 +77,9 @@ The ticket asks for:
 
 **ROCm.**
 
-- ROCm 10.0.0, released 2026-08-25, lists "AMD Ryzen AI Max+ 395 (Radeon 8060S) (gfx1151)" as supported. The only Linux distributions listed for it are Ubuntu 26.04 (GA 7.0 kernel) and Ubuntu 24.04.4 (OEM 6.17) [31].
-- The frameworks AMD lists are PyTorch, TensorFlow, JAX and vLLM. llama.cpp and Ollama are not in AMD's matrix [31].
-- **Recent change:** ROCm jumped from the 7.x series to 10.0 and is now built on "TheRock" [32].
+- ROCm 10.0.0 (matrix dated 2026-08-25; release notes dated 2026-08-26 [32]) lists "AMD Ryzen AI Max+ 395 (Radeon 8060S) (gfx1151)" as supported, both the PRO and non-PRO parts. The only Linux distributions listed for it are Ubuntu 26.04 (GA 7.0 kernel) and Ubuntu 24.04.4 (OEM 6.17); Windows 11 25H2 with Adrenalin 26.8.1 is also listed [31].
+- The frameworks AMD lists include PyTorch, TensorFlow, JAX, vLLM, SGLang, MIGraphX and ONNX Runtime. llama.cpp and Ollama are not in AMD's matrix [31].
+- **Recent change:** ROCm jumped from the 7.x series (last 7.x: 7.14.0, 2026-07-16) to 10.0. "Since ROCm 7.14, ROCm uses TheRock as its build and release system" [32].
 - The older "ROCm on Radeon and Ryzen" matrix (7.2.1) lists Ryzen AI Max with PyTorch only, on Ubuntu 24.04.4 [34].
 - Arch's `rocm-hip-runtime` is 7.2.4 (packaged 2026-06-02) [37], so the author's distro is behind AMD's supported release.
 - llama.cpp's release CI builds its Linux ROCm binary against AMD's ROCm 10.0.0 pip wheels, with `gfx1151` in `AMDGPU_TARGETS` [6]. That binary can be used without a system ROCm install matching AMD's matrix. Verify this on the machine.
@@ -94,7 +94,7 @@ The ticket asks for:
 **Vulkan versus ROCm (secondary).**
 
 - One test (2026-08-03, Qwen3-Coder-30B-A3B Q4_K_S): ROCm 1,345 tok/s prompt and 73.7 tok/s generation; Vulkan 1,115 tok/s prompt and 97.7 tok/s generation. That is ROCm "20.56% faster at prompt processing and 24.64% slower at generation" [39].
-- A larger model (Qwen3.5-122B-A10B) showed the same split [39].
+- A larger model (Qwen3.5-122B-A10B Q4_K_XL, 77 GB) showed the same direction but a much smaller generation gap: ROCm 339.9 against Vulkan 285.0 tok/s on pp512 (about +19%), and 21.3 against 22.9 tok/s on tg128 (Vulkan about 7% faster) [39]. On the independent site, one model showed ROCm only about 5% ahead on prompt processing and almost 30% behind on generation [38].
 - An August 2025 snapshot found Vulkan faster on every model tested then [40]. ROCm has improved since, so treat older guidance as stale.
 - Instability under ROCm is still reported: an "illegal memory access" after about 68 minutes on one model [38].
 
@@ -104,7 +104,7 @@ The ticket asks for:
 
 | Option | How | For | Against |
 |---|---|---|---|
-| **A. Bring your own server** | User installs Ollama, LM Studio or Lemonade. Commander stores a base URL | Zero bundling. The runtime handles GPU detection, model downloads and updates. Same client code also reaches cloud APIs | Extra install step for testers. Version drift. Ollama's default context is 4k on machines with under 24 GiB VRAM, which silently truncates long inputs unless set [11]. LM Studio cannot be bundled [17] |
+| **A. Bring your own server** | User installs Ollama, LM Studio or Lemonade. Commander stores a base URL | Zero bundling. The runtime handles GPU detection, model downloads and updates. Same client code also reaches cloud APIs | Extra install step for testers. Version drift. Ollama's default context is 4k on machines with under 24 GiB VRAM (32k at 24–48 GiB, 256k at 48 GiB and over), which truncates long inputs unless set [11]. LM Studio cannot be bundled [17] |
 | **B. Bundle `llama-server` as a sidecar process** | Ship the right binary per platform. Tauri has a first-class `externalBin` sidecar mechanism [28]. Electron can spawn a child process | Commander pins the engine version. HTTP boundary isolates crashes. Router mode serves several models from a directory. `--sleep-idle-seconds` unloads models and KV cache when idle [1]. `--fit` (default on) sizes settings to device memory [1]. Small for Vulkan and Metal [4] | Commander owns backend choice per machine (Vulkan, CUDA, Metal, ROCm), model downloads and updates. New model architectures need a newer engine build. CUDA bundles are large (about 560 MiB with runtime) [4] |
 | **C. In-process bindings** | node-llama-cpp in the Node or Electron main process [25][26] | No separate process. Typed JS API with grammar and JSON-schema enforcement [25] | Electron main process only [26]. No ROCm prebuilt [27]. A native crash or memory spike shares the app's process. Engine updates are gated on the binding's release cadence |
 
@@ -139,7 +139,7 @@ The landscape moved fast in 2026: Qwen went 3.5, then 3.6, then 3.8 within six m
 
 ### 2.2 Throughput and memory on Strix Halo
 
-All figures are **secondary**. They come from one independent tester on a 128 GB Ryzen AI Max+ 395 (Vulkan RADV, llama.cpp `llama-bench`, 512-token prompt and 128-token generation, page updated August–September 2026) [38], unless marked. "Size" is the GGUF file size reported there. Runtime memory adds KV cache and compute buffers on top.
+All figures are **secondary**. They come from one independent tester on a 128 GB Ryzen AI Max+ 395 (Vulkan RADV, llama.cpp `llama-bench`, 512-token prompt and 128-token generation; the page footer says "Updated August 2026" but it includes reruns from 21–22 September 2026) [38], unless marked. "Size" is the GGUF file size reported there. Runtime memory adds KV cache and compute buffers on top.
 
 | Model | Type | Size | Prompt tok/s (pp512) | Gen tok/s (tg128) |
 |---|---|---|---|---|
@@ -172,7 +172,7 @@ Reading the table:
 - Q8 of the 35B-A3B models (36.9 GB [61]) needs the GTT limit raised.
 - gpt-oss-120b is 63.4 GB (MXFP4) [61]. llama.cpp's guide puts it at about 64.0 GB total at 8k context [54]. **Does not fit.**
 - Qwen3.5-122B-A10B Q4_K_M is about 76.6 GB [61], and Mistral Small 4 Q4 is about 69–70 GB [38]. **Neither fits.**
-- gpt-oss-20b is 12.1 GB [61], about 14.9 GB total at 8k context [54]. It fits easily. No current Strix Halo throughput figure was found for it.
+- gpt-oss-20b is 12.1 GB [61], about 14.9 GB total at 8k context [54]. It fits easily. No current (2026) Strix Halo throughput figure was found for it. An older community comment (2025, BF16 GGUF, Vulkan) in llama.cpp's gpt-oss guide thread reports about 982 tok/s pp2048 and about 48 tok/s tg128 on a Ryzen AI Max+ 395 [54]. Treat that as stale.
 
 ### 2.3 Download sizes of candidate GGUFs (Hugging Face, Q4_K_M unless noted) [61]
 
@@ -206,8 +206,8 @@ Reading the table:
   - LM Studio warns "not all models are capable of structured output, particularly LLMs below 7B parameters" [20].
   - Ollama recommends also putting the schema in the prompt and using a low temperature [8].
   - Until v0.34.4 (2026-09-23), Ollama's structured outputs on thinking models were not single-pass [16].
-- **Constrained decoding helped accuracy and exposed llama.cpp coverage gaps.** JSONSchemaBench (independent, January 2025, Llama-3.1-8B) found constrained decoding "achieves higher performance than the unconstrained setting" on its reasoning tasks (for example GSM8K 80.1% unconstrained against 83.8% with Guidance) [64]. llama.cpp's JSON-schema coverage was the weakest of the open engines then: empirical coverage 0.38–0.95 depending on dataset, with failures mostly at schema compilation [64]. llama.cpp has kept improving its JSON-schema handling ("Improve JSON Schema and PEG handling", v0.5.0 [5]), so re-check this. Keep the Agent's schemas simple: flat objects, enums, short strings, no exotic keywords.
-- **Prompting strategy can matter more than model size.** LLMStructBench (independent, February 2026, 22 open models from 0.6B to 70B) found "choosing the right prompting strategy is more important than standard attributes such as model size". Gemma3-12B ranked in the top three, ahead of several 70B models [65]. Forcing valid JSON shifts errors "toward incorrect field values", so code must still validate meaning, not just shape [65].
+- **Constrained decoding helped accuracy and exposed llama.cpp coverage gaps.** JSONSchemaBench (independent, January 2025, Llama-3.1-8B) found constrained decoding "achieves higher performance than the unconstrained setting" on its reasoning tasks (for example GSM8K 80.1% unconstrained against 83.8% with Guidance) [64]. llama.cpp's empirical JSON-schema coverage ranged from 0.38 (JSON Schema Store) to 0.95 (GlaiveAI), with failures mostly at schema compilation [64]. It was generally second to Guidance among the open engines and well ahead of Outlines on most datasets; it led on two datasets (Washington Post 0.94, JSON Schema Store 0.38) [64]. Complex real-world schemas (GitHub "hard", JSON Schema Store) failed often in every engine. llama.cpp has kept improving its JSON-schema handling ("Improve JSON Schema and PEG handling", v0.5.0 [5]), so re-check this. Keep the Agent's schemas simple: flat objects, enums, short strings, no exotic keywords.
+- **Prompting strategy can matter more than model size.** LLMStructBench (independent, February 2026, 22 open models from 0.6B to 70B) found "choosing the right prompting strategy is more important than standard attributes such as model size". Gemma3-12B ranked in the top three, ahead of several 70B models [65]. Enforcing the schema "guarantees a complete json structure … but redirects almost every remaining uncertainty into field content" (observed for the DeepSeek-R1 family), so code must still validate meaning, not just shape [65].
 - **Reliability without constraints (secondary).** In an independent automation suite (strict JSON envelopes, extraction and classification with exact ground truth, format contracts, robustness), Qwen3.6-27B returned every call machine-usable and 96.9% parseable with "zero recovery". Gemma-4-31B QAT had the best strict parse rate at 98.5%. Qwen3.8-27B scored 62.5/65 with 98.5% usable output. These runs parse raw output, with no constrained decoding reported [38]. With grammar constraints, parse failures should approach zero, which leaves semantic accuracy as the open question.
 - **Thinking leaks.** Qwen3.6 models, even with `enable_thinking:false`, sometimes leaked planning notes into free-text output [38]. Constrained decoding prevents this for JSON jobs.
 
@@ -238,7 +238,7 @@ Reading the table:
 | Gemma-4-31B / 26B-A4B / 12B | — | — | 76.9 / 68.2 / 69.0 | [49] |
 | Gemma-4-E4B / E2B | — | — | 42.2 / 24.5 | [49] |
 | Granite-4.2-3B | IFBench 74.33 | 52.41 | τ³ 45.78 | [55] |
-| LFM2.5-8B-A1B | 91.84 | 49.73 (v3: 64.79) | Telecom 88.07 / Retail 39.82 | [57] |
+| LFM2.5-8B-A1B | 91.84 | 49.73 (v3: 64.79); the same card's other table says 48.50 (v3: 64.36) | Telecom 88.07 / Retail 39.82 | [57] |
 | gpt-oss-20b (low/med/high) | — | — | τ-bench Retail (v1) 35.0 / 47.3 / 54.8 | [52] |
 
 Qwen3.6-35B-A3B reports TAU3-Bench 67.2 and MCPMark 37.0, against 67.5 and 18.1 for Gemma4-31B in the same table [45].
@@ -289,22 +289,33 @@ Qwen3.6-35B-A3B reports TAU3-Bench 67.2 and MCPMark 37.0, against 67.5 and 18.1 
 | M1 (8-core GPU) | 68 GB/s | 118 | 14.2 |
 | M2 / M3 (10-core) | 100 GB/s | 180–187 | 21–22 |
 | M4 (10-core) | 120 GB/s | 221 | 24.1 |
-| M4 Pro | 273 GB/s | 440 | 50.7 |
-| M4 Max | 546 GB/s | 886 | 83.1 |
-| M5 Max | 614 GB/s | 3,220 | 119.9 |
+| M5 (10-core, base chip in the 16 GB MacBook Air) | 154 GB/s | 723 | 31.9 |
+| M4 Pro (20-core) | 273 GB/s | 440 | 50.7 |
+| M4 Max (40-core) | 546 GB/s | 886 | 83.1 |
+| M5 Max (40-core) | 614 GB/s | 3,220 | 119.9 |
+
+The M5 generation roughly triples prompt processing over M4 at the same tier (base M5 723 against M4 221 tok/s) [70]. That matters because the Agent's jobs are prompt-heavy.
 
 The base M5 (MacBook Air, 2026-03-03) has 153 GB/s and starts at 16 GB, configurable to 24 or 32 GB [72][73]. Apple does not document how much unified memory the GPU may wire by default. Metal reports a per-device `recommendedMaxWorkingSetSize` [74]. Secondary write-ups quote roughly two-thirds to three-quarters of RAM; one measured 78% on a 32 GB M2 Max [75].
 
-**Vulkan scoreboard** (community-submitted, llama.cpp repo, Llama 2 7B Q4_0) [71]:
+**Vulkan scoreboard** (community-submitted, llama.cpp repo, Llama 2 7B Q4_0, no flash attention; rows are named by chip series and are usually a single submission each) [71]:
 
 | GPU | Prompt tok/s | Gen tok/s |
 |---|---|---|
-| RTX 4090 | 9,452 | 188 |
 | RTX 5090 | 10,382 | 264 |
+| RTX 4090 | 9,452 | 188 |
 | RX 7900 XTX | 3,727 | 183 |
-| Intel Iris Xe (i7-1185G7 laptop) | 106 | 5.9 |
+| AMD Ryzen AI Max+ 300 series (Strix Halo iGPU) | 1,289 | 53.6 |
+| Intel Core Ultra 300 series iGPU (laptop) | 1,380 | 24.5 |
+| Intel Core Ultra 200 series iGPU (laptop) | 865 | 24.4 |
+| AMD Ryzen AI 300 series iGPU (Strix Point laptop) | 479 | 22.4 |
+| AMD Ryzen 7000 / 8000 series iGPU (780M class) | 267–282 | 19.8–19.9 |
+| Intel Core Ultra 100 series iGPU (laptop) | 186 | 8.2 |
+| Intel Core 1100 series iGPU (11th-gen laptop, Iris Xe) | 187 | 10.4 |
 
-**gpt-oss-20b** (llama.cpp guide) [54]: about 221 tok/s on an RTX 4090, and about 30–67 tok/s on an RTX 3060 12 GB with MoE layers offloaded. Devices with under 16 GB VRAM need some MoE layers on the CPU (`--n-cpu-moe`) [54][1].
+These are current-generation x86 laptop iGPUs, so typical 16–32 GB laptops from 2024–2026 run a 7B Q4 model at about 20–25 tok/s generation and several hundred to over 1,000 tok/s prompt processing on Vulkan [71].
+
+**gpt-oss-20b** (llama.cpp guide thread) [54]: about 221 tok/s on an RTX 4090 (guide body), and about 30–67 tok/s on an RTX 3060 12 GB with some MoE layers offloaded (a 2025 community comment in the same thread). Devices with under 16 GB VRAM need some MoE layers on the CPU (`--n-cpu-moe`) [54][1].
 
 Memory bandwidth is the main predictor of generation speed [70].
 
@@ -316,8 +327,11 @@ These are **estimates**, computed from the cited throughput above. Assumptions: 
 |---|---|---|---|
 | Strix Halo, Qwen3.6-35B-A3B [38] | ≈ 1.5 s + 0.7 s ≈ 2 s | ≈ 10 min | ≈ 6 h |
 | Strix Halo, Qwen3.6-27B dense [38] | ≈ 4.7 s + 3.3 s ≈ 8 s | ≈ 40 min | ≈ 22 h |
-| M1, 7B-class [70] | ≈ 12.7 s + 2.9 s ≈ 16 s (a 4B model is roughly half) | ≈ 80 min | ≈ 2 days |
-| 2020 Intel laptop iGPU, 7B-class [71] | ≈ 14 s + 7 s ≈ 21 s | ≈ 105 min | ≈ 2.4 days |
+| M5 (2026 MacBook Air, 16 GB), 7B-class [70] | ≈ 2.1 s + 1.3 s ≈ 3.4 s | ≈ 17 min | ≈ 9 h |
+| Intel Core Ultra 200 laptop iGPU, 7B-class [71] | ≈ 1.7 s + 1.6 s ≈ 3.4 s | ≈ 17 min | ≈ 9 h |
+| AMD Ryzen AI 300 laptop iGPU, 7B-class [71] | ≈ 3.1 s + 1.8 s ≈ 5 s | ≈ 25 min | ≈ 14 h |
+| M1, 7B-class [70] | ≈ 12.7 s + 2.8 s ≈ 16 s (a 4B model is roughly half) | ≈ 80 min | ≈ 2 days |
+| 2021 Intel 11th-gen laptop iGPU (Iris Xe), 7B-class [71] | ≈ 8.0 s + 3.8 s ≈ 12 s | ≈ 60 min | ≈ 1.4 days |
 
 llama-server reuses the KV cache for a shared prompt prefix by default (`cache_prompt`) [1]. Putting fixed instructions first and the email last reduces repeated prefill. Verify this per model architecture. Running parallel slots also raises throughput.
 
@@ -328,7 +342,7 @@ llama-server reuses the KV cache for a shared prompt prefix by default (`cache_p
 | Tier | Realistic local model | Experience | Recommendation |
 |---|---|---|---|
 | **8 GB RAM, no discrete GPU** | 1–3 GB models: Qwen3.5-2B, Gemma-4-E2B [61] | Weak tool-use scores: Qwen3.5-2B τ² 48.8 [44], Gemma-4-E2B τ² 24.5 [49]. Competes with the OS, browser and Commander for memory | Default to a cloud key, or a no-LLM mode (rules plus embeddings) |
-| **16 GB (x86 laptop iGPU, or Apple 16 GB)** | 3–5 GB models: Qwen3.5-4B, Gemma-4-E4B, Granite-4.2-3B/8B, LFM2.5-8B-A1B [61] | OK for single-shot Bucket and Todo jobs with constrained JSON. Seconds to tens of seconds per item. Long summaries are slow | **Practical floor for a local default** |
+| **16 GB (x86 laptop iGPU, or Apple 16 GB)** | 3–5 GB models: Qwen3.5-4B, Gemma-4-E4B, Granite-4.2-3B/8B, LFM2.5-8B-A1B [61] | OK for single-shot Bucket and Todo jobs with constrained JSON. About 3–5 s per item on 2024–2026 laptops and the M5 Air, 12–16 s on 2020–2021 machines (7B estimates, section 4.2). Long summaries are slow | **Practical floor for a local default** |
 | **32 GB unified (Apple) or 32 GB plus iGPU** | 16–22 GB MoE: Gemma-4-26B-A4B (16.9 GB), Qwen3.6-35B-A3B (22.1 GB) [61] | Good. On a 32 GB Mac the default GPU limit may not hold 22 GB (secondary [75]), so prefer the 26B-A4B | Local default. Cloud for heavy synthesis is optional |
 | **NVIDIA 8 GB VRAM** | 4–9B Q4 fully on GPU. Larger MoE with `--n-cpu-moe` if system RAM is 32 GB or more [1][54] | Fast for small models | Local default with a 4–9B model |
 | **NVIDIA 12–16 GB** | gpt-oss-20b (12.1 GB) [61], 26B-A4B with partial offload | Good | Local default |
@@ -380,7 +394,7 @@ Embedding models are 0.1–0.6B parameters, well over 10× smaller than the chat
 **Storage.**
 
 - `sqlite-vec` is Apache-2.0 and pure C, and runs "anywhere SQLite runs". It is "pre-v1, so expect breaking changes" [83].
-- The latest stable release is v0.1.9 (2026-03-31). ANN indexes (IVF and DiskANN) exist only in the v0.1.10 alphas (latest 2026-05-18) [83].
+- The latest stable release is v0.1.9 (2026-03-31). ANN indexes exist only in the v0.1.10 alphas (latest alpha.4, 2026-05-18): rescore and DiskANN, with IVF "experimental, not enabled" [83]. The repository has had no pushes since 2026-05-18, so treat maintenance pace as a risk.
 - Brute-force KNN is fine at personal scale (estimate): 200k items × 768 dims × 4 bytes ≈ 614 MB as float32, ≈ 154 MB as int8, ≈ 19 MB as binary vectors, all supported types [83].
 - Store the model id and dimension with each vector so a model change triggers re-embedding.
 
@@ -405,7 +419,7 @@ Embedding models are 0.1–0.6B parameters, well over 10× smaller than the chat
 - **Keep the Bucket count small and the descriptions explicit.** Zero-shot accuracy of 9B-and-under models on many-label tasks is mediocre [66].
 - **Learning:** an embeddings kNN classifier over the User's corrected examples is cheap, private, and inside Google's "personalized model" carve-out [79]. Use it as a first pass, or as a tie-breaker.
 - **Safety:** treat email as untrusted. The classification call gets no tools, its output is limited to the enum, and Agent side effects (labels and moves that two-way sync writes back to the Source) go through the Autonomy setting [69]. At least two current local models followed an embedded injection in an independent test [38].
-- **Backfill:** bound LLM sorting to a recent window. 10k emails takes about 6 h on Strix Halo and days on a 16 GB laptop (section 4.2).
+- **Backfill:** bound LLM sorting to a recent window. 10k emails takes about 6 h on Strix Halo, roughly 9–14 h on a current 16 GB laptop or M5 Air with a 7B-class model, and over a day on 2020–2021 machines (section 4.2 estimates).
 - **Before choosing a model,** build a labelled eval set of about 200–500 of the author's own emails. No public benchmark matches this job.
 
 ### #19 Agent jobs and model choice
@@ -426,8 +440,8 @@ Embedding models are 0.1–0.6B parameters, well over 10× smaller than the chat
 ## Not fully answered
 
 - **No direct benchmark** of local models on email Bucket sorting, Todo extraction, GitHub summaries or calendar proposals. Only proxies exist (section 3). An eval on the author's data is needed.
-- **Current-generation throughput on typical 16 GB x86 laptops** (Intel Lunar Lake or AMD Strix Point iGPUs, CPU-only) was not found in primary or current sources. Section 4 extrapolates from older 7B data [70][71] and bandwidth.
-- **gpt-oss-20b throughput on Strix Halo** was not found in current sources.
+- **Throughput of current models on typical 16 GB x86 laptops.** The llama.cpp Vulkan scoreboard has current laptop iGPU results (Intel Core Ultra 100/200/300, AMD Ryzen AI 300), but only for Llama 2 7B Q4_0, one community submission each, and memory size is not recorded [71]. No figures for Qwen3.5/Gemma 4 on these laptops, or CPU-only, were found. Section 4 extrapolates from the 7B data.
+- **gpt-oss-20b throughput on Strix Halo** was not found in 2026 sources; only a 2025 community comment exists [54].
 - **Apple's default GPU memory cap** is not documented by Apple. Only secondary measurements exist [75].
 - **ROCm 10 on Arch with gfx1151** is untested here. AMD supports Ubuntu only [31].
 
@@ -469,12 +483,12 @@ AMD / Strix Halo / platform
 
 30. AMD Ryzen AI Max+ 395 product page: https://www.amd.com/en/products/processors/laptop/ryzen/ai-300-series/amd-ryzen-ai-max-plus-395.html
 31. ROCm 10.0.0 compatibility matrix: https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html
-32. ROCm 10.0.0 release notes: https://rocm.docs.amd.com/en/latest/about/release-notes.html
+32. ROCm 10.0.0 release notes (dated 2026-08-26): https://rocm.docs.amd.com/en/latest/about/release-notes.html
 33. AMD Strix Halo system optimization (ROCm 10.0.0 docs): https://rocm.docs.amd.com/en/latest/how-to/system-optimization/strixhalo.html
 34. ROCm on Radeon and Ryzen, Linux support matrix (7.2.1): https://rocm.docs.amd.com/projects/radeon-ryzen/en/latest/docs/compatibility/compatibilityryz/native_linux/native_linux_compatibility.html
 35. Linux kernel amdgpu module parameters: https://docs.kernel.org/gpu/amdgpu/module-parameters.html
 36. AMDVLK repository (discontinuation notice): https://github.com/GPUOpen-Drivers/AMDVLK
-37. Arch Linux packages: https://archlinux.org/packages/extra/x86_64/rocm-hip-runtime/ , https://archlinux.org/packages/extra/x86_64/ollama-vulkan/ , https://archlinux.org/packages/extra/x86_64/ollama-rocm/ , https://archlinux.org/packages/extra/x86_64/vulkan-radeon/
+37. Arch Linux packages: https://archlinux.org/packages/extra/x86_64/rocm-hip-runtime/ , https://archlinux.org/packages/extra/x86_64/ollama-vulkan/ , https://archlinux.org/packages/extra/x86_64/ollama-rocm/ , https://archlinux.org/packages/extra/x86_64/vulkan-radeon/ , https://archlinux.org/packages/extra/x86_64/lemonade-server/
 38. **(secondary)** Strix Benchmarks, independent tester, 128 GB Ryzen AI Max+ 395, updated August–September 2026: https://slb350.github.io/strix-benchmarks/ (methodology: https://slb350.github.io/strix-benchmarks/methodology/)
 39. **(secondary)** "llama.cpp: Vulkan vs ROCm on Strix Halo", 2026-08-03: https://www.soothill.io/blog/2026/08/03/llamacpp-vulkan-vs-rocm-strix-halo/
 40. **(secondary)** llm-tracker Strix Halo notes (August 2025, stale): https://llm-tracker.info/_TOORG/Strix-Halo
@@ -494,7 +508,7 @@ Models
 51. gpt-oss-20b model card: https://huggingface.co/openai/gpt-oss-20b
 52. gpt-oss model card PDF (2025-08-05; Table 3): https://cdn.openai.com/pdf/419b6906-9da6-406c-a19d-1bb078ac7637/oai_gpt-oss_model_card.pdf
 53. OpenAI on Hugging Face (model list): https://huggingface.co/openai
-54. llama.cpp guide: running gpt-oss (memory, performance): https://github.com/ggml-org/llama.cpp/discussions/15396
+54. llama.cpp guide: running gpt-oss (memory table and RTX 4090 figures in the guide body; RTX 3060 and Strix Halo figures are 2025 community comments in the same thread): https://github.com/ggml-org/llama.cpp/discussions/15396
 55. Granite 4.2 3B model card: https://huggingface.co/ibm-granite/granite-4.2-3b
 56. Mistral 3 announcement (Ministral 3, 2025-12-02): https://mistral.ai/news/mistral-3
 57. LFM2.5-8B-A1B model card: https://huggingface.co/LiquidAI/LFM2.5-8B-A1B
@@ -516,7 +530,7 @@ Quality evidence
 
 Hardware
 
-70. llama.cpp discussion #4167, Apple Silicon performance (community-submitted): https://github.com/ggml-org/llama.cpp/discussions/4167
+70. llama.cpp discussion #4167, Apple Silicon performance (community-submitted; LLaMA 7B Q4_0 summary table, M5 rows added 2026): https://github.com/ggml-org/llama.cpp/discussions/4167
 71. llama.cpp discussion #10879, Vulkan scoreboard (community-submitted): https://github.com/ggml-org/llama.cpp/discussions/10879
 72. Apple newsroom: MacBook Air with M5 (2026-03-03): https://www.apple.com/newsroom/2026/03/apple-introduces-the-new-macbook-air-with-m5/
 73. Apple: MacBook Air (13-inch, M5) tech specs: https://support.apple.com/en-us/126320
@@ -541,3 +555,48 @@ Embeddings and storage
 86. Ollama embeddings: https://docs.ollama.com/capabilities/embeddings
 87. Ollama thinking: https://docs.ollama.com/capabilities/thinking
 88. Repository licenses (GitHub API `license.spdx_id`, checked 2026-10-01): Ollama MIT https://github.com/ollama/ollama , vLLM Apache-2.0 https://github.com/vllm-project/vllm , Lemonade Apache-2.0 https://github.com/lemonade-sdk/lemonade , node-llama-cpp MIT https://github.com/withcatai/node-llama-cpp , FastFlowLM MIT https://github.com/FastFlowLM/FastFlowLM , llama.cpp MIT https://github.com/ggml-org/llama.cpp
+
+## Verification
+
+Adversarial fact-check on 2026-10-01. Each load-bearing claim was checked against its cited source (fetched directly, or through the GitHub and Hugging Face APIs). Machine facts were re-read on the author's machine.
+
+### Confirmed
+
+- **Machine (observed):** `mem_info_vram_total` 4,294,967,296 bytes (4.0 GiB); `mem_info_gtt_total` 31,403,520,000 bytes (29.25 GiB); 58 GiB visible to the OS; kernel 7.2.6-arch2-1; no TTM or GTT parameters on the kernel command line; Mesa and `vulkan-radeon` 26.2.3; `amdxdna` loaded; `/dev/accel/accel0` present.
+- **llama-server README [1]:** Anthropic `/v1/messages`, `/v1/responses`, `--fit` (default on), `--jinja` (default enabled), `--sleep-idle-seconds`, router mode (`--models-dir`), `n_probs`, `cache_prompt` (default true), `--n-cpu-moe`, `--reasoning on|off|auto`, `--reasoning-budget`.
+- **llama.cpp releases [4][5][6]:** b11317 (2026-10-01, marked pre-release) asset sizes match: Vulkan x64 30 MiB, CPU x64 16 MiB, macOS arm64 11 MiB, ROCm 10.0 x64 231 MiB, CUDA 13.4 x64 145 MiB plus a 419 MiB runtime. Semver releases run from v0.1.2 (2026-08-18) to v0.5.0 (2026-09-23). v0.5.0 lists "Improve JSON Schema and PEG handling" and the Gemma 4 and qwen3-coder parser fixes. `release.yml` pip-installs ROCm 10.0.0 wheels, with `gfx1151` in the Linux and Windows target lists.
+- **Ollama [7][8][11][13][14][15][16]:** Ryzen AI Max+ 395 listed; ROCm v7 driver required; "Vulkan is enabled by default when the backend is installed"; context defaults; 5-minute keep-alive; Anthropic compatibility. v0.35.0 (2026-09-28) `/v1/systemone` with Nimble and Tev1; v0.40.0-rc0 (2026-09-25, pre-release) MLX by default; v0.34.4 (2026-09-23) single-pass structured outputs on thinking models. The install script creates a systemd service.
+- **LM Studio terms [17]:** version 2026-08-23. The licence covers "personal and / or internal business purposes" and forbids distributing or sublicensing, and integrating "other than through Company published interfaces". llmster is from 0.4.0. The under-7B structured-output caveat is present.
+- **AMD [31][33][36]:** gfx1151 (PRO and non-PRO 395) is supported on Ubuntu 26.04 and 24.04.4. Strix Halo guide: "for example, 0.5 GB" BIOS reservation, `amd-ttm`, `pages_limit`, reboot required, GTT about 50% of RAM, kernel 6.18.4 or later outside Ubuntu. AMDVLK was discontinued on 2025-09-15 in favour of RADV. `amdgpu.gttsize` is "deprecated and will be removed in the future" [35].
+- **Arch [37]:** `rocm-hip-runtime` 7.2.4 (2026-06-02); `ollama`, `ollama-vulkan` and `ollama-rocm` 0.35.0 (2026-09-30).
+- **Strix Benchmarks [38]:** every row of the throughput table in 2.2; the MTP figures (dense 1.76–2.44×, MoE 1.20–1.40×); the injection results (Gemma-4-26B-A4B Q8 payload, Qwen3.6-35B-A3B importance score, Laguna S 2.1 "resists all three prompt-injection trials"); Qwen3.6-27B 100% usable and 96.9% strict; Gemma-4-31B QAT 98.5% strict parse; Qwen3.8-27B 62.5/65 at 98.5% usable; the 43 s per call (Ornith-1.0-35B, thinking on); the Qwen3.6 planning-note leak; the ROCm illegal memory access after about 68 minutes (Nemotron-Labs-3 Puzzle); the Flash-Next long-context figures (Vulkan 13.3 to 8.3, ROCm about 34 tok/s); Mistral Small 4 at 69 GiB; RADV labelled "Recommended default".
+- **Soothill [39]:** Qwen3-Coder-30B-A3B Q4_K_S, 17.46 GB. ROCm 1,344.65 / 73.65 and Vulkan 1,115.30 / 97.73; "20.56% faster at prompt processing and 24.64% slower at generation".
+- **Every GGUF size in 2.3 and 2.2** (Hugging Face API), and every model licence tag: Qwen3.5/3.6/3.8-27B, Gemma 4, gpt-oss, Granite 4.2, Ministral 3, Muse Glimmer and the Qwen and Granite embedding models are Apache-2.0. Qwen3.8-Flash-Next is `other`, LFM2.5 is `lfm1.0` with a $10,000,000 revenue threshold [58], EmbeddingGemma is under the Gemma terms, and jina v5 is CC-BY-NC-4.0.
+- **Release dates:** Qwen (QwenLM README) [41], Gemma (2026-03-31, 12B Unified 2026-06-03, EmbeddingGemma 2025-09-04) [47], Granite 4.2 (2026-08-25) [55], Mistral Small 4 (2026-03-16, 119B/6B active, Apache-2.0) [62]. gpt-oss is still OpenAI's latest open-weight LLM on Hugging Face (later uploads are safeguard fine-tunes and non-LLM models) [53].
+- **Vendor benchmarks:** the Qwen3.5-35B-A3B, 9B, 4B, 2B and 0.8B rows; Qwen3.6 TAU3 and MCPMark; Gemma 4 Tau2 and MRCR v2; Granite 4.2 IFBench, BFCL v4 and τ³; LFM2.5 IFEval and Tau².
+- **BFCL V4 [63]:** last updated 2026-04-12. All six rows match `data_overall.csv` exactly, and no Qwen3.5+, Gemma 4 or gpt-oss entries exist.
+- **Papers:** EmailBench (2026-09-25): eight closed frontier configurations; Sonnet 4.5 33.5%; folder 88.9% (8/9) against calendar-write 16.7% (2/12). Intent study (2026-07-29): 41 models, 135M–9B, best 0.660 exact-match accuracy (Mistral-7B-Instruct-v0.3). SCHEDBench v2 (2026-08-26). LLMStructBench (2026-02-16): 22 models, 0.6–70B, Gemma3-12B third overall. JSONSchemaBench: GSM8K 80.1 to 83.8 with Guidance.
+- **Cloud and data policy [76]–[79]:** the Anthropic and OpenAI no-training defaults and OpenAI's 30-day abuse logs; the Limited Use transfer exception (policy last updated 2024-02-15); the Workspace policy (updated 2026-09-03) and its "personalized model" wording.
+- **Embeddings and storage [80][81][83][85]:** Qwen3-Embedding-0.6B (MTEB multilingual 64.33, English v2 70.70, 32K, 1,024 dims); granite-embedding-311m-r2 (65.2, 768 dims, 32,768 tokens, 2026-04-29); EmbeddingGemma (61.15 / 69.67 / 68.76, 2K input, QAT); sqlite-vec "pre-v1", v0.1.9 stable.
+- **Apple [72][73][75]:** the M5 Air has 153 GB/s and 16 GB base, configurable to 24 or 32 GB. The secondary article measured 78% on a 32 GB M2 Max.
+
+### Corrected
+
+1. **vLLM:** the Ryzen AI MAX / AI 300 series needs ROCm **7.2.1+**, not 7.0.2+ [22].
+2. **JSONSchemaBench:** the file said llama.cpp's coverage was "the weakest of the open engines". The paper's Table 4 shows Outlines weakest on most datasets. llama.cpp was generally second to Guidance and led on two datasets [64].
+3. **LLMStructBench:** the quote "toward incorrect field values" is not in the paper. It is replaced with the actual wording ("redirects almost every remaining uncertainty into field content") [65].
+4. **Vulkan scoreboard:** the "Intel Iris Xe (i7-1185G7) 106 / 5.9" row is not on the current scoreboard. It is replaced with the 11th-gen row (187 / 10.4). Current laptop iGPU rows (Intel Core Ultra 100/200/300, AMD Ryzen AI 300, 780M class, Strix Halo) are added [71]. This also refutes most of the "no current 16 GB x86 laptop figures" gap: those figures exist for Llama 2 7B.
+5. **Apple:** added the base M5 row (723 / 31.9 tok/s at 154 GB/s), the chip in the 16 GB MacBook Air. It processes prompts about 3× faster than M4 [70]. The M4 Pro and M4 Max rows are labelled with their core counts.
+6. **Per-email estimates (4.2):** the old-Intel row was recomputed (about 12 s, not 21 s). Rows were added for the M5 Air, Intel Core Ultra 200 and Ryzen AI 300 (about 3–5 s per email with a 7B model). The 16 GB tier text and the #16 backfill bullet were updated to match.
+7. **ROCm against Vulkan:** the "same split" claim for Qwen3.5-122B is qualified. Generation favours Vulkan by only about 7% there [39].
+8. **ROCm 10.0.0:** the release notes are dated 2026-08-26, while the matrix is dated 2026-08-25. Windows 11 25H2 is also supported for these APUs. "Since ROCm 7.14, ROCm uses TheRock" [31][32].
+9. **gpt-oss-20b:** the RTX 3060 figures are attributed to a 2025 community comment, not the guide body. An older (2025) Strix Halo community figure is added (about 982 pp2048 and 48 tg128, Vulkan, BF16 GGUF) [54].
+10. **sqlite-vec:** the ANN alphas contain rescore and DiskANN, with IVF "experimental, not enabled". Added that the repository has had no pushes since 2026-05-18 [83].
+11. **Smaller fixes:** noted the LFM2.5 model card's internal inconsistency in BFCL figures [57]. Added Lemonade's Arch package [37] and Ollama's full context-default table [11]. Noted that the Strix page footer says "August 2026" despite September reruns [38].
+
+### Could not confirm
+
+- The AMD product page [30] timed out. The 256-bit LPDDR5x-8000, 40 CU and 128 GB figures are standard published specifications but were not re-read today.
+- The older ROCm on Radeon and Ryzen 7.2.1 matrix [34] and the LM Studio system requirements page [18] were not re-opened. Docker Model Runner [29] was re-checked: llama.cpp, vLLM and Diffusers engines; CPU, CUDA, ROCm and Vulkan on Linux; OpenAI- and Ollama-compatible APIs.
+- Whether RADV exposes the full VRAM plus GTT (about 33 GiB) as one usable Vulkan heap on this machine. `vulkaninfo` is not installed. The Strix page notes RADV caps any single allocation at 4 GiB [38]. Check with `vulkaninfo` before relying on the 33 GiB figure.
+- All Strix Halo quality and reliability numbers still come from one independent tester [38], and all x86 iGPU numbers from single community submissions [71].
