@@ -1,0 +1,186 @@
+<!doctype html>
+<!--
+  PROTOTYPE — throwaway. Lives only on the prototype/daily-note-look branch, never on main.
+  Round 3 of "What should Daily Notes look and feel like?"
+  The author picked round 2's Industrial variant. This page is a signal-colour picker for it:
+  pick the primary colour and see it live in both themes, with per-theme contrast readouts.
+  URL: ?signal=RRGGBB&theme=dark|light&auto=1|0   ← → cycle the presets (when not typing).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PROTOTYPE · Industrial · signal colour</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #111; }
+  iframe { border: 0; width: 100%; height: 100%; display: block; }
+  #picker {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    width: min(820px, calc(100vw - 32px)); box-sizing: border-box;
+    background: #0B0B0B; color: #F2F2F2; border: 1px solid #F2F2F2;
+    box-shadow: 0 0 0 4px #0B0B0B; z-index: 2147483647;
+    font: 500 11px/1.3 ui-monospace, 'IBM Plex Mono', Menlo, monospace; letter-spacing: .04em;
+  }
+  #picker.collapsed .body { display: none; }
+  .head { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid #333; }
+  #picker.collapsed .head { border-bottom: 0; }
+  .tag { background: #F2F2F2; color: #0B0B0B; padding: 2px 6px; font-weight: 700; letter-spacing: .12em; }
+  .head .name { flex: 1; text-transform: uppercase; letter-spacing: .12em; color: #BDBDBD; }
+  .head .name b { color: #F2F2F2; }
+  button { all: unset; cursor: pointer; box-sizing: border-box; }
+  .hbtn { border: 1px solid #555; padding: 3px 8px; text-transform: uppercase; letter-spacing: .12em; }
+  .hbtn:hover { border-color: #F2F2F2; }
+  .body { padding: 10px; display: grid; gap: 10px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .sw { width: 30px; height: 30px; border: 1px solid #444; position: relative; }
+  .sw:hover { border-color: #F2F2F2; }
+  .sw.on { outline: 2px solid #F2F2F2; outline-offset: 2px; }
+  .sep { width: 1px; align-self: stretch; background: #333; margin: 0 4px; }
+  input[type=color] { width: 38px; height: 30px; padding: 0; border: 1px solid #555; background: none; cursor: pointer; }
+  input[type=text] {
+    width: 92px; height: 30px; box-sizing: border-box; padding: 0 8px; background: #0B0B0B; color: #F2F2F2;
+    border: 1px solid #555; font: inherit; letter-spacing: .08em; text-transform: uppercase;
+  }
+  input[type=text]:focus { outline: none; border-color: #F2F2F2; }
+  label.chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; color: #BDBDBD; text-transform: uppercase; letter-spacing: .1em; }
+  .read { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .card { border: 1px solid #333; padding: 7px 9px; display: grid; grid-template-columns: auto 1fr auto; gap: 3px 10px; align-items: center; }
+  .card.cur { border-color: #8A8A8A; }
+  .card h4 { margin: 0 0 2px; grid-column: 1 / -1; font-size: 10px; letter-spacing: .16em; color: #9A9A9A; font-weight: 600; }
+  .chip { width: 12px; height: 12px; border: 1px solid #555; }
+  .v { color: #F2F2F2; }
+  .r { text-align: right; }
+  .ok { color: #8BE38B; } .meh { color: #F2C14E; } .bad { color: #FF7A7A; }
+  .note { color: #9A9A9A; }
+</style>
+</head>
+<body>
+<iframe id="stage" title="Industrial Daily Note"></iframe>
+
+<div id="picker" role="region" aria-label="Prototype signal colour picker">
+  <div class="head">
+    <span class="tag">PROTOTYPE</span>
+    <span class="name">Signal colour · <b id="presetName">International orange</b></span>
+    <button class="hbtn" id="theme" title="Toggle light / dark">◐ <span id="themeLbl">Dark</span></button>
+    <button class="hbtn" id="copy" title="Copy hex">Copy</button>
+    <button class="hbtn" id="fold" title="Collapse">▾</button>
+  </div>
+  <div class="body">
+    <div class="row" id="swatches"></div>
+    <div class="row">
+      <input type="color" id="native" aria-label="Pick any colour">
+      <input type="text" id="hex" maxlength="7" spellcheck="false" aria-label="Hex colour">
+      <span class="sep"></span>
+      <label class="chk"><input type="checkbox" id="auto" checked> Keep it visible in both themes</label>
+      <span class="note" id="autoNote"></span>
+    </div>
+    <div class="read">
+      <div class="card" id="card-dark"></div>
+      <div class="card" id="card-light"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const PRESETS = [
+    ['International orange', 'FF5F00'],
+    ['Hazard amber', 'FFA400'],
+    ['Safety yellow', 'FFD100'],
+    ['Signal red', 'FF2A1F'],
+    ['Magenta', 'FF2D95'],
+    ['Ultraviolet', '8B5CFF'],
+    ['Cobalt', '2F6BFF'],
+    ['Electric cyan', '00D2FF'],
+    ['Phosphor green', '00E676'],
+    ['Acid green', 'B8FF00'],
+  ];
+  const $ = s => document.querySelector(s);
+  const stage = $('#stage'), hexIn = $('#hex'), native = $('#native'), auto = $('#auto');
+  const params = new URLSearchParams(location.search);
+  let hex = (params.get('signal') || 'FF5F00').replace('#', '').toUpperCase();
+  let theme = params.get('theme') === 'light' ? 'light' : 'dark';
+  auto.checked = params.get('auto') !== '0';
+  if (!/^[0-9A-F]{6}$/.test(hex)) hex = 'FF5F00';
+
+  // Swatches
+  const sw = $('#swatches');
+  PRESETS.forEach(([name, h], i) => {
+    const b = document.createElement('button');
+    b.className = 'sw'; b.style.background = '#' + h; b.title = `${name} · #${h}`; b.dataset.hex = h;
+    b.onclick = () => setHex(h);
+    sw.appendChild(b);
+  });
+
+  function presetName(h) { const p = PRESETS.find(p => p[1] === h); return p ? p[0] : 'Custom'; }
+  function sync() {
+    const url = new URL(location.href);
+    url.searchParams.set('signal', hex); url.searchParams.set('theme', theme); url.searchParams.set('auto', auto.checked ? '1' : '0');
+    history.replaceState(null, '', url);
+  }
+  function send() { stage.contentWindow && stage.contentWindow.postMessage({ type: 'proto-signal', hex, auto: auto.checked }, '*'); }
+  function setHex(h, fromInput) {
+    h = h.replace('#', '').toUpperCase();
+    if (!/^[0-9A-F]{6}$/.test(h)) return;
+    hex = h;
+    if (!fromInput) hexIn.value = '#' + h;
+    native.value = '#' + h.toLowerCase();
+    $('#presetName').textContent = presetName(h);
+    sw.querySelectorAll('.sw').forEach(b => b.classList.toggle('on', b.dataset.hex === h));
+    send(); sync();
+  }
+  function setTheme(t, tell) {
+    theme = t; $('#themeLbl').textContent = t === 'dark' ? 'Dark' : 'Light';
+    if (tell && stage.contentWindow) stage.contentWindow.postMessage({ type: 'proto-theme', theme }, '*');
+    ['dark', 'light'].forEach(k => $('#card-' + k).classList.toggle('cur', k === theme));
+    sync();
+  }
+  const grade = (v, good, ok) => v >= good ? 'ok' : v >= ok ? 'meh' : 'bad';
+  function readout(k, t, picked) {
+    const r = v => v.toFixed(1) + ':1';
+    $('#card-' + k).innerHTML = `
+      <h4>${k === 'dark' ? 'DARK THEME' : 'LIGHT THEME'}${t.adjusted ? ' · ADJUSTED FROM #' + picked : ''}</h4>
+      <span class="chip" style="background:${t.fill}"></span><span>Fill / lines <span class="v">${t.fill}</span></span>
+        <span class="r ${grade(t.fillOnSheet, 3, 2)}">${r(t.fillOnSheet)}</span>
+      <span class="chip" style="background:${t.fill};outline:3px solid ${t.onFill};outline-offset:-5px"></span><span>Text on fill <span class="v">${t.onFill === '#FFFFFF' ? 'white' : 'black'}</span></span>
+        <span class="r ${grade(t.textOnFill, 4.5, 3)}">${r(t.textOnFill)}</span>
+      <span class="chip" style="background:${t.ink}"></span><span>Coloured text <span class="v">${t.ink}</span></span>
+        <span class="r ${grade(t.inkOnSheet, 4.5, 3)}">${r(t.inkOnSheet)}</span>`;
+  }
+
+  addEventListener('message', e => {
+    const d = e.data || {};
+    if (d.type === 'proto-signal-applied') {
+      readout('dark', d.themes.dark, d.hex.slice(1)); readout('light', d.themes.light, d.hex.slice(1));
+      const adj = ['dark', 'light'].filter(k => d.themes[k].adjusted);
+      $('#autoNote').textContent = auto.checked && adj.length ? `· adjusted in ${adj.join(' and ')} so lines stay visible` : '';
+      ['dark', 'light'].forEach(k => $('#card-' + k).classList.toggle('cur', k === theme));
+    }
+    if (d.type === 'proto-theme-changed' && (d.theme === 'dark' || d.theme === 'light')) setTheme(d.theme, false);
+    if (d.type === 'proto-key') step(d.key === 'ArrowLeft' ? -1 : 1);
+  });
+  function step(dir) {
+    const i = PRESETS.findIndex(p => p[1] === hex);
+    const n = i < 0 ? 0 : (i + dir + PRESETS.length) % PRESETS.length;
+    setHex(PRESETS[n][1]);
+  }
+
+  hexIn.addEventListener('input', () => setHex(hexIn.value, true));
+  hexIn.addEventListener('blur', () => { hexIn.value = '#' + hex; });
+  native.addEventListener('input', () => setHex(native.value));
+  auto.addEventListener('change', () => { send(); sync(); });
+  $('#theme').onclick = () => setTheme(theme === 'dark' ? 'light' : 'dark', true);
+  $('#copy').onclick = () => { navigator.clipboard && navigator.clipboard.writeText('#' + hex); $('#copy').textContent = 'Copied'; setTimeout(() => $('#copy').textContent = 'Copy', 1200); };
+  $('#fold').onclick = () => { const c = $('#picker').classList.toggle('collapsed'); $('#fold').textContent = c ? '▴' : '▾'; };
+  const isTyping = el => el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  document.addEventListener('keydown', e => {
+    if (isTyping(e.target)) return;
+    if (e.key === 'ArrowLeft') step(-1);
+    if (e.key === 'ArrowRight') step(1);
+  });
+
+  stage.src = `industrial.html?theme=${theme}&signal=${hex}&auto=${auto.checked ? 1 : 0}`;
+  stage.addEventListener('load', () => setHex(hex));
+  hexIn.value = '#' + hex; native.value = '#' + hex.toLowerCase();
+  setTheme(theme, false);
+</script>
+</body>
+</html>
