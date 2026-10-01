@@ -52,6 +52,14 @@ _Avoid_: Journal, entry, page
 The background process that continually works through incoming information from every Source, sorting it and pulling out what needs your attention.
 _Avoid_: Bot, assistant, worker
 
+**Titanus**:
+The name and persona under which the Agent presents itself to the User.
+_Avoid_: Assistant, bot, AI
+
+**Update**:
+Everything Titanus has queued to tell the User since they last asked, delivered only when the User is active and asks for it.
+_Avoid_: Notification, alert, briefing, digest
+
 **Autonomy setting**:
 A User's choice, per kind of action and per Section, of how far the Agent may go on its own (act, propose, or stay out).
 _Avoid_: Permission, mode, policy
