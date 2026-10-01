@@ -2,7 +2,7 @@
 
 Research ticket #4 on the Commander wayfinder map. Researched 2026-10-01. Its answer feeds decision ticket #14, "Linear Todos and what syncs back".
 
-Every claim cites a source. Most sources are first-party: Linear's developer docs, help docs, changelog, terms, OAuth metadata, and the `linear/linear` SDK repo. Where I probed a live endpoint myself, the text says so. One third-party source is used and labelled **[secondary]**. Schema references point to `packages/sdk/src/schema.graphql` at commit `b37823b` (2026-09-29) of `github.com/linear/linear`, the published copy of the public API schema.
+Every claim cites a source. Most sources are first-party: Linear's developer docs, help docs, changelog, terms, OAuth metadata, and the `linear/linear` SDK repo. Where I probed a live endpoint myself, the text says so. Third-party sources are labelled **[secondary]**. Schema references point to `packages/sdk/src/schema.graphql` at commit `b37823b` (2026-09-29) of `github.com/linear/linear`, the published copy of the public API schema.
 
 ## Question
 
@@ -34,7 +34,7 @@ The ticket asks five things:
   - OAuth: 5,000 requests and 2,000,000 complexity points per hour.
   - API key: 2,500 requests and 3,000,000 points per hour.
   - Any single query: at most 10,000 points ([Rate limiting](https://linear.app/developers/rate-limiting)).
-  - These numbers changed twice in the past ten months, so read the response headers rather than hard-coding them.
+  - These numbers changed at least twice between December 2025 and May 2026 (archived copies of the page, section 4), so read the response headers rather than hard-coding them.
 - **Linear has no built-in conflict control.**
   - `issueUpdate` takes no version number or precondition (`IssueUpdateInput`, schema). Linear applies whichever fields you send, and the last write wins.
   - Commander must detect conflicts itself. Linear gives it useful tools for this:
@@ -59,7 +59,7 @@ The ticket asks five things:
 | Lifetime | Long-lived until revoked | Access token valid 24 h; refresh tokens rotate ([OAuth 2.0](https://linear.app/developers/oauth-2-0-authentication)) | Same |
 | Changes appear in Linear as | The User | The User | The app |
 | Request limit | 2,500/h per user, **shared by all of that user's API keys** ([Rate limiting](https://linear.app/developers/rate-limiting)) | 5,000/h per user | 5,000/h; workspace-level apps get dynamic increases |
-| Can be blocked by | Admins can stop Members creating keys (Settings > Administration > API > Member API keys) ([API and Webhooks](https://linear.app/docs/api-and-webhooks)) | Third-party app approvals on paid plans ([Third-Party App Approvals](https://linear.app/docs/third-party-application-approvals)) | Always needs an admin |
+| Can be blocked by | Admins can stop Members creating keys (Settings > Administration > API > Member API keys) ([API and Webhooks](https://linear.app/docs/api-and-webhooks)) | Third-party app approvals, "available to workspaces on any paid plan" ([Third-Party App Approvals](https://linear.app/docs/third-party-application-approvals)); the [Workspaces](https://linear.app/docs/workspaces) page still calls it an Enterprise feature, so Linear's own docs disagree | Always needs an admin |
 
 Commander acts on the User's behalf, so `actor=app` does not fit. It also needs an admin to install it, and Linear's agent APIs that build on it are still a "Developer Preview" ([Agents](https://linear.app/developers/agents)). The real choice is between API keys and OAuth with `actor=user`.
 
@@ -88,10 +88,10 @@ Commander acts on the User's behalf, so `actor=app` does not fit. It also needs 
 - The docs use `http://localhost:3000/oauth/callback` as their example ([OAuth 2.0](https://linear.app/developers/oauth-2-0-authentication)).
 - The app manifest schema allows only `http`/`https` redirect URIs, 1 to 32 of them. Each "must exactly match one used by the app" ([manifest JSON Schema](https://linear.app/.well-known/oauth-app-manifest.schema.json)).
 - So: no custom URL schemes such as `commander://`. Use a loopback listener on a fixed, pre-registered port, and register a few fallback ports to cover the case where one is busy.
-- Whether Linear accepts any port on loopback (the RFC 8252 convention) is **not documented**.
+- Whether Linear accepts any port on loopback (the RFC 8252 convention) is **not documented** by Linear. **[secondary]** One open-source project reports testing this live on 2026-09-06: Linear refused a PKCE redirect with "Invalid redirect_uri parameter for the application" when the port differed from the registered one, so it moved to a fixed port ([loncadev/baron#199](https://github.com/loncadev/baron/issues/199)). Plan for exact matching, including `localhost` vs `127.0.0.1`.
 
 **Public vs private apps.**
-- An OAuth app's `distribution` is `private` (only the workspace that created it) or `public` ("installable by other workspaces"). The default is private ([OAuth app manifests](https://linear.app/developers/oauth-app-manifests)).
+- An OAuth app's `distribution` is `private` (only the workspace that created it) or `public` ("installable by other workspaces"). The default is private ([OAuth app manifests](https://linear.app/developers/oauth-app-manifests)). The manifest schema requires an `oauth.client_uri` (the developer's URL) when `distribution` is `public` ([manifest JSON Schema](https://linear.app/.well-known/oauth-app-manifest.schema.json)), so Commander needs a home page, for example the GitHub repo.
 - Commander therefore needs a **public** app. Linear recommends creating it in a dedicated workspace ([OAuth 2.0](https://linear.app/developers/oauth-2-0-authentication)).
 - Being public does not require a listing in Linear's Integration Directory. The directory is reviewed, and Linear says it "generally do[es] not accept ... apps built by hobbyists" ([Integration Directory](https://linear.app/developers/integration-directory)). This matters for later monetization, not for v1.
 
@@ -101,7 +101,8 @@ Commander acts on the User's behalf, so `actor=app` does not fit. It also needs 
 
 **Scopes.**
 - User-actor scopes: `read` (always present), `write`, `issues:create`, `comments:create`, `timeSchedule:write`, and `admin` ([OAuth 2.0](https://linear.app/developers/oauth-2-0-authentication)).
-- App-actor-only scopes: `app:assignable`, `app:mentionable`, `customer:read/write`, and `initiative:read/write` ([Agents](https://linear.app/developers/agents)).
+- `issues:create` is described as "Allows creating new issues and their attachments", so the link-back attachment in section 2 fits under it ([OAuth 2.0](https://linear.app/developers/oauth-2-0-authentication)).
+- Agent-oriented scopes, documented on the Agents page for apps installed with `actor=app`: `app:assignable`, `app:mentionable`, `customer:read/write`, and `initiative:read/write`. Apps using `actor=app` cannot also request `admin` ([Agents](https://linear.app/developers/agents)).
 - Since **2025-12-04**, "`issueUpdate` is now allowed with the `issues:create` scope" ([changelog](https://linear.app/changelog/2025-12-04-openai-codex-agent)). That makes `read,issues:create,comments:create` a possible least-privilege set. Which `issueUpdate` fields it covers is not documented.
 
 **Revocation.** Users can revoke an app under Settings > Account > Security & Access > Authorized applications ([Security & Access](https://linear.app/docs/security-and-access)). Commander will then get 401 errors and must ask the User to connect again.
@@ -147,7 +148,7 @@ Facts that matter for sync design:
 - **Retries are safe for creates.** `IssueCreateInput.id` and `CommentCreateInput.id` accept "The identifier in UUID v4 format. If none is provided, the backend will generate one." Commander can create the ID while offline and retry without making duplicates.
 - **Linear does not check for conflicts.** `IssueUpdateInput` has no version, `updatedAt` precondition, or ETag. Fields left out are unchanged; fields sent overwrite. Mutation responses return `lastSyncId` (schema `IssuePayload`), but no public query accepts it, so it cannot drive syncing.
 - **Early edits are not logged.** "Changes made to an issue's properties in the first 3 minutes are considered part of the issue creation process, and won't be added to the activity log" ([Getting started](https://linear.app/developers/graphql)).
-- **Images need auth.** Images in descriptions and comments require authentication to load. Commander must fetch them with the token, or download them ([Getting started](https://linear.app/developers/graphql)).
+- **Images need auth.** Images in descriptions and comments require authentication to load ([Getting started](https://linear.app/developers/graphql)). Files live on `https://uploads.linear.app` and accept the same `Authorization` header. Alternatively, sending the request header `public-file-urls-expire-in: <seconds>` makes the API return signed file URLs that work without a header for that long, which suits rendering in a webview ([File storage authentication](https://linear.app/developers/file-storage-authentication)).
 - **Who the change appears to come from.** With `actor=user` or an API key, every write, including writes the Agent makes, shows in Linear as made by the User. Changes appear as coming from the app only with `actor=app`, which needs an admin ([OAuth actor authorization](https://linear.app/developers/oauth-actor-authorization)).
 
 ## 3. Change detection without a public endpoint
@@ -162,7 +163,7 @@ Facts that matter for sync design:
 ### Polling: documented, discouraged, and cheap
 
 - **Linear's stance.** Linear says "One thing that we especially discourage is polling the API to fetch updates" ([Rate limiting](https://linear.app/developers/rate-limiting)). Its "Fetching Updates" guidance still covers it: "If you have to poll recent changes, order results by returning recently updated issue first … Filter issues in your GraphQL request", and do not poll each issue individually ([Getting started](https://linear.app/developers/graphql)).
-- **Pagination** is Relay-style cursors: `first`/`after`, then `pageInfo { hasNextPage endCursor }`. Pages default to 50. Results are ordered by `createdAt` unless you pass `orderBy: updatedAt` ([Pagination](https://linear.app/developers/pagination)). No maximum for `first` is documented; the 10,000-point limit per query is the practical ceiling.
+- **Pagination** is Relay-style cursors: `first`/`after`, then `pageInfo { hasNextPage endCursor }`. Pages default to 50. Results are ordered by `createdAt` unless you pass `orderBy: updatedAt` ([Pagination](https://linear.app/developers/pagination)). No maximum for `first` is documented for `issues` or `comments`; the 10,000-point limit per query is the practical ceiling. **[secondary]** Third-party clients cap `first` at 250 as "Linear's maximum" ([linear-cli pagination](https://pkg.go.dev/github.com/joa23/linear-cli/pkg/linear/pagination)); the only 250 cap in the schema is on `templateSearch`.
 - **Filtering.** `IssueFilter.updatedAt` and `CommentFilter.updatedAt` take a `DateComparator` (`eq`, `gt`, `gte`, `lt`, …). The value can be an ISO timestamp or a duration relative to now, such as `-PT5M` (schema `DateTimeOrDuration`; [Filtering](https://linear.app/developers/filtering)). "Me" can be expressed as `assignee: { isMe: { eq: true } }` or `subscribers: { some: { isMe: { eq: true } } }` (schema `UserFilter.isMe`, `UserCollectionFilter.some`).
 - **A delta poll** for each Account can be one request with two root fields:
 
@@ -189,7 +190,7 @@ Facts that matter for sync design:
    - poll a broader scope (the User's teams) and filter on the machine; or
    - add a cheap periodic query that fetches only the IDs of open Todos and compares them.
 2. **Comments are separate entities.** It is not documented whether a new comment updates the issue's `updatedAt`. The schema only says `updatedAt` is "The last time at which the entity was meaningfully updated". Poll comments separately, as above.
-3. **Deletions.** Archived and trashed issues show up with `includeArchived: true` (`archivedAt`, `trashed`). After 30 days in the trash, an issue is permanently removed ([Delete and archive issues](https://linear.app/docs/delete-archive-issues)) and never appears in a delta again. Only the ID comparison in pitfall 1 catches it.
+3. **Deletions.** Archived and trashed issues show up with `includeArchived: true` (`archivedAt`, `trashed`). After 30 days in the trash, an issue is permanently removed ([Delete and archive issues](https://linear.app/docs/delete-archive-issues)) and never appears in a delta again. Admins can also skip the 30 days: `issueDelete(permanentlyDelete: true)` is "Available only to admins" (schema). Only the ID comparison in pitfall 1 catches either case. That a trashed issue still appears in an `includeArchived` delta is inferred from the schema, not tested.
 4. **Watermarks.** Track the latest server `updatedAt` seen, not the local clock. Re-query a small overlap and drop duplicates by `(id, updatedAt)`. This is my design advice, not a Linear rule.
 
 ### GraphQL subscriptions: newly open, undocumented
@@ -208,7 +209,7 @@ Facts that matter for sync design:
   - A `subscribe` message without credentials closed the socket with code `4002` and "You need to authenticate to access this operation."
   - The older `graphql-ws` (subscriptions-transport-ws) subprotocol was not accepted.
 - **Not documented anywhere.** The developer docs have no subscriptions page; their GraphQL section covers Getting started, Pagination, Filtering, Rate limiting, Deprecations, Webhooks, Attachments, and Managing Customers ([Getting started](https://linear.app/developers/graphql)). The SDK sends only HTTP POST requests through `fetch` and has no WebSocket client (`packages/sdk/src/graphql-client.ts`).
-- **[secondary] One open-source app's experience.** SuperAgent authenticates the socket "with the bearer in the HTTP upgrade header". It reports that registering subscriptions in a burst got the socket closed with code `4003`, so it spaces registrations 1.5 s apart. It notes that "Messages and changes that occur while disconnected are not recovered" ([subscriptions.ts](https://github.com/SkillfulAgents/SuperAgent/blob/459874c1975dbbb9806d5a23bd680d1108738ca8/src/shared/lib/task-manager-integrations/linear/subscriptions.ts); [design notes](https://github.com/SkillfulAgents/SuperAgent/blob/459874c1975dbbb9806d5a23bd680d1108738ca8/docs/linear-agent-integration.md)). I have not verified this.
+- **[secondary] One open-source app's experience.** SuperAgent's notes say "The bearer is supplied in the HTTP upgrade header", and its code closes and reopens the socket shortly before the access token expires. It reports that registering subscriptions in a burst got the socket closed with code `4003`, so it spaces registrations 1.5 s apart. It notes that "Messages and changes that occur while disconnected are not recovered" ([subscriptions.ts](https://github.com/SkillfulAgents/SuperAgent/blob/459874c1975dbbb9806d5a23bd680d1108738ca8/src/shared/lib/task-manager-integrations/linear/subscriptions.ts); [design notes](https://github.com/SkillfulAgents/SuperAgent/blob/459874c1975dbbb9806d5a23bd680d1108738ca8/docs/linear-agent-integration.md)). I have not verified this.
 - **Running it from a webview.** Browser `WebSocket` cannot set request headers. If header authentication is the only method, the socket must run in Commander's backend process.
 - **Still unknown:**
   - whether authentication also works through the `connection_init` payload;
@@ -248,7 +249,7 @@ Source for every row: [Rate limiting](https://linear.app/developers/rate-limitin
 | Archived copy | API key, requests | OAuth, requests | API key, points | OAuth, points |
 |---|---|---|---|---|
 | [2025-12-10](http://web.archive.org/web/20251210054039/https://linear.app/developers/rate-limiting) | 1,500 | 1,200 | 250,000 | 200,000 |
-| [2026-02-12](http://web.archive.org/web/20260212002853/https://linear.app/developers/rate-limiting) | 5,000 | 5,000 | 3,000,000 | 2,000,000 |
+| [2026-02-12](http://web.archive.org/web/20260212002853/https://linear.app/developers/rate-limiting) | 5,000 | 5,000 | 3,000,000 in the table (the prose still said 250,000) | 2,000,000 |
 | [2026-05-19](http://web.archive.org/web/20260519094055/https://linear.app/developers/rate-limiting) | 2,500 in the table (the prose still said 5,000) | 5,000 | 3,000,000 | 2,000,000 |
 | Live page, 2026-10-01 | 2,500 | 5,000 | 3,000,000 | 2,000,000 |
 
@@ -290,7 +291,7 @@ Cost per Account at that size (one combined request per poll):
 - `@linear/sdk` is at **97.0.0**, published 2026-09-28 ([npm](https://www.npmjs.com/package/@linear/sdk)). It is MIT-licensed TypeScript, generated from the schema ([package.json](https://github.com/linear/linear/blob/b37823be308a42f837277671f3ded66d33d92e6c/packages/sdk/package.json)).
 - **ESM-only since 97.0.0.** It needs Node `^20.19.0 || >=22.12.0`, which Node 24 satisfies ([SDK CHANGELOG](https://github.com/linear/linear/blob/b37823be308a42f837277671f3ded66d33d92e6c/packages/sdk/CHANGELOG.md)).
 - Its only runtime dependency is `@graphql-typed-document-node/core`. It uses `globalThis.fetch` (`graphql-client.ts`). The built `dist/index.mjs` is about 3.2 MB; `dist/` is 8.2 MB with type declarations (measured from the npm tarball).
-- The developer docs list only this TypeScript SDK. Other languages, Rust included, have to run code generation against the published schema ([SDK getting started](https://linear.app/developers/sdk)).
+- The developer docs list only this TypeScript SDK. For other languages, Rust included, the docs only suggest "a GraphQL client to introspect and explore the schema" ([Getting started](https://linear.app/developers/graphql)); a typed client would come from code generation against the published schema.
 
 **What it gives you.**
 - Typed models and mutations, such as `client.createIssue`, `client.updateIssue`, and `issue.comments()`.
@@ -300,9 +301,9 @@ Cost per Account at that size (one combined request per poll):
 
 **Where it falls short for a desktop sync engine.**
 - **Too many requests by default.** Relations load lazily: `await issue.assignee` is another request ([Fetching & modifying data](https://linear.app/developers/sdk-fetching-and-modifying-data)). Linear itself advises "This applies especially if you're using our SDK … write your own custom GraphQL queries" ([Rate limiting](https://linear.app/developers/rate-limiting)).
-- **No token refresh.** `LinearClient` takes a fixed `accessToken` or `apiKey` (`client.ts`). Commander must refresh tokens itself and rebuild the client, or pass its own request function to `LinearSdk` ([Advanced usage](https://linear.app/developers/advanced-usage)).
+- **No token refresh.** `LinearClient` takes a fixed `accessToken` or `apiKey` (`client.ts`). Commander must refresh tokens itself, then either swap the header with `client.client.setHeader("Authorization", "Bearer …")` (`graphql-client.ts`), rebuild the client, or pass its own request function to `LinearSdk` ([Advanced usage](https://linear.app/developers/advanced-usage)).
 - **Missing pieces.** No WebSocket subscriptions, no offline cache, no sync layer.
-- **Needs Node.** It reads `process.env.npm_package_name` when the client is created (`client.ts`), so a plain browser bundle needs a `process` stand-in. Combined with the hidden rate-limit headers in a webview, the SDK belongs in a Node process: Electron's main process or a Node sidecar.
+- **Needs Node.** It reads `process.env.npm_package_name` when the client is created (`client.ts`), so a plain browser bundle needs a `process` stand-in. Combined with the hidden rate-limit headers in a webview, the SDK belongs in a Node process: Electron's main process or a Node sidecar. If the tech stack ticket picks a Rust backend (for example Tauri), the SDK drops out and the sync engine would send its own GraphQL over HTTP.
 - **Frequent breaking releases.** Majors 89.0.0 through 97.0.0 shipped between 2026-07-30 and 2026-09-28 ([npm](https://www.npmjs.com/package/@linear/sdk)). Most were schema changes marked `[breaking]`, often to internal fields ([SDK CHANGELOG](https://github.com/linear/linear/blob/b37823be308a42f837277671f3ded66d33d92e6c/packages/sdk/CHANGELOG.md)). The API itself is unversioned. Breaking changes are announced and marked with `@deprecated`, and API changes appear in the changelog under an `[API]` prefix ([Deprecations](https://linear.app/developers/deprecations)). Pin an exact SDK version.
 
 **Fit.**
@@ -352,15 +353,15 @@ Cost per Account at that size (one combined request per poll):
 ### Spikes worth running before #14 is closed
 
 1. **Authenticated subscriptions.** Test whether the token works as an upgrade header and/or in the `connection_init` payload. Check whether filtering by `assigneeId` catches reassignment away from the User, how the socket behaves when the token expires after 24 h, and what errors it gives when too many subscriptions are opened (the reported `4003`).
-2. **OAuth loopback redirect.** Check whether a redirect URI with any port is accepted, or only an exact registered port.
+2. **OAuth loopback redirect.** Check whether a redirect URI with any port is accepted, or only an exact registered port (a secondary report says exact only).
 3. **Real costs.** Measure `X-Complexity` on the real delta query, and check whether creating a comment updates `Issue.updatedAt`.
 
 ## Not answered or not verified
 
 - **Subscriptions.** How authentication works, the limits on connections and subscriptions, how events are billed against rate limits, and whether delivery is guaranteed. None of it is documented; it needs an authenticated test, which I did not run because I had no credentials.
-- **Loopback redirects with any port.** Not documented.
+- **Loopback redirects with any port.** Not documented by Linear. One secondary report says the port must match exactly; confirm in the spike.
 - **Refresh token lifetime.** Not documented.
-- **Maximum page size (`first`).** Not documented; the 10,000-point cap per query is the practical bound.
+- **Maximum page size (`first`).** Not documented; the 10,000-point cap per query is the practical bound. Third-party clients assume 250.
 - **Whether quotas are shared across workspaces** for the same person. Not documented.
 - **Which `issueUpdate` fields** the `issues:create` scope permits. Not documented.
 - **What counts as "meaningfully updated"** for `updatedAt`. Not defined; in particular, whether comments update it.
@@ -384,6 +385,7 @@ Cost per Account at that size (one combined request per poll):
 - TypeScript SDK, Getting started: https://linear.app/developers/sdk
 - SDK, Fetching & modifying data: https://linear.app/developers/sdk-fetching-and-modifying-data
 - SDK, Advanced usage: https://linear.app/developers/advanced-usage
+- File storage authentication: https://linear.app/developers/file-storage-authentication
 
 **Linear help docs and policy** (fetched 2026-10-01)
 - API and Webhooks: https://linear.app/docs/api-and-webhooks
@@ -424,6 +426,44 @@ Cost per Account at that size (one combined request per poll):
 - Rate limiting, 2026-02-12: http://web.archive.org/web/20260212002853/https://linear.app/developers/rate-limiting
 - Rate limiting, 2026-05-19: http://web.archive.org/web/20260519094055/https://linear.app/developers/rate-limiting
 
-**[secondary] Third-party implementation of Linear subscriptions** (unverified)
+**[secondary] Third-party reports** (unverified)
+- loncadev/baron issue #199 (2026-09-06), exact redirect-port matching: https://github.com/loncadev/baron/issues/199
+- linear-cli pagination package, 250 page cap: https://pkg.go.dev/github.com/joa23/linear-cli/pkg/linear/pagination
 - SuperAgent subscriptions.ts: https://github.com/SkillfulAgents/SuperAgent/blob/459874c1975dbbb9806d5a23bd680d1108738ca8/src/shared/lib/task-manager-integrations/linear/subscriptions.ts
 - SuperAgent design notes: https://github.com/SkillfulAgents/SuperAgent/blob/459874c1975dbbb9806d5a23bd680d1108738ca8/docs/linear-agent-integration.md
+
+## Verification
+
+Adversarial fact-check on 2026-10-01. I re-fetched every first-party page listed above and re-ran the live probes.
+
+**Checked and confirmed as written**
+- Rate limits on the live page: API key 2,500 requests and 3,000,000 points per hour; OAuth 5,000 and 2,000,000; unauthenticated 600 and 100,000; 10,000 points per query; HTTP 400 with `RATELIMITED`; leaky bucket; endpoint headers; the complexity formula and its worked examples. The three Wayback snapshots match the history table.
+- OAuth: PKCE with `client_secret` "(optional)"; refresh with only `client_id` for PKCE tokens; `expires_in: 86399`; a new refresh token on every refresh; the 30-minute replay grace; "All OAuth2 applications were migrated to the new refresh token system on April 1, 2026"; `prompt=consent` wording; the scope list; and the recommendation to manage the app from a dedicated workspace.
+- OAuth metadata: `none` auth method, S256 only, no `registration_endpoint`. Manifest schema: `http(s)` redirect URIs only, 1 to 32 of them, exact match.
+- Changelog entries: 2025-04-10 (PKCE without a secret; granular API keys), 2025-09-18 (24-hour tokens; new apps from 2025-10-01; deadline 2026-04-01), 2025-12-04 (`issueUpdate` under `issues:create`; `stateHistory`), 2026-03-24 ("GraphQL subscriptions can now be used with the API"), 2026-04-02 (`parentId` filter) and 2026-08-13 (user settings subscription).
+- Webhooks: the public-URL rule, admin-only creation, one URL per OAuth app, the retry schedule and `updatedFrom`. The app manifest page bans loopback and private-network hosts.
+- Schema at `b37823b` (identical to `master` on 2026-10-01): `Subscription` has 85 fields and none takes a cursor or "since" argument; `IssueSubscriptionFilter` has the five fields listed; `IssueUpdateInput` has no version or precondition field and does have `addedLabelIds`/`removedLabelIds`; `IssueCreateInput.id` and `CommentCreateInput.id` take a client UUID; `issueBatchUpdate` allows at most 50 IDs; `DateComparator` takes `DateTimeOrDuration`; `createAsUser` only works with `actor=app`.
+- Live probes, re-run: `wss://api.linear.app/graphql` negotiates `graphql-transport-ws`, sends `connection_ack`, then closes with `4002` on an unauthenticated `subscribe`; `graphql-ws` fails. A bogus token in the `connection_init` payload produced the same `4002`, so the probe cannot tell whether payload auth is supported. CORS echoes any origin (including `tauri://localhost`) and exposes `Retry-After` but no rate-limit headers.
+- SDK: version 97.0.0 published 2026-09-28; ESM-only (CHANGELOG); engines `^20.19.0 || >=22.12.0`; MIT; a single dependency; `dist/index.mjs` 3.2 MB and `dist/` 8.2 MB; majors 89 to 97 between 2026-07-30 and 2026-09-28; `process.env.npm_package_name` in `client.ts`; `RatelimitedLinearError` fields.
+- Help docs: member API key controls and team-limited keys; app creation needs an admin; 30-day restore window for deleted issues; several workspaces under one login; MCP's "separate authentication context" for each workspace; the Integration Directory "hobbyists" line; Terms section 2.3 and the ban on discovering "non-public APIs" (effective 2026-06-09); Agents still in "Developer Preview".
+- Cost arithmetic: the delta query works out to about 588 points (400 + 185 + 2.4), and the table percentages follow from it.
+
+**Corrected or added**
+- "Changed twice in the past ten months" became "at least twice between December 2025 and May 2026": the snapshots are sparse, so there may have been more changes.
+- The `customer:*` and `initiative:*` scopes are documented for agents, not stated as "app-actor-only". Reworded, and added that `actor=app` cannot request `admin`.
+- Added that `issues:create` also covers attachments, so the link-back attachment fits the least-privilege scope set.
+- Added that public apps must give an `oauth.client_uri` (manifest schema).
+- Added a secondary report (2026-09-06) that Linear requires the exact registered redirect port.
+- Third-party app approvals: Linear's docs disagree on whether this is any paid plan or Enterprise only. Flagged it.
+- Added signed file URLs (the `public-file-urls-expire-in` header) for showing images.
+- Deletions: admins can delete permanently at once (`permanentlyDelete`), skipping the 30-day trash.
+- Corrected the SuperAgent quote to its exact wording, and noted that it reconnects before the token expires.
+- SDK: `client.client.setHeader` can swap a refreshed token without rebuilding the client. The codegen claim was cited to a page that does not say it; now cited correctly. Noted that a Rust backend would not use the SDK.
+- Page size: added a secondary claim of a 250 cap, and noted that the schema's only documented 250 cap is on `templateSearch`.
+- The 2026-02-12 snapshot's prose still said 250,000 points while its table said 3,000,000.
+
+**Could not confirm**
+- Anything about authenticated subscriptions: how authentication works, limits, rate-limit billing, behaviour when the token expires. No credentials were available.
+- Redirect-port matching (secondary evidence only), refresh-token lifetime, the maximum `first`, whether quotas are shared across workspaces, which fields `issues:create` allows in `issueUpdate`, and whether comments change `Issue.updatedAt`. Each still needs a test with real credentials.
+- That `await issue.assignee` triggers a separate request comes from the SDK's documented lazy-loading pattern (`await comment.user`), not from an explicit statement in the docs.
+
