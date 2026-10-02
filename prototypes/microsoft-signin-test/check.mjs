@@ -24,7 +24,7 @@ const pca = new PublicClientApplication({ auth: { clientId, authority } });
 const interactive = (scopes, extra = {}) => pca.acquireTokenInteractive({
   scopes, openBrowser: async (url) => { await open(url); },
   successTemplate: '<h1>Signed in. You can close this tab and go back to the terminal.</h1>',
-  errorTemplate: '<h1>Sign-in failed: {error}</h1>', ...extra,
+  errorTemplate: '<h1>Sign-in failed. Go back to the terminal (or Claude) for the error details.</h1>', ...extra,
 });
 const errInfo = (e) => ({ ok: false, errorCode: e.errorCode || e.code || null, message: String(e.errorMessage || e.message || e).slice(0, 400) });
 
