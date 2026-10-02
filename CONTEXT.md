@@ -78,6 +78,14 @@ _Avoid_: Bot, assistant, worker
 The name and persona under which the Agent presents itself to the User.
 _Avoid_: Titanus (former name), assistant, bot, AI
 
+**Skill**:
+A named ability Ares can use, on request or when he judges it is wanted (e.g. Update, Find, Summarise, Draft, Schedule).
+_Avoid_: Tool, command, feature, plugin
+
+**Conversation**:
+One thread of typed back-and-forth between the User and Ares; several can run at once.
+_Avoid_: Chat, session, thread (alone)
+
 **Memory**:
 What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from.
 _Avoid_: Knowledge base, context, history, profile
