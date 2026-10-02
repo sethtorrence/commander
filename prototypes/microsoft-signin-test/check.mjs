@@ -2,7 +2,7 @@
 // (https://github.com/sethtorrence/commander/issues/20). Tokens live in memory only.
 // The report keeps counts and yes/no results only: no subjects, addresses or message content.
 //
-// Run: node check.mjs --client-id <APP_ID> --label personal|work
+// Run: node check.mjs --client-id <APP_ID> --label personal [--authority consumers|common]
 import { PublicClientApplication } from '@azure/msal-node';
 import open from 'open';
 import { writeFileSync } from 'node:fs';
@@ -11,6 +11,8 @@ const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ?
 const clientId = arg('client-id');
 const label = arg('label', 'account');
 const skipSend = process.argv.includes('--skip-send-later');
+// Personal-only app registrations must use the consumers endpoint; pass --authority common for multi-tenant apps.
+const authority = `https://login.microsoftonline.com/${arg('authority', 'consumers')}`;
 if (!clientId) { console.error('Usage: node check.mjs --client-id <APP_ID> --label personal|work [--skip-send-later]'); process.exit(1); }
 
 const G = 'https://graph.microsoft.com';
@@ -18,7 +20,7 @@ const report = { label, startedAt: new Date().toISOString(), checks: {} };
 const log = (...a) => console.log(`[${label}]`, ...a);
 const save = () => writeFileSync(`report-${label}.json`, JSON.stringify(report, null, 2));
 
-const pca = new PublicClientApplication({ auth: { clientId, authority: 'https://login.microsoftonline.com/common' } });
+const pca = new PublicClientApplication({ auth: { clientId, authority } });
 const interactive = (scopes, extra = {}) => pca.acquireTokenInteractive({
   scopes, openBrowser: async (url) => { await open(url); },
   successTemplate: '<h1>Signed in. You can close this tab and go back to the terminal.</h1>',
