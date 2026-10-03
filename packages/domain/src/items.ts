@@ -39,9 +39,16 @@ export type Filing = z.infer<typeof filing>;
 // People involved, by handle (email address, GitHub or Linear user) until Person matching lands.
 export const people = z.array(z.string().min(1));
 
+// Where a Todo came from: one the User added, a suggestion from Ares the User accepted, or a Linear
+// issue assigned to the User.
+export const todoOrigins = ['manual', 'ares', 'linear'] as const;
+export const todoOrigin = z.enum(todoOrigins);
+export type TodoOrigin = z.infer<typeof todoOrigin>;
+
 // Kind-specific detail. Each kind with detail gets its own variant (and table).
 export const todoDetail = z.object({
   kind: z.literal('todo'),
+  origin: todoOrigin,
   // Calendar day the Todo is due, as YYYY-MM-DD.
   dueOn: z.iso.date().nullable(),
   // The Item behind a backed Todo (a Linear issue, a review request); ticking writes through to it.
@@ -68,6 +75,17 @@ export const item = z.object({
   deletedAt: timestamp.nullable(),
 });
 export type Item = z.infer<typeof item>;
+
+// The part of an Item that changes, and that the activity log records before and after each change.
+export const itemState = item.pick({
+  title: true,
+  people: true,
+  status: true,
+  filing: true,
+  detail: true,
+  deletedAt: true,
+});
+export type ItemState = z.infer<typeof itemState>;
 
 // An Item as a Source adapter hands it over. Filing is never set by a Source: it belongs to the User,
 // Rules and Ares, and survives every sync.
@@ -152,6 +170,19 @@ export const itemAction = z.discriminatedUnion('type', [
 ]);
 export type ItemAction = z.input<typeof itemAction>;
 
+// One field an action changed on an Item, with its value before and after.
+const fieldChange = <F extends keyof ItemState>(field: F) =>
+  z.object({ field: z.literal(field), before: itemState.shape[field], after: itemState.shape[field] });
+export const itemChange = z.discriminatedUnion('field', [
+  fieldChange('title'),
+  fieldChange('people'),
+  fieldChange('status'),
+  fieldChange('filing'),
+  fieldChange('detail'),
+  fieldChange('deletedAt'),
+]);
+export type ItemChange = z.infer<typeof itemChange>;
+
 export const activityAction = z.enum(['create', 'update', 'delete', 'tombstone', 'link', 'unlink', 'undo']);
 export type ActivityAction = z.infer<typeof activityAction>;
 
@@ -168,6 +199,8 @@ export const activityEntry = z.object({
   causedBy: causedBy.nullable(),
   // For an undo: the entry it reversed.
   undoes: z.number().int().positive().nullable(),
+  // The Item fields the entry changed. Empty for a creation, and for Links.
+  changes: z.array(itemChange),
 });
 export type ActivityEntry = z.infer<typeof activityEntry>;
 

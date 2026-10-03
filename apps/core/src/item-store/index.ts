@@ -29,7 +29,16 @@ import Database from 'better-sqlite3';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { actorColumns, type ItemRow, type ItemState, itemColumns, stateOf, toEntry, toItem } from './rows';
+import {
+  actorColumns,
+  changesBetween,
+  type ItemRow,
+  type ItemState,
+  itemColumns,
+  stateOf,
+  toEntry,
+  toItem,
+} from './rows';
 import * as schema from './schema';
 import { type Snapshot, takeDailySnapshot } from './snapshots';
 
@@ -139,7 +148,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       db.delete(todoDetails).where(eq(todoDetails.itemId, id)).run();
       return;
     }
-    const values = { dueOn: detail.dueOn, backedBy: detail.backedBy };
+    const values = { origin: detail.origin, dueOn: detail.dueOn, backedBy: detail.backedBy };
     db.insert(todoDetails)
       .values({ itemId: id, ...values })
       .onConflictDoUpdate({ target: todoDetails.itemId, set: values })
@@ -304,9 +313,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     let restored: ItemState = { ...current, deletedAt: at };
     if (before) {
       restored = { ...current };
-      for (const key of Object.keys(after) as (keyof ItemState)[]) {
-        if (!isDeepStrictEqual(before[key], after[key])) Object.assign(restored, { [key]: before[key] });
-      }
+      for (const change of changesBetween(before, after))
+        Object.assign(restored, { [change.field]: change.before });
     }
     writeState(item, restored, at);
     return log({ ...undoEntry, before: current, after: restored }, at);

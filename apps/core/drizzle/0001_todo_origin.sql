@@ -1,0 +1,1 @@
+ALTER TABLE `todo_details` ADD `origin` text DEFAULT 'manual' NOT NULL;

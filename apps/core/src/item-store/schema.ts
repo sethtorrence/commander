@@ -1,6 +1,14 @@
 // The database schema behind the Item store. Migrations in ../../drizzle are generated from this
 // file with `pnpm --filter @commander/core db:generate`; never edit them by hand.
-import type { ActivityAction, FiledBy, ItemKind, ItemStatus, LinkType, Source } from '@commander/domain';
+import type {
+  ActivityAction,
+  FiledBy,
+  ItemKind,
+  ItemStatus,
+  LinkType,
+  Source,
+  TodoOrigin,
+} from '@commander/domain';
 import {
   type AnySQLiteColumn,
   index,
@@ -40,6 +48,7 @@ export const todoDetails = sqliteTable('todo_details', {
   itemId: text('item_id')
     .primaryKey()
     .references(() => items.id),
+  origin: text('origin').$type<TodoOrigin>().notNull().default('manual'),
   dueOn: text('due_on'),
   backedBy: text('backed_by').references(() => items.id),
 });

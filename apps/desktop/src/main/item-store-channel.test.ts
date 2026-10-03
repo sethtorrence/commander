@@ -12,6 +12,7 @@ const activityEntry = {
   why: null,
   causedBy: null,
   undoes: null,
+  changes: [],
 };
 
 function channel(timeoutMs = 1000) {

@@ -1,13 +1,21 @@
 // Translation between database rows and the domain shapes the Item store hands out.
-import type { ActivityEntry, Actor, CausedBy, Item, ItemDetail } from '@commander/domain';
+import { isDeepStrictEqual } from 'node:util';
+import type {
+  ActivityEntry,
+  Actor,
+  CausedBy,
+  Item,
+  ItemChange,
+  ItemDetail,
+  ItemState,
+} from '@commander/domain';
 import type * as schema from './schema';
+
+export type { ItemState } from '@commander/domain';
 
 export type ItemRow = typeof schema.items.$inferSelect;
 export type TodoDetailRow = typeof schema.todoDetails.$inferSelect;
 export type ActivityRow = typeof schema.activity.$inferSelect;
-
-// The part of an Item that changes, and that the activity log records before and after each change.
-export type ItemState = Pick<Item, 'title' | 'people' | 'status' | 'filing' | 'detail' | 'deletedAt'>;
 
 export function stateOf(item: Item): ItemState {
   const { title, people, status, filing, detail, deletedAt } = item;
@@ -27,7 +35,8 @@ export function itemColumns(state: ItemState) {
 
 export function toItem(row: ItemRow, todo: TodoDetailRow | undefined): Item {
   let detail: ItemDetail | null = null;
-  if (row.kind === 'todo' && todo) detail = { kind: 'todo', dueOn: todo.dueOn, backedBy: todo.backedBy };
+  if (row.kind === 'todo' && todo)
+    detail = { kind: 'todo', origin: todo.origin, dueOn: todo.dueOn, backedBy: todo.backedBy };
   return {
     id: row.id,
     kind: row.kind,
@@ -71,6 +80,14 @@ function toActor(row: ActivityRow): Actor {
   }
 }
 
+// The fields that differ between two recorded states of an Item, in the order ItemState lists them.
+export function changesBetween(before: ItemState, after: ItemState): ItemChange[] {
+  const fields = Object.keys(after) as (keyof ItemState)[];
+  return fields
+    .filter((field) => !isDeepStrictEqual(before[field], after[field]))
+    .map((field) => ({ field, before: before[field], after: after[field] }) as ItemChange);
+}
+
 export function toEntry(row: ActivityRow): ActivityEntry {
   let causedBy: CausedBy | null = null;
   if (row.causedByItemId || row.causedByEntryId) {
@@ -88,5 +105,10 @@ export function toEntry(row: ActivityRow): ActivityEntry {
     why: row.why,
     causedBy,
     undoes: row.undoes,
+    // A Link entry records the Link, and a creation has no state before it.
+    changes:
+      row.otherItemId === null && row.before && row.after
+        ? changesBetween(row.before as ItemState, row.after as ItemState)
+        : [],
   };
 }
