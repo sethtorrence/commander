@@ -5,11 +5,15 @@ import type {
   FiledBy,
   ItemKind,
   ItemStatus,
+  LinearIssueDetail,
   LinkType,
   ModelCall,
   ModelProvider,
   ModelTier,
   Source,
+  SyncOutcomeKind,
+  SyncProblem,
+  SyncTrigger,
   TodoOrigin,
 } from '@commander/domain';
 import {
@@ -185,4 +189,54 @@ export const projects = sqliteTable(
     createdAt: integer('created_at').notNull(),
   },
   (t) => [uniqueIndex('projects_code').on(t.code)],
+);
+
+// Kind-specific detail for Linear issues, as Linear sync reported it (see LinearIssueDetail).
+export const linearIssueDetails = sqliteTable('linear_issue_details', {
+  itemId: text('item_id')
+    .primaryKey()
+    .references(() => items.id),
+  // e.g. ENG-418, for finding an issue by the name people use for it.
+  identifier: text('identifier').notNull(),
+  // The rest of the detail, without `kind`.
+  data: text('data', { mode: 'json' }).$type<Omit<LinearIssueDetail, 'kind'>>().notNull(),
+});
+
+// Where each Account's sync stands, so it carries on after a restart: the Source's cursor, when it
+// last synced, any back-off, and the User's cadence. Never a token.
+export const syncState = sqliteTable('sync_state', {
+  account: text('account').primaryKey(),
+  source: text('source').$type<Source>().notNull(),
+  // Minutes between syncs; null means the Source's default.
+  cadenceMinutes: integer('cadence_minutes'),
+  // Whatever the Source's adapter needs to fetch only what changed since (opaque to the engine).
+  cursor: text('cursor', { mode: 'json' }),
+  lastSyncedAt: integer('last_synced_at'),
+  // Failures in a row, and when to try again (back-off, or the Source's Retry-After).
+  failures: integer('failures').notNull().default(0),
+  retryAt: integer('retry_at'),
+  problem: text('problem', { mode: 'json' }).$type<SyncProblem>(),
+});
+
+// One row per sync run: what it saved and what it cost the Source (Linear's reported complexity).
+export const syncRuns = sqliteTable(
+  'sync_runs',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    account: text('account').notNull(),
+    source: text('source').$type<Source>().notNull(),
+    trigger: text('trigger').$type<SyncTrigger>().notNull(),
+    startedAt: integer('started_at').notNull(),
+    finishedAt: integer('finished_at').notNull(),
+    outcome: text('outcome').$type<SyncOutcomeKind>().notNull(),
+    created: integer('created').notNull(),
+    updated: integer('updated').notNull(),
+    tombstoned: integer('tombstoned').notNull(),
+    unchanged: integer('unchanged').notNull(),
+    requests: integer('requests').notNull(),
+    // The Source's own measure of what the run cost (Linear: summed X-Complexity), when it reports one.
+    complexity: integer('complexity'),
+    error: text('error'),
+  },
+  (t) => [index('sync_runs_account').on(t.account, t.startedAt)],
 );

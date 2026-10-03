@@ -1,0 +1,297 @@
+[
+  {
+    "request": {
+      "operationName": "CommanderIssues",
+      "variables": {
+        "first": 50,
+        "after": null,
+        "includeArchived": true,
+        "filter": { "updatedAt": { "gt": "2026-10-01T09:00:00.000Z" } }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": { "x-complexity": "290", "x-ratelimit-complexity-remaining": "1998000" },
+      "body": {
+        "data": {
+          "issues": {
+            "nodes": [
+              {
+                "id": "issue-418",
+                "identifier": "ENG-418",
+                "title": "Fix the login loop",
+                "url": "https://linear.app/acme/issue/ENG-418/fix-the-login-loop",
+                "description": "The login page **loops** after SSO.",
+                "priority": 1,
+                "estimate": 3,
+                "dueDate": "2026-10-09",
+                "createdAt": "2026-09-29T10:00:00.000Z",
+                "updatedAt": "2026-10-03T10:00:00.000Z",
+                "startedAt": "2026-09-30T08:00:00.000Z",
+                "completedAt": null,
+                "canceledAt": null,
+                "archivedAt": null,
+                "trashed": null,
+                "team": { "id": "team-eng", "key": "ENG", "name": "Engineering" },
+                "state": { "id": "state-review", "name": "In Review", "type": "started", "color": "#0f783c" },
+                "assignee": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                },
+                "creator": { "id": "user-sam", "name": "Sam Lee", "displayName": "sam", "email": null },
+                "labels": {
+                  "nodes": [
+                    { "id": "label-urgent", "name": "Customer", "color": "#5e6ad2" },
+                    { "id": "label-bug", "name": "Bug", "color": "#eb5757" }
+                  ]
+                },
+                "cycle": {
+                  "id": "cycle-12",
+                  "number": 12,
+                  "name": null,
+                  "startsAt": "2026-09-28T00:00:00.000Z",
+                  "endsAt": "2026-10-12T00:00:00.000Z"
+                },
+                "project": { "id": "project-login", "name": "Login revamp" },
+                "comments": {
+                  "nodes": [
+                    {
+                      "id": "comment-1",
+                      "body": "Reproduced on staging.",
+                      "createdAt": "2026-09-30T09:00:00.000Z",
+                      "updatedAt": "2026-09-30T09:00:00.000Z",
+                      "user": {
+                        "id": "user-priya",
+                        "name": "Priya Patel",
+                        "displayName": "priya",
+                        "email": "priya@acme.test"
+                      }
+                    }
+                  ],
+                  "pageInfo": { "hasNextPage": false, "endCursor": "comment-1" }
+                }
+              },
+              {
+                "id": "issue-377",
+                "identifier": "OPS-377",
+                "title": "Move backups to the new bucket",
+                "url": "https://linear.app/acme/issue/OPS-377/move-backups-to-the-new-bucket",
+                "description": "Superseded by the storage plan.",
+                "priority": 4,
+                "estimate": 1,
+                "dueDate": null,
+                "createdAt": "2026-08-01T10:00:00.000Z",
+                "updatedAt": "2026-10-02T08:00:00.000Z",
+                "startedAt": null,
+                "completedAt": null,
+                "canceledAt": "2026-09-20T11:00:00.000Z",
+                "archivedAt": "2026-10-02T08:00:00.000Z",
+                "trashed": true,
+                "team": { "id": "team-ops", "key": "OPS", "name": "Operations" },
+                "state": {
+                  "id": "state-canceled",
+                  "name": "Canceled",
+                  "type": "canceled",
+                  "color": "#95a2b3"
+                },
+                "assignee": { "id": "user-sam", "name": "Sam Lee", "displayName": "sam", "email": null },
+                "creator": { "id": "user-sam", "name": "Sam Lee", "displayName": "sam", "email": null },
+                "labels": { "nodes": [] },
+                "cycle": null,
+                "project": { "id": "project-storage", "name": "Storage plan" },
+                "comments": { "nodes": [], "pageInfo": { "hasNextPage": false, "endCursor": null } }
+              }
+            ],
+            "pageInfo": { "hasNextPage": true, "endCursor": "issue-377" }
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "operationName": "CommanderIssues",
+      "variables": {
+        "first": 50,
+        "after": "issue-377",
+        "includeArchived": true,
+        "filter": { "updatedAt": { "gt": "2026-10-01T09:00:00.000Z" } }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": { "x-complexity": "286", "x-ratelimit-complexity-remaining": "1997700" },
+      "body": {
+        "data": {
+          "issues": {
+            "nodes": [
+              {
+                "id": "issue-430",
+                "identifier": "ENG-430",
+                "title": "Add audit events for exports",
+                "url": "https://linear.app/acme/issue/ENG-430/add-audit-events-for-exports",
+                "description": "Every export should leave an audit event.",
+                "priority": 3,
+                "estimate": 2,
+                "dueDate": null,
+                "createdAt": "2026-10-02T14:00:00.000Z",
+                "updatedAt": "2026-10-02T15:10:00.000Z",
+                "startedAt": null,
+                "completedAt": null,
+                "canceledAt": null,
+                "archivedAt": null,
+                "trashed": null,
+                "team": { "id": "team-eng", "key": "ENG", "name": "Engineering" },
+                "state": { "id": "state-todo", "name": "Todo", "type": "unstarted", "color": "#e2e2e2" },
+                "assignee": null,
+                "creator": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                },
+                "labels": { "nodes": [] },
+                "cycle": null,
+                "project": null,
+                "comments": {
+                  "nodes": [
+                    {
+                      "id": "comment-30b",
+                      "body": "And for imports?",
+                      "createdAt": "2026-10-02T15:00:00.000Z",
+                      "updatedAt": "2026-10-02T15:00:00.000Z",
+                      "user": { "id": "user-sam", "name": "Sam Lee", "displayName": "sam", "email": null }
+                    }
+                  ],
+                  "pageInfo": { "hasNextPage": true, "endCursor": "comment-30b" }
+                }
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": "issue-430" }
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "operationName": "CommanderIssueComments",
+      "variables": { "id": "issue-430", "after": "comment-30b" }
+    },
+    "response": {
+      "status": 200,
+      "headers": { "x-complexity": "12" },
+      "body": {
+        "data": {
+          "issue": {
+            "comments": {
+              "nodes": [
+                {
+                  "id": "comment-30a",
+                  "body": "Started a spike.",
+                  "createdAt": "2026-10-02T14:30:00.000Z",
+                  "updatedAt": "2026-10-02T15:10:00.000Z",
+                  "user": null
+                }
+              ],
+              "pageInfo": { "hasNextPage": false, "endCursor": "comment-30a" }
+            }
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "operationName": "CommanderChangedComments",
+      "variables": {
+        "first": 50,
+        "after": null,
+        "filter": { "updatedAt": { "gt": "2026-10-01T09:00:00.000Z" } }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": { "x-complexity": "6" },
+      "body": {
+        "data": {
+          "comments": {
+            "nodes": [
+              { "updatedAt": "2026-10-02T15:10:00.000Z", "issue": { "id": "issue-430" } },
+              { "updatedAt": "2026-10-03T11:15:00.000Z", "issue": { "id": "issue-401" } },
+              { "updatedAt": "2026-10-03T09:00:00.000Z", "issue": null }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": "c-3" }
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "operationName": "CommanderIssues",
+      "variables": {
+        "first": 50,
+        "after": null,
+        "includeArchived": true,
+        "filter": { "id": { "in": ["issue-401"] } }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": { "x-complexity": "40" },
+      "body": {
+        "data": {
+          "issues": {
+            "nodes": [
+              {
+                "id": "issue-401",
+                "identifier": "ENG-401",
+                "title": "Rotate the signing keys",
+                "url": "https://linear.app/acme/issue/ENG-401/rotate-the-signing-keys",
+                "description": null,
+                "priority": 0,
+                "estimate": null,
+                "dueDate": null,
+                "createdAt": "2026-09-10T10:00:00.000Z",
+                "updatedAt": "2026-09-25T16:30:00.000Z",
+                "startedAt": "2026-09-20T10:00:00.000Z",
+                "completedAt": "2026-09-25T16:30:00.000Z",
+                "canceledAt": null,
+                "archivedAt": null,
+                "trashed": null,
+                "team": { "id": "team-eng", "key": "ENG", "name": "Engineering" },
+                "state": { "id": "state-done", "name": "Done", "type": "completed", "color": "#5e6ad2" },
+                "assignee": null,
+                "creator": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                },
+                "labels": { "nodes": [] },
+                "cycle": null,
+                "project": null,
+                "comments": {
+                  "nodes": [
+                    {
+                      "id": "comment-9",
+                      "body": "Keys rotated in prod too.",
+                      "createdAt": "2026-10-03T11:15:00.000Z",
+                      "updatedAt": "2026-10-03T11:15:00.000Z",
+                      "user": { "id": "user-sam", "name": "Sam Lee", "displayName": "sam", "email": null }
+                    }
+                  ],
+                  "pageInfo": { "hasNextPage": false, "endCursor": "comment-9" }
+                }
+              }
+            ],
+            "pageInfo": { "hasNextPage": false, "endCursor": "issue-401" }
+          }
+        }
+      }
+    }
+  }
+]

@@ -366,6 +366,54 @@ describe('reconnecting', () => {
     expect(await accounts.list()).toMatchObject([{ id: 'linear:org-acme', status: 'needs-reconnect' }]);
   });
 
+  it('marks an API key Account Reconnect when Linear refuses its key during a sync', async () => {
+    linear.addApiKey('lin_api_revoked', ACME);
+    const accounts = start();
+    const changed = vi.fn();
+    accounts.onChange(changed);
+    await accounts.connectWithApiKey('lin_api_revoked');
+
+    await accounts.reportRefused('linear:org-acme');
+
+    expect(await accounts.list()).toMatchObject([{ status: 'needs-reconnect' }]);
+    expect(changed).toHaveBeenCalled();
+    await expect(accounts.accessToken('linear:org-acme')).rejects.toMatchObject({
+      reason: 'needs-reconnect',
+    });
+  });
+
+  it('refreshes a refused OAuth token, keeping the Account when Linear issues a new one', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+
+    await accounts.reportRefused('linear:org-acme');
+
+    const [newAccess] = linear.issuedTokens().slice(-2);
+    expect(linear.refreshes).toBe(1);
+    expect(await accounts.list()).toMatchObject([{ status: 'connected' }]);
+    expect(await accounts.accessToken('linear:org-acme')).toEqual({ token: newAccess, kind: 'oauth' });
+  });
+
+  it('marks an OAuth Account Reconnect when its refused token can’t be refreshed either', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    linear.revoke(ACME.id);
+
+    await accounts.reportRefused('linear:org-acme');
+
+    expect(await accounts.list()).toMatchObject([{ status: 'needs-reconnect' }]);
+  });
+
+  it('keeps an OAuth Account when Linear can’t refresh its refused token just now', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    linear.failRefreshesTemporarily(true);
+
+    await accounts.reportRefused('linear:org-acme');
+
+    expect(await accounts.list()).toMatchObject([{ status: 'connected' }]);
+  });
+
   it('reconnects an API key Account with a new key', async () => {
     linear.addApiKey('lin_api_new', ACME);
     linear.addApiKey('lin_api_old', ACME);

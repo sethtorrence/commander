@@ -39,6 +39,20 @@ export type AccountSummary = {
   urlKey: string;
   method: AccountMethod;
   status: AccountStatus;
+  // Where the Account's syncing stands; null until the Core first reports it.
+  sync: AccountSyncStatus | null;
+};
+// An Account's sync, as the Core reports it (validated in sync-messages.ts).
+export type AccountSyncStatus = {
+  account: string;
+  source: 'gmail' | 'outlook' | 'google-calendar' | 'teams' | 'linear' | 'github';
+  activity: 'idle' | 'syncing' | 'backing-off' | 'offline' | 'asleep' | 'needs-reconnect';
+  cadenceMinutes: number;
+  cadenceChoices: number[];
+  lastSyncedAt: number | null;
+  nextSyncAt: number | null;
+  itemCount: number;
+  problem: { kind: 'rate-limited' | 'refused' | 'failed'; message: string } | null;
 };
 export type AccountsState = {
   accounts: AccountSummary[];
@@ -51,7 +65,11 @@ export type AccountsRequest =
   | { op: 'connect-linear'; method: 'oauth'; reconnect?: string }
   | { op: 'connect-linear'; method: 'api-key'; apiKey: string; reconnect?: string }
   | { op: 'cancel-sign-in' }
-  | { op: 'remove'; accountId: string };
+  | { op: 'remove'; accountId: string }
+  // Syncs the Account at once (Sync now; Sections call it when they open).
+  | { op: 'sync-now'; accountId: string }
+  // Minutes between the Account's syncs, from its Source's choices.
+  | { op: 'set-sync-cadence'; accountId: string; minutes: number };
 export type AccountsResponse =
   | { ok: true; state: AccountsState }
   | { ok: false; error: string; state: AccountsState };

@@ -1,4 +1,4 @@
-import type { AccountSummary } from '@commander/domain/ipc';
+import type { AccountSummary as WindowAccountSummary } from '@commander/domain/ipc';
 import { type AccountRecord, type AccountStore, credentialKey } from '../accounts/account-store';
 import type { Secrets } from '../secrets';
 import { RefreshError, refreshTokens, signInWithBrowser, type TokenSet } from './oauth';
@@ -9,6 +9,9 @@ import { type LinearCredential, readWorkspace, type Workspace } from './workspac
 // removing, and handing the Core a current access token. Runs in the main process only. Tokens
 // and keys go to the keyring through the secrets module and nowhere else: what leaves this
 // module for the window is an AccountSummary, and errors never carry a secret.
+
+// An Account as the window sees it, before its sync status (which the Core reports) is added.
+export type AccountSummary = Omit<WindowAccountSummary, 'sync'>;
 
 export type LinearConfig = {
   // Commander's OAuth app client ID, from the private build config. null: only API keys work.
@@ -60,6 +63,9 @@ export type LinearAccounts = {
   remove(accountId: string): Promise<void>;
   // A current access token, refreshed first when it is near expiry. Rejects with AccessTokenError.
   accessToken(accountId: string): Promise<AccessToken>;
+  // Linear refused the Account's token during a sync (e.g. an API key revoked in Linear). An API key
+  // Account is marked Reconnect; an OAuth one is refreshed, and marked Reconnect if that fails for good.
+  reportRefused(accountId: string): Promise<void>;
   // Called whenever the list of Accounts or their status changes.
   onChange(listener: () => void): () => void;
 };
@@ -157,14 +163,15 @@ export function createLinearAccounts({
     return summary(record);
   }
 
-  async function refresh(record: AccountRecord): Promise<AccessToken> {
+  // `force`: refresh even a token that looks fresh, because Linear refused it.
+  async function refresh(record: AccountRecord, force = false): Promise<AccessToken> {
     const credential = await readCredential(record.id);
     if (!credential) {
       await markNeedsReconnect(record);
       throw new AccessTokenError('needs-reconnect', `The ${record.name} Linear Account needs reconnecting`);
     }
     if (credential.kind === 'api-key') return { token: credential.apiKey, kind: 'api-key' };
-    if (credential.expiresAt - now() > REFRESH_MARGIN_MS)
+    if (!force && credential.expiresAt - now() > REFRESH_MARGIN_MS)
       return { token: credential.accessToken, kind: 'oauth' };
     if (!config.clientId) {
       throw new AccessTokenError(
@@ -187,7 +194,7 @@ export function createLinearAccounts({
         throw new AccessTokenError('needs-reconnect', `The ${record.name} Linear Account needs reconnecting`);
       }
       log(`Linear Account ${record.id} could not refresh its sign-in yet: ${message}`);
-      if (credential.expiresAt > now()) return { token: credential.accessToken, kind: 'oauth' };
+      if (!force && credential.expiresAt > now()) return { token: credential.accessToken, kind: 'oauth' };
       throw new AccessTokenError(
         'unavailable',
         `Linear couldn't refresh the ${record.name} sign-in just now`,
@@ -284,6 +291,22 @@ export function createLinearAccounts({
       const run = refresh(record).finally(() => refreshing.delete(id));
       refreshing.set(id, run);
       return run;
+    },
+
+    async reportRefused(id) {
+      await refreshing.get(id)?.catch(() => {});
+      const record = await store.get(id);
+      if (!record || record.status === 'needs-reconnect') return;
+      if (record.method === 'api-key') {
+        log(`Linear refused the API key of Linear Account ${id}; it needs reconnecting`);
+        await markNeedsReconnect(record);
+        return;
+      }
+      // A refused OAuth token may only have been revoked early: a refresh tells. A refresh refused
+      // for good marks the Account Reconnect inside refresh().
+      const run = refresh(record, true).finally(() => refreshing.delete(id));
+      refreshing.set(id, run);
+      await run.catch(() => {});
     },
 
     onChange(listener) {

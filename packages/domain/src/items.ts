@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { linearIssueDetail } from './linear';
 
 // Items: everything Commander tracks, in one shape (ADR 0001). A shared core plus
 // kind-specific detail, typed Links between Items, and one activity log of every change.
@@ -77,7 +78,12 @@ export const blockDetail = z.object({
 });
 export type BlockDetail = z.infer<typeof blockDetail>;
 
-export const itemDetail = z.discriminatedUnion('kind', [todoDetail, dailyNoteDetail, blockDetail]);
+export const itemDetail = z.discriminatedUnion('kind', [
+  todoDetail,
+  dailyNoteDetail,
+  blockDetail,
+  linearIssueDetail,
+]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 
 export const item = z.object({

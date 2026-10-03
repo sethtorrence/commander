@@ -1,0 +1,54 @@
+{
+  "rateLimited": {
+    "status": 400,
+    "headers": {
+      "x-ratelimit-requests-limit": "2500",
+      "x-ratelimit-requests-remaining": "0",
+      "x-ratelimit-requests-reset": "1791036000000",
+      "x-ratelimit-complexity-remaining": "1800000",
+      "x-ratelimit-complexity-reset": "1791034000000"
+    },
+    "body": {
+      "errors": [
+        {
+          "message": "Rate limit exceeded",
+          "extensions": {
+            "type": "Ratelimited",
+            "code": "RATELIMITED",
+            "statusCode": 429,
+            "userError": true,
+            "userPresentableMessage": "Rate limit exceeded"
+          }
+        }
+      ]
+    }
+  },
+  "tooManyRequests": {
+    "status": 429,
+    "headers": { "retry-after": "120" },
+    "body": { "errors": [{ "message": "Too many requests" }] }
+  },
+  "unauthenticated": {
+    "status": 400,
+    "headers": {},
+    "body": {
+      "errors": [
+        {
+          "message": "Authentication required, not authenticated",
+          "extensions": {
+            "type": "authentication error",
+            "code": "AUTHENTICATION_ERROR",
+            "statusCode": 401,
+            "userError": true,
+            "userPresentableMessage": "You need to authenticate to access this operation."
+          }
+        }
+      ]
+    }
+  },
+  "serverError": {
+    "status": 503,
+    "headers": {},
+    "body": null
+  }
+}

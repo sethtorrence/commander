@@ -1,11 +1,12 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createFakeIssues, type FakeIssues } from './fake-linear-issues';
 
 // A stand-in for Linear's OAuth and GraphQL endpoints, for tests only (unit and end-to-end). It
 // behaves like Linear where Commander depends on it: PKCE with no client secret, refresh tokens
-// that rotate on every refresh, and the `viewer { organization }` query. Nothing here talks to
-// the real Linear.
+// that rotate on every refresh, the `viewer { organization }` query, and the issue queries Linear
+// sync sends (see fake-linear-issues.ts). Nothing here talks to the real Linear.
 
 export type FakeWorkspace = { id: string; name: string; urlKey: string };
 
@@ -45,6 +46,12 @@ export type FakeLinear = {
   delayRefreshes(ms: number): void;
   // The tokens Linear issued, newest last (for asserting what reached disk, logs or the window).
   issuedTokens(): string[];
+  // Each workspace's issues, which Linear sync reads.
+  issues: FakeIssues;
+  // Revokes a personal API key, as the User can in Linear: requests with it are refused from now on.
+  revokeApiKey(key: string): void;
+  // Every GraphQL request, by operation name.
+  graphqlRequests: { operationName: string; variables: Record<string, unknown> }[];
   close(): Promise<void>;
 };
 
@@ -58,8 +65,13 @@ async function body(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-function json(response: ServerResponse, status: number, value: unknown) {
-  response.writeHead(status, { 'content-type': 'application/json' }).end(JSON.stringify(value));
+function json(
+  response: ServerResponse,
+  status: number,
+  value: unknown,
+  headers: Record<string, string> = {},
+) {
+  response.writeHead(status, { 'content-type': 'application/json', ...headers }).end(JSON.stringify(value));
 }
 
 export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<FakeLinear> {
@@ -103,6 +115,11 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
       refreshDelay = ms;
     },
     issuedTokens: () => [...issued],
+    issues: createFakeIssues(),
+    revokeApiKey: (key) => {
+      apiKeys.delete(key);
+    },
+    graphqlRequests: [],
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 
@@ -176,7 +193,13 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
   }
 
   async function graphql(request: IncomingMessage, response: ServerResponse) {
-    const query = (JSON.parse(await body(request)) as { query?: string }).query ?? '';
+    const sent = JSON.parse(await body(request)) as {
+      query?: string;
+      operationName?: string;
+      variables?: Record<string, unknown>;
+    };
+    const query = sent.query ?? '';
+    fake.graphqlRequests.push({ operationName: sent.operationName ?? '', variables: sent.variables ?? {} });
     const authorization = request.headers.authorization ?? '';
     const workspace = authorization.startsWith('Bearer ')
       ? grants.find((g) => g.accessToken === authorization.slice('Bearer '.length))?.workspace
@@ -191,6 +214,8 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
         ],
       });
     }
+    const answer = fake.issues.answer(workspace.id, sent.operationName ?? '', sent.variables ?? {});
+    if (answer !== null) return json(response, 200, { data: answer }, { 'x-complexity': '42' });
     if (!/viewer\s*{\s*organization\s*{/.test(query))
       return json(response, 400, { errors: [{ message: 'unknown' }] });
     return json(response, 200, { data: { viewer: { organization: workspace } } });

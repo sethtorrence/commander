@@ -3,6 +3,8 @@ export * from './core-messages';
 export * from './ipc';
 export * from './item-store-messages';
 export * from './items';
+export * from './linear';
 export * from './model-messages';
 export * from './models';
 export * from './projects';
+export * from './sync-messages';

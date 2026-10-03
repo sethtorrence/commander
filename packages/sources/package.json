@@ -5,5 +5,9 @@
   "main": "src/index.ts",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@commander/domain": "workspace:*",
+    "zod": "^4.6.5"
   }
 }

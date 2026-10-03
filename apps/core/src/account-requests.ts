@@ -15,9 +15,11 @@ const sourceNames: Record<Source, string> = {
 };
 
 // Returns the reply to send back, or null when the message is not a remove-account-items request.
+// `beforeRemove` runs first, so the Account's syncing stops before its Items go.
 export function answerRemoveAccountItems(
   store: ItemStore,
   message: unknown,
+  beforeRemove: (account: string) => void = () => {},
 ): CoreRemoveAccountItemsReply | null {
   const header = envelope.safeParse(message);
   if (!header.success) return null;
@@ -30,6 +32,7 @@ export function answerRemoveAccountItems(
   if (!parsed.success) return reply({ ok: false, error: `Malformed request: ${parsed.error.message}` });
   const { source, account, name } = parsed.data;
   try {
+    beforeRemove(account);
     const removed = store.removeAccountItems(
       { source, account },
       { by: { kind: 'user' }, why: `Removed the ${sourceNames[source]} Account ${name}` },

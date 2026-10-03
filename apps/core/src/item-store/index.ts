@@ -47,6 +47,7 @@ import {
   type ItemRow,
   type ItemState,
   itemColumns,
+  linearIssueDetailOf,
   stateOf,
   todoDetailOf,
   toEntry,
@@ -54,8 +55,10 @@ import {
 } from './rows';
 import * as schema from './schema';
 import { type Snapshot, takeDailySnapshot } from './snapshots';
+import { openSyncStateStore, type SyncStateStore } from './sync-state';
 
 export type { Snapshot } from './snapshots';
+export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
 
 export type ItemStoreOptions = {
   // The SQLite database file. Created, and migrated to the latest schema, on open.
@@ -97,6 +100,8 @@ export type ItemStore = {
   takeDailySnapshot(): Snapshot | null;
   // The usage ledger and Settings → Ares, in the same database.
   models: ModelStore;
+  // Where each Account's sync stands, and its recent sync runs, in the same database.
+  syncState: SyncStateStore;
   close(): void;
 };
 
@@ -189,7 +194,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   function withDetails(rows: ItemRow[]): Item[] {
     const idsOf = (kind: ItemKind) => rows.filter((row) => row.kind === kind).map((row) => row.id);
     const details = new Map<string, ItemDetail>();
-    const { todoDetails, dailyNoteDetails, blockDetails } = schema;
+    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails } = schema;
     const todoIds = idsOf('todo');
     if (todoIds.length) {
       const found = db.select().from(todoDetails).where(inArray(todoDetails.itemId, todoIds)).all();
@@ -204,6 +209,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (blockIds.length) {
       const found = db.select().from(blockDetails).where(inArray(blockDetails.itemId, blockIds)).all();
       for (const row of found) details.set(row.itemId, blockDetailOf(row));
+    }
+    const issueIds = idsOf('linear-issue');
+    if (issueIds.length) {
+      const found = db
+        .select()
+        .from(linearIssueDetails)
+        .where(inArray(linearIssueDetails.itemId, issueIds))
+        .all();
+      for (const row of found) details.set(row.itemId, linearIssueDetailOf(row));
     }
     return rows.map((row) => toItem(row, details.get(row.id) ?? null));
   }
@@ -245,11 +259,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   function writeDetail(id: string, detail: ItemDetail | null) {
-    const { todoDetails, dailyNoteDetails, blockDetails } = schema;
+    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails } = schema;
     if (detail?.kind !== 'todo') db.delete(todoDetails).where(eq(todoDetails.itemId, id)).run();
     if (detail?.kind !== 'daily-note')
       db.delete(dailyNoteDetails).where(eq(dailyNoteDetails.itemId, id)).run();
     if (detail?.kind !== 'block') db.delete(blockDetails).where(eq(blockDetails.itemId, id)).run();
+    if (detail?.kind !== 'linear-issue')
+      db.delete(linearIssueDetails).where(eq(linearIssueDetails.itemId, id)).run();
     switch (detail?.kind) {
       case 'todo': {
         const values = { origin: detail.origin, dueOn: detail.dueOn, backedBy: detail.backedBy };
@@ -264,6 +280,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         db.insert(dailyNoteDetails)
           .values({ itemId: id, ...values })
           .onConflictDoUpdate({ target: dailyNoteDetails.itemId, set: values })
+          .run();
+        return;
+      }
+      case 'linear-issue': {
+        const { kind: _kind, ...data } = detail;
+        const values = { identifier: detail.identifier, data };
+        db.insert(linearIssueDetails)
+          .values({ itemId: id, ...values })
+          .onConflictDoUpdate({ target: linearIssueDetails.itemId, set: values })
           .run();
         return;
       }
@@ -622,6 +647,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
   return {
     models: openModelStore(db, now),
+    syncState: openSyncStateStore(db),
 
     saveFromSource,
     removeAccountItems,
