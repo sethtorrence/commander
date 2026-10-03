@@ -36,6 +36,11 @@ export function App() {
       </p>
       <SecurityPanel />
       <StartAtLogin />
+      <p>
+        <a href="#/design" className="font-mono text-label-lg uppercase tracking-label text-ink">
+          Design gallery →
+        </a>
+      </p>
     </main>
   );
 }

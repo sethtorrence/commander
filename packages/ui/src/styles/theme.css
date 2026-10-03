@@ -1,0 +1,91 @@
+/*
+  Tailwind's theme, reduced to the Industrial look. The default palette, radii and shadows are
+  removed on purpose: there are no rounded corners and no soft shadows, and every colour is a token.
+*/
+@theme static {
+  --color-*: initial;
+  --radius-*: initial;
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+  --font-*: initial;
+  --text-*: initial;
+  --tracking-*: initial;
+  --leading-*: initial;
+
+  /* A 4px spacing step, so half steps reach the prototypes' 2px increments (h-7.5 = 30px). */
+  --spacing: 4px;
+
+  /* Type scale (px, as in the prototypes). Mono labels sit at 8–11px, Archivo text above. */
+  --text-micro: 8px;
+  --text-tiny: 8.5px;
+  --text-label: 9px;
+  --text-label-lg: 9.5px;
+  --text-kbd: 10px;
+  --text-clock: 10.5px;
+  --text-code: 11px;
+  --text-code-lg: 11.5px;
+  --text-small: 12.5px;
+  --text-note: 13px;
+  --text-heading: 13.5px;
+  --text-ui: 14px;
+  --text-row: 15px;
+  --text-body: 15.5px;
+  --text-intro: 17px;
+  --text-lead: 19px;
+  --text-figure: 21px;
+  --text-subtitle: 26px;
+  --text-count: 33px;
+  --text-title: 40px;
+  --text-display-sm: 46px;
+  --text-display: 64px;
+
+  --tracking-display: -0.015em;
+  --tracking-body: -0.003em;
+  --tracking-mono: 0.02em;
+  --tracking-code: 0.04em;
+  --tracking-badge: 0.06em;
+  --tracking-heading: 0.08em;
+  --tracking-tag: 0.1em;
+  --tracking-label: 0.12em;
+  --tracking-caps: 0.14em;
+  --tracking-wide: 0.16em;
+
+  --leading-none: 1;
+  --leading-display: 0.88;
+  --leading-tight: 1.2;
+  --leading-body: 1.65;
+
+  /* Archivo's width axis */
+  --stretch-wide: 112%;
+  --stretch-wider: 118%;
+  --stretch-widest: 125%;
+}
+
+/* The prototypes tighten their layout on windows shorter than 880px. */
+@custom-variant short (@media (max-height: 880px));
+
+@theme inline {
+  --font-sans: var(--sans);
+  --font-mono: var(--mono);
+
+  --color-bg: var(--bg);
+  --color-sheet: var(--sheet);
+  --color-raise: var(--raise);
+  --color-ink: var(--ink);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line2: var(--line2);
+  --color-hatch: var(--hatch);
+  --color-signal: var(--signal);
+  --color-on-signal: var(--on-signal);
+  --color-signal-ink: var(--signal-ink);
+  --color-signal-soft: var(--signal-soft);
+  --color-signal-focus: var(--signal-focus);
+  --color-on-accent: var(--on-accent);
+  --color-transparent: transparent;
+  --color-current: currentColor;
+}

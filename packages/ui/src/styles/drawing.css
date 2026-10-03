@@ -1,0 +1,165 @@
+/*
+  The technical drawing: rulers lettered A–H across the top and numbered 01–24 down the side,
+  the exposed grid behind the sheets, and dimension lines. Ported from the prototypes' .rul-x,
+  .rul-y, .gridwrap and .dim rules.
+*/
+@layer components {
+  .c-drawing {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--rul) minmax(0, 1fr);
+    grid-template-rows: var(--rul) minmax(0, 1fr);
+    background: var(--bg);
+    min-width: 0;
+  }
+  .c-drawing-field {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+  }
+  .c-drawing-field > .c-drawing-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ---------- top ruler ---------- */
+  .c-ruler-x {
+    position: relative;
+    height: var(--rul);
+    background: var(--bg);
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    grid-template-columns: var(--rul) repeat(var(--cols, 8), minmax(0, 1fr));
+  }
+  .c-ruler-x .k {
+    font: 600 8px / var(--rul) var(--mono);
+    color: var(--faint);
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+  .c-ruler-x .c {
+    position: relative;
+    border-left: 1px solid var(--line);
+    font: 600 9.5px / 1 var(--mono);
+    color: var(--muted);
+    padding: 4px 0 0 6px;
+    background-image:
+      repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 10%),
+      linear-gradient(var(--line), var(--line));
+    background-size:
+      100% 4px,
+      1px 8px;
+    background-position:
+      0 100%,
+      50% 100%;
+    background-repeat: no-repeat;
+  }
+  .c-ruler-x .c.on,
+  .c-ruler-y .r.on {
+    color: var(--signal-ink);
+  }
+  .c-ruler-x .c.on::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 2px;
+    background: var(--signal);
+  }
+
+  /* In a Drawing, the top ruler spans the corner and the field. */
+  .c-drawing > .c-ruler-x {
+    grid-column: 1 / -1;
+  }
+
+  /* ---------- side ruler ---------- */
+  .c-ruler-y {
+    position: relative;
+    width: var(--rul);
+    background: var(--bg);
+    border-right: 1px solid var(--line);
+    display: grid;
+    grid-template-rows: repeat(var(--rows, 24), minmax(0, 1fr));
+  }
+  .c-ruler-y .r {
+    position: relative;
+    border-top: 1px solid var(--line);
+    font: 600 8px / 1 var(--mono);
+    color: var(--muted);
+    padding: 4px 0 0 3px;
+    letter-spacing: 0.02em;
+    background-image: repeating-linear-gradient(180deg, var(--line) 0 1px, transparent 1px 25%);
+    background-size: 4px 100%;
+    background-position: 100% 0;
+    background-repeat: no-repeat;
+  }
+  .c-ruler-y .r:first-child {
+    border-top: 0;
+  }
+  .c-ruler-y .r.on::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: 0;
+    width: 2px;
+    background: var(--signal);
+  }
+
+  /* ---------- exposed grid ---------- */
+  .c-grid {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .c-grid svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  .c-grid .gc {
+    stroke: var(--grid);
+    stroke-width: 1;
+    fill: none;
+  }
+  .c-grid .gr {
+    stroke: var(--grid2);
+    stroke-width: 1;
+    fill: none;
+  }
+  .c-grid .gx {
+    stroke: var(--cross);
+    stroke-width: 1;
+    fill: none;
+  }
+
+  /* ---------- dimension line ---------- */
+  .c-dim {
+    height: 13px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    color: var(--faint);
+    border-left: 1px solid var(--muted);
+    border-right: 1px solid var(--muted);
+    font: 500 8.5px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .c-dim::before,
+  .c-dim::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--faint);
+    min-width: 8px;
+  }
+  .c-dim span {
+    color: var(--muted);
+  }
+}

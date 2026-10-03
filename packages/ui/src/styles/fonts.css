@@ -1,0 +1,8 @@
+/*
+  Fonts ship inside the app (both SIL Open Font License): Archivo with its width axis for headings
+  and text, IBM Plex Mono for labels and figures. No network fonts.
+*/
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
