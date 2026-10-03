@@ -4,7 +4,7 @@
   "description": "PROTOTYPE, throwaway: checks Electron behaviour on Hyprland/Wayland for the Commander wayfinder map.",
   "main": "main.js",
   "scripts": {
-    "start": "electron . --ozone-platform-hint=auto --enable-features=GlobalShortcutsPortal,WaylandWindowDecorations"
+    "start": "electron . --ozone-platform-hint=auto --enable-features=GlobalShortcutsPortal,WaylandWindowDecorations --password-store=gnome-libsecret"
   },
   "devDependencies": {
     "electron": "^44.5.1"

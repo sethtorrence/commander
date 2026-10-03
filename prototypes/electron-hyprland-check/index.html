@@ -94,7 +94,7 @@
     <body style="font:14px sans-serif;margin:10px">
     <b>Untrusted test email.</b> If scripts ran, this would say "SCRIPT RAN" in red.
     <p id="x"></p><img src="https://tracker.invalid/pixel.png?open=1" alt="[tracking pixel blocked]">
-    <script>document.getElementById('x').innerHTML='<b style=color:red>SCRIPT RAN</b>'; parent.postMessage('script-ran','*'); try{parent.document.title='pwned'}catch(e){}</script>
+    <script>document.getElementById('x').innerHTML='<b style=color:red>SCRIPT RAN</b>'; parent.postMessage('script-ran','*'); try{parent.document.title='pwned'}catch(e){}<\/script>
     <a href="https://example.com">a link</a></body></html>`;
   let scriptRan = false;
   addEventListener('message', (e) => { if (e.data === 'script-ran') scriptRan = true; });

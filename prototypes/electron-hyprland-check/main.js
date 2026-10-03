@@ -8,6 +8,7 @@ const state = {
   env: { session: process.env.XDG_SESSION_TYPE, desktop: process.env.XDG_CURRENT_DESKTOP, electron: process.versions.electron, chrome: process.versions.chrome },
   ozonePlatform: null, tray: {}, worker: { beats: 0, aliveWhileHidden: null }, shortcut: {}, safeStorage: {}, emailSandbox: {}, display: {}, manual: {},
 };
+if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }
 let win, tray, worker, hiddenAt = null, beatsWhenHidden = 0, quitting = false;
 const push = () => win && !win.isDestroyed() && win.webContents.send('state', state);
 const save = () => fs.writeFileSync(path.join(__dirname, 'report.json'), JSON.stringify(state, null, 2));
@@ -38,8 +39,14 @@ function createWindow() {
   win.webContents.on('did-finish-load', push);
 }
 
+// Hyprland path: a hyprland.conf bind runs `electron . --show`; the running instance receives it here.
+app.on('second-instance', (_e, argv) => {
+  if (argv.includes('--show')) { state.shortcut.secondInstanceShow = (state.shortcut.secondInstanceShow || 0) + 1; if (win) { win.show(); win.focus(); } push(); save(); }
+});
+
 app.whenReady().then(async () => {
   state.ozonePlatform = app.commandLine.getSwitchValue('ozone-platform') || app.commandLine.getSwitchValue('ozone-platform-hint') || '(default)';
+  state.passwordStore = app.commandLine.getSwitchValue('password-store') || '(default)';
 
   // 1. Tray + background utilityProcess
   try {
