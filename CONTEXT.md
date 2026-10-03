@@ -9,13 +9,13 @@ The main screen, merging items from every Section into one at-a-glance view.
 _Avoid_: Home, overview, feed
 
 **Section**:
-A notebook-style tab dedicated to one kind of work (Linear, Email, Calendar, GitHub, Notes, Todos), holding that work's full view.
+A notebook-style tab dedicated to one kind of work (Notes, Todos, Linear, Email, Calendar, GitHub, Teams, Ares), holding that work's full view.
 _Avoid_: Tab, module, page, app
 
 ## Sources
 
 **Source**:
-An outside service Commander syncs with, such as Linear, Gmail, Outlook, or GitHub.
+An outside service Commander syncs with, such as Linear, Gmail, Outlook, Microsoft Teams, or GitHub.
 _Avoid_: Integration, provider, connector
 
 **Account**:
@@ -65,6 +65,16 @@ _Avoid_: Uncategorised, unfiled (that's for Projects), inbox
 **Triage**:
 A manual, keyboard-driven pass through email where you decide what happens to each message.
 _Avoid_: Inbox zero, processing
+
+## Teams
+
+**Chat**:
+A Microsoft Teams one-to-one, group or meeting chat, with its messages.
+_Avoid_: Conversation (that's a thread with Ares), thread, DM
+
+**Channel post**:
+A message posted in a Microsoft Teams team channel, with its replies.
+_Avoid_: Chat, conversation, thread
 
 ## Work and notes
 
