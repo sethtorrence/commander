@@ -21,6 +21,8 @@ export interface AresStatusProps {
   presence?: 'here' | 'away';
   /** When the User went away. */
   awaySince?: Date;
+  /** Opens Ares's activity page. */
+  onOpen?: () => void;
 }
 
 const things = (n: number) => `${n} thing${n === 1 ? '' : 's'}`;
@@ -30,7 +32,7 @@ const hhmm = (date: Date) => clockTime(date).slice(0, 5);
  * The Ares status module (.ttn): what he is holding, whether you're here, and Ask for an update.
  * A placeholder until Updates arrive: nothing is queued and the button does nothing yet.
  */
-export function AresStatus({ queued = 0, presence = 'here', awaySince }: AresStatusProps) {
+export function AresStatus({ queued = 0, presence = 'here', awaySince, onOpen }: AresStatusProps) {
   const away = presence === 'away';
   const line = !queued
     ? 'Ares has nothing for you right now'
@@ -39,6 +41,8 @@ export function AresStatus({ queued = 0, presence = 'here', awaySince }: AresSta
       : `Ares has ${things(queued)} for you`;
   return (
     <section className={cn('f-ares', !queued && 'empty')} aria-label="Ares" data-testid="ares-status">
+      {/* Covers the count and the lines: the whole module opens Ares's activity page. */}
+      <button type="button" className="f-ares-open" onClick={onOpen} aria-label="Ares’s activity" />
       <div className="f-ares-count" title="Things Ares is holding for you">
         <b data-testid="ares-queued">{pad(queued)}</b>
         <span>Queued</span>

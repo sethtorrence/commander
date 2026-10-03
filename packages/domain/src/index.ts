@@ -1,4 +1,6 @@
 export * from './account-messages';
+export * from './autonomy';
+export * from './autonomy-messages';
 export * from './core-messages';
 export * from './ipc';
 export * from './item-store-messages';

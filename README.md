@@ -79,9 +79,17 @@ Ares runs on GLM-5.3-Flash through Z.ai's OpenAI-compatible API, behind one mode
 - **Usage and the cap:** every call is logged in `commander.db` with its job, tier, model, tokens, latency and cost (never the prompt or reply), and **Settings → Usage** totals it. With a monthly cap set, 80% records one warning for the month; at the cap, Deep-tier calls go to the fallback model if one is set and otherwise fail as over cap, while Quick-tier calls carry on.
 - **Tests never call Z.ai:** they run against a fake OpenAI-compatible server (`@commander/models/testing`).
 
+### What Ares may do on his own (Autonomy)
+
+Every Ares action goes through one gate in the Core (`apps/core/src/autonomy/gate.ts`). His jobs register their actions and hand it **proposals**; it checks the **Settings → Autonomy** grid (a level per Action kind, with Section and per-action overrides) and either drops the proposal (Off), keeps it as a suggestion on its Item for you to accept (Ask), or carries it out through the Item store as Ares (Auto, or Auto when sure at 80% confidence or more). Act for you and Delete never go above Ask, whatever is saved, and Delete is Off until you turn it on. A proposal's steps must fit its kind: any delete step makes it Delete, and Organise may file an outside Item but not change it at its Source; a proposal that doesn't fit is refused. Anything suggested because of another Item always asks, and accepting it never starts a next step by itself.
+
+**Ares's activity page** (the Ares tab, or click the Ares module in the header) lists everything he did or suggested, newest first, with his reason and what caused it. Accept or dismiss suggestions there (Organise and Tidy your Sources all at once, Act for you and Delete one at a time), and **Undo** anything he did.
+
+Until his jobs arrive, the end-to-end tests stand in for them: with `COMMANDER_TEST_HOOKS=1` the main process exposes a hook, reachable only from the main process and never from the window, that registers actions and proposes.
+
 ## Moving around
 
-Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares and usage), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
+Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares, usage and autonomy), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
 
 In Todos, type a Todo in the **New Todo** field (`n` jumps there) and press Enter. `j`/`k` move the selection, `Enter` opens the selected Todo in the detail pane beside the list and `Esc` closes it, `x` ticks it (or unticks it), `Delete` deletes it, and `Ctrl+Z` undoes your last change there, one at a time. Ticked Todos move to the collapsed **Done** group at the bottom (`d` or a click on its header shows them). The detail pane lets you edit the title, and shows the Todo's origin, its Links in both directions (click one to go to the Item at the other end) and its activity log. The Todos tab shows how many Todos are open.
 

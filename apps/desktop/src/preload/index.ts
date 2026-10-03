@@ -1,4 +1,7 @@
 import type {
+  AutonomyRequest,
+  AutonomyResponse,
+  AutonomyResults,
   CoreMessage,
   ItemStoreRequest,
   ItemStoreResponse,
@@ -55,6 +58,12 @@ const commander = {
   saveModelKey: (provider: ModelProvider, key: string): Promise<SaveModelKeyResult> =>
     ipcRenderer.invoke(ipc.saveModelKey, provider, key),
   clearModelKey: (provider: ModelProvider): Promise<void> => ipcRenderer.invoke(ipc.clearModelKey, provider),
+  // Autonomy settings and Ares's activity: read, accept, dismiss, undo. Rejects with the reason.
+  async autonomy<R extends AutonomyRequest>(request: R): Promise<AutonomyResults[R['op']]> {
+    const response: AutonomyResponse<R['op']> = await ipcRenderer.invoke(ipc.autonomy, request);
+    if (!response.ok) throw new Error(response.error);
+    return response.result;
+  },
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
   // Settings → Accounts. Answers carry Account summaries, never a token or key.

@@ -11,6 +11,7 @@ import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { AccountsPanel } from './AccountsPanel';
+import { AutonomyPanel } from './AutonomyPanel';
 import { AresSettings } from './ares/AresSettings';
 import { Diagnostics } from './Diagnostics';
 import { SettingRow, SettingsGroup } from './parts';
@@ -38,8 +39,8 @@ function ThemeChoice() {
   );
 }
 
-/** Settings, opened from the header (or `,`) as a temporary tab. */
-export function SettingsScreen() {
+/** Settings, opened from the header (or `,`) as a temporary tab. `open` while it is on screen. */
+export function SettingsScreen({ open = true }: { open?: boolean }) {
   const today = useNow(60_000);
   return (
     <Sheet
@@ -87,6 +88,7 @@ export function SettingsScreen() {
         </SettingRow>
       </SettingsGroup>
       <AresSettings no="08" usageNo="09" />
+      <AutonomyPanel no="10" shown={open} />
     </Sheet>
   );
 }

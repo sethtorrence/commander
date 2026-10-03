@@ -7,6 +7,13 @@ describe('parseCoreMessage', () => {
     expect(result).toEqual({ ok: true, message: { type: 'heartbeat', beats: 3, at: 1_790_000_000_000 } });
   });
 
+  it('accepts word that Ares did or suggested something', () => {
+    expect(parseCoreMessage({ type: 'ares-activity', at: 5 })).toEqual({
+      ok: true,
+      message: { type: 'ares-activity', at: 5 },
+    });
+  });
+
   it.each([
     ['a missing beat count', { type: 'heartbeat', at: 1 }],
     ['a negative beat count', { type: 'heartbeat', beats: -1, at: 1 }],

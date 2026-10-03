@@ -108,7 +108,12 @@ export function Frame() {
   return (
     <ProjectsProvider client={projects}>
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
-      <Header {...header} onBand={() => openSection('dashboard')} slotRef={setHeaderSlot} />
+      <Header
+        {...header}
+        onBand={() => openSection('dashboard')}
+        slotRef={setHeaderSlot}
+        ares={{ onOpen: () => openSection('ares') }}
+      />
       <RulerX className="fixed top-(--hdr) right-0 left-0 z-24" />
       <RulerY className="fixed top-(--top) bottom-0 left-0 z-24" />
       <RulerCursor />
@@ -129,7 +134,7 @@ export function Frame() {
           </HeaderSlotProvider>
         </FrameControlsProvider>
         <section className="grid grid-cols-8" hidden={open !== SETTINGS} aria-label="Settings">
-          <SettingsScreen />
+          <SettingsScreen open={open === SETTINGS} />
         </section>
       </main>
       <CheatSheet open={cheatSheet} onOpenChange={setCheatSheet} />

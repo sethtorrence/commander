@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import type { CoreMessage } from '@commander/domain';
 import { createAccessTokens } from './access-tokens';
 import { answerRemoveAccountItems } from './account-requests';
+import { openGate } from './autonomy/gate';
+import { answerAutonomyRequest } from './autonomy/requests';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 import { setUpModels } from './models';
@@ -42,12 +44,22 @@ const models = setUpModels(itemStore, { send: (message) => port.postMessage(mess
 // Source sync: every Account on its cadence, writing through the Item store.
 const sync = setUpSync(itemStore, { send: (message) => port.postMessage(message), accessTokens });
 
+// The gate every Ares action goes through. Test hooks (proposing from end-to-end tests) are on only
+// when the main process asks for them.
+const testHooks = process.argv.includes('--test-hooks');
+const gate = openGate({
+  itemStore,
+  onChange: () => port.postMessage({ type: 'ares-activity', at: Date.now() } satisfies CoreMessage),
+});
+
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
   if (models.handle(data)) return;
   if (sync.handle(data)) return;
   const reply =
-    answerRemoveAccountItems(itemStore, data, sync.forget) ?? answerItemStoreRequest(itemStore, data);
+    answerRemoveAccountItems(itemStore, data, sync.forget) ??
+    answerItemStoreRequest(itemStore, data) ??
+    answerAutonomyRequest(gate, data, { testHooks });
   if (reply) port.postMessage(reply);
 });
 
