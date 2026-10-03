@@ -4,6 +4,7 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useNow } from '../../frame/use-now';
 import type { ItemStoreClient } from '../../item-store/client';
 import { MappingRules } from '../../rules/MappingRules';
+import { ProjectRankedList } from '../../sections/dashboard/ProjectRankedList';
 import { TodoGroup } from '../../sections/todos/TodoGroup';
 import { TodoList } from '../../sections/todos/TodoList';
 import { todosIn } from '../../sections/todos/todos';
@@ -34,9 +35,10 @@ export interface ProjectPageProps {
 
 /**
  * A Project's page, opened as a temporary tab: the sheet header with its Badge, per-Section counts,
- * the Project's open Todos (which behave as in the Todos Section: `j`/`k`, `x`, `b`), and in the side
- * column how its Items were filed, its mapping Rules, and the controls to rename, recolour, archive
- * and merge it. The scoped feed and schedule join it with the Dashboard and Calendar milestones.
+ * the Dashboard's ranked list scoped to the Project, the Project's open Todos (which behave as in the
+ * Todos Section: `j`/`k`, `x`, `b`), and in the side column how its Items were filed, its mapping
+ * Rules, and the controls to rename, recolour, archive and merge it. Its schedule joins it with the
+ * Calendar milestone.
  */
 export function ProjectPage({ projectId, active, itemStore, back, onOpenSection }: ProjectPageProps) {
   const { projectById, setFilter, openPage, loaded } = useProjects();
@@ -177,6 +179,11 @@ export function ProjectPage({ projectId, active, itemStore, back, onOpenSection 
         />
         <PickBadgeProvider value={badges.open}>
           <div className="flex-1 pb-30">
+            <ProjectRankedList
+              projectId={project.id}
+              projectName={project.name}
+              onOpenSection={onOpenSection}
+            />
             <TodoGroup no="G1" title="Open Todos" count={openTodos.length}>
               <TodoList
                 todos={openTodos}

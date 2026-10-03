@@ -1,19 +1,12 @@
-import { EmptySheet, type SectionDefinition, SectionSheet } from '../section';
+import type { SectionDefinition } from '../section';
+import { DashboardSheet } from './DashboardSheet';
 
-// The Dashboard Section: an empty sheet until its own ticket fills it in.
-function DashboardSection() {
-  return (
-    <SectionSheet span="wide" title="What needs you" size="dashboard" subtitle="Ranked from every Section">
-      <EmptySheet>
-        Nothing needs you yet. Once Sources are connected, what needs you from every Section is ranked here.
-      </EmptySheet>
-    </SectionSheet>
-  );
-}
-
+// The Dashboard Section: "What needs you", one ranked list merged from Todos and Linear. Its state
+// (the Items, the ranking, the cleared rows) lives in the frame's <DashboardProvider> (context.tsx),
+// which the header's band meter and the Project pages read too.
 export const dashboard: SectionDefinition = {
   id: 'dashboard',
   label: 'Dashboard',
   code: 'DSH',
-  Component: DashboardSection,
+  Component: DashboardSheet,
 };
