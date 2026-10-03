@@ -31,6 +31,8 @@ The Core's Item store is the only writer to Commander's database: one SQLite fil
 
 Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, security, diagnostics), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
 
+In Todos, type a Todo in the **New Todo** field (`n` jumps there) and press Enter. `j`/`k` move the selection, `x` ticks the selected Todo (or unticks it), and `Ctrl+Z` undoes your last change there. The side column shows the selected Todo's history from the activity log.
+
 ## Tray and summoning
 
 Commander is meant to stay running. Closing the window hides it to the tray and the Core keeps working. Click the tray icon or use its menu (**Open Commander**, **Quit Commander**) to get it back; **Quit** is the only way to stop it. On Hyprland the tray needs a StatusNotifierItem host in your bar, such as waybar's `tray` module or DankMaterialShell. Launching Commander again while it is running just brings the running window forward.

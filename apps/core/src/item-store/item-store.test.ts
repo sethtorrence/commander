@@ -240,7 +240,7 @@ describe('recording actions made in Commander', () => {
         item: {
           kind: 'todo',
           title: 'Fix sync',
-          detail: { kind: 'todo', dueOn: '2026-10-05', backedBy: issue },
+          detail: { kind: 'todo', origin: 'linear', dueOn: '2026-10-05', backedBy: issue },
         },
       },
       user,
@@ -250,7 +250,7 @@ describe('recording actions made in Commander', () => {
       kind: 'todo',
       source: null,
       title: 'Fix sync',
-      detail: { kind: 'todo', dueOn: '2026-10-05', backedBy: issue },
+      detail: { kind: 'todo', origin: 'linear', dueOn: '2026-10-05', backedBy: issue },
     });
     expect(entry).toMatchObject({ action: 'create', by: { kind: 'user' }, at: clock });
   });
@@ -259,7 +259,11 @@ describe('recording actions made in Commander', () => {
     const store = open();
     const action = {
       type: 'create',
-      item: { kind: 'email', title: 'Hi', detail: { kind: 'todo', dueOn: null, backedBy: null } },
+      item: {
+        kind: 'email',
+        title: 'Hi',
+        detail: { kind: 'todo', origin: 'manual', dueOn: null, backedBy: null },
+      },
     } as const;
 
     expect(() => store.record(action, user)).toThrow(/detail/);
@@ -371,6 +375,38 @@ describe('recording actions made in Commander', () => {
     const todo = store.record({ type: 'create', item: { kind: 'todo', title: 'Loop' } }, user).itemId;
 
     expect(() => store.link({ from: todo, linkType: 'about', to: todo }, user)).toThrow(/itself/);
+  });
+});
+
+describe('what each activity entry changed', () => {
+  it('lists the fields an update changed, with their values before and after', () => {
+    const store = open();
+    const todo = store.record({ type: 'create', item: { kind: 'todo', title: 'Pay rent' } }, user).itemId;
+
+    const tick = store.record({ type: 'update', itemId: todo, changes: { status: 'done' } }, user);
+
+    expect(tick.changes).toEqual([{ field: 'status', before: 'open', after: 'done' }]);
+    expect(latestEntry(store, todo).changes).toEqual(tick.changes);
+  });
+
+  it('lists what an undo put back', () => {
+    const store = open();
+    const todo = store.record({ type: 'create', item: { kind: 'todo', title: 'Pay rent' } }, user).itemId;
+    const tick = store.record({ type: 'update', itemId: todo, changes: { status: 'done' } }, user);
+
+    const undo = store.record({ type: 'undo', entryId: tick.id }, user);
+
+    expect(undo.changes).toEqual([{ field: 'status', before: 'done', after: 'open' }]);
+  });
+
+  it('lists nothing for a creation or a Link', () => {
+    const store = open();
+    const created = store.record({ type: 'create', item: { kind: 'todo', title: 'Pay rent' } }, user);
+    const event = store.record({ type: 'create', item: { kind: 'event', title: 'Viewing' } }, user);
+
+    const linked = store.link({ from: created.itemId, linkType: 'about', to: event.itemId }, user);
+
+    expect([created.changes, linked.changes]).toEqual([[], []]);
   });
 });
 
