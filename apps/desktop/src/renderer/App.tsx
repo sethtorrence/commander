@@ -1,6 +1,7 @@
 import type { Diagnostics } from '@commander/domain';
 import { useEffect, useState } from 'react';
 import type { CommanderBridge } from '../preload';
+import { SecurityPanel } from './SecurityPanel';
 
 declare global {
   interface Window {
@@ -32,6 +33,7 @@ export function App() {
         <span data-testid="password-store">{diagnostics?.passwordStore ?? '…'}</span> · electron{' '}
         {diagnostics?.electron ?? '…'}
       </p>
+      <SecurityPanel />
     </main>
   );
 }

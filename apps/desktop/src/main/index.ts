@@ -5,6 +5,7 @@ import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
 import { app, BrowserWindow, ipcMain, utilityProcess } from 'electron';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { launchSwitches } from './launch-switches';
+import { setUpSecretStorage } from './secret-storage';
 import { windowWebPreferences } from './window-config';
 
 for (const [name, value] of launchSwitches(process.platform)) app.commandLine.appendSwitch(name, value);
@@ -55,6 +56,7 @@ function startCore() {
 
 app.whenReady().then(() => {
   ipcMain.handle(ipc.diagnostics, () => diagnostics());
+  setUpSecretStorage();
   window = new BrowserWindow({
     width: 1200,
     height: 800,
