@@ -4,6 +4,9 @@ import type { Project } from '@commander/domain';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { onReveal } from '../../frame/reveal';
+import type { ItemChanges } from '../../item-store/changes';
+import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
@@ -16,12 +19,14 @@ import { type Todos, todosIn } from './todos';
 let store: ItemStore;
 let todos: Todos;
 let projects: ProjectsClient;
+let client: ItemStoreClient;
+let changes: ItemChanges;
 let close: () => void;
 const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
 
 beforeEach(() => {
   const opened = openTestItemStore();
-  ({ store, close } = opened);
+  ({ store, close, client, changes } = opened);
   todos = todosIn(opened.client);
   projects = projectsIn(opened.client);
   localStorage.clear();
@@ -51,7 +56,7 @@ function renderSheet() {
           <SectionProvider place={place}>
             <ShortcutScope scope="todos" group="Todos">
               <Active>
-                <TodosSheet todos={todos} />
+                <TodosSheet todos={todos} changes={changes} />
               </Active>
             </ShortcutScope>
           </SectionProvider>
@@ -229,6 +234,85 @@ describe('the Todos sheet', () => {
     await waitFor(() => expect(within(links).getAllByRole('button')).toHaveLength(2));
     fireEvent.click(within(detail() as HTMLElement).getByRole('button', { name: /Contract redlines/ }));
     expect(controls.openSection).toHaveBeenCalledWith('email');
+  });
+
+  describe('a Todo made from a Block', () => {
+    // A Block on Saturday 3 October typed into a Todo, as the Notes Section saves it.
+    function blockTodo(text: string) {
+      const note = store.ensureDailyNote('2026-10-03', { by: { kind: 'user' } });
+      const blockId = crypto.randomUUID();
+      const todoId = crypto.randomUUID();
+      store.recordAll(
+        [
+          {
+            type: 'create',
+            item: {
+              id: blockId,
+              kind: 'block',
+              title: text,
+              detail: {
+                kind: 'block',
+                dailyNoteId: note.id,
+                parentId: null,
+                position: 'a0',
+                text,
+                folded: false,
+              },
+            },
+          },
+          {
+            type: 'create',
+            item: {
+              id: todoId,
+              kind: 'todo',
+              title: text,
+              detail: { kind: 'todo', origin: 'daily-note', dueOn: null, backedBy: null },
+            },
+          },
+          { type: 'link', from: todoId, linkType: 'made-from', to: blockId },
+        ],
+        { by: { kind: 'user' } },
+      );
+      return { blockId, todoId };
+    }
+
+    it('shows its origin as the Daily Note and its day', async () => {
+      blockTodo('Call Dana');
+      renderSheet();
+
+      await waitFor(() => expect(rows(openGroup())[0]).toContain('Daily Note · 3 Oct'));
+      await press('Enter');
+      expect(within(detail() as HTMLElement).getByText('Origin').nextSibling?.textContent).toBe(
+        'Daily Note · 3 Oct',
+      );
+    });
+
+    it('opens Notes at its Block from the made-from Link', async () => {
+      const { blockId } = blockTodo('Call Dana');
+      const revealed: string[] = [];
+      const stop = onReveal('notes', (itemId) => revealed.push(itemId));
+      renderSheet();
+      await waitFor(() => expect(rows(openGroup())[0]).toContain('Call Dana'));
+      await press('Enter');
+
+      const links = within(detail() as HTMLElement).getByRole('region', { name: 'Links' });
+      fireEvent.click(await within(links).findByRole('button', { name: /Made from.*Call Dana/ }));
+
+      expect(controls.openSection).toHaveBeenCalledWith('notes');
+      expect(revealed).toEqual([blockId]);
+      stop();
+    });
+
+    it('catches up when Items change elsewhere', async () => {
+      const { todoId } = blockTodo('Call Dana');
+      renderSheet();
+      await waitFor(() => expect(rows(openGroup())[0]).toContain('Call Dana'));
+
+      // Ticked in the Notes Section: another client on the same store.
+      await client({ op: 'record', action: { type: 'update', itemId: todoId, changes: { status: 'done' } } });
+
+      await waitFor(() => expect(within(openGroup()).queryAllByRole('listitem')).toEqual([]));
+    });
   });
 
   it('puts the open-Todo count on the tab, keeping it up to date', async () => {

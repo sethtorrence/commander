@@ -145,6 +145,64 @@ describe('answering Item store requests from the window', () => {
     expect(store.blocks([idOf(past)])).toEqual([]);
   });
 
+  it('says which Items changed after each recorded change, and nothing after queries or failures', () => {
+    const changed: string[][] = [];
+    const tell = (request: unknown) =>
+      answerItemStoreRequest(store, { type: 'item-store-request', id: 1, request }, (ids) =>
+        changed.push(ids),
+      );
+    const todo = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e02';
+    const other = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e03';
+
+    tell({ op: 'record', action: { type: 'create', item: { id: todo, kind: 'todo', title: 'A' } } });
+    tell({
+      op: 'record-all',
+      actions: [
+        { type: 'create', item: { id: other, kind: 'todo', title: 'B' } },
+        { type: 'link', from: todo, linkType: 'refers-to', to: other },
+        { type: 'update', itemId: todo, changes: { status: 'done' } },
+      ],
+    });
+    tell({ op: 'query', query: {} });
+    tell({ op: 'record', action: { type: 'delete', itemId: 'missing' } });
+
+    expect(changed).toEqual([[todo], [other, todo]]);
+  });
+
+  it('finds the Todos made from Blocks', () => {
+    const note = store.ensureDailyNote('2026-10-03', { by: { kind: 'user' } });
+    const blockId = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e04';
+    const todoId = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e05';
+    const detail = {
+      kind: 'block',
+      dailyNoteId: note.id,
+      parentId: null,
+      position: 'a0',
+      text: 'Call Dana',
+      folded: false,
+    };
+    ask(1, {
+      op: 'record-all',
+      actions: [
+        { type: 'create', item: { id: blockId, kind: 'block', title: '', detail } },
+        {
+          type: 'create',
+          item: {
+            id: todoId,
+            kind: 'todo',
+            title: 'Call Dana',
+            detail: { kind: 'todo', origin: 'daily-note', dueOn: null, backedBy: null },
+          },
+        },
+        { type: 'link', from: todoId, linkType: 'made-from', to: blockId },
+      ],
+    });
+
+    expect(ask(2, { op: 'block-todos', query: { dailyNoteIds: [note.id] } })).toMatchObject({
+      response: { ok: true, result: [{ todo: { id: todoId }, block: { id: blockId }, day: '2026-10-03' }] },
+    });
+  });
+
   it('ignores messages that are not Item store requests', () => {
     expect(answerItemStoreRequest(store, { type: 'heartbeat' })).toBeNull();
     expect(answerItemStoreRequest(store, 'hello')).toBeNull();

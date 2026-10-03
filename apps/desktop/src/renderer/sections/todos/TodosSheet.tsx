@@ -1,5 +1,7 @@
 import { cn, toast } from '@commander/ui';
 import { useEffect, useRef } from 'react';
+import { requestReveal, useReveal } from '../../frame/reveal';
+import type { ItemChanges } from '../../item-store/changes';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
@@ -23,7 +25,7 @@ const onPressable = () => !!document.activeElement?.closest('button, a[href], su
  * Closed, the sheet spans columns A–F like the prototype's Todos sheet; open, it spans A–H with
  * the detail pane in the last three eighths, like its Calendar.
  */
-export function TodosSheet({ todos }: { todos: Todos }) {
+export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemChanges }) {
   // Projects (projects/): the filter narrows the list, `b` or a Badge click files a Todo.
   const { filter, include, filingForNew } = useProjectFilter();
   const { projects } = useProjects();
@@ -36,6 +38,13 @@ export function TodosSheet({ todos }: { todos: Todos }) {
 
   useTabCount(state.list ? state.openCount : null);
   useRefreshWhenShown(refresh);
+  // Changes made elsewhere (a Todo ticked in the Daily Note) show at once.
+  useEffect(() => changes?.(refresh), [changes, refresh]);
+  // A Block's Todo, opened from the Daily Note.
+  useReveal('todos', (todoId) => {
+    state.jumpTo(todoId);
+    setDetailOpen(true);
+  });
 
   const tick = async (todoId?: string) => {
     const todo = todoId ? state.list?.find((t) => t.id === todoId) : selected;
@@ -57,6 +66,8 @@ export function TodosSheet({ todos }: { todos: Todos }) {
     if (other.deletedAt !== null) return;
     if (other.kind === 'todo') return state.jumpTo(other.id);
     const section = sectionFor(other.kind);
+    // A Block opens in its Daily Note, scrolled to and highlighted.
+    if (section && other.kind === 'block') requestReveal(section, other.id);
     if (section) openSection(section);
   };
 
@@ -100,6 +111,7 @@ export function TodosSheet({ todos }: { todos: Todos }) {
               <TodoList
                 todos={open}
                 first={1}
+                madeFrom={state.madeFrom}
                 selectedId={selected?.id ?? null}
                 onSelect={state.select}
                 onOpen={openTodo}
@@ -117,6 +129,7 @@ export function TodosSheet({ todos }: { todos: Todos }) {
               <TodoList
                 todos={done}
                 first={open.length + 1}
+                madeFrom={state.madeFrom}
                 selectedId={selected?.id ?? null}
                 onSelect={state.select}
                 onOpen={openTodo}
@@ -127,6 +140,7 @@ export function TodosSheet({ todos }: { todos: Todos }) {
           {detailOpen && (
             <TodoDetail
               todo={selected}
+              madeFrom={selected ? state.madeFrom.get(selected.id) : undefined}
               links={state.links}
               history={state.history}
               onRename={(title) => state.rename(title)}

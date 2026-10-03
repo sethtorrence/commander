@@ -14,7 +14,14 @@ describe('parseCoreMessage', () => {
     });
   });
 
+  it('accepts word of which Items changed', () => {
+    const result = parseCoreMessage({ type: 'items-changed', itemIds: ['a', 'b'] });
+    expect(result).toEqual({ ok: true, message: { type: 'items-changed', itemIds: ['a', 'b'] } });
+  });
+
   it.each([
+    ['an Items change naming no Items', { type: 'items-changed', itemIds: [] }],
+    ['an Items change with an empty id', { type: 'items-changed', itemIds: [''] }],
     ['a missing beat count', { type: 'heartbeat', at: 1 }],
     ['a negative beat count', { type: 'heartbeat', beats: -1, at: 1 }],
     ['a fractional beat count', { type: 'heartbeat', beats: 1.5, at: 1 }],

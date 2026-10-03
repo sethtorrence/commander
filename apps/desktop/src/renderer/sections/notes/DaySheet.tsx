@@ -4,6 +4,7 @@ import { dayOfYear, isoWeek } from '../../frame/calendar';
 import { dateOf, dayLabel, longDate, notePartNumber, weekday } from './days';
 import type { DayState } from './notebook';
 import { OutlineView } from './OutlineView';
+import type { Outline } from './outline';
 
 const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -13,12 +14,14 @@ function daysInYear(year: number) {
 }
 
 // Column A: the sheet's title block, with its part number, the big date and a table of what it holds.
-function Spec({ day, today, blocks }: { day: string; today: boolean; blocks: number }) {
+function Spec({ day, today, outline }: { day: string; today: boolean; outline: Outline }) {
   const date = dateOf(day);
+  const todos = [...outline.values()].filter((block) => block.todo);
+  const done = todos.filter((block) => block.todo?.done).length;
   const rows: [string, string, string?][] = [
     ['Meetings', '00'],
-    today ? ['Open Todos', '00'] : ['Todos done', '0/0'],
-    ['Blocks', pad(blocks, 3)],
+    today ? ['Open Todos', pad(todos.length - done)] : ['Todos done', `${done}/${todos.length}`],
+    ['Blocks', pad(outline.size, 3)],
   ];
   if (today) rows.push(['From Ares', '00', 'ares']);
   return (
@@ -91,6 +94,8 @@ function Legend() {
         indent, outdent
       </Key>
       <Key keys={<Kbd>■</Kbd>}>click a bullet to fold</Key>
+      <Key keys={<Kbd>[ ]</Kbd>}>start a line, get a Todo</Key>
+      <Key keys={<Kbd>Ctrl ↵</Kbd>}>make a Todo, tick it</Key>
       <Key keys={<Kbd>Ctrl .</Kbd>}>fold, unfold</Key>
       <Key
         keys={
@@ -126,7 +131,7 @@ export function DaySheet({ state, today, sheet }: DaySheetProps) {
       data-testid="daily-note"
       aria-label={`${weekday(day)} ${longDate(day)}`}
     >
-      <Spec day={day} today={isToday} blocks={outline.size} />
+      <Spec day={day} today={isToday} outline={outline} />
       <Sheet className="n-sheet">
         <SheetStrip
           eyebrow={dayLabel(day, today)}

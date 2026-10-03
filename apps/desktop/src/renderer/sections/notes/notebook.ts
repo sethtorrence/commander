@@ -1,3 +1,4 @@
+import { enterTodo, makeTodo, removeTodo, tickTodo, typeTodoMark } from './block-todos';
 import type { DailyNotes } from './daily-notes';
 import {
   type BlockChange,
@@ -27,6 +28,9 @@ import {
     first, and `flush()` saves whatever is held (Commander calls it before quitting).
   - Each edit, and each pause in typing, is one step to undo. Undo puts the outline back here and
     asks the Item store to undo that step's activity entries; redo undoes those undos.
+  - A Block can be a Todo (block-todos.ts): `[] ` typed at its start, or Ctrl+Enter, makes one;
+    its checkbox ticks it; deleting the checkbox or the Block deletes the Todo. Each is one step to
+    undo, saved together with the Block. Changes made in the Todos Section show after `refresh()`.
   - A day that has no Daily Note yet (an empty past day opened from the week strip) shows blank, and
     its Daily Note is made only when the User writes in it.
   - Today's Daily Note, made when Notes first opens or when the date moves on while it is open, starts
@@ -79,8 +83,12 @@ export interface Notebook {
   /** Which days from `from` to `to` (inclusive) have something written. */
   daysWithContent(from: string, to: string): Promise<Set<string>>;
 
-  /** The User's text for a Block, as typed. Saved after a pause. */
-  type(day: string, id: string, text: string): void;
+  /**
+   * The User's text for a Block, as typed, with the caret at `caret`. Saved after a pause. `[] ` typed
+   * at the start of a plain Block makes it a Todo at once: the mark goes, and the caret to put back
+   * in the Block is returned (null otherwise).
+   */
+  type(day: string, id: string, text: string, caret?: number): Caret | null;
   /** Writing in an empty day: makes its first Block, holding `text`. */
   begin(day: string, text: string): Caret;
   enter(day: string, id: string, start: number, end: number): Caret | null;
@@ -90,6 +98,16 @@ export interface Notebook {
   removeBackward(day: string, id: string): Caret | null;
   joinNext(day: string, id: string): Caret | null;
   toggleFold(day: string, id: string): boolean;
+  /** Ctrl+Enter on a plain Block: makes it a Todo. Null if it is one already. */
+  makeTodo(day: string, id: string, offset?: number): Caret | null;
+  /** Ticks a Todo Block's Todo, or unticks it. Returns false if the Block isn't a Todo. */
+  tick(day: string, id: string): boolean;
+  /** Deletes a Block's checkbox: it becomes a plain Block, and its Todo is deleted. */
+  removeTodo(day: string, id: string): Caret | null;
+  /** Reads the days on screen again, for changes made elsewhere (the Todos Section). */
+  refresh(): Promise<void>;
+  /** Makes sure the day holding a Block is on screen, and returns that day (null if it isn't found). */
+  reveal(blockId: string): Promise<string | null>;
   /** Undoes the last step; returns where the caret was before it. */
   undo(): Caret | null;
   /** Redoes the last undone step; returns where the caret was after it. */
@@ -163,10 +181,11 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     return noteId;
   }
 
-  function save(day: string, changes: BlockChange[], why: string, step?: Step) {
+  // `before` is the day's outline as saved before these changes, so their Todos change with them.
+  function save(day: string, changes: BlockChange[], why: string, before: Outline, step?: Step) {
     if (!changes.length) return;
     enqueue(async () => {
-      const entries = await api.save(await noteIdFor(day), changes, why);
+      const entries = await api.save(await noteIdFor(day), changes, why, before);
       if (step) step.entries = entries;
     });
   }
@@ -214,21 +233,28 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     }
     step.after = outlineOfDay(day);
     step.focusAfter = { id, offset: block.text.length };
-    save(day, [{ type: 'update', block }], 'Typing', step);
+    save(day, [{ type: 'update', block }], 'Typing', step.before, step);
   }
 
   // ---- edits ----
 
-  function commit(day: string, edit: Edit | null, why: string, focusBefore: Caret): Caret | null {
+  // `before` is the outline as saved, which the step goes back to: the day's outline unless typing
+  // held back is being folded into this step.
+  function commit(
+    day: string,
+    edit: Edit | null,
+    why: string,
+    focusBefore: Caret,
+    before = outlineOfDay(day),
+  ): Caret | null {
     if (!edit) return null;
-    const before = outlineOfDay(day);
     setDay(day, { outline: edit.outline });
     const focusAfter = edit.focus ?? focusBefore;
     if (edit.changes.length) {
       const step: Step = { day, before, after: edit.outline, focusBefore, focusAfter, entries: [] };
       undoStack.push(step);
       redoStack = [];
-      save(day, edit.changes, why, step);
+      save(day, edit.changes, why, before, step);
     }
     return focusAfter;
   }
@@ -238,6 +264,9 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     flushTyping();
     return commit(day, make(outlineOfDay(day)), why, focusBefore);
   }
+
+  const removeCheckbox = (day: string, id: string) =>
+    edit(day, 'Remove the Todo', { id, offset: 0 }, (outline) => removeTodo(outline, id));
 
   function undoRedo(from: Step[], to: Step[], direction: 'undo' | 'redo'): Caret | null {
     flushTyping();
@@ -251,7 +280,7 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     return direction === 'undo' ? step.focusBefore : step.focusAfter;
   }
 
-  return {
+  const notebook: Notebook = {
     snapshot: () => state,
 
     subscribe(listener) {
@@ -317,10 +346,22 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       return days;
     },
 
-    type(day, id, text) {
+    type(day, id, text, caret) {
       const before = outlineOfDay(day);
+      const todo = api.todos !== false ? typeTodoMark(before, id, text, caret, newId()) : null;
+      if (todo?.focus) {
+        // The typing that led up to the mark is folded into this one step.
+        const held = typing?.day === day && typing.id === id ? typing : null;
+        if (held) {
+          clearTimeout(held.timer);
+          typing = null;
+          undoStack = undoStack.filter((s) => s !== held.step);
+        } else flushTyping();
+        const saved = held?.step.before ?? before;
+        return commit(day, todo, 'Make a Todo', held?.step.focusBefore ?? todo.focus, saved);
+      }
       const changed = setText(before, id, text);
-      if (!changed) return;
+      if (!changed) return null;
       if (typing && (typing.day !== day || typing.id !== id)) flushTyping();
       let step = typing?.step;
       if (!step) {
@@ -333,6 +374,7 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       if (typing) clearTimeout(typing.timer);
       typing = { day, id, step, timer: setTimeout(flushTyping, typingPauseMs) };
       setDay(day, { outline: changed.outline });
+      return null;
     },
 
     begin(day, text) {
@@ -353,7 +395,9 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
 
     enter(day, id, start, end) {
       return edit(day, 'New Block', { id, offset: start }, (outline) =>
-        enter(outline, id, start, end, newId()),
+        outline.get(id)?.todo
+          ? enterTodo(outline, id, start, end, newId)
+          : enter(outline, id, start, end, newId()),
       );
     },
 
@@ -373,6 +417,8 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     },
 
     removeBackward(day, id) {
+      // Backspace at the start of a Todo deletes its checkbox first.
+      if (outlineOfDay(day).get(id)?.todo) return removeCheckbox(day, id);
       return edit(day, 'Remove Block', { id, offset: 0 }, (outline) => removeBackward(outline, id));
     },
 
@@ -387,6 +433,34 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       return !!edit(day, folded ? 'Unfold' : 'Fold', { id, offset }, (outline) => toggleFold(outline, id));
     },
 
+    makeTodo(day, id, offset) {
+      const caret = { id, offset: offset ?? outlineOfDay(day).get(id)?.text.length ?? 0 };
+      if (api.todos === false) return null;
+      return edit(day, 'Make a Todo', caret, (outline) => makeTodo(outline, id, newId()));
+    },
+
+    tick(day, id) {
+      const block = outlineOfDay(day).get(id);
+      const caret = { id, offset: block?.text.length ?? 0 };
+      return !!edit(day, block?.todo?.done ? 'Untick' : 'Tick', caret, (outline) => tickTodo(outline, id));
+    },
+
+    removeTodo: removeCheckbox,
+
+    refresh() {
+      flushTyping();
+      return enqueue(reload);
+    },
+
+    async reveal(blockId) {
+      const day = await api.dayOfBlock(blockId).catch((error) => {
+        onError(message(error));
+        return null;
+      });
+      if (day) await notebook.showDay(day);
+      return day;
+    },
+
     undo: () => undoRedo(undoStack, redoStack, 'undo'),
     redo: () => undoRedo(redoStack, undoStack, 'redo'),
 
@@ -395,4 +469,5 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       await queue;
     },
   };
+  return notebook;
 }

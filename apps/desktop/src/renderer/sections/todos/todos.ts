@@ -3,6 +3,7 @@ import type {
   Actor,
   Filing,
   Item,
+  ItemAction,
   ItemChange,
   ItemRef,
   LinkType,
@@ -39,7 +40,7 @@ export interface Todos {
   add(title: string, filing?: Filing): Promise<ActivityEntry>;
   /** Ticks a Todo (done) or unticks it. */
   setDone(todoId: string, done: boolean): Promise<ActivityEntry>;
-  /** Changes a Todo's title. */
+  /** Changes a Todo's title; a Todo made from a Block changes the Block's text with it, as one change. */
   rename(todoId: string, title: string): Promise<ActivityEntry>;
   /** Deletes a Todo. It stays in the Item store with its history and Links, so undo brings it back. */
   remove(todoId: string): Promise<ActivityEntry>;
@@ -47,13 +48,29 @@ export interface Todos {
   links(todoId: string): Promise<TodoLink[]>;
   /** A Todo's activity log, newest first. */
   history(todoId: string): Promise<ActivityEntry[]>;
-  /** Reverses what an activity entry changed. */
+  /**
+   * Reverses a change made here, given its (first) activity entry: with it, anything recorded as part
+   * of the same change (the Block of a Todo renamed here).
+   */
   undo(entryId: number): Promise<ActivityEntry>;
+  /** For the Todos made from a Block (origin Daily Note): the Block and its day, by Todo id. */
+  madeFrom(todos: readonly Item[]): Promise<Map<string, MadeFrom>>;
 }
+
+/** Where a Todo of origin Daily Note was made: its Block, and the day of that Block's Daily Note. */
+export interface MadeFrom {
+  blockId: string;
+  day: string;
+}
+
+const fromDailyNote = (todo: Item) => todo.detail?.kind === 'todo' && todo.detail.origin === 'daily-note';
 
 const EMPTY = 'A Todo can’t be empty';
 
 export function todosIn(itemStore: ItemStoreClient): Todos {
+  // Changes made here that were recorded as several entries, by their first entry's id.
+  const together = new Map<number, number[]>();
+
   return {
     async list() {
       // The store answers newest change first, which is the order ticked Todos are shown in.
@@ -88,13 +105,28 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
       });
     },
 
-    rename(todoId, title) {
+    async rename(todoId, title) {
       const trimmed = title.trim();
-      if (!trimmed) return Promise.reject(new Error(EMPTY));
-      return itemStore({
-        op: 'record',
-        action: { type: 'update', itemId: todoId, changes: { title: trimmed } },
+      if (!trimmed) throw new Error(EMPTY);
+      const retitle: ItemAction = { type: 'update', itemId: todoId, changes: { title: trimmed } };
+      // A Todo made from a Block is that Block's text: the Block changes with it.
+      const [made] = await itemStore({ op: 'block-todos', query: { todoIds: [todoId] } });
+      const detail = made?.block.detail;
+      if (!made || detail?.kind !== 'block') return itemStore({ op: 'record', action: retitle });
+      const entries = await itemStore({
+        op: 'record-all',
+        actions: [
+          retitle,
+          { type: 'update', itemId: made.block.id, changes: { detail: { ...detail, text: trimmed } } },
+        ],
       });
+      const [first] = entries;
+      if (!first) throw new Error('Nothing was recorded');
+      together.set(
+        first.id,
+        entries.map((entry) => entry.id),
+      );
+      return first;
     },
 
     remove(todoId) {
@@ -114,8 +146,25 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
       return itemStore({ op: 'activity', query: { itemId: todoId } });
     },
 
-    undo(entryId) {
-      return itemStore({ op: 'record', action: { type: 'undo', entryId } });
+    async undo(entryId) {
+      const entries = together.get(entryId);
+      if (!entries) return itemStore({ op: 'record', action: { type: 'undo', entryId } });
+      const actions = [...entries].reverse().map((id): ItemAction => ({ type: 'undo', entryId: id }));
+      const [first] = await itemStore({ op: 'record-all', actions });
+      if (!first) throw new Error('Nothing was undone');
+      together.delete(entryId);
+      return first;
+    },
+
+    async madeFrom(todos) {
+      const todoIds = todos.filter(fromDailyNote).map((todo) => todo.id);
+      // The store answers for up to 1000 Todos at a time.
+      const pages = [];
+      for (let i = 0; i < todoIds.length; i += 1000) pages.push(todoIds.slice(i, i + 1000));
+      const made = await Promise.all(
+        pages.map((page) => itemStore({ op: 'block-todos', query: { todoIds: page } })),
+      );
+      return new Map(made.flat().map(({ todo, block, day }) => [todo.id, { blockId: block.id, day }]));
     },
   };
 }

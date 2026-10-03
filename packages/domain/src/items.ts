@@ -41,9 +41,9 @@ export type Filing = z.infer<typeof filing>;
 // People involved, by handle (email address, GitHub or Linear user) until Person matching lands.
 export const people = z.array(z.string().min(1));
 
-// Where a Todo came from: one the User added, a suggestion from Ares the User accepted, or a Linear
-// issue assigned to the User.
-export const todoOrigins = ['manual', 'ares', 'linear'] as const;
+// Where a Todo came from: one the User added, a suggestion from Ares the User accepted, a Linear
+// issue assigned to the User, or a Block of a Daily Note (made from it, with a made-from Link).
+export const todoOrigins = ['manual', 'ares', 'linear', 'daily-note'] as const;
 export const todoOrigin = z.enum(todoOrigins);
 export type TodoOrigin = z.infer<typeof todoOrigin>;
 
@@ -291,3 +291,15 @@ export const dailyNotePage = z.object({
   total: z.number().int().nonnegative(),
 });
 export type DailyNotePage = z.infer<typeof dailyNotePage>;
+
+// Todos made from Blocks (`[]` at the start of a Block): those with a made-from Link to a Block of
+// these Daily Notes, or these Todos themselves. Only live Todos of live Blocks.
+export const blockTodoQuery = z.object({
+  dailyNoteIds: z.array(id).max(1000).optional(),
+  todoIds: z.array(id).max(1000).optional(),
+});
+export type BlockTodoQuery = z.input<typeof blockTodoQuery>;
+
+// A Todo made from a Block, with that Block and its Daily Note's day.
+export const blockTodo = z.object({ todo: item, block: item, day: z.iso.date() });
+export type BlockTodo = z.infer<typeof blockTodo>;

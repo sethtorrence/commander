@@ -1,7 +1,7 @@
 import type { ActivityEntry, Filing, Item } from '@commander/domain';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { TodoLink, Todos } from './todos';
+import type { MadeFrom, TodoLink, Todos } from './todos';
 
 export interface TodosState {
   /**
@@ -15,6 +15,8 @@ export interface TodosState {
   open: Item[];
   /** The ticked Todos, most recently changed first. */
   done: Item[];
+  /** Where each Todo made from a Block (origin Daily Note) was made, by Todo id. */
+  madeFrom: ReadonlyMap<string, MadeFrom>;
   /** How many Todos are open, shown or not, for the notebook tab. */
   openCount: number;
   /** Whether the Done group is expanded. It starts collapsed. */
@@ -59,6 +61,7 @@ export interface TodosState {
  */
 export function useTodos(todos: Todos, include?: (todo: Item) => boolean): TodosState {
   const [all, setAll] = useState<Item[] | null>(null);
+  const [madeFrom, setMadeFrom] = useState<ReadonlyMap<string, MadeFrom>>(new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doneShown, setDoneShown] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -75,7 +78,13 @@ export function useTodos(todos: Todos, include?: (todo: Item) => boolean): Todos
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload after a change
   useEffect(() => {
     let current = true;
-    todos.list().then((next) => current && setAll(next), report);
+    (async () => {
+      const next = await todos.list();
+      const origins = await todos.madeFrom(next);
+      if (!current) return;
+      setAll(next);
+      setMadeFrom(origins);
+    })().catch(report);
     return () => {
       current = false;
     };
@@ -231,6 +240,7 @@ export function useTodos(todos: Todos, include?: (todo: Item) => boolean): Todos
     allOpen,
     open,
     done,
+    madeFrom,
     openCount: allOpen.length,
     doneShown,
     showDone,

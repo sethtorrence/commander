@@ -180,6 +180,7 @@ export function ProjectPage({ projectId, active, itemStore, back, onOpenSection 
               <TodoList
                 todos={openTodos}
                 first={1}
+                madeFrom={state.madeFrom}
                 selectedId={state.selected?.id ?? null}
                 onSelect={state.select}
                 onOpen={state.select}

@@ -16,6 +16,14 @@ export interface Block {
   position: string;
   text: string;
   folded: boolean;
+  /** The Todo made from this Block (`[]`), shown as its checkbox; absent for a plain Block. */
+  todo?: BlockTodo;
+}
+
+/** A Block's Todo: its own Item (see block-todos.ts), and whether it is ticked. */
+export interface BlockTodo {
+  id: string;
+  done: boolean;
 }
 
 export type Outline = ReadonlyMap<string, Block>;

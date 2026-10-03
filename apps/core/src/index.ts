@@ -56,11 +56,16 @@ port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
   if (models.handle(data)) return;
   if (sync.handle(data)) return;
+  let changed: CoreMessage | null = null;
   const reply =
     answerRemoveAccountItems(itemStore, data, sync.forget) ??
-    answerItemStoreRequest(itemStore, data) ??
+    answerItemStoreRequest(itemStore, data, (itemIds) => {
+      changed = { type: 'items-changed', itemIds };
+    }) ??
     answerAutonomyRequest(gate, data, { testHooks });
   if (reply) port.postMessage(reply);
+  // After the reply, so the window that made the change has its answer first.
+  if (changed) port.postMessage(changed);
 });
 
 // Closing the last connection checkpoints the WAL into commander.db.

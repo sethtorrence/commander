@@ -11,6 +11,7 @@ import {
   useMemo,
   useRef,
 } from 'react';
+import { TodoCheck, TodoTag } from './BlockTodo';
 import { caretX, onFirstLine, onLastLine, placeCaret, placeCaretAtX, selectionIn } from './caret';
 import type { Notebook } from './notebook';
 import { type Block, blockNumbers, type Caret, descendantCount, type Outline, treeOf } from './outline';
@@ -165,6 +166,13 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
       return;
     }
     if (sharedKey(event, controls)) return;
+    // Ctrl+Enter: a plain Block becomes a Todo; a Todo is ticked or unticked.
+    if (event.key === 'Enter' && mod && !event.altKey && !event.shiftKey) {
+      take();
+      if (block.todo) notebook.tick(day, id);
+      else focus(notebook.makeTodo(day, id, start));
+      return;
+    }
     if (event.key === 'Enter' && !mod && !event.altKey) {
       take();
       if (event.shiftKey) document.execCommand('insertText', false, '\n');
@@ -202,7 +210,11 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
       spellCheck={false}
       data-block-text=""
       data-block-id={block.id}
-      onInput={(event) => notebook.type(day, block.id, event.currentTarget.textContent ?? '')}
+      onInput={(event) => {
+        const element = event.currentTarget;
+        // `[] ` typed at the start makes the Block a Todo: the mark goes, and the caret stays put.
+        focus(notebook.type(day, block.id, element.textContent ?? '', selectionIn(element)[0]));
+      }}
       onKeyDown={onKeyDown}
       onPaste={pastePlain}
       onDrop={(event) => event.preventDefault()}
@@ -237,11 +249,21 @@ function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps
   };
 
   return (
-    <div className={cn('n-blk', hasKids && 'has-kids', folded && 'folded')} data-block={block.id}>
+    <div
+      className={cn(
+        'n-blk',
+        hasKids && 'has-kids',
+        folded && 'folded',
+        block.todo && 'todo',
+        block.todo?.done && 'done',
+      )}
+      data-block={block.id}
+    >
       <div className="n-row" style={{ '--d': depth } as CSSProperties}>
         <span className="n-bn" aria-hidden="true">
           {numbers.get(block.id)}
         </span>
+        {block.todo && <TodoCheck notebook={notebook} day={day} block={block} />}
         <button
           type="button"
           className="n-bullet"
@@ -267,6 +289,7 @@ function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps
             +{descendantCount(outline, block.id)}
           </button>
         )}
+        <TodoTag block={block} />
       </div>
       {hasKids && !folded && (
         <div className={cn('n-kids', opening && 'opening')}>
