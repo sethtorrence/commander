@@ -73,7 +73,7 @@ Ares runs on GLM-5.3-Flash through Z.ai's OpenAI-compatible API, behind one mode
 
 Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares and usage), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
 
-In Todos, type a Todo in the **New Todo** field (`n` jumps there) and press Enter. `j`/`k` move the selection, `x` ticks the selected Todo (or unticks it), and `Ctrl+Z` undoes your last change there. The side column shows the selected Todo's history from the activity log.
+In Todos, type a Todo in the **New Todo** field (`n` jumps there) and press Enter. `j`/`k` move the selection, `Enter` opens the selected Todo in the detail pane beside the list and `Esc` closes it, `x` ticks it (or unticks it), `Delete` deletes it, and `Ctrl+Z` undoes your last change there, one at a time. Ticked Todos move to the collapsed **Done** group at the bottom (`d` or a click on its header shows them). The detail pane lets you edit the title, and shows the Todo's origin, its Links in both directions (click one to go to the Item at the other end) and its activity log. The Todos tab shows how many Todos are open.
 
 ## Tray and summoning
 

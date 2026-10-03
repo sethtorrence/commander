@@ -7,12 +7,17 @@ import type { ItemStoreClient } from './todos';
 
 // For tests only: a real Item store on a temporary database, and a client that reaches it through
 // the same request handling the Core uses for the window, so every action is recorded as the User's.
-export function openTestItemStore(): { store: ItemStore; client: ItemStoreClient; close: () => void } {
+export function openTestItemStore(now?: () => number): {
+  store: ItemStore;
+  client: ItemStoreClient;
+  close: () => void;
+} {
   const dir = mkdtempSync(join(tmpdir(), 'commander-todos-'));
   const store = openItemStore({
     path: join(dir, 'commander.db'),
     snapshotDir: join(dir, 'snapshots'),
     migrationsFolder: join(import.meta.dirname, '../../../../../core/drizzle'),
+    now,
   });
   let id = 0;
   const client: ItemStoreClient = async (request) => {

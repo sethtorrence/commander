@@ -5,10 +5,15 @@ export interface NotebookTabsProps {
   sections: readonly SectionDefinition[];
   /** The open Section's id, or "settings". */
   open: string;
+  /** The count each Section shows on its tab, by id (useTabCount); none when absent or null. */
+  counts?: Readonly<Record<string, number | null>>;
   onOpen: (id: string) => void;
   onOpenSettings: () => void;
   onCloseSettings: () => void;
 }
+
+const tabCount = (count: number | null | undefined) =>
+  count === null || count === undefined ? '' : String(count).padStart(2, '0');
 
 // Sliders, drawn like the prototypes' glyphs: square caps, mitred corners.
 function SettingsIcon() {
@@ -25,7 +30,14 @@ function SettingsIcon() {
  * The numbered notebook index tabs along the sheet edge (.tabs). Settings opens as a temporary tab
  * with × after the Sections, like a Project page does in the prototype.
  */
-export function NotebookTabs({ sections, open, onOpen, onOpenSettings, onCloseSettings }: NotebookTabsProps) {
+export function NotebookTabs({
+  sections,
+  open,
+  counts = {},
+  onOpen,
+  onOpenSettings,
+  onCloseSettings,
+}: NotebookTabsProps) {
   return (
     <nav className="f-tabs" aria-label="Sections">
       {sections.map((section, index) => (
@@ -42,7 +54,7 @@ export function NotebookTabs({ sections, open, onOpen, onOpenSettings, onCloseSe
         >
           <span className="tn">{index + 1}</span>
           <span className="tlb">{section.label}</span>
-          <span className="tc" />
+          <span className="tc">{tabCount(counts[section.id])}</span>
         </button>
       ))}
       {open === 'settings' && (
