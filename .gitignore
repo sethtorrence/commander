@@ -5,3 +5,6 @@ test-results/
 playwright-report/
 *.log
 .claude/worktrees/
+
+# Private build config: app client IDs (see config/example.json and the README).
+config/local.json

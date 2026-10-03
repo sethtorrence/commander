@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
 import { app, BrowserWindow, ipcMain, utilityProcess } from 'electron';
+import { setUpAccounts } from './accounts/set-up-accounts';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
 import { revealWhenPainted } from './reveal';
 import { setUpSecretStorage } from './secret-storage';
+import type { Secrets } from './secrets';
 import { windowWebPreferences } from './window-config';
 
 for (const [name, value] of launchSwitches(process.platform)) app.commandLine.appendSwitch(name, value);
@@ -45,13 +47,15 @@ async function diagnostics(): Promise<Diagnostics> {
   };
 }
 
-function startCore() {
+function startCore(secrets: Secrets) {
   // The Core keeps the database in userData (which --user-data-dir overrides, e.g. in e2e tests).
   const core = utilityProcess.fork(join(__dirname, 'core.js'), [`--data-dir=${app.getPath('userData')}`]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));
+  const accounts = setUpAccounts({ secrets, sendToCore: (message) => core.postMessage(message) });
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw)) return;
+    if (accounts.fromCore(raw)) return;
     const parsed = parseCoreMessage(raw);
     if (!parsed.ok) {
       console.warn('Rejected malformed message from core:', parsed.error);
@@ -65,7 +69,7 @@ function startCore() {
 app.whenReady().then(() => {
   if (!primary) return;
   ipcMain.handle(ipc.diagnostics, () => diagnostics());
-  setUpSecretStorage();
+  const secrets = setUpSecretStorage();
   window = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -87,5 +91,5 @@ app.whenReady().then(() => {
   });
   if (process.env.ELECTRON_RENDERER_URL) window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else window.loadFile(join(__dirname, '../renderer/index.html'));
-  runInBackground(window, startCore());
+  runInBackground(window, startCore(secrets));
 });

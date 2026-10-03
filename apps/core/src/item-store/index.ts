@@ -57,6 +57,9 @@ export type ItemStoreOptions = {
 
 export type ItemStore = {
   saveFromSource(batch: SourceBatch): SaveResult;
+  // Deletes every Item that came from one Account, when the User removes it. They stay as
+  // tombstones, so Links from notes and Todos show them as gone. Returns their ids.
+  removeAccountItems(account: { source: Source; account: string }, context: ActionContext): string[];
   query(query?: ItemQuery): Item[];
   // An Item with its Links and backlinks; tombstones included.
   get(itemId: string): ItemView | null;
@@ -377,8 +380,29 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return result;
   });
 
+  const removeAccountItems = sqlite.transaction(
+    ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] => {
+      const context = actionContext.parse(rawContext);
+      const { items } = schema;
+      const rows = db
+        .select()
+        .from(items)
+        .where(and(eq(items.source, source), eq(items.account, account), isNull(items.deletedAt)))
+        .all();
+      return withDetails(rows).map((item) => {
+        const at = now();
+        const before = stateOf(item);
+        const after: ItemState = { ...before, deletedAt: at };
+        writeState(item, after, at);
+        log({ ...context, action: 'delete', itemId: item.id, before, after }, at);
+        return item.id;
+      });
+    },
+  );
+
   return {
     saveFromSource,
+    removeAccountItems,
 
     query(input = {}) {
       const query = itemQuery.parse(input);
