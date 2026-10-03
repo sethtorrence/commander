@@ -2,6 +2,7 @@
 export const ipc = {
   coreMessage: 'core-message',
   diagnostics: 'diagnostics',
+  secretStorageStatus: 'secret-storage-status',
 } as const;
 
 // How the window reaches the screen. 'xwayland' means a Wayland session fell back to X11.
@@ -13,4 +14,14 @@ export type Diagnostics = {
   displaySource: 'compositor' | 'inferred';
   passwordStore: string;
   electron: string;
+};
+
+// Where Account tokens and API keys are kept. The window only ever learns this status, never a secret.
+export type SecretStorageStatus = {
+  // safeStorage's backend on Linux (e.g. 'gnome_libsecret', 'basic_text'); 'keychain' or 'dpapi' elsewhere.
+  backend: string;
+  // True only when secrets are encrypted by a real OS keyring.
+  protected: boolean;
+  // A User-facing explanation of what's wrong and how to fix it, when not protected.
+  problem: string | null;
 };
