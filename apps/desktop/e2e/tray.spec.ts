@@ -4,6 +4,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { type ElectronApplication, expect, type Page, test } from '@playwright/test';
+import { openSettings } from './frame';
 import { launchCommander } from './launch-commander';
 
 // Commander is always there: closing the window hides it to the tray, the Core keeps running,
@@ -129,7 +130,9 @@ test('Start at login is off by default and toggles an autostart entry', async ()
   const config = mkdtempSync(join(tmpdir(), 'commander-e2e-config-'));
   const entry = join(config, 'autostart', 'commander.desktop');
   const commander = await launchCommander({ env: { XDG_CONFIG_HOME: config } });
-  const toggle = (await commander.app.firstWindow()).getByTestId('start-at-login');
+  const window = await commander.app.firstWindow();
+  await openSettings(window);
+  const toggle = window.getByTestId('start-at-login');
 
   await expect(toggle).toBeEnabled();
   await expect(toggle).not.toBeChecked();

@@ -46,6 +46,7 @@ export {
   SheetStripStatus,
 } from './components/sheet';
 export { SignalColourPicker } from './components/signal-colour-picker';
+export { Switch } from './components/switch';
 export { ThemeToggle } from './components/theme-toggle';
 export { Toaster, ToastView, toast } from './components/toast';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/tooltip';

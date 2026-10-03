@@ -7,6 +7,7 @@ import { claimSingleInstance, runInBackground, startsHidden } from './background
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
+import { revealWhenPainted } from './reveal';
 import { setUpSecretStorage } from './secret-storage';
 import { windowWebPreferences } from './window-config';
 
@@ -66,12 +67,23 @@ app.whenReady().then(() => {
   ipcMain.handle(ipc.diagnostics, () => diagnostics());
   setUpSecretStorage();
   window = new BrowserWindow({
-    width: 1200,
+    width: 1280,
     height: 800,
     title: 'Commander',
+    // Hidden until the first frame is painted in the User's theme (see reveal.ts); this colour
+    // only shows while resizing.
     backgroundColor: '#141516',
-    show: !startsHidden(process.argv),
+    show: false,
     webPreferences: windowWebPreferences(join(__dirname, '../preload/index.cjs')),
+  });
+  const created = window;
+  revealWhenPainted({
+    window: created,
+    startsHidden: startsHidden(process.argv),
+    onPainted: (listener) =>
+      ipcMain.on(ipc.framePainted, (event) => {
+        if (event.sender === created.webContents) listener();
+      }),
   });
   if (process.env.ELECTRON_RENDERER_URL) window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else window.loadFile(join(__dirname, '../renderer/index.html'));

@@ -22,6 +22,7 @@ import {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
+  Switch,
   type Theme,
   ToastView,
   Tooltip,
@@ -29,7 +30,7 @@ import {
   TooltipTrigger,
   toast,
 } from '@commander/ui';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { Caption } from './Plate';
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -112,7 +113,20 @@ export function FieldsSpecimen({ theme }: { theme: Theme }) {
           </SelectContent>
         </Select>
       </Row>
+      <Row label="Switch">
+        <SwitchSpecimen theme={theme} />
+      </Row>
     </div>
+  );
+}
+
+function SwitchSpecimen({ theme }: { theme: Theme }) {
+  const [on, setOn] = useState(true);
+  return (
+    <>
+      <Switch checked={on} onCheckedChange={setOn} aria-label={`Start at login (${theme})`} />
+      <Switch checked={false} disabled aria-label={`Unavailable (${theme})`} />
+    </>
   );
 }
 
