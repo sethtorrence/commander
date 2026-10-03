@@ -120,6 +120,29 @@ describe('answering Item store requests from the window', () => {
     expect(store.activity({ itemId: noteId })[0]?.by).toEqual({ kind: 'user' });
   });
 
+  it('reads and saves the daily template, and fills a Daily Note made as today from it', () => {
+    const template = {
+      blocks: [{ id: 'focus', parentId: null, position: 'a0', text: 'Focus', folded: false }],
+    };
+    expect(ask(1, { op: 'daily-template' })).toMatchObject({
+      response: { ok: true, result: { blocks: [{ text: 'Morning' }, {}, {}, {}, { text: 'Evening' }] } },
+    });
+    expect(ask(2, { op: 'save-daily-template', template })).toMatchObject({
+      response: { ok: true, result: template },
+    });
+    expect(ask(3, { op: 'save-daily-template', template: { blocks: [{ id: 'x' }] } })).toMatchObject({
+      response: { ok: false },
+    });
+
+    const today = ask(4, { op: 'daily-note', day: '2026-10-03', fromTemplate: true });
+    const past = ask(5, { op: 'daily-note', day: '2026-09-28' });
+    const idOf = (reply: typeof today) =>
+      reply?.response.ok ? (reply.response.result as { id: string }).id : '';
+
+    expect(store.blocks([idOf(today)]).map((item) => item.title)).toEqual(['Focus']);
+    expect(store.blocks([idOf(past)])).toEqual([]);
+  });
+
   it('ignores messages that are not Item store requests', () => {
     expect(answerItemStoreRequest(store, { type: 'heartbeat' })).toBeNull();
     expect(answerItemStoreRequest(store, 'hello')).toBeNull();

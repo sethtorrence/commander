@@ -29,6 +29,9 @@ import {
     asks the Item store to undo that step's activity entries; redo undoes those undos.
   - A day that has no Daily Note yet (an empty past day opened from the week strip) shows blank, and
     its Daily Note is made only when the User writes in it.
+  - Today's Daily Note, made when Notes first opens or when the date moves on while it is open, starts
+    with a copy of the daily template (made by the Item store, with fresh ids). A blank past day
+    never does.
 */
 
 export interface DayState {
@@ -261,7 +264,7 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     start() {
       starting ??= (async () => {
         try {
-          const noteId = await api.ensure(state.today);
+          const noteId = await api.ensure(state.today, { fromTemplate: true });
           addDays(await load([{ day: state.today, noteId }]));
           await loadOlder();
         } catch (error) {
@@ -294,7 +297,7 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       const written = [...outlineOfDay(state.today).values()].some((block) => block.text !== '');
       set({ today: day, olderTotal: state.olderTotal + (written ? 1 : 0) });
       try {
-        const noteId = await api.ensure(day);
+        const noteId = await api.ensure(day, { fromTemplate: true });
         const existing = findDay(day);
         if (existing) setDay(day, { noteId });
         else addDays(await load([{ day, noteId }]));

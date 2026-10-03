@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type DailyTemplate, dailyTemplate } from './daily-template';
 import {
   type ActivityEntry,
   activityEntry,
@@ -30,10 +31,14 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
     actions: z.array(itemAction).min(1).max(500),
     why: z.string().optional(),
   }),
-  // The Daily Note for a calendar day, made if there isn't one yet.
-  z.object({ op: z.literal('daily-note'), day: z.iso.date() }),
+  // The Daily Note for a calendar day, made if there isn't one yet. `fromTemplate` when the day is
+  // being made as today: a new Daily Note then starts with a copy of the daily template.
+  z.object({ op: z.literal('daily-note'), day: z.iso.date(), fromTemplate: z.boolean().optional() }),
   z.object({ op: z.literal('daily-notes'), query: dailyNoteQuery.default({}) }),
   z.object({ op: z.literal('blocks'), dailyNoteIds: z.array(z.string().min(1)).max(1000) }),
+  // Settings → Notes → Daily template. A setting, not an Item change, so not in the activity log.
+  z.object({ op: z.literal('daily-template') }),
+  z.object({ op: z.literal('save-daily-template'), template: dailyTemplate }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -49,6 +54,8 @@ export type ItemStoreResults = {
   'daily-note': Item;
   'daily-notes': DailyNotePage;
   blocks: Item[];
+  'daily-template': DailyTemplate;
+  'save-daily-template': DailyTemplate;
 };
 
 export const itemStoreResult = {
@@ -62,6 +69,8 @@ export const itemStoreResult = {
   'daily-note': item,
   'daily-notes': dailyNotePage,
   blocks: z.array(item),
+  'daily-template': dailyTemplate,
+  'save-daily-template': dailyTemplate,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

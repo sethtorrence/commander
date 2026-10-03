@@ -1,4 +1,5 @@
 import type { ItemStore } from '@commander/core/src/item-store';
+import { defaultDailyTemplate } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
@@ -14,6 +15,8 @@ const notebooks: Notebook[] = [];
 
 beforeEach(() => {
   ({ store, client, close } = openTestItemStore());
+  // Most tests here write into an empty day; the daily template's own tests set one.
+  store.saveDailyTemplate({ blocks: [] });
   errors = [];
 });
 
@@ -137,6 +140,84 @@ describe('opening Notes', () => {
 
     expect(notebook.snapshot().today).toBe('2026-10-04');
     expect(notebook.snapshot().days.map((d) => d.day)).toEqual(['2026-10-04', '2026-10-03']);
+  });
+});
+
+describe('the daily template', () => {
+  const template = (...texts: string[]) => ({
+    blocks: texts.map((text, i) => ({
+      id: `t${i}`,
+      parentId: i > 0 && text.startsWith(' ') ? 't0' : null,
+      position: `a${i}`,
+      text: text.trim(),
+      folded: false,
+    })),
+  });
+
+  it('starts today’s Daily Note with the default Morning, Meetings, Todos, Ideas and Evening', async () => {
+    store.saveDailyTemplate(defaultDailyTemplate);
+    const notebook = open();
+    await notebook.start();
+
+    expect(lines(notebook, '2026-10-03')).toEqual(['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening']);
+  });
+
+  it('is not applied again when Notes opens on a day that already has its Daily Note', async () => {
+    store.saveDailyTemplate(template('Plan'));
+    const first = open();
+    await first.start();
+    const [plan] = dayOf(first, '2026-10-03').outline.keys();
+    first.type('2026-10-03', plan as string, 'Plan, done');
+    await first.flush();
+
+    const again = open();
+    await again.start();
+    expect(lines(again, '2026-10-03')).toEqual(['Plan, done']);
+  });
+
+  it('makes the new day from the template when the date rolls over while open', async () => {
+    store.saveDailyTemplate(template('Plan', ' Top three'));
+    const notebook = open('2026-10-03');
+    await notebook.start();
+    const [plan] = dayOf(notebook, '2026-10-03').outline.keys();
+    notebook.type('2026-10-03', plan as string, 'Plan, late');
+    store.saveDailyTemplate(template('Focus'));
+
+    await notebook.setToday('2026-10-04');
+
+    expect(notebook.snapshot().days.map((d) => d.day)).toEqual(['2026-10-04', '2026-10-03']);
+    expect(lines(notebook, '2026-10-04')).toEqual(['Focus']);
+    expect(lines(notebook, '2026-10-03')).toEqual(['Plan, late', '  Top three']);
+  });
+
+  it('leaves a blank past day empty, before and after the User writes in it', async () => {
+    store.saveDailyTemplate(template('Plan'));
+    const notebook = open();
+    await notebook.start();
+
+    await notebook.showDay('2026-09-28');
+    expect(lines(notebook, '2026-09-28')).toEqual([]);
+    write(notebook, '2026-09-28', 'Remembered later');
+    await notebook.flush();
+
+    const reopened = open();
+    await reopened.start();
+    await reopened.showDay('2026-09-28');
+    expect(lines(reopened, '2026-09-28')).toEqual(['Remembered later']);
+  });
+
+  it('gives a new day Blocks of its own, which edit like any others', async () => {
+    store.saveDailyTemplate(template('Plan'));
+    const notebook = open();
+    await notebook.start();
+    const [id] = dayOf(notebook, '2026-10-03').outline.keys();
+
+    expect(id).not.toBe('t0');
+    notebook.type('2026-10-03', id as string, 'Plan the week');
+    await notebook.flush();
+
+    expect(store.dailyTemplate()).toEqual(template('Plan'));
+    expect(blockItems().map((item) => item.title)).toEqual(['Plan the week']);
   });
 });
 
