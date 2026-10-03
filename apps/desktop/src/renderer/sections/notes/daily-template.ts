@@ -92,5 +92,11 @@ export function templateIn(itemStore: ItemStoreClient): DailyNotes {
       await persist();
       return undone;
     },
+
+    // The template's Blocks aren't Items, so nothing would keep an image's file for the days copied
+    // from it (attachments are kept for the Blocks that use them): images go in Daily Notes only.
+    async saveImage() {
+      throw new Error('Images can’t go in the daily template.');
+    },
   };
 }

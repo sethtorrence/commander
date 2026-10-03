@@ -1,4 +1,5 @@
 import './notes.css';
+import './formatting.css';
 import { DimensionLine, toast } from '@commander/ui';
 import {
   useCallback,

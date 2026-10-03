@@ -77,6 +77,21 @@ describe('answering Item store requests from the window', () => {
     });
   });
 
+  it('saves a pasted image and answers its file name, or why it was refused', () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+    expect(ask(5, { op: 'save-attachment', bytes: png })).toEqual({
+      type: 'item-store-reply',
+      id: 5,
+      response: { ok: true, result: { name: expect.stringMatching(/^[0-9a-f]{64}\.png$/) } },
+    });
+    expect(ask(6, { op: 'save-attachment', bytes: new Uint8Array([1, 2, 3]) })).toMatchObject({
+      response: { ok: false, error: expect.stringMatching(/PNG, JPEG, GIF or WebP/) },
+    });
+    expect(ask(7, { op: 'save-attachment', bytes: 'iVBORw0KGgo=' })).toMatchObject({
+      response: { ok: false },
+    });
+  });
+
   it('answers a malformed request with an error', () => {
     expect(ask(4, { op: 'drop-table' })).toMatchObject({ id: 4, response: { ok: false } });
   });

@@ -34,6 +34,8 @@ export interface DailyNotes {
    * entries' ids in the order they were made, so passing them back here redoes the change.
    */
   undo(entryIds: number[]): Promise<number[]>;
+  /** Saves a pasted image's bytes into attachments/ and returns its file name. */
+  saveImage(bytes: Uint8Array): Promise<string>;
 }
 
 export function blockOf(item: Item): Block | null {
@@ -104,6 +106,10 @@ export function dailyNotesIn(itemStore: ItemStoreClient): DailyNotes {
       if (!entryIds.length) return [];
       const actions = [...entryIds].reverse().map((entryId): ItemAction => ({ type: 'undo', entryId }));
       return (await itemStore({ op: 'record-all', actions })).map((entry) => entry.id);
+    },
+
+    async saveImage(bytes) {
+      return (await itemStore({ op: 'save-attachment', bytes })).name;
     },
   };
 }

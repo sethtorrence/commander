@@ -1,9 +1,10 @@
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
-import { app, BrowserWindow, ipcMain, shell, utilityProcess } from 'electron';
+import { attachmentScheme, type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
+import { app, BrowserWindow, ipcMain, protocol, shell, utilityProcess } from 'electron';
 import { setUpAccounts } from './accounts/set-up-accounts';
+import { attachmentSchemePrivileges, serveAttachment } from './attachments-protocol';
 import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
@@ -17,6 +18,8 @@ import type { Secrets } from './secrets';
 import { windowWebPreferences } from './window-config';
 
 for (const [name, value] of launchSwitches(process.platform)) app.commandLine.appendSwitch(name, value);
+// Pasted images reach the window through attachment://, which must be declared before the app is ready.
+protocol.registerSchemesAsPrivileged([attachmentSchemePrivileges]);
 const primary = claimSingleInstance();
 
 let window: BrowserWindow | null = null;
@@ -100,6 +103,9 @@ app.whenReady().then(() => {
   // Links in the window open in the system browser (read at call time, so the end-to-end tests can
   // stand in for it).
   keepLinksInBrowser(created.webContents, (url) => void shell.openExternal(url));
+  // Pasted images, served from attachments/ next to the database (the Core writes them there).
+  const attachmentsDir = join(app.getPath('userData'), 'attachments');
+  protocol.handle(attachmentScheme, (request) => serveAttachment(request, attachmentsDir));
   revealWhenPainted({
     window: created,
     startsHidden: startsHidden(process.argv),

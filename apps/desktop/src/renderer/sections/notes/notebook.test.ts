@@ -1,5 +1,5 @@
 import type { ItemStore } from '@commander/core/src/item-store';
-import { defaultDailyTemplate } from '@commander/domain';
+import { attachmentMarkdown, defaultDailyTemplate } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
@@ -435,6 +435,73 @@ describe('earlier days', () => {
     await notebook.flush();
 
     expect([...(await notebook.daysWithContent('2026-09-28', '2026-10-04'))]).toEqual(['2026-09-29']);
+  });
+});
+
+describe('pasted images', () => {
+  const png = (extra = 'pixels') =>
+    new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...new TextEncoder().encode(extra)]);
+  const imageText = (bytes: Uint8Array) => attachmentMarkdown(store.saveAttachment(bytes).name);
+
+  it('are saved by the Core and each put in its own Block below, the caret on the last', async () => {
+    const notebook = open();
+    await notebook.start();
+    const [first] = write(notebook, '2026-10-03', 'Whiteboard', 'After');
+
+    const caret = await notebook.attach('2026-10-03', first as string, [png('one'), png('two')]);
+    await notebook.flush();
+
+    expect(lines(notebook, '2026-10-03')).toEqual([
+      'Whiteboard',
+      imageText(png('one')),
+      imageText(png('two')),
+      'After',
+    ]);
+    expect(caret).toEqual({ id: expect.any(String), offset: imageText(png('two')).length });
+    expect(dayOf(notebook, '2026-10-03').outline.get(caret?.id ?? '')?.text).toBe(imageText(png('two')));
+    expect(blockItems().map((item) => item.title)).toContain(imageText(png('one')));
+    expect(errors).toEqual([]);
+  });
+
+  it('start an empty Daily Note', async () => {
+    const notebook = open();
+    await notebook.start();
+
+    await notebook.attach('2026-10-03', null, [png()]);
+    await notebook.flush();
+
+    expect(lines(notebook, '2026-10-03')).toEqual([imageText(png())]);
+  });
+
+  it('come back with undo after their Block is removed', async () => {
+    const notebook = open();
+    await notebook.start();
+    const [first] = write(notebook, '2026-10-03', 'Whiteboard');
+    const image = await notebook.attach('2026-10-03', first as string, [png()]);
+
+    expect(notebook.remove('2026-10-03', image?.id as string)).toEqual({ id: first, offset: 10 });
+    await notebook.flush();
+    expect(lines(notebook, '2026-10-03')).toEqual(['Whiteboard']);
+
+    notebook.undo();
+    await notebook.flush();
+    expect(lines(notebook, '2026-10-03')).toEqual(['Whiteboard', imageText(png())]);
+    expect(blockItems().map((item) => item.title)).toEqual(
+      expect.arrayContaining(['Whiteboard', imageText(png())]),
+    );
+    expect(blockItems()).toHaveLength(2);
+  });
+
+  it('that are not images are refused with the reason, and nothing changes', async () => {
+    const notebook = open();
+    await notebook.start();
+    const [first] = write(notebook, '2026-10-03', 'Whiteboard');
+
+    expect(
+      await notebook.attach('2026-10-03', first as string, [new TextEncoder().encode('text')]),
+    ).toBeNull();
+    expect(lines(notebook, '2026-10-03')).toEqual(['Whiteboard']);
+    expect(errors).toEqual([expect.stringMatching(/Couldn’t paste the image: .*PNG, JPEG, GIF or WebP/)]);
   });
 });
 

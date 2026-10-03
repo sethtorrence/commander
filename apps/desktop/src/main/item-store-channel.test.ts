@@ -55,6 +55,29 @@ describe('the Item store channel in the main process', () => {
     expect(sent).toEqual([]);
   });
 
+  it('only relays a pasted image as bytes within the size limit', async () => {
+    const { itemStore, sent } = channel();
+    const tooBig = new Uint8Array(20 * 1024 * 1024 + 1);
+
+    await expect(itemStore.request({ op: 'save-attachment', bytes: tooBig })).resolves.toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/20 MB/),
+    });
+    await expect(itemStore.request({ op: 'save-attachment', bytes: 'a path' })).resolves.toMatchObject({
+      ok: false,
+    });
+    expect(sent).toEqual([]);
+
+    const reply = itemStore.request({ op: 'save-attachment', bytes: new Uint8Array([1, 2]) });
+    expect(sent).toHaveLength(1);
+    itemStore.settle({
+      type: 'item-store-reply',
+      id: 1,
+      response: { ok: true, result: { name: '../x.png' } },
+    });
+    await expect(reply).resolves.toMatchObject({ ok: false });
+  });
+
   it('passes on an error the Core reports', async () => {
     const { itemStore } = channel();
     const reply = itemStore.request({ op: 'get', itemId: 'x' });

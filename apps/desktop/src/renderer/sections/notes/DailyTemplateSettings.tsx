@@ -1,4 +1,5 @@
 import './notes.css';
+import './formatting.css';
 import { toast } from '@commander/ui';
 import {
   useCallback,

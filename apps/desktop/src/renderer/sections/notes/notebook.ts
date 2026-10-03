@@ -1,3 +1,4 @@
+import { attachmentMarkdown } from '@commander/domain';
 import { enterTodo, makeTodo, removeTodo, tickTodo, typeTodoMark } from './block-todos';
 import type { DailyNotes } from './daily-notes';
 import {
@@ -6,15 +7,18 @@ import {
   type Edit,
   enter,
   indent,
+  insertBelow,
   joinNext,
   move,
   type Outline,
   outdent,
   outlineOf,
   removeBackward,
+  removeBlock,
   setText,
   startOutline,
   toggleFold,
+  visibleBlocks,
 } from './outline';
 
 /*
@@ -108,6 +112,13 @@ export interface Notebook {
   refresh(): Promise<void>;
   /** Makes sure the day holding a Block is on screen, and returns that day (null if it isn't found). */
   reveal(blockId: string): Promise<string | null>;
+  /** Removes a Block whatever its text (an image Block). */
+  remove(day: string, id: string): Caret | null;
+  /**
+   * Pasted or dropped images: each is saved by the Core, then put in its own Block below `id` (or
+   * starts the empty day when `id` is null). Returns the caret on the last one, or null if none was saved.
+   */
+  attach(day: string, id: string | null, images: Uint8Array[]): Promise<Caret | null>;
   /** Undoes the last step; returns where the caret was before it. */
   undo(): Caret | null;
   /** Redoes the last undone step; returns where the caret was after it. */
@@ -127,6 +138,7 @@ interface Step {
 }
 
 const EMPTY: Outline = new Map();
+const lastShown = (outline: Outline) => visibleBlocks(outline).at(-1)?.block.id ?? null;
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 export function createNotebook(api: DailyNotes, options: NotebookOptions): Notebook {
@@ -459,6 +471,34 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       });
       if (day) await notebook.showDay(day);
       return day;
+    },
+
+    remove(day, id) {
+      return edit(day, 'Remove Block', { id, offset: 0 }, (outline) => removeBlock(outline, id));
+    },
+
+    async attach(day, id, images) {
+      let caret: Caret | null = null;
+      let below = id;
+      for (const bytes of images) {
+        let name: string;
+        try {
+          name = await api.saveImage(bytes);
+        } catch (error) {
+          onError(`Couldn’t paste the image: ${message(error)}`);
+          continue;
+        }
+        const text = attachmentMarkdown(name);
+        // The Block may have gone while the image was saving: then it goes at the end of the day.
+        const target = below && outlineOfDay(day).has(below) ? below : lastShown(outlineOfDay(day));
+        caret = target
+          ? edit(day, 'Paste image', { id: target, offset: 0 }, (outline) =>
+              insertBelow(outline, target, text, newId()),
+            )
+          : notebook.begin(day, text);
+        below = caret?.id ?? below;
+      }
+      return caret;
     },
 
     undo: () => undoRedo(undoStack, redoStack, 'undo'),
