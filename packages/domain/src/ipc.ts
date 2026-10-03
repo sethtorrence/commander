@@ -9,7 +9,38 @@ export const ipc = {
   setStartAtLogin: 'set-start-at-login',
   // The window has painted its first frame, in the User's theme, so it can be shown.
   framePainted: 'frame-painted',
+  // Settings → Accounts; see account-messages.ts for the validated contract.
+  accounts: 'accounts',
+  accountsChanged: 'accounts-changed',
 } as const;
+
+// Accounts, as the window sees them: never a token or an API key.
+export type AccountMethod = 'oauth' | 'api-key';
+// 'needs-reconnect': its sign-in failed for good (revoked, or a refresh past the replay window).
+export type AccountStatus = 'connected' | 'needs-reconnect';
+export type AccountSummary = {
+  id: string;
+  source: 'linear';
+  name: string;
+  urlKey: string;
+  method: AccountMethod;
+  status: AccountStatus;
+};
+export type AccountsState = {
+  accounts: AccountSummary[];
+  // Whether this build has a Linear OAuth app configured; without one only API keys are offered.
+  linearOAuth: boolean;
+};
+export type AccountsRequest =
+  | { op: 'list' }
+  // `reconnect` names the Account being reconnected: the sign-in must be for its workspace.
+  | { op: 'connect-linear'; method: 'oauth'; reconnect?: string }
+  | { op: 'connect-linear'; method: 'api-key'; apiKey: string; reconnect?: string }
+  | { op: 'cancel-sign-in' }
+  | { op: 'remove'; accountId: string };
+export type AccountsResponse =
+  | { ok: true; state: AccountsState }
+  | { ok: false; error: string; state: AccountsState };
 
 // How the window reaches the screen. 'xwayland' means a Wayland session fell back to X11.
 export type DisplayServer = 'wayland' | 'xwayland' | 'x11' | 'other';

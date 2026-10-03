@@ -225,6 +225,57 @@ describe('Items deleted at their Source', () => {
   });
 });
 
+describe('removing an Account', () => {
+  const linearAcme = { source: 'linear', account: 'linear:org-acme' } as const;
+  const issues = (...externalIds: string[]): SourceBatch => ({
+    ...linearAcme,
+    items: externalIds.map((externalId) => ({
+      externalId,
+      kind: 'linear-issue' as const,
+      title: externalId,
+    })),
+  });
+
+  it('removes its Items, leaving notes and Todos with their Links shown as gone', () => {
+    const store = open();
+    const issue = firstCreated(store, issues('ENG-1'));
+    store.saveFromSource(issues('ENG-2'));
+    const todo = store.record({ type: 'create', item: { kind: 'todo', title: 'Ship ENG-1' } }, user).itemId;
+    store.link({ from: todo, linkType: 'refers-to', to: issue }, user);
+    clock += 1000;
+
+    const removed = store.removeAccountItems(linearAcme, { ...user, why: 'Removed the Linear Account Acme' });
+
+    expect(removed).toHaveLength(2);
+    expect(store.query({ source: 'linear' })).toEqual([]);
+    expect(store.query()).toMatchObject([{ id: todo, title: 'Ship ENG-1', deletedAt: null }]);
+    expect(store.get(todo)?.links).toMatchObject([
+      { type: 'refers-to', to: { id: issue, source: 'linear', deletedAt: clock } },
+    ]);
+    expect(store.activity({ itemId: issue })[0]).toMatchObject({
+      action: 'delete',
+      by: { kind: 'user' },
+      why: 'Removed the Linear Account Acme',
+    });
+  });
+
+  it('leaves other Accounts’ Items alone', () => {
+    const store = open();
+    store.saveFromSource(issues('ENG-1'));
+    store.saveFromSource({ ...issues('OPS-1'), account: 'linear:org-globex' });
+    store.saveFromSource(emails({ externalId: 'm1', title: 'Hello' }));
+
+    store.removeAccountItems(linearAcme, user);
+
+    expect(
+      store
+        .query()
+        .map((item) => item.title)
+        .sort(),
+    ).toEqual(['Hello', 'OPS-1']);
+  });
+});
+
 describe('recording actions made in Commander', () => {
   it('creates a Todo with its kind-specific detail', () => {
     const store = open();

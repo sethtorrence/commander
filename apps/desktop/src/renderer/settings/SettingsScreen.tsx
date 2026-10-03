@@ -9,6 +9,7 @@ import {
 } from '@commander/ui';
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
+import { AccountsPanel } from './AccountsPanel';
 import { Diagnostics } from './Diagnostics';
 import { SettingRow, SettingsGroup } from './parts';
 import { SecurityPanel } from './SecurityPanel';
@@ -70,9 +71,10 @@ export function SettingsScreen() {
       <SettingsGroup no="02" title="Start-up" note="Tray">
         <StartAtLogin />
       </SettingsGroup>
-      <SecurityPanel no="03" />
-      <Diagnostics no="04" />
-      <SettingsGroup no="05" title="Design" note="Industrial design system">
+      <AccountsPanel no="03" />
+      <SecurityPanel no="04" />
+      <Diagnostics no="05" />
+      <SettingsGroup no="06" title="Design" note="Industrial design system">
         <SettingRow label="Design gallery" description="Every token and component, dark and light.">
           <Button asChild>
             <a href="#/design" className="no-underline">

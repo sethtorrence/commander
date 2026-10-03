@@ -27,6 +27,39 @@ The Core's Item store is the only writer to Commander's database: one SQLite fil
 - **Native module:** better-sqlite3 ships Node-API prebuilt binaries (Linux, macOS and Windows on x64 and arm64), and Node-API binaries load in both Node (Vitest) and Electron (the Core), so there is no rebuild step. `pnpm-workspace.yaml` therefore declines its node-gyp fallback build; on any other platform, set `better-sqlite3: true` there and have a C++ toolchain installed.
 - **Throwaway data:** pass `--user-data-dir=<folder>` to Electron to run against other data. The end-to-end tests launch every app with a fresh temporary folder, so they never touch your real database.
 
+### Build config (app client IDs)
+
+The repo is public, so Commander's app registrations never go in it. They come from a private, git-ignored `config/local.json`, read at build time (`pnpm dev`, `pnpm build`, `pnpm test:e2e`) and injected into the main process. Without it, the committed `config/example.json` is used, which has no client IDs. A malformed file fails the build with the reason.
+
+```sh
+cp config/example.json config/local.json   # then fill in the client IDs
+```
+
+```json
+{
+  "linear": {
+    "clientId": "your Linear OAuth app's client ID",
+    "redirectPort": 48613
+  }
+}
+```
+
+Restart `pnpm dev` after changing it.
+
+### Connecting Linear
+
+**Settings → Accounts** (`,`) lists Linear Accounts by workspace name. Each Linear workspace is its own Account, and you can connect several. Connecting the same workspace again updates its Account rather than adding a second.
+
+- **Connect Linear** signs in through your browser: OAuth with PKCE (S256) and no client secret, asking for `read` and `write`. Commander listens on `http://localhost:<redirectPort>/callback` only while a sign-in is open. It is offered only when `config/local.json` has a Linear client ID.
+- **Use an API key instead** takes a Linear personal API key (Linear → Settings → Security & access → Personal API keys). It works without any OAuth app.
+- Tokens and API keys are stored only in the system keyring, through the secrets module. If no real keyring is available, Commander refuses to connect and says how to fix it. The window never receives a token. The Accounts themselves (workspace name, how they signed in, and whether they need reconnecting) are kept in `accounts.json` in the `userData` folder.
+- Access tokens last 24 hours. The main process refreshes one when it is within 10 minutes of expiry, the first time the Core asks for it. If Linear refuses a refresh for good (the access was revoked, or a refresh was replayed too late), the Account shows **Reconnect**. Reconnecting signs in again and keeps the same Account.
+- **Remove** deletes the Account's keyring entry and its Items. Your notes and Todos stay, and their Links to removed Items show them as gone.
+
+**Registering Commander's Linear OAuth app (once, by the owner):** in Linear, open Settings → API → OAuth applications → New. Name it "Commander", set the callback URL to `http://localhost:48613/callback` (use your `redirectPort` if you changed it; Linear matches it exactly, port included), leave webhooks off, and create it. Copy the **client ID** into `config/local.json`. Commander doesn't need the client secret, so never copy it anywhere. Then run `pnpm dev`, choose **Connect Linear**, and approve. This also confirms that Linear accepts the fixed loopback port.
+
+The end-to-end tests never contact Linear: they point sign-in at a fake Linear on this machine through `COMMANDER_TEST_LINEAR`, which only accepts loopback URLs.
+
 ## Moving around
 
 Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, security, diagnostics), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.

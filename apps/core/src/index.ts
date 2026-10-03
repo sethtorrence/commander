@@ -3,6 +3,8 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { CoreMessage } from '@commander/domain';
+import { createAccessTokens } from './access-tokens';
+import { answerRemoveAccountItems } from './account-requests';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 
@@ -31,8 +33,12 @@ const itemStore = openItemStore({
 itemStore.takeDailySnapshot();
 setInterval(() => itemStore.takeDailySnapshot(), 60 * 60 * 1000);
 
+// Sources borrow their Accounts' access tokens from the main process through this, in memory only.
+const accessTokens = createAccessTokens((message) => port.postMessage(message));
+
 port.on('message', ({ data }) => {
-  const reply = answerItemStoreRequest(itemStore, data);
+  if (accessTokens.settle(data)) return;
+  const reply = answerRemoveAccountItems(itemStore, data) ?? answerItemStoreRequest(itemStore, data);
   if (reply) port.postMessage(reply);
 });
 
