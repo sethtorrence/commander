@@ -1,30 +1,45 @@
-import type { ActivityEntry, ItemChange, NewProject, Project } from '@commander/domain';
+import type {
+  ActivityEntry,
+  ItemChange,
+  NewProject,
+  Project,
+  ProjectAction,
+  ProjectChange,
+} from '@commander/domain';
 import type { ItemStoreClient } from '../item-store/client';
 
 /*
-  The renderer's view of Projects in the Item store: reading and creating Projects, and filing any
-  Item into one. Like every window request, filing is recorded as the User's, so it shows in the
-  activity log and can be undone.
+  The renderer's view of Projects in the Item store: reading, creating and managing Projects, and
+  filing any Item into one. Like every window request, filing is recorded as the User's, so it shows
+  in the activity log and can be undone. Changes to Projects themselves go to the Project log, and
+  each can be undone through `change({ type: 'undo', changeId })`.
 */
 
 export interface ProjectsClient {
-  /** The Projects offered for filing and filtering (not archived), in their order. */
+  /** Every Project, archived ones included, in their order. */
   list(): Promise<Project[]>;
   /** Creates a Project. Rejects with the reason when it is refused (a taken code, say). */
   create(project: NewProject): Promise<Project>;
+  /** Renames, recolours, reorders, archives, merges or undoes. Rejects with the reason when refused. */
+  change(action: ProjectAction): Promise<ProjectChange>;
   /** Files an Item into a Project by the User, or unfiles it with null. */
   file(itemId: string, projectId: string | null): Promise<ActivityEntry>;
 }
 
 export function projectsIn(itemStore: ItemStoreClient): ProjectsClient {
+  const change = (action: ProjectAction) => itemStore({ op: 'change-project', action });
   return {
     list() {
-      return itemStore({ op: 'projects', query: {} });
+      return itemStore({ op: 'projects', query: { includeArchived: true } });
     },
 
-    create(project) {
-      return itemStore({ op: 'change-project', action: { type: 'create', project } });
+    async create(project) {
+      const created = (await change({ type: 'create', project })).project;
+      if (!created) throw new Error('The Project wasn’t created');
+      return created;
     },
+
+    change,
 
     file(itemId, projectId) {
       return itemStore({

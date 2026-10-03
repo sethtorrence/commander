@@ -21,18 +21,22 @@ export function useAccentBar(filing: Filing): string | undefined {
   return project && accentColour(project.accent);
 }
 
+type FilterBarProps = ComponentProps<typeof ProjectFilterBar>;
+
 /**
  * The Project filter bar for a Section, under its sheet header: the app-wide filter, with the
- * Section's own counts. `items` are the Items the counts are over (a Section's open Todos, say).
+ * Section's own counts, and each Project's page a click away. `items` are the Items the counts are
+ * over (a Section's open Todos, say).
  */
 export function SectionProjectFilter({
   items,
   ...props
 }: { items: readonly Pick<Item, 'filing'>[] } & Omit<
-  ComponentProps<typeof ProjectFilterBar>,
+  FilterBarProps,
   'projects' | 'everything' | 'unfiled' | 'selected' | 'onSelect'
->) {
-  const { projects, filter, setFilter } = useProjects();
+> &
+  Partial<Pick<FilterBarProps, 'selected' | 'onSelect'>>) {
+  const { projects, filter, setFilter, openPage } = useProjects();
   const armed = usePendingKeys() === 'p';
   const counts = countByFilter(items);
   return (
@@ -42,6 +46,7 @@ export function SectionProjectFilter({
       unfiled={counts.unfiled}
       selected={filter}
       onSelect={setFilter}
+      onOpenPage={openPage}
       armed={armed}
       {...props}
     />

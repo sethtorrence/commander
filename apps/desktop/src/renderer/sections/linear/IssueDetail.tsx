@@ -133,7 +133,7 @@ export function IssueDetail({
   onClose: () => void;
   onOpenLink: (link: IssueLink) => void;
 }) {
-  const { projects, projectOf } = useProjects();
+  const { projects, archived, projectOf } = useProjects();
   const detail = issue?.detail;
   const project = issue ? projectOf(issue.filing) : undefined;
   return (
@@ -245,7 +245,9 @@ export function IssueDetail({
                     key={entry.id}
                     className="flex justify-between gap-2.5 border-b border-line2 px-2.5 py-[7px] text-note leading-[18px] last:border-b-0"
                   >
-                    <span className="text-text">{describeIssueEntry(entry, history, projects)}</span>
+                    <span className="text-text">
+                      {describeIssueEntry(entry, history, [...projects, ...archived])}
+                    </span>
                     <time
                       dateTime={new Date(entry.at).toISOString()}
                       className="font-mono text-label-lg leading-[18px] whitespace-nowrap text-muted tabular-nums"

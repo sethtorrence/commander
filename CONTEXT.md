@@ -56,6 +56,10 @@ _Avoid_: Tag, label, icon, chip
 A condition the User sets that files matching items into a Project (or emails into a Bucket); Rules sit in one list the User orders, and the first match wins.
 _Avoid_: Filter, automation, mapping (alone)
 
+**Project log**:
+The record of every change to a Project itself (made, renamed, recoloured, reordered, archived, merged), kept apart from the Activity log because a Project is not an Item; it powers undo for those changes. The Items a merge moves are in the Activity log too.
+_Avoid_: Project history, audit trail
+
 **Unfiled**:
 The state of an item that belongs to no Project yet.
 _Avoid_: Uncategorised, inbox, misc

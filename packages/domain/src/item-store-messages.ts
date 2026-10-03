@@ -14,7 +14,14 @@ import {
   itemQuery,
   itemView,
 } from './items';
-import { type Project, project, projectAction, projectQuery } from './projects';
+import {
+  type Project,
+  type ProjectChange,
+  project,
+  projectAction,
+  projectChange,
+  projectQuery,
+} from './projects';
 
 // What the window may ask of the Item store. It reaches the store only through these requests,
 // validated in the main process and again in the Core. Actions from the window are always the User's.
@@ -49,7 +56,7 @@ export type ItemStoreResults = {
   activity: ActivityEntry[];
   record: ActivityEntry;
   projects: Project[];
-  'change-project': Project;
+  'change-project': ProjectChange;
   'record-all': ActivityEntry[];
   'daily-note': Item;
   'daily-notes': DailyNotePage;
@@ -64,7 +71,7 @@ export const itemStoreResult = {
   activity: z.array(activityEntry),
   record: activityEntry,
   projects: z.array(project),
-  'change-project': project,
+  'change-project': projectChange,
   'record-all': z.array(activityEntry),
   'daily-note': item,
   'daily-notes': dailyNotePage,

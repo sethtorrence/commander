@@ -63,4 +63,47 @@ describe('ProjectFilterBar', () => {
     expect(bar.dataset.armed).toBe('true');
     expect(bar.textContent).toContain('All');
   });
+
+  describe('with Project pages', () => {
+    it('gives each Project an open control, and opens its page on a double-click too', () => {
+      const onOpenPage = vi.fn();
+      const { bar } = renderBar({ onOpenPage });
+
+      fireEvent.click(within(bar).getByRole('button', { name: 'Open the Titanlink page' }));
+      fireEvent.doubleClick(within(bar).getByTitle('Only Longtail'));
+
+      expect(onOpenPage.mock.calls).toEqual([['p-tl'], ['p-lt']]);
+      expect(within(bar).queryByRole('button', { name: /Unfiled page/ })).toBeNull();
+    });
+
+    it('offers the selected Project’s page at the end of the bar', () => {
+      const onOpenPage = vi.fn();
+      const { bar } = renderBar({ onOpenPage, selected: 'p-tl' });
+
+      fireEvent.click(within(bar).getByRole('button', { name: 'Titanlink page ↗' }));
+
+      expect(onOpenPage).toHaveBeenCalledWith('p-tl');
+    });
+
+    it('shows O for the page while p waits', () => {
+      const { bar } = renderBar({ onOpenPage: vi.fn(), armed: true });
+
+      expect(bar.textContent).toContain('OPage');
+    });
+
+    it('on a Project page, marks its open control and offers the way back', () => {
+      const onBack = vi.fn();
+      const { bar } = renderBar({
+        onOpenPage: vi.fn(),
+        selected: 'p-lt',
+        page: 'p-lt',
+        back: { label: 'Todos', onClick: onBack },
+      });
+
+      expect(within(bar).getByRole('button', { name: 'Open the Longtail page' }).dataset.on).toBe('true');
+      expect(within(bar).queryByRole('button', { name: 'Longtail page ↗' })).toBeNull();
+      fireEvent.click(within(bar).getByRole('button', { name: 'TodosEsc' }));
+      expect(onBack).toHaveBeenCalledOnce();
+    });
+  });
 });

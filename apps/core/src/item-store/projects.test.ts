@@ -28,7 +28,9 @@ const longtail = { name: 'Longtail', code: 'LT', accent: 'blue' };
 const titanlink = { name: 'Titanlink', code: 'TL', accent: 'teal' };
 
 function create(store: ItemStore, project: { name: string; code: string; accent: string }) {
-  return store.changeProject({ type: 'create', project });
+  const created = store.changeProject({ type: 'create', project }).project;
+  if (!created) throw new Error('No Project created');
+  return created;
 }
 
 function addTodo(store: ItemStore, title = 'Write the brief') {

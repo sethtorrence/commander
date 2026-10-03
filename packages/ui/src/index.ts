@@ -59,9 +59,13 @@ export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './comp
 export { cn } from './lib/cn';
 export {
   ACCENT_NAMES,
+  type AccentCheck,
   type AccentName,
   accentColour,
   accentFor,
+  accentTextColour,
+  checkAccent,
+  ORANGE_DISTANCE,
   PROJECT_ACCENTS,
   type ProjectAccent,
 } from './projects/accents';

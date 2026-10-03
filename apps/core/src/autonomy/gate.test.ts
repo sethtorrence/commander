@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ActionContext, Proposal, RegisteredAction } from '@commander/domain';
+import type { ActionContext, Project, Proposal, RegisteredAction } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ItemStore, openItemStore } from '../item-store';
 import { type Gate, openGate } from './gate';
@@ -294,7 +294,7 @@ describe('propose', () => {
     const longtail = store.changeProject({
       type: 'create',
       project: { name: 'Longtail', code: 'LT', accent: 'blue' },
-    });
+    }).project as Project;
     const filing = suggestTodo({
       action: 'file-into-projects',
       itemId: email,

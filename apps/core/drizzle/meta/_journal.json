@@ -57,6 +57,13 @@
       "when": 1791068693069,
       "tag": "0007_daily_template",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1791069505136,
+      "tag": "0008_managing_projects",
+      "breakpoints": true
     }
   ]
 }
