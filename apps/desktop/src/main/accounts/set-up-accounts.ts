@@ -1,10 +1,12 @@
 import { join } from 'node:path';
 import type { CoreAccessTokenReply, CoreRemoveAccountItems } from '@commander/domain';
 import { ipc } from '@commander/domain/ipc';
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, net, powerMonitor, shell } from 'electron';
 import { linearConfig, parseBuildConfig } from '../build-config';
 import { createLinearAccounts } from '../linear/linear-accounts';
 import type { Secrets } from '../secrets';
+import { type CoreSyncMessage, createCoreSyncChannel } from '../sync/core-sync-channel';
+import { watchSystemState } from '../sync/system-state';
 import { createAccountStore } from './account-store';
 import { accountsState, answerAccountsRequest } from './accounts-requests';
 import { createCoreAccountChannel } from './core-account-channel';
@@ -13,14 +15,14 @@ import { createCoreAccountChannel } from './core-account-channel';
 // electron.vite.config.ts.
 declare const __COMMANDER_BUILD_CONFIG__: unknown;
 
-// Wires Accounts into the app: Settings → Accounts for the window, access tokens and Item removal
-// with the Core. Call once the app is ready. Returns the handler for messages from the Core.
+// Wires Accounts into the app: Settings → Accounts for the window; access tokens, Item removal and
+// Source sync with the Core. Call once the app is ready. Returns the handler for messages from the Core.
 export function setUpAccounts({
   secrets,
   sendToCore,
 }: {
   secrets: Secrets;
-  sendToCore: (message: CoreAccessTokenReply | CoreRemoveAccountItems) => void;
+  sendToCore: (message: CoreAccessTokenReply | CoreRemoveAccountItems | CoreSyncMessage) => void;
 }): { fromCore: (raw: unknown) => boolean } {
   const config = linearConfig(parseBuildConfig(__COMMANDER_BUILD_CONFIG__), process.env);
   const core = createCoreAccountChannel({
@@ -36,12 +38,33 @@ export function setUpAccounts({
     removeItems: ({ id, name }) => core.removeItems({ source: 'linear', account: id, name }),
   });
 
-  ipcMain.handle(ipc.accounts, (_event, request: unknown) => answerAccountsRequest(linear, request));
-  // Status changes (an Account needing reconnecting) can happen without the window asking.
-  linear.onChange(async () => {
-    const state = await accountsState(linear);
-    for (const window of BrowserWindow.getAllWindows()) window.webContents.send(ipc.accountsChanged, state);
+  // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
+  // reports a sign-in Linear refused, which may mean the Account needs reconnecting.
+  const sync = createCoreSyncChannel({
+    send: sendToCore,
+    endpoints: { linear: config.apiUrl },
+    onRefused: (account) => void linear.reportRefused(account),
+  });
+  const syncAccounts = async () => sync.setAccounts(await linear.list());
+  void syncAccounts();
+  // Syncing pauses while the machine is asleep or offline.
+  watchSystemState({
+    powerMonitor,
+    isOnline: () => net.isOnline(),
+    onChange: (state) => sync.systemState(state),
   });
 
-  return { fromCore: core.handle };
+  ipcMain.handle(ipc.accounts, (_event, request: unknown) => answerAccountsRequest(linear, request, sync));
+  // Status changes (an Account needing reconnecting, a sync finishing) happen without the window asking.
+  const broadcast = async () => {
+    const state = await accountsState(linear, sync);
+    for (const window of BrowserWindow.getAllWindows()) window.webContents.send(ipc.accountsChanged, state);
+  };
+  linear.onChange(() => {
+    void syncAccounts();
+    void broadcast();
+  });
+  sync.onChange(() => void broadcast());
+
+  return { fromCore: (raw) => core.handle(raw) || sync.handle(raw) };
 }

@@ -8,6 +8,7 @@ import { answerRemoveAccountItems } from './account-requests';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 import { setUpModels } from './models';
+import { setUpSync } from './sync';
 
 const port = process.parentPort;
 let beats = 0;
@@ -38,11 +39,15 @@ setInterval(() => itemStore.takeDailySnapshot(), 60 * 60 * 1000);
 const accessTokens = createAccessTokens((message) => port.postMessage(message));
 // Model calls for Ares; the API key is borrowed the same way, for each call.
 const models = setUpModels(itemStore, { send: (message) => port.postMessage(message), accessTokens });
+// Source sync: every Account on its cadence, writing through the Item store.
+const sync = setUpSync(itemStore, { send: (message) => port.postMessage(message), accessTokens });
 
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
   if (models.handle(data)) return;
-  const reply = answerRemoveAccountItems(itemStore, data) ?? answerItemStoreRequest(itemStore, data);
+  if (sync.handle(data)) return;
+  const reply =
+    answerRemoveAccountItems(itemStore, data, sync.forget) ?? answerItemStoreRequest(itemStore, data);
   if (reply) port.postMessage(reply);
 });
 
@@ -51,6 +56,7 @@ let closed = false;
 const closeStore = () => {
   if (closed) return;
   closed = true;
+  sync.stop();
   itemStore.close();
 };
 process.on('exit', closeStore);

@@ -7,7 +7,9 @@ import type { Plugin } from 'vite';
 import { parseBuildConfig } from './src/main/build-config';
 
 // Workspace packages are TypeScript source, so they're bundled rather than externalized.
-const bundleWorkspace = { exclude: ['@commander/domain', '@commander/core', '@commander/models'] };
+const bundleWorkspace = {
+  exclude: ['@commander/domain', '@commander/core', '@commander/models', '@commander/sources'],
+};
 // `electron` is provided by the runtime and must never be bundled.
 const runtimeExternals = ['electron', /^node:/];
 // Native modules load their binary from their own package folder, so they stay in node_modules.

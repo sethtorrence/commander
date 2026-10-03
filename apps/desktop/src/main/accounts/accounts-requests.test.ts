@@ -99,6 +99,42 @@ describe('Settings → Accounts requests from the window', () => {
     });
   });
 
+  it('shows each Account’s sync status, and passes Sync now and the cadence to the Core', async () => {
+    linear.addApiKey('lin_api_secret', ACME);
+    await accounts.connectWithApiKey('lin_api_secret');
+    const asked: string[] = [];
+    const status = {
+      account: 'linear:org-acme',
+      source: 'linear' as const,
+      activity: 'idle' as const,
+      cadenceMinutes: 15,
+      cadenceChoices: [15, 30, 60],
+      lastSyncedAt: 1,
+      nextSyncAt: 2,
+      itemCount: 12,
+      problem: null,
+    };
+    const sync = {
+      status: (id: string) => (id === 'linear:org-acme' ? status : null),
+      refresh: (id: string) => asked.push(`refresh ${id}`),
+      setCadence: (id: string, minutes: number) => asked.push(`cadence ${id} ${minutes}`),
+    };
+
+    const synced = await answerAccountsRequest(
+      accounts,
+      { op: 'sync-now', accountId: 'linear:org-acme' },
+      sync,
+    );
+    await answerAccountsRequest(
+      accounts,
+      { op: 'set-sync-cadence', accountId: 'linear:org-acme', minutes: 30 },
+      sync,
+    );
+
+    expect(asked).toEqual(['refresh linear:org-acme', 'cadence linear:org-acme 30']);
+    expect(synced).toMatchObject({ ok: true, state: { accounts: [{ name: 'Acme', sync: status }] } });
+  });
+
   it('rejects a malformed request without echoing it', async () => {
     const response = await answerAccountsRequest(accounts, {
       op: 'connect-linear',

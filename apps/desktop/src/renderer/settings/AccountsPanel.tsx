@@ -15,6 +15,7 @@ import {
   Led,
 } from '@commander/ui';
 import { type FormEvent, useEffect, useState } from 'react';
+import { AccountSync } from './AccountSync';
 import { SettingRow, SettingsGroup } from './parts';
 
 // Settings → Accounts: the User's signed-in Accounts, by Source. Only Linear so far. Tokens and
@@ -192,6 +193,12 @@ export function AccountsPanel({ no }: { no: string }) {
               />
             </ButtonGroup>
           </div>
+          <AccountSync
+            account={account}
+            request={(request) =>
+              window.commander.accounts(request).then((response) => setState(response.state))
+            }
+          />
         </SettingRow>
       ))}
       <SettingRow

@@ -58,7 +58,17 @@ Restart `pnpm dev` after changing it.
 
 **Registering Commander's Linear OAuth app (once, by the owner):** in Linear, open Settings → API → OAuth applications → New. Name it "Commander", set the callback URL to `http://localhost:48613/callback` (use your `redirectPort` if you changed it; Linear matches it exactly, port included), leave webhooks off, and create it. Copy the **client ID** into `config/local.json`. Commander doesn't need the client secret, so never copy it anywhere. Then run `pnpm dev`, choose **Connect Linear**, and approve. This also confirms that Linear accepts the fixed loopback port.
 
-The end-to-end tests never contact Linear: they point sign-in at a fake Linear on this machine through `COMMANDER_TEST_LINEAR`, which only accepts loopback URLs.
+The end-to-end tests never contact Linear: they point sign-in and sync at a fake Linear on this machine through `COMMANDER_TEST_LINEAR`, which only accepts loopback URLs.
+
+### Syncing
+
+The Core's sync engine keeps each Account current. A newly connected Linear Account syncs at once: every issue you can see that is open, plus those completed or cancelled in the last 30 days, arrive as `linear-issue` Items. After that Commander asks Linear only for what changed (issues and comments updated since the last sync), every **15 minutes** by default; each Account can be set to 30 or 60 in Settings → Accounts, which also shows its last sync, how many issues it holds, the next sync, any problem in plain words, and **Sync now**.
+
+- Each Account syncs on its own, so a slow or failing one never holds up another. Syncing pauses while the machine sleeps or is offline and catches up once afterwards.
+- After a failure Commander waits 1, 2, 4… minutes (at most an hour) before trying again, and always waits as long as Linear's rate limit asks.
+- Issues archived or deleted in Linear stay in Commander as tombstones, so Links to them survive. Your filing, Links and notes are never touched by a sync.
+- If Linear refuses an Account's sign-in (an API key revoked in Linear, say), the Account shows **Reconnect** and only its syncing pauses.
+- Where each Account's sync stands (its cursor, last sync and back-off, never a token) is kept in `commander.db`, with a short history of sync runs and the query complexity Linear reported for each.
 
 ### Ares's model (Z.ai)
 

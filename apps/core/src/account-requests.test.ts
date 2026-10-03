@@ -47,6 +47,28 @@ describe('removing an Account’s Items at the main process’s request', () => 
     });
   });
 
+  it('stops the Account’s syncing before its Items go', () => {
+    const order: string[] = [];
+    store.saveFromSource({
+      source: 'linear',
+      account: 'linear:org-acme',
+      items: [{ externalId: 'ENG-1', kind: 'linear-issue', title: 'Fix the build' }],
+    });
+    const request = {
+      type: 'remove-account-items',
+      id: 9,
+      source: 'linear',
+      account: 'linear:org-acme',
+      name: 'Acme',
+    };
+
+    answerRemoveAccountItems(store, request, (account) => {
+      order.push(`stop ${account}`, `items left: ${store.query().length}`);
+    });
+
+    expect(order).toEqual(['stop linear:org-acme', 'items left: 1']);
+  });
+
   it('answers a malformed request with the reason', () => {
     const reply = answerRemoveAccountItems(store, { type: 'remove-account-items', id: 8, source: 'myspace' });
 

@@ -17,6 +17,7 @@ export type ItemRow = typeof schema.items.$inferSelect;
 export type TodoDetailRow = typeof schema.todoDetails.$inferSelect;
 export type DailyNoteDetailRow = typeof schema.dailyNoteDetails.$inferSelect;
 export type BlockDetailRow = typeof schema.blockDetails.$inferSelect;
+export type LinearIssueDetailRow = typeof schema.linearIssueDetails.$inferSelect;
 export type ActivityRow = typeof schema.activity.$inferSelect;
 
 export function stateOf(item: Item): ItemState {
@@ -54,6 +55,11 @@ export const blockDetailOf = (block: BlockDetailRow): ItemDetail => ({
   position: block.position,
   text: block.text,
   folded: block.folded,
+});
+
+export const linearIssueDetailOf = (issue: LinearIssueDetailRow): ItemDetail => ({
+  kind: 'linear-issue',
+  ...issue.data,
 });
 
 export function toItem(row: ItemRow, detail: ItemDetail | null): Item {

@@ -22,6 +22,12 @@ export const accountsRequest = z.union([
   }),
   z.object({ op: z.literal('cancel-sign-in') }),
   z.object({ op: z.literal('remove'), accountId: z.string().min(1) }),
+  z.object({ op: z.literal('sync-now'), accountId: z.string().min(1) }),
+  z.object({
+    op: z.literal('set-sync-cadence'),
+    accountId: z.string().min(1),
+    minutes: z.number().int().positive(),
+  }),
 ]);
 // The zod-free AccountsRequest type in ipc.ts (for the preload) must match the schema.
 type _RequestMatches = [AccountsRequest] extends [z.infer<typeof accountsRequest>]
