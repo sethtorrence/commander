@@ -149,12 +149,13 @@ test('Todos: move with j/k, open with Enter, edit the title, tick into Done, del
   await expect(count).toHaveText('03');
 
   // Ticked Todos show when the Done group is opened, and unticking one there returns it.
-  // (The checkbox is visually hidden behind its drawn box, hence `force`; ticked, its row leaves.)
-  await todos.getByRole('checkbox', { name: 'Book the dentist' }).click({ force: true });
+  // (The checkbox is visually hidden behind its drawn box, and toasts may sit over it in a short
+  // tiled window, so the click is dispatched on the element itself; ticked, its row leaves.)
+  await todos.getByRole('checkbox', { name: 'Book the dentist' }).dispatchEvent('click');
   await expect(done.getByRole('button', { name: /Done/ })).toContainText('01');
   await done.getByRole('button', { name: /Done/ }).click();
   await expect(done.getByRole('listitem')).toHaveText([/Book the dentist/]);
-  await done.getByRole('checkbox', { name: 'Book the dentist' }).click({ force: true });
+  await done.getByRole('checkbox', { name: 'Book the dentist' }).dispatchEvent('click');
   await expect(done.getByRole('listitem')).toHaveCount(0);
   await expect(open.getByRole('listitem').first()).toContainText('Book the dentist');
 
