@@ -1,0 +1,111 @@
+<!doctype html>
+<!-- PROTOTYPE, throwaway: the Electron-on-Hyprland check for Commander. -->
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; frame-src 'self' about:; img-src 'self' data:">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+<title>PROTOTYPE · Commander on Hyprland check</title>
+<style>
+  :root { --bg:#141516; --sheet:#1B1C1E; --ink:#EEECE7; --muted:#8F8D87; --line:rgba(238,236,231,.15); --org:#FF5F00; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 'Archivo', system-ui, sans-serif; }
+  header { padding:18px 24px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; }
+  header h1 { margin:0; font-size:22px; font-weight:800; letter-spacing:.02em; text-transform:uppercase; }
+  .tag { font:600 11px 'IBM Plex Mono', monospace; color:var(--org); letter-spacing:.12em; }
+  main { display:grid; grid-template-columns: 1fr 1fr; gap:0; }
+  section { padding:16px 24px; border-bottom:1px solid var(--line); border-right:1px solid var(--line); }
+  h2 { margin:0 0 8px; font:600 12px 'IBM Plex Mono', monospace; letter-spacing:.14em; color:var(--muted); text-transform:uppercase; }
+  .row { display:flex; justify-content:space-between; gap:12px; font-family:'IBM Plex Mono', monospace; font-size:13px; padding:3px 0; border-bottom:1px dashed var(--line); }
+  .ok { color:#7CD992; } .bad { color:#FF7A7A; } .wait { color:var(--muted); }
+  .q { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed var(--line); font-size:14px; }
+  .q button { all:unset; cursor:pointer; padding:3px 10px; border:1px solid var(--line); font:600 12px 'IBM Plex Mono', monospace; }
+  .q button.sel-yes { background:#7CD992; color:#141414; border-color:#7CD992; }
+  .q button.sel-no { background:#FF7A7A; color:#141414; border-color:#FF7A7A; }
+  iframe { width:100%; height:150px; border:1px solid var(--line); background:#fff; }
+  .hint { color:var(--muted); font-size:13px; margin:6px 0 0; }
+</style>
+</head>
+<body>
+<header><span class="tag">PROTOTYPE</span><h1>Commander on Hyprland check</h1><span class="tag" id="env"></span></header>
+<main>
+  <section>
+    <h2>1 · Tray and background process</h2>
+    <div id="tray"></div>
+    <p class="hint">Close this window (Super+Q or the close button). It should hide, not quit. Then click the orange tray icon, or use its menu, to bring it back. "Alive while hidden" should then say yes.</p>
+  </section>
+  <section>
+    <h2>2 · Global shortcut</h2>
+    <div id="shortcut"></div>
+    <p class="hint">Click another window, then press <b>Ctrl+Shift+Space</b>. Hyprland may ask once to allow the shortcut. This window should come forward and the count should go up.</p>
+  </section>
+  <section>
+    <h2>3 · Email sandbox</h2>
+    <iframe id="mail" sandbox="" title="untrusted email"></iframe>
+    <div id="sandbox"></div>
+  </section>
+  <section>
+    <h2>4 · Token storage (safeStorage)</h2>
+    <div id="safe"></div>
+    <h2 style="margin-top:14px">5 · Display</h2>
+    <div id="display"></div>
+  </section>
+  <section style="grid-column: 1 / -1">
+    <h2>What you see (click yes or no)</h2>
+    <div id="manual"></div>
+  </section>
+</main>
+<script>
+  const QUESTIONS = [
+    ['trayIconVisible', 'Is the orange square tray icon visible in your bar?'],
+    ['trayClickWorks', 'Does clicking it (or its menu → Open window) bring this window back?'],
+    ['tilesNormally', 'Does this window tile, float, move and resize normally under Hyprland?'],
+    ['sharpText', 'Is the text crisp (not blurry) at your scaling?'],
+    ['fontsLook', 'Do the headings look like the Commander prototypes (wide Archivo, Plex Mono labels)?'],
+    ['shortcutPrompt', 'Did Hyprland or a portal ask you to allow the shortcut? (yes = it asked)'],
+  ];
+  const fmt = (v) => v === true ? '<span class="ok">yes</span>' : v === false ? '<span class="bad">no</span>' : v == null ? '<span class="wait">waiting…</span>' : String(v);
+  const rows = (obj) => Object.entries(obj).map(([k, v]) => `<div class="row"><span>${k}</span><span>${typeof v === 'object' && v !== null ? JSON.stringify(v) : fmt(v)}</span></div>`).join('');
+  let manual = {};
+  function drawManual() {
+    document.getElementById('manual').innerHTML = QUESTIONS.map(([k, q]) => `
+      <div class="q"><span>${q}</span><span>
+        <button data-k="${k}" data-v="yes" class="${manual[k] === 'yes' ? 'sel-yes' : ''}">Yes</button>
+        <button data-k="${k}" data-v="no" class="${manual[k] === 'no' ? 'sel-no' : ''}">No</button></span></div>`).join('');
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-k]'); if (!b) return;
+    manual[b.dataset.k] = b.dataset.v; window.check.manual(b.dataset.k, b.dataset.v); drawManual();
+  });
+  window.check.onUpdate((s) => {
+    document.getElementById('env').textContent = `${s.env.desktop} · ${s.env.session} · Electron ${s.env.electron} · ozone ${s.ozonePlatform}`;
+    document.getElementById('tray').innerHTML = rows({ 'tray created': s.tray.created, 'close hides to tray': s.tray.closeHidesToTray ?? null, 'tray click opened window': s.tray.clickOpenedWindow ?? null, 'tray menu worked': s.tray.menuOpenWorked ?? null, 'background beats': s.worker.beats, 'alive while hidden': s.worker.aliveWhileHidden });
+    document.getElementById('shortcut').innerHTML = rows({ accelerator: s.shortcut.accelerator, registered: s.shortcut.registered, 'times fired': s.shortcut.fired ?? 0, ...(s.shortcut.error ? { error: s.shortcut.error } : {}) });
+    document.getElementById('safe').innerHTML = rows(s.safeStorage);
+    document.getElementById('display').innerHTML = rows({ 'scale factor': s.display.scaleFactor, 'screen': `${s.display.size?.width}×${s.display.size?.height}` });
+    document.getElementById('sandbox').innerHTML = rows(s.emailSandbox);
+    manual = { ...manual, ...s.manual }; drawManual();
+  });
+
+  // Untrusted email: a script, a tracking pixel, a remote stylesheet, and a link.
+  const evil = `<!doctype html><html><head>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'">
+    <link rel="stylesheet" href="https://tracker.invalid/style.css"></head>
+    <body style="font:14px sans-serif;margin:10px">
+    <b>Untrusted test email.</b> If scripts ran, this would say "SCRIPT RAN" in red.
+    <p id="x"></p><img src="https://tracker.invalid/pixel.png?open=1" alt="[tracking pixel blocked]">
+    <script>document.getElementById('x').innerHTML='<b style=color:red>SCRIPT RAN</b>'; parent.postMessage('script-ran','*'); try{parent.document.title='pwned'}catch(e){}</script>
+    <a href="https://example.com">a link</a></body></html>`;
+  let scriptRan = false;
+  addEventListener('message', (e) => { if (e.data === 'script-ran') scriptRan = true; });
+  const frame = document.getElementById('mail');
+  frame.srcdoc = evil;
+  setTimeout(() => {
+    window.check.report('scriptBlocked', !scriptRan);
+    window.check.report('parentTitleUntouched', document.title !== 'pwned');
+    window.check.report('note', 'sandbox="" (no scripts) + CSP default-src none. remoteRequestsReachedNetwork counts tracker requests that got past the CSP (each is then cancelled); 0 means the CSP stopped them first.');
+  }, 2500);
+  drawManual();
+</script>
+</body>
+</html>
