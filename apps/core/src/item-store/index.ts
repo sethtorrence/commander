@@ -8,7 +8,11 @@ import {
   type Actor,
   actionContext,
   activityQuery,
+  type BlockDetail,
   type CausedBy,
+  type DailyNotePage,
+  type DailyNoteQuery,
+  dailyNoteQuery,
   type Item,
   type ItemAction,
   type ItemDetail,
@@ -29,18 +33,22 @@ import {
   sourceBatch,
 } from '@commander/domain';
 import Database from 'better-sqlite3';
-import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { z } from 'zod';
 import { type ModelStore, openModelStore } from './models';
 import { projectsIn } from './projects';
 import {
   actorColumns,
+  blockDetailOf,
   changesBetween,
+  dailyNoteDetailOf,
   type ItemRow,
   type ItemState,
   itemColumns,
   stateOf,
+  todoDetailOf,
   toEntry,
   toItem,
 } from './rows';
@@ -72,11 +80,19 @@ export type ItemStore = {
   link(link: { from: string; linkType: LinkType; to: string }, context: ActionContext): ActivityEntry;
   // Every change made in Commander goes through here, and each one records an activity entry.
   record(action: ItemAction, context: ActionContext): ActivityEntry;
+  // Records several actions in order, all or none: a refused action rolls back the ones before it.
+  recordAll(actions: ItemAction[], context: ActionContext): ActivityEntry[];
   activity(query?: ActivityQuery): ActivityEntry[];
   // Projects in their order; archived ones only when asked for.
   projects(query?: ProjectQuery): Project[];
   // Creates (later also renames, reorders, archives) a Project. Not an Item change, so not logged.
   changeProject(action: ProjectAction): Project;
+  // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet.
+  ensureDailyNote(day: string, context: ActionContext): Item;
+  // Daily Notes, newest first.
+  dailyNotes(query?: DailyNoteQuery): DailyNotePage;
+  // The live Blocks of these Daily Notes, each note's in position order.
+  blocks(dailyNoteIds: string[]): Item[];
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7.
   takeDailySnapshot(): Snapshot | null;
   // The usage ledger and Settings → Ares, in the same database.
@@ -112,6 +128,34 @@ type NewEntry = {
   after: unknown;
 };
 
+// Daily Notes and Blocks only make sense with their detail: the day, or the place in the outline.
+const NEEDS_DETAIL: ReadonlySet<ItemKind> = new Set(['daily-note', 'block']);
+
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const MONTHS = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+// A Daily Note's title: its day written out, "Saturday 3 October 2026".
+function dayTitle(day: string): string {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+  const weekday = new Date(Date.UTC(year, month - 1, date)).getUTCDay();
+  return `${WEEKDAYS[weekday]} ${date} ${MONTHS[month - 1]} ${year}`;
+}
+
+const calendarDay = z.iso.date();
+
 export function openItemStore(options: ItemStoreOptions): ItemStore {
   const now = options.now ?? Date.now;
   const sqlite = new Database(options.path);
@@ -143,54 +187,124 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   function withDetails(rows: ItemRow[]): Item[] {
-    const todoIds = rows.filter((row) => row.kind === 'todo').map((row) => row.id);
-    const todos = todoIds.length
-      ? db.select().from(schema.todoDetails).where(inArray(schema.todoDetails.itemId, todoIds)).all()
-      : [];
-    const byId = new Map(todos.map((todo) => [todo.itemId, todo]));
-    return rows.map((row) => toItem(row, byId.get(row.id)));
+    const idsOf = (kind: ItemKind) => rows.filter((row) => row.kind === kind).map((row) => row.id);
+    const details = new Map<string, ItemDetail>();
+    const { todoDetails, dailyNoteDetails, blockDetails } = schema;
+    const todoIds = idsOf('todo');
+    if (todoIds.length) {
+      const found = db.select().from(todoDetails).where(inArray(todoDetails.itemId, todoIds)).all();
+      for (const row of found) details.set(row.itemId, todoDetailOf(row));
+    }
+    const noteIds = idsOf('daily-note');
+    if (noteIds.length) {
+      const found = db.select().from(dailyNoteDetails).where(inArray(dailyNoteDetails.itemId, noteIds)).all();
+      for (const row of found) details.set(row.itemId, dailyNoteDetailOf(row));
+    }
+    const blockIds = idsOf('block');
+    if (blockIds.length) {
+      const found = db.select().from(blockDetails).where(inArray(blockDetails.itemId, blockIds)).all();
+      for (const row of found) details.set(row.itemId, blockDetailOf(row));
+    }
+    return rows.map((row) => toItem(row, details.get(row.id) ?? null));
   }
 
-  function checkDetail(kind: ItemKind, state: ItemState) {
+  // Checks the state about to be written for an Item, and returns it as stored: a Block's title is its text.
+  function checked(itemId: string, kind: ItemKind, state: ItemState): ItemState {
     if (state.detail && state.detail.kind !== kind) {
       throw new ItemStoreError('invalid', `A ${kind} Item cannot have ${state.detail.kind} detail`);
+    }
+    if (!state.detail && NEEDS_DETAIL.has(kind)) {
+      throw new ItemStoreError('invalid', `A ${kind} Item needs its ${kind} detail`);
+    }
+    if (state.detail?.kind !== 'block') return state;
+    checkBlockPlace(itemId, state.detail);
+    return { ...state, title: state.detail.text };
+  }
+
+  // A Block sits in a Daily Note, at its top or under another Block of the same note, never under itself.
+  function checkBlockPlace(itemId: string, block: BlockDetail) {
+    if (readItem(block.dailyNoteId)?.kind !== 'daily-note') {
+      throw new ItemStoreError(
+        'invalid',
+        `A Block belongs to a Daily Note, and ${block.dailyNoteId} is not one`,
+      );
+    }
+    if (block.parentId === null) return;
+    const { blockDetails } = schema;
+    const placeOf = (id: string) => db.select().from(blockDetails).where(eq(blockDetails.itemId, id)).get();
+    if (placeOf(block.parentId)?.dailyNoteId !== block.dailyNoteId) {
+      throw new ItemStoreError('invalid', "A Block's parent must be a Block of the same Daily Note");
+    }
+    for (
+      let ancestor: string | null = block.parentId;
+      ancestor !== null;
+      ancestor = placeOf(ancestor)?.parentId ?? null
+    ) {
+      if (ancestor === itemId) throw new ItemStoreError('invalid', 'A Block cannot be moved under itself');
     }
   }
 
   function writeDetail(id: string, detail: ItemDetail | null) {
-    const { todoDetails } = schema;
-    if (!detail) {
-      db.delete(todoDetails).where(eq(todoDetails.itemId, id)).run();
-      return;
+    const { todoDetails, dailyNoteDetails, blockDetails } = schema;
+    if (detail?.kind !== 'todo') db.delete(todoDetails).where(eq(todoDetails.itemId, id)).run();
+    if (detail?.kind !== 'daily-note')
+      db.delete(dailyNoteDetails).where(eq(dailyNoteDetails.itemId, id)).run();
+    if (detail?.kind !== 'block') db.delete(blockDetails).where(eq(blockDetails.itemId, id)).run();
+    switch (detail?.kind) {
+      case 'todo': {
+        const values = { origin: detail.origin, dueOn: detail.dueOn, backedBy: detail.backedBy };
+        db.insert(todoDetails)
+          .values({ itemId: id, ...values })
+          .onConflictDoUpdate({ target: todoDetails.itemId, set: values })
+          .run();
+        return;
+      }
+      case 'daily-note': {
+        const values = { day: detail.day };
+        db.insert(dailyNoteDetails)
+          .values({ itemId: id, ...values })
+          .onConflictDoUpdate({ target: dailyNoteDetails.itemId, set: values })
+          .run();
+        return;
+      }
+      case 'block': {
+        const { kind: _kind, ...values } = detail;
+        db.insert(blockDetails)
+          .values({ itemId: id, ...values })
+          .onConflictDoUpdate({ target: blockDetails.itemId, set: values })
+          .run();
+        return;
+      }
     }
-    const values = { origin: detail.origin, dueOn: detail.dueOn, backedBy: detail.backedBy };
-    db.insert(todoDetails)
-      .values({ itemId: id, ...values })
-      .onConflictDoUpdate({ target: todoDetails.itemId, set: values })
-      .run();
   }
 
+  // Inserts a new Item, under the caller's id if it chose one, and returns the id and the state as stored.
   function insertItem(
     identity: Pick<Item, 'kind' | 'source' | 'account' | 'externalId'>,
-    state: ItemState,
+    input: ItemState,
     at: number,
-  ) {
-    checkDetail(identity.kind, state);
-    const id = randomUUID();
+    chosenId?: string,
+  ): { id: string; state: ItemState } {
+    if (chosenId && readItem(chosenId))
+      throw new ItemStoreError('invalid', `The id ${chosenId} is already taken`);
+    const id = chosenId ?? randomUUID();
+    const state = checked(id, identity.kind, input);
     db.insert(schema.items)
       .values({ id, ...identity, ...itemColumns(state), createdAt: at, updatedAt: at })
       .run();
     writeDetail(id, state.detail);
-    return id;
+    return { id, state };
   }
 
-  function writeState(item: Item, state: ItemState, at: number) {
-    checkDetail(item.kind, state);
+  // Writes an Item's new state and returns it as stored.
+  function writeState(item: Item, input: ItemState, at: number): ItemState {
+    const state = checked(item.id, item.kind, input);
     db.update(schema.items)
       .set({ ...itemColumns(state), updatedAt: at })
       .where(eq(schema.items.id, item.id))
       .run();
     writeDetail(item.id, state.detail);
+    return state;
   }
 
   function log(entry: NewEntry, at: number): ActivityEntry {
@@ -246,18 +360,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const entry = { by: context.by, why: context.why, causedBy: context.causedBy };
     switch (action.type) {
       case 'create': {
-        const { kind, ...fields } = action.item;
+        const { id: chosenId, kind, ...fields } = action.item;
         projects.checkFiling(fields.filing);
-        const state: ItemState = { ...fields, deletedAt: null };
-        const id = insertItem({ kind, source: null, account: null, externalId: null }, state, at);
+        const identity = { kind, source: null, account: null, externalId: null };
+        const { id, state } = insertItem(identity, { ...fields, deletedAt: null }, at, chosenId);
         return log({ ...entry, action: 'create', itemId: id, before: null, after: state }, at);
       }
       case 'update': {
         const item = requireItem(action.itemId);
         projects.checkFiling(action.changes.filing);
         const before = stateOf(item);
-        const after: ItemState = { ...before, ...action.changes };
-        writeState(item, after, at);
+        const after = writeState(item, { ...before, ...action.changes }, at);
         return log({ ...entry, action: 'update', itemId: item.id, before, after }, at);
       }
       case 'delete': {
@@ -337,6 +450,99 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return log({ ...undoEntry, before: current, after: restored }, at);
   }
 
+  const recordAll = sqlite.transaction((actions: ItemAction[], context: ActionContext): ActivityEntry[] =>
+    actions.map((action) => record(action, context)),
+  );
+
+  function findDailyNote(day: string): Item | undefined {
+    const { items, dailyNoteDetails } = schema;
+    const row = db
+      .select({ item: items })
+      .from(items)
+      .innerJoin(dailyNoteDetails, eq(dailyNoteDetails.itemId, items.id))
+      .where(eq(dailyNoteDetails.day, day))
+      .get();
+    return row && withDetails([row.item])[0];
+  }
+
+  const ensureDailyNote = sqlite.transaction((input: string, rawContext: ActionContext): Item => {
+    const day = calendarDay.parse(input);
+    const context = actionContext.parse(rawContext);
+    const entry = { by: context.by, why: context.why, causedBy: context.causedBy };
+    const existing = findDailyNote(day);
+    if (existing && existing.deletedAt === null) return existing;
+    const at = now();
+    if (existing) {
+      // A deleted Daily Note comes back rather than a second one being made for the same day.
+      const before = stateOf(existing);
+      const after = writeState(existing, { ...before, deletedAt: null }, at);
+      log({ ...entry, action: 'update', itemId: existing.id, before, after }, at);
+      return requireItem(existing.id);
+    }
+    const identity = { kind: 'daily-note' as const, source: null, account: null, externalId: null };
+    const fresh: ItemState = {
+      title: dayTitle(day),
+      people: [],
+      status: 'open',
+      filing: null,
+      detail: { kind: 'daily-note', day },
+      deletedAt: null,
+    };
+    const { id, state } = insertItem(identity, fresh, at);
+    log({ ...entry, action: 'create', itemId: id, before: null, after: state }, at);
+    return requireItem(id);
+  });
+
+  function dailyNotes(input: DailyNoteQuery = {}): DailyNotePage {
+    const query = dailyNoteQuery.parse(input);
+    const { items, dailyNoteDetails } = schema;
+    // Live Blocks of the Daily Note in the outer query, with text when `written`.
+    const liveBlocks = (written: boolean) => sql`(
+      SELECT count(*) FROM block_details b JOIN items bi ON bi.id = b.item_id
+      WHERE b.daily_note_id = ${items.id} AND bi.deleted_at IS NULL${written ? sql` AND b.text <> ''` : sql``}
+    )`;
+    const filters = and(
+      isNull(items.deletedAt),
+      query.from ? gte(dailyNoteDetails.day, query.from) : undefined,
+      query.to ? lte(dailyNoteDetails.day, query.to) : undefined,
+      query.withContent ? sql`${liveBlocks(true)} > 0` : undefined,
+      query.before ? lt(dailyNoteDetails.day, query.before) : undefined,
+    );
+    const rows = db
+      .select({ item: items, day: dailyNoteDetails.day, blocks: sql<number>`${liveBlocks(false)}` })
+      .from(items)
+      .innerJoin(dailyNoteDetails, eq(dailyNoteDetails.itemId, items.id))
+      .where(filters)
+      .orderBy(desc(dailyNoteDetails.day))
+      .limit(query.limit ?? 50)
+      .all();
+    const total =
+      db
+        .select({ total: sql<number>`count(*)` })
+        .from(items)
+        .innerJoin(dailyNoteDetails, eq(dailyNoteDetails.itemId, items.id))
+        .where(filters)
+        .get()?.total ?? 0;
+    const withItems = withDetails(rows.map((row) => row.item));
+    return {
+      notes: rows.map((row, i) => ({ item: withItems[i] as Item, day: row.day, blocks: row.blocks })),
+      total,
+    };
+  }
+
+  function blocks(dailyNoteIds: string[]): Item[] {
+    if (!dailyNoteIds.length) return [];
+    const { items, blockDetails } = schema;
+    const rows = db
+      .select({ item: items })
+      .from(items)
+      .innerJoin(blockDetails, eq(blockDetails.itemId, items.id))
+      .where(and(inArray(blockDetails.dailyNoteId, dailyNoteIds), isNull(items.deletedAt)))
+      .orderBy(asc(blockDetails.dailyNoteId), asc(blockDetails.position), asc(items.id))
+      .all();
+    return withDetails(rows.map((row) => row.item));
+  }
+
   const saveFromSource = sqlite.transaction((input: SourceBatch): SaveResult => {
     const batch = sourceBatch.parse(input);
     const by: Actor = { kind: 'source', source: batch.source, account: batch.account };
@@ -377,8 +583,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         account: batch.account,
         externalId: incoming.externalId,
       };
-      const id = insertItem(identity, state, at);
-      log({ by, action: 'create', itemId: id, before: null, after: state }, at);
+      const { id, state: stored } = insertItem(identity, state, at);
+      log({ by, action: 'create', itemId: id, before: null, after: stored }, at);
       result.created.push(id);
     }
     for (const externalId of batch.deleted) {
@@ -457,6 +663,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     record,
+    recordAll,
+    ensureDailyNote,
+    dailyNotes,
+    blocks,
 
     activity(input = {}) {
       const query = activityQuery.parse(input);

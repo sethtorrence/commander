@@ -192,6 +192,18 @@
     background: var(--raise);
   }
 
+  /* A Section's own strip across C–E (the Notes week strip), in place of the date and the meter. */
+  .f-slot {
+    grid-column: 4 / 7;
+    display: grid;
+  }
+  .f-slot:empty {
+    display: none;
+  }
+  .f-hdr:has(> .f-slot:not(:empty)) > :is(.f-wk, .f-meter) {
+    display: none;
+  }
+
   /* The Ares status module (.ttn) */
   .f-ares {
     grid-column: 7 / 10;

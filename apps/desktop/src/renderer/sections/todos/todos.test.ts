@@ -1,7 +1,7 @@
 import type { ItemStore } from '@commander/core/src/item-store';
 import type { ActivityEntry } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTestItemStore } from './test-item-store';
+import { openTestItemStore } from '../../item-store/test-item-store';
 import { describeEntry, type Todos, todosIn } from './todos';
 
 // The Todos module against a real Item store on a temporary database.

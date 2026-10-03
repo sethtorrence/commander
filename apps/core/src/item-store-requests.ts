@@ -24,6 +24,17 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.projects(request.query) };
       case 'change-project':
         return { ok: true, result: store.changeProject(request.action) };
+      case 'record-all':
+        return {
+          ok: true,
+          result: store.recordAll(request.actions, { by: { kind: 'user' }, why: request.why }),
+        };
+      case 'daily-note':
+        return { ok: true, result: store.ensureDailyNote(request.day, { by: { kind: 'user' } }) };
+      case 'daily-notes':
+        return { ok: true, result: store.dailyNotes(request.query) };
+      case 'blocks':
+        return { ok: true, result: store.blocks(request.dailyNoteIds) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

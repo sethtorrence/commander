@@ -1,13 +1,11 @@
 import type { ActivityEntry, ItemChange, NewProject, Project } from '@commander/domain';
+import type { ItemStoreClient } from '../item-store/client';
 
 /*
   The renderer's view of Projects in the Item store: reading and creating Projects, and filing any
   Item into one. Like every window request, filing is recorded as the User's, so it shows in the
   activity log and can be undone.
 */
-
-/** The window's Item store channel (the preload bridge), or a stand-in for tests. */
-type ItemStoreClient = Window['commander']['itemStore'];
 
 export interface ProjectsClient {
   /** The Projects offered for filing and filtering (not archived), in their order. */

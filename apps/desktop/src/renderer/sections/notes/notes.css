@@ -1,0 +1,599 @@
+/*
+  The Notes Section: the journal stream of Daily Notes, each a drawing sheet with its spec column (A),
+  the sheet itself (B–E) and the margin (F–H), and the week strip in the header. Ported from the
+  locked prototype (prototype/daily-note-look, round-3/industrial.html: .day, .spec, .sheet, .outline,
+  .blk, .legend, .end, .days), on the design system's tokens.
+*/
+@layer components {
+  .n-stream {
+    padding: 18px 0 calc(100vh - 320px);
+    min-width: 0;
+  }
+  .n-g8 {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+
+  /* ================= Dimension lines ================= */
+  .n-dims {
+    height: 13px;
+    margin-bottom: 13px;
+  }
+  .n-d-a {
+    grid-column: 1;
+    margin: 0 12px 0 14px;
+  }
+  .n-d-s {
+    grid-column: 2 / 6;
+  }
+  .n-d-g {
+    grid-column: 6 / 9;
+    margin-left: calc(100% / 3 + 14px);
+    margin-right: 16px;
+  }
+
+  /* ================= Day ================= */
+  .n-day {
+    position: relative;
+    scroll-margin-top: calc(var(--body) + 22px);
+  }
+  .n-day + .n-day {
+    margin-top: 64px;
+  }
+
+  /* The spec: the title block in column A */
+  .n-spec {
+    grid-column: 1;
+    grid-row: 1;
+    align-self: start;
+    position: sticky;
+    top: calc(var(--body) + 22px);
+    margin: 0 12px 0 14px;
+    container-type: inline-size;
+    font-family: var(--mono);
+    z-index: 2;
+  }
+  .n-sp-pn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--ink);
+    font: 600 10px / 1 var(--mono);
+    letter-spacing: 0.08em;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .n-sp-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--signal-ink);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .n-sp-num {
+    font: 800 min(108px, 64cqw) / 0.8 var(--sans);
+    font-stretch: 125%;
+    letter-spacing: -0.04em;
+    color: transparent;
+    -webkit-text-stroke: 1.25px var(--ink);
+    margin: 16px 0 10px -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .n-day:not(.today) .n-sp-num {
+    -webkit-text-stroke-color: var(--muted);
+  }
+  .n-sp-mo {
+    font: 500 9.5px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .n-sp-tab {
+    margin: 0;
+  }
+  .n-sp-tab div {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line2);
+    font: 500 9px / 1.2 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .n-sp-tab dt {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .n-sp-tab dd {
+    margin: 0;
+    color: var(--ink);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .n-sp-tab .ares dt,
+  .n-sp-tab .ares dd {
+    color: var(--signal-ink);
+  }
+  .n-sp-foot {
+    margin-top: 9px;
+    font: 500 8.5px / 1.4 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+  }
+
+  /* The sheet (B–E), with the numbered margin's rule at 36px */
+  .n-sheet {
+    grid-column: 2 / 6;
+    grid-row: 1;
+    background-image: linear-gradient(var(--line2), var(--line2));
+    background-size: 1px 100%;
+    background-position: 36px 0;
+    background-repeat: no-repeat;
+  }
+  /* Earlier days have a smaller title. */
+  .n-past > div {
+    padding-top: 24px;
+    padding-bottom: 24px;
+  }
+  .n-past h2 {
+    font-size: 44px;
+  }
+  .n-past .n-date {
+    display: block;
+    font-size: 21px;
+    /* With the subtitle's own 10px, 8px below the weekday as in the prototype. */
+    margin-top: -2px;
+  }
+  .n-body {
+    padding: 0 28px 34px 64px;
+  }
+  .n-outline {
+    position: relative;
+    z-index: 1;
+    margin: 22px 0 0 -24px;
+  }
+  .n-day:not(.today) .n-outline {
+    margin-top: 18px;
+  }
+
+  /* ================= Blocks ================= */
+  .n-row {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    min-height: 30px;
+  }
+  .n-row::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(-40px - var(--d, 0) * 24px);
+    right: -28px;
+    background: transparent;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .n-row:focus-within::before {
+    background: var(--signal-focus);
+    box-shadow: inset 3px 0 0 var(--signal);
+  }
+  .n-bn {
+    position: absolute;
+    top: 0;
+    left: calc(-34px - var(--d, 0) * 24px);
+    width: 24px;
+    text-align: right;
+    font: 500 9px / 30px var(--mono);
+    color: var(--faint);
+    letter-spacing: 0.02em;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  .n-row:focus-within > .n-bn {
+    color: var(--signal-ink);
+    font-weight: 600;
+  }
+  .n-bullet {
+    flex: 0 0 24px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    padding: 0;
+    border: 0;
+    background: none;
+  }
+  .n-bullet i {
+    display: block;
+    position: relative;
+    width: 5px;
+    height: 5px;
+    background: var(--faint);
+  }
+  .n-row:hover > .n-bullet i {
+    background: var(--muted);
+  }
+  .n-row:focus-within > .n-bullet i {
+    background: var(--signal);
+  }
+  .n-blk.has-kids > .n-row:hover > .n-bullet i {
+    width: 11px;
+    height: 11px;
+    background: transparent;
+    box-shadow: inset 0 0 0 1px var(--ink);
+  }
+  .n-blk.has-kids > .n-row:hover > .n-bullet i::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    top: 5px;
+    height: 1px;
+    background: var(--ink);
+  }
+  /* biome-ignore lint/style/noDescendingSpecificity: a folded bullet keeps its look under hover */
+  .n-blk.folded > .n-row > .n-bullet i,
+  .n-blk.folded > .n-row:hover > .n-bullet i {
+    width: 11px;
+    height: 11px;
+    background: var(--ink);
+    box-shadow: none;
+  }
+  /* biome-ignore lint/style/noDescendingSpecificity: a folded bullet keeps its look under hover */
+  .n-blk.folded > .n-row > .n-bullet i::before,
+  .n-blk.folded > .n-row:hover > .n-bullet i::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    right: 3px;
+    top: 5px;
+    height: 1px;
+    background: var(--sheet);
+  }
+  .n-blk.folded > .n-row > .n-bullet i::after {
+    content: "";
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 5px;
+    width: 1px;
+    background: var(--sheet);
+  }
+  .n-content {
+    flex: 1;
+    min-width: 0;
+    outline: none;
+    padding: 2px 0;
+    line-height: 26px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    caret-color: var(--signal);
+  }
+  .n-content:empty:not(:focus)::before {
+    content: attr(data-ph);
+    color: var(--faint);
+    pointer-events: none;
+  }
+  .n-content:focus-visible {
+    outline: none;
+  }
+  .n-kids {
+    margin-left: 11.5px;
+    padding-left: 12.5px;
+    border-left: 1px solid var(--line2);
+  }
+  .n-kids.opening {
+    animation: n-kids-in 0.18s steps(3, end);
+  }
+  @keyframes n-kids-in {
+    from {
+      clip-path: inset(0 0 100% 0);
+    }
+    to {
+      clip-path: inset(0);
+    }
+  }
+  .n-hid {
+    flex: none;
+    margin: 5px 0 0 10px;
+    height: 20px;
+    padding: 0 6px;
+    border: 1px dashed var(--muted);
+    border-radius: 0;
+    font: 500 9px / 18px var(--mono);
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    background: var(--sheet);
+  }
+  .n-hid::after {
+    content: " BLK";
+  }
+  .n-hid:hover {
+    color: var(--ink);
+    border-color: var(--ink);
+  }
+
+  /* ================= Margin: the outliner key ================= */
+  .n-gutter {
+    grid-column: 6 / 9;
+    grid-row: 1;
+    position: relative;
+    pointer-events: none;
+    min-width: 0;
+  }
+  .n-legend {
+    position: absolute;
+    top: 0;
+    left: calc(100% / 3 + 14px);
+    right: 16px;
+    max-width: 360px;
+    pointer-events: auto;
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--muted);
+  }
+  .n-lt {
+    overflow: hidden;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 30px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--line);
+    font: 600 9px / 1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .n-lt-n {
+    color: var(--faint);
+    font-weight: 500;
+  }
+  .n-legend .k {
+    display: grid;
+    grid-template-columns: 84px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border-bottom: 1px solid var(--line2);
+  }
+  .n-legend .k:last-child {
+    border-bottom: 0;
+  }
+  .n-legend .kk {
+    display: flex;
+    gap: 4px;
+  }
+  .n-legend kbd .sh {
+    width: 9px;
+    height: 9px;
+    margin-right: 3px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.1;
+    stroke-linejoin: miter;
+  }
+
+  /* ================= Stream end ================= */
+  .n-end-row {
+    margin-top: 64px;
+  }
+  .n-end {
+    grid-column: 2 / 6;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border: 1px dashed var(--line);
+    background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 7px);
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  .n-end b {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .n-end .m {
+    font: 600 9.5px / 1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .n-end .m:last-child {
+    margin-left: auto;
+  }
+
+  @media (max-width: 1440px) {
+    .n-sheet,
+    .n-end,
+    .n-d-s {
+      grid-column: 2 / 7;
+    }
+    .n-gutter,
+    .n-d-g {
+      grid-column: 7 / 9;
+    }
+    .n-d-g {
+      margin-left: 14px;
+    }
+    .n-legend {
+      left: 14px;
+    }
+  }
+
+  /* ================= Week strip (in the header, C–E) ================= */
+  .n-week {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) repeat(7, minmax(0, 1fr)) minmax(0, 1.3fr);
+  }
+  .n-wk {
+    position: relative;
+    padding: 11px 12px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .n-wkn {
+    font: 700 13px / 1 var(--sans);
+    font-stretch: 112%;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+  .n-wkr {
+    font: 500 9.5px / 1.3 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .n-wk-nav {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: flex;
+  }
+  .n-wk-nav button {
+    width: 22px;
+    height: 22px;
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-top: 1px solid var(--line2);
+    border-left: 1px solid var(--line2);
+    border-radius: 0;
+    background: none;
+    color: var(--muted);
+    font: 600 11px / 1 var(--mono);
+    cursor: pointer;
+    padding: 0;
+  }
+  .n-wk-nav button:hover {
+    background: var(--raise);
+    color: var(--ink);
+  }
+  .n-dbtn,
+  .n-tbtn {
+    position: relative;
+    border: 0;
+    border-left: 1px solid var(--line2);
+    border-radius: 0;
+    background: none;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 0 9px;
+    min-width: 0;
+    color: inherit;
+    font: inherit;
+  }
+  .n-dbtn .w,
+  .n-tbtn .w {
+    font: 500 9px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .n-dbtn .n {
+    font: 700 21px / 1 var(--sans);
+    font-stretch: 112%;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+  .n-dbtn.empty {
+    background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 6px);
+  }
+  .n-dbtn.empty .n {
+    color: var(--faint);
+    font-weight: 400;
+  }
+  .n-dbtn.empty .w {
+    color: var(--faint);
+  }
+  .n-dbtn.has::after {
+    content: "";
+    position: absolute;
+    right: 8px;
+    bottom: 9px;
+    width: 5px;
+    height: 5px;
+    background: var(--muted);
+  }
+  .n-dbtn.today::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 3px;
+    background: var(--signal);
+  }
+  .n-dbtn:hover:not(.active) {
+    background-color: var(--raise);
+  }
+  .n-dbtn.active {
+    background: var(--ink);
+  }
+  .n-dbtn.active .w,
+  .n-dbtn.active .n {
+    color: var(--bg);
+  }
+  .n-dbtn.active::after {
+    background: var(--bg);
+  }
+  .n-tbtn {
+    border-left: 1px solid var(--line);
+  }
+  .n-tbtn .t {
+    font: 700 11px / 1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .n-tbtn:hover {
+    background: var(--raise);
+  }
+  .n-wkn .short {
+    display: none;
+  }
+  @media (max-width: 1440px) {
+    .n-wkn .long,
+    .n-wkr {
+      display: none;
+    }
+    .n-wkn .short {
+      display: inline;
+    }
+    .n-dbtn,
+    .n-tbtn {
+      padding: 0 6px;
+    }
+    .n-tbtn .t {
+      letter-spacing: 0.06em;
+    }
+  }
+}

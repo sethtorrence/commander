@@ -4,6 +4,7 @@ import { app, type BrowserWindow, ipcMain, type Tray, type UtilityProcess } from
 import { autostartPath, isAutostartEnabled, launchAtLoginCommand, setAutostart } from './autostart';
 import { keepInTray, stopCoreOnQuit } from './lifecycle';
 import { ownPidRecord, pidFilePath, removePidFile, writePidFile } from './pid-file';
+import { askWindowToSave } from './save-before-quit';
 import { DESKTOP_ENTRY, focusThroughHyprland, installSummon, summonWindow } from './summon';
 import { createTray } from './tray';
 
@@ -28,7 +29,14 @@ let tray: Tray | null = null; // Held so the tray icon isn't garbage-collected.
 
 export function runInBackground(window: BrowserWindow, core: UtilityProcess): void {
   keepInTray(window, app);
-  stopCoreOnQuit(app, core);
+  const saving = askWindowToSave({
+    send: (channel, id) => window.webContents.send(channel, id),
+    isDestroyed: () => window.isDestroyed() || window.webContents.isDestroyed(),
+  });
+  ipcMain.on(ipc.savedBeforeQuit, (event, id: unknown) => {
+    if (event.sender === window.webContents) saving.settle(id);
+  });
+  stopCoreOnQuit(app, core, { beforeStop: saving.request });
 
   const open = () => {
     summonWindow(window);

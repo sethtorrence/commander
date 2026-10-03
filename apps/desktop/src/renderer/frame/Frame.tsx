@@ -3,7 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { ProjectsProvider } from '../projects/context';
 import { projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
-import { FrameControlsProvider, SectionProvider } from '../sections/section';
+import { FrameControlsProvider, HeaderSlotProvider, SectionProvider } from '../sections/section';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { ShortcutScope, useActiveScopes, useShortcuts } from '../shortcuts/react';
 import { isTypingTarget } from '../shortcuts/registry';
@@ -50,6 +50,7 @@ export function Frame() {
   const [lastSection, setLastSection] = useState(open);
   const [cheatSheet, setCheatSheet] = useState(false);
   const projects = useMemo(() => projectsIn(window.commander.itemStore), []);
+  const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
 
   const openSection = useCallback((id: string) => {
     setOpen(id);
@@ -107,7 +108,7 @@ export function Frame() {
   return (
     <ProjectsProvider client={projects}>
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
-      <Header {...header} onBand={() => openSection('dashboard')} />
+      <Header {...header} onBand={() => openSection('dashboard')} slotRef={setHeaderSlot} />
       <RulerX className="fixed top-(--hdr) right-0 left-0 z-24" />
       <RulerY className="fixed top-(--top) bottom-0 left-0 z-24" />
       <RulerCursor />
@@ -121,9 +122,11 @@ export function Frame() {
       />
       <main className="relative z-1 ml-(--rul) pt-(--body)">
         <FrameControlsProvider value={controls}>
-          {SECTIONS.map((section, i) => (
-            <SectionView key={section.id} section={section} number={i + 1} open={open === section.id} />
-          ))}
+          <HeaderSlotProvider value={headerSlot}>
+            {SECTIONS.map((section, i) => (
+              <SectionView key={section.id} section={section} number={i + 1} open={open === section.id} />
+            ))}
+          </HeaderSlotProvider>
         </FrameControlsProvider>
         <section className="grid grid-cols-8" hidden={open !== SETTINGS} aria-label="Settings">
           <SettingsScreen />

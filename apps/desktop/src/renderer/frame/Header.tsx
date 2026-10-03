@@ -1,4 +1,5 @@
 import { cn, Kbd, Led } from '@commander/ui';
+import type { Ref } from 'react';
 import { clockTime, dayOfYear, isoWeek, shortDate } from './calendar';
 import { useNow } from './use-now';
 
@@ -76,10 +77,15 @@ export interface HeaderProps {
   bands?: BandCounts;
   onBand?: (band: string) => void;
   ares?: AresStatusProps;
+  /**
+   * Where the open Section can put its own strip across C–E (the Notes Section's week strip). While
+   * something is in it, it takes the place of the date and the band meter.
+   */
+  slotRef?: Ref<HTMLDivElement>;
 }
 
 /** The Industrial header (.hdr): identity and clock, the date, the band meter, and Ares. */
-export function Header({ eyebrow, title, bands = {}, onBand, ares }: HeaderProps) {
+export function Header({ eyebrow, title, bands = {}, onBand, ares, slotRef }: HeaderProps) {
   const now = useNow(1000);
   return (
     <header className="f-hdr">
@@ -127,6 +133,7 @@ export function Header({ eyebrow, title, bands = {}, onBand, ares }: HeaderProps
           );
         })}
       </nav>
+      <div className="f-slot" ref={slotRef} />
       <AresStatus {...ares} />
     </header>
   );

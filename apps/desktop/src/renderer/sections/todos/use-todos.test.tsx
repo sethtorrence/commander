@@ -3,8 +3,9 @@ import type { ItemStore } from '@commander/core/src/item-store';
 import type { Item } from '@commander/domain';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+
+import { openTestItemStore } from '../../item-store/test-item-store';
 import { projectsIn } from '../../projects/projects';
-import { openTestItemStore } from './test-item-store';
 import { describeEntry, type Todos, todosIn } from './todos';
 import { type TodosState, useTodos } from './use-todos';
 

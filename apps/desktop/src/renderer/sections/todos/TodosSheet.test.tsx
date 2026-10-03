@@ -3,13 +3,13 @@ import type { ItemStore } from '@commander/core/src/item-store';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { openTestItemStore } from '../../item-store/test-item-store';
 import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
 import { ShortcutProvider, ShortcutScope, useActiveScopes, useShortcutList } from '../../shortcuts/react';
 import { FrameControlsProvider, SectionProvider } from '../section';
 import { todos as definition } from '.';
 import { TodosSheet } from './TodosSheet';
-import { openTestItemStore } from './test-item-store';
 import { type Todos, todosIn } from './todos';
 
 let store: ItemStore;

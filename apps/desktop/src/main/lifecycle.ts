@@ -31,8 +31,17 @@ type StoppableCore = {
 };
 
 // Quit waits for the Core to exit (it gets SIGTERM, so it can finish what it is writing),
-// but never longer than timeoutMs.
-export function stopCoreOnQuit(app: QuittableApp, core: StoppableCore, { timeoutMs = 3000 } = {}): void {
+// but never longer than timeoutMs. First, `beforeStop` gets up to beforeStopTimeoutMs to finish
+// with the Core while it still runs: the window saves the edits it is holding.
+export function stopCoreOnQuit(
+  app: QuittableApp,
+  core: StoppableCore,
+  {
+    timeoutMs = 3000,
+    beforeStop,
+    beforeStopTimeoutMs = 2000,
+  }: { timeoutMs?: number; beforeStop?: () => Promise<void>; beforeStopTimeoutMs?: number } = {},
+): void {
   let state: 'running' | 'stopping' | 'stopped' = 'running';
   let finish = () => {};
   core.on('exit', () => {
@@ -44,15 +53,28 @@ export function stopCoreOnQuit(app: QuittableApp, core: StoppableCore, { timeout
     event.preventDefault();
     if (state === 'stopping') return;
     state = 'stopping';
-    const timer = setTimeout(() => {
-      state = 'stopped';
-      finish();
-    }, timeoutMs);
-    finish = () => {
-      finish = () => {};
-      clearTimeout(timer);
-      app.quit();
+    const stop = () => {
+      // The Core may have exited by itself in the meantime.
+      if (state === 'stopped') return app.quit();
+      const timer = setTimeout(() => {
+        state = 'stopped';
+        finish();
+      }, timeoutMs);
+      finish = () => {
+        finish = () => {};
+        clearTimeout(timer);
+        app.quit();
+      };
+      core.kill();
     };
-    core.kill();
+    if (!beforeStop) return stop();
+    let waited: ReturnType<typeof setTimeout> | undefined;
+    const tooLong = new Promise<void>((resolve) => {
+      waited = setTimeout(resolve, beforeStopTimeoutMs);
+    });
+    Promise.race([beforeStop().catch(() => {}), tooLong]).then(() => {
+      clearTimeout(waited);
+      stop();
+    });
   });
 }

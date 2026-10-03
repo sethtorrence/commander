@@ -18,6 +18,10 @@ export const ipc = {
   modelKeyStatus: 'model-key-status',
   saveModelKey: 'save-model-key',
   clearModelKey: 'clear-model-key',
+  // Commander is quitting: main asks the window to save the edits it holds (with a request id), and
+  // the window answers on savedBeforeQuit with that id once they are saved.
+  saveBeforeQuit: 'save-before-quit',
+  savedBeforeQuit: 'saved-before-quit',
 } as const;
 
 // Whether a model provider's API key is in the keyring. The key itself never reaches the window.

@@ -3,6 +3,9 @@ import {
   type ActivityEntry,
   activityEntry,
   activityQuery,
+  type DailyNotePage,
+  dailyNotePage,
+  dailyNoteQuery,
   type Item,
   type ItemView,
   item,
@@ -21,6 +24,16 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('record'), action: itemAction, why: z.string().optional() }),
   z.object({ op: z.literal('projects'), query: projectQuery.default({}) }),
   z.object({ op: z.literal('change-project'), action: projectAction }),
+  // Several actions, recorded in order as one: all of them or none.
+  z.object({
+    op: z.literal('record-all'),
+    actions: z.array(itemAction).min(1).max(500),
+    why: z.string().optional(),
+  }),
+  // The Daily Note for a calendar day, made if there isn't one yet.
+  z.object({ op: z.literal('daily-note'), day: z.iso.date() }),
+  z.object({ op: z.literal('daily-notes'), query: dailyNoteQuery.default({}) }),
+  z.object({ op: z.literal('blocks'), dailyNoteIds: z.array(z.string().min(1)).max(1000) }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -32,6 +45,10 @@ export type ItemStoreResults = {
   record: ActivityEntry;
   projects: Project[];
   'change-project': Project;
+  'record-all': ActivityEntry[];
+  'daily-note': Item;
+  'daily-notes': DailyNotePage;
+  blocks: Item[];
 };
 
 export const itemStoreResult = {
@@ -41,6 +58,10 @@ export const itemStoreResult = {
   record: activityEntry,
   projects: z.array(project),
   'change-project': project,
+  'record-all': z.array(activityEntry),
+  'daily-note': item,
+  'daily-notes': dailyNotePage,
+  blocks: z.array(item),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

@@ -9,6 +9,7 @@ import type {
   Project,
   Source,
 } from '@commander/domain';
+import type { ItemStoreClient } from '../../item-store/client';
 import { describeFiling } from '../../projects/projects';
 
 /*
@@ -17,8 +18,7 @@ import { describeFiling } from '../../projects/projects';
   window's bridge (`window.commander.itemStore`), where every action is recorded as the User's.
 */
 
-/** The window's Item store channel (the preload bridge), or a stand-in for tests. */
-export type ItemStoreClient = Window['commander']['itemStore'];
+export type { ItemStoreClient } from '../../item-store/client';
 
 /** One of a Todo's Links: from the Todo to another Item, or a backlink from another Item to it. */
 export interface TodoLink {
