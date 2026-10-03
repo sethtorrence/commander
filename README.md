@@ -97,6 +97,8 @@ Every Todo belongs to a Project or is Unfiled, and shows it with its Badge (the 
 
 Notes is one stream of Daily Notes: today on top, earlier days below as you scroll, and the week strip in the header to jump to a day (`‹` `›` step a week). Every line is a Block: `Enter` makes one, `Tab`/`Shift+Tab` indent and outdent, clicking a bullet or `Ctrl+.` folds its children, `Alt+Shift+↑`/`↓` move a Block with its children, `Backspace` on an empty Block removes it, and `Ctrl+Z`/`Ctrl+Shift+Z` undo and redo. Blocks are Items, saved as you go: typing after a short pause (and anything pending when Commander quits), everything else at once.
 
+Each new day starts from the **daily template**: Morning, Meetings, Todos, Ideas and Evening until you change it in **Settings → Notes**, which edits it in the same outliner (nesting and folds included). It applies only when a day's Daily Note is first made as today, when Notes first opens or when the date passes midnight while Commander runs; a blank past day opened from the week strip starts empty. The day gets copies, new Blocks with their own ids, so editing the template changes only days made afterwards. The template is a setting kept in `commander.db` (not Items), and the copies are logged as the User's, "From the daily template".
+
 ## Tray and summoning
 
 Commander is meant to stay running. Closing the window hides it to the tray and the Core keeps working. Click the tray icon or use its menu (**Open Commander**, **Quit Commander**) to get it back; **Quit** is the only way to stop it. On Hyprland the tray needs a StatusNotifierItem host in your bar, such as waybar's `tray` module or DankMaterialShell. Launching Commander again while it is running just brings the running window forward.

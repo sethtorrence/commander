@@ -2,6 +2,7 @@ export * from './account-messages';
 export * from './autonomy';
 export * from './autonomy-messages';
 export * from './core-messages';
+export * from './daily-template';
 export * from './ipc';
 export * from './item-store-messages';
 export * from './items';

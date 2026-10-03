@@ -9,8 +9,11 @@ import type { Block, BlockChange } from './outline';
 */
 
 export interface DailyNotes {
-  /** The id of the Daily Note for a day (YYYY-MM-DD), made if there isn't one yet. */
-  ensure(day: string): Promise<string>;
+  /**
+   * The id of the Daily Note for a day (YYYY-MM-DD), made if there isn't one yet. With `fromTemplate`
+   * (the day is being made as today), a new one starts with a copy of the daily template.
+   */
+  ensure(day: string, options?: { fromTemplate?: boolean }): Promise<string>;
   /** Daily Notes, newest first. */
   list(query: DailyNoteQuery): Promise<DailyNotePage>;
   /** The Blocks of these Daily Notes, by Daily Note id. */
@@ -41,8 +44,8 @@ function actionFor(dailyNoteId: string, change: BlockChange): ItemAction {
 
 export function dailyNotesIn(itemStore: ItemStoreClient): DailyNotes {
   return {
-    async ensure(day) {
-      return (await itemStore({ op: 'daily-note', day })).id;
+    async ensure(day, options) {
+      return (await itemStore({ op: 'daily-note', day, ...options })).id;
     },
 
     list(query) {

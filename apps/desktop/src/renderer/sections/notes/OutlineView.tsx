@@ -36,11 +36,14 @@ function useControls(): OutlineControls {
   return controls;
 }
 
-// Every editable row on the page, in page order: the folded-away ones aren't rendered.
-const editors = () => [...document.querySelectorAll<HTMLElement>('[data-notes-stream] [data-block-text]')];
+// Every editable row in the same stream (the Notes Section, or the daily template in Settings), in
+// page order: the folded-away ones aren't rendered.
+const editors = (element: HTMLElement) => [
+  ...(element.closest('[data-notes-stream]') ?? document).querySelectorAll<HTMLElement>('[data-block-text]'),
+];
 
 function neighbour(element: HTMLElement, step: 1 | -1): HTMLElement | undefined {
-  const all = editors();
+  const all = editors(element);
   return all[all.indexOf(element) + step];
 }
 

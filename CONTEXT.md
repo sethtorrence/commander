@@ -98,6 +98,10 @@ _Avoid_: Journal, entry, page
 One line of a Daily Note; Blocks nest under one another, and each belongs to a Project (inherited from its parent unless set) and can become a Todo.
 _Avoid_: Line, paragraph, bullet, node
 
+**Daily template**:
+The Blocks each new Daily Note starts with, edited in Settings; a new day gets copies of them, not links to them.
+_Avoid_: Default note, skeleton, boilerplate
+
 ## Processing
 
 **Core**:

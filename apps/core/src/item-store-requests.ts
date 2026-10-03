@@ -30,11 +30,22 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
           result: store.recordAll(request.actions, { by: { kind: 'user' }, why: request.why }),
         };
       case 'daily-note':
-        return { ok: true, result: store.ensureDailyNote(request.day, { by: { kind: 'user' } }) };
+        return {
+          ok: true,
+          result: store.ensureDailyNote(
+            request.day,
+            { by: { kind: 'user' } },
+            { fromTemplate: request.fromTemplate },
+          ),
+        };
       case 'daily-notes':
         return { ok: true, result: store.dailyNotes(request.query) };
       case 'blocks':
         return { ok: true, result: store.blocks(request.dailyNoteIds) };
+      case 'daily-template':
+        return { ok: true, result: store.dailyTemplate() };
+      case 'save-daily-template':
+        return { ok: true, result: store.saveDailyTemplate(request.template) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

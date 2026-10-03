@@ -12,6 +12,7 @@ import {
   type CausedBy,
   type DailyNotePage,
   type DailyNoteQuery,
+  type DailyTemplate,
   dailyNoteQuery,
   type Item,
   type ItemAction,
@@ -38,6 +39,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { z } from 'zod';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
+import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type ModelStore, openModelStore } from './models';
 import { projectsIn } from './projects';
 import {
@@ -92,8 +94,10 @@ export type ItemStore = {
   projects(query?: ProjectQuery): Project[];
   // Creates (later also renames, reorders, archives) a Project. Not an Item change, so not logged.
   changeProject(action: ProjectAction): Project;
-  // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet.
-  ensureDailyNote(day: string, context: ActionContext): Item;
+  // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet. With
+  // `fromTemplate` (the day is being made as today), a new one starts with copies of the daily
+  // template's Blocks, made in the same transaction; a Daily Note that already exists never does.
+  ensureDailyNote(day: string, context: ActionContext, options?: { fromTemplate?: boolean }): Item;
   // Daily Notes, newest first.
   dailyNotes(query?: DailyNoteQuery): DailyNotePage;
   // The live Blocks of these Daily Notes, each note's in position order.
@@ -104,6 +108,10 @@ export type ItemStore = {
   undone(entryIds: number[]): number[];
   // Runs fn as one change: everything it records happens, or (when it throws) none of it does.
   transaction<T>(fn: () => T): T;
+  // Settings → Notes → Daily template (the default until the User saves one). Not Items, so saving
+  // it is not logged.
+  dailyTemplate(): DailyTemplate;
+  saveDailyTemplate(template: DailyTemplate): DailyTemplate;
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7.
   takeDailySnapshot(): Snapshot | null;
   // The usage ledger and Settings → Ares, in the same database.
@@ -179,6 +187,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: options.migrationsFolder });
   const projects = projectsIn(db, now, (message) => new ItemStoreError('invalid', message));
+  const template = dailyTemplateIn(db, now);
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
     const { items } = schema;
@@ -500,6 +509,38 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return row && withDetails([row.item])[0];
   }
 
+  // Fills a new Daily Note with copies of the template's Blocks: fresh ids, the same outline.
+  function copyTemplate(dailyNoteId: string, entry: Pick<NewEntry, 'by' | 'causedBy'>, at: number) {
+    const ids = new Map<string, string>();
+    for (const block of inCopyOrder(template.read().blocks)) {
+      const id = randomUUID();
+      ids.set(block.id, id);
+      const parentId = block.parentId === null ? null : (ids.get(block.parentId) ?? null);
+      const { position, text, folded } = block;
+      const copy: ItemState = {
+        title: text,
+        people: [],
+        status: 'open',
+        filing: null,
+        detail: { kind: 'block', dailyNoteId, parentId, position, text, folded },
+        deletedAt: null,
+      };
+      const identity = { kind: 'block' as const, source: null, account: null, externalId: null };
+      const { state } = insertItem(identity, copy, at, id);
+      log(
+        {
+          ...entry,
+          why: 'From the daily template',
+          action: 'create',
+          itemId: id,
+          before: null,
+          after: state,
+        },
+        at,
+      );
+    }
+  }
+
   const ensureDailyNote = sqlite.transaction((input: string, rawContext: ActionContext): Item => {
     const day = calendarDay.parse(input);
     const context = actionContext.parse(rawContext);
@@ -526,6 +567,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const { id, state } = insertItem(identity, fresh, at);
     log({ ...entry, action: 'create', itemId: id, before: null, after: state }, at);
     return requireItem(id);
+  });
+
+  // A Daily Note made as today: if there was none for the day at all, it starts with the template.
+  const ensureFromTemplate = sqlite.transaction((input: string, rawContext: ActionContext): Item => {
+    const isNew = !findDailyNote(calendarDay.parse(input));
+    const note = ensureDailyNote(input, rawContext);
+    if (isNew) copyTemplate(note.id, actionContext.parse(rawContext), now());
+    return note;
   });
 
   function dailyNotes(input: DailyNoteQuery = {}): DailyNotePage {
@@ -701,9 +750,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
     record,
     recordAll,
-    ensureDailyNote,
+    ensureDailyNote: (day, context, options) =>
+      options?.fromTemplate ? ensureFromTemplate(day, context) : ensureDailyNote(day, context),
     dailyNotes,
     blocks,
+    dailyTemplate: () => template.read(),
+    saveDailyTemplate: (input) => template.save(input),
 
     activity(input = {}) {
       const query = activityQuery.parse(input);

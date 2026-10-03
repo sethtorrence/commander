@@ -11,7 +11,13 @@ const dayFrom = (page: Page, offset = 0) =>
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   }, offset);
 
+const emptyDailyTemplate = (page: Page) =>
+  page.evaluate(() => window.commander.itemStore({ op: 'save-daily-template', template: { blocks: [] } }));
+
+// These tests write into an empty day, so the daily template is emptied before today's Daily Note is
+// made (daily-template.spec.ts covers the template).
 async function openNotes(window: Page) {
+  await emptyDailyTemplate(window);
   await tab(window, 'Notes').click();
   const today = await dayFrom(window);
   const sheet = window.locator(`#day-${today}`);

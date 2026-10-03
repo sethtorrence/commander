@@ -278,3 +278,11 @@ export const proposals = sqliteTable(
   },
   (t) => [index('proposals_item').on(t.itemId), index('proposals_status').on(t.status)],
 );
+
+// Settings → Notes → Daily template: the Blocks a new day starts with, as one validated document in a
+// single row. A setting rather than Items: a day gets copies of its Blocks.
+export const dailyTemplate = sqliteTable('daily_template', {
+  id: integer('id').primaryKey(),
+  template: text('template', { mode: 'json' }).notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
