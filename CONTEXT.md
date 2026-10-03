@@ -30,6 +30,14 @@ _Avoid_: Record, entity, object, thing
 A typed connection between two Items (made from, refers to, finishes, about, caused by), visible from both ends.
 _Avoid_: Relation, reference, edge
 
+**Activity log**:
+The one record of every change to an Item or Link: who made it (the User, Ares, a Rule or the Source), why, and what caused it; it powers undo.
+_Avoid_: Audit trail, changelog, event log
+
+**Tombstone**:
+What Commander keeps of an Item deleted at its Source: hidden from views but kept, so its Links and activity log survive (shown as "deleted in Gmail").
+_Avoid_: Soft delete, trash, archive
+
 **Two-way sync**:
 Changes made in Commander are written back to the Source, and changes in the Source show up in Commander.
 _Avoid_: Import, mirror

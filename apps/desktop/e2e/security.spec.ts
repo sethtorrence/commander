@@ -1,4 +1,5 @@
-import { _electron as electron, expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { launchCommander } from './launch-commander';
 
 // On Linux/Wayland (the author's Hyprland) Commander launches with --password-store=gnome-libsecret,
 // so secrets must be protected by the Secret Service keyring.
@@ -6,7 +7,7 @@ const onLinuxWayland = process.platform === 'linux' && !!process.env.WAYLAND_DIS
 
 test('Settings → Security shows the libsecret keyring protecting secrets', async () => {
   test.skip(!onLinuxWayland, 'needs a Linux Wayland session with a Secret Service keyring');
-  const app = await electron.launch({ args: ['.'] });
+  const { app } = await launchCommander();
   const window = await app.firstWindow();
 
   const panel = window.getByTestId('security-panel');
@@ -19,10 +20,7 @@ test('Settings → Security shows the libsecret keyring protecting secrets', asy
 
 test('a secret survives a save, read and delete round trip through the real keyring', async () => {
   test.skip(!onLinuxWayland, 'needs a Linux Wayland session with a Secret Service keyring');
-  const app = await electron.launch({
-    args: ['.'],
-    env: { ...process.env, COMMANDER_SECRETS_SELF_TEST: '1' },
-  });
+  const { app } = await launchCommander({ env: { COMMANDER_SECRETS_SELF_TEST: '1' } });
   await app.firstWindow();
 
   // The self-test runs in the main process; its report never passes through the window.
