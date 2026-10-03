@@ -1,5 +1,8 @@
 import { cn, toast } from '@commander/ui';
 import { useEffect, useRef } from 'react';
+import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
+import { SectionProjectFilter } from '../../projects/badges';
+import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { AddTodo } from './AddTodo';
@@ -21,8 +24,13 @@ const onPressable = () => !!document.activeElement?.closest('button, a[href], su
  * the detail pane in the last three eighths, like its Calendar.
  */
 export function TodosSheet({ todos }: { todos: Todos }) {
-  const state = useTodos(todos);
+  // Projects (projects/): the filter narrows the list, `b` or a Badge click files a Todo.
+  const { filter, include, filingForNew } = useProjectFilter();
+  const { projects } = useProjects();
+  const filtered = projects.find((project) => project.id === filter);
+  const state = useTodos(todos, include);
   const { open, done, selected, detailOpen, setDetailOpen, undo, refresh } = state;
+  const badges = useBadgePicker(state.apply, undo);
   const input = useRef<HTMLInputElement>(null);
   const openSection = useOpenSection();
 
@@ -67,6 +75,7 @@ export function TodosSheet({ todos }: { todos: Todos }) {
     { keys: 'd', label: 'Show or hide Done', run: () => state.showDone() },
     { keys: 'Ctrl+z', label: 'Undo', run: () => undo() },
     { keys: 'n', label: 'New Todo', run: () => input.current?.focus() },
+    { keys: 'b', label: 'File under a Project', run: () => selected && badges.open(selected) },
   ]);
 
   return (
@@ -74,56 +83,62 @@ export function TodosSheet({ todos }: { todos: Todos }) {
       span={detailOpen ? 'full' : 'wide'}
       subtitle={
         <>
-          <b>{open.length} open</b> · {done.length} done · from Linear, Email, the Daily Note and you
+          <b>{open.length} open</b>
+          {filter !== 'everything' &&
+            ` ${filtered ? `in ${filtered.name}` : 'Unfiled'} (of ${state.allOpen.length})`}{' '}
+          · {done.length} done · from Linear, Email, the Daily Note and you
         </>
       }
       aside={<Keys />}
       className="flex flex-col"
     >
-      {/* The Project filter bar (.pflt) goes here, between the header and the list. */}
-      <div className={cn('flex-1', detailOpen && 'grid grid-cols-[minmax(0,5fr)_minmax(0,3fr)]')}>
-        <div className="min-w-0 pb-30">
-          <TodoGroup no="G1" title="Open" count={open.length}>
-            <TodoList
-              todos={open}
-              first={1}
-              selectedId={selected?.id ?? null}
-              onSelect={state.select}
-              onOpen={openTodo}
-              onTick={tick}
+      <SectionProjectFilter items={state.allOpen} />
+      <PickBadgeProvider value={badges.open}>
+        <div className={cn('flex-1', detailOpen && 'grid grid-cols-[minmax(0,5fr)_minmax(0,3fr)]')}>
+          <div className="min-w-0 pb-30">
+            <TodoGroup no="G1" title="Open" count={open.length}>
+              <TodoList
+                todos={open}
+                first={1}
+                selectedId={selected?.id ?? null}
+                onSelect={state.select}
+                onOpen={openTodo}
+                onTick={tick}
+              />
+              <AddTodo input={input} add={(title) => state.add(title, filingForNew)} project={filtered} />
+            </TodoGroup>
+            <TodoGroup
+              no="G2"
+              title="Done"
+              count={done.length}
+              expanded={state.doneShown}
+              onExpandedChange={state.showDone}
+            >
+              <TodoList
+                todos={done}
+                first={open.length + 1}
+                selectedId={selected?.id ?? null}
+                onSelect={state.select}
+                onOpen={openTodo}
+                onTick={tick}
+              />
+            </TodoGroup>
+          </div>
+          {detailOpen && (
+            <TodoDetail
+              todo={selected}
+              links={state.links}
+              history={state.history}
+              onRename={(title) => state.rename(title)}
+              onTick={() => tick()}
+              onDelete={remove}
+              onClose={() => setDetailOpen(false)}
+              onOpenLink={openLink}
             />
-            <AddTodo input={input} add={state.add} />
-          </TodoGroup>
-          <TodoGroup
-            no="G2"
-            title="Done"
-            count={done.length}
-            expanded={state.doneShown}
-            onExpandedChange={state.showDone}
-          >
-            <TodoList
-              todos={done}
-              first={open.length + 1}
-              selectedId={selected?.id ?? null}
-              onSelect={state.select}
-              onOpen={openTodo}
-              onTick={tick}
-            />
-          </TodoGroup>
+          )}
         </div>
-        {detailOpen && (
-          <TodoDetail
-            todo={selected}
-            links={state.links}
-            history={state.history}
-            onRename={(title) => state.rename(title)}
-            onTick={() => tick()}
-            onDelete={remove}
-            onClose={() => setDetailOpen(false)}
-            onOpenLink={openLink}
-          />
-        )}
-      </div>
+      </PickBadgeProvider>
+      {badges.picker}
     </SectionSheet>
   );
 }

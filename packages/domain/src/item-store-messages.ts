@@ -10,6 +10,7 @@ import {
   itemQuery,
   itemView,
 } from './items';
+import { type Project, project, projectAction, projectQuery } from './projects';
 
 // What the window may ask of the Item store. It reaches the store only through these requests,
 // validated in the main process and again in the Core. Actions from the window are always the User's.
@@ -18,6 +19,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('get'), itemId: z.string().min(1) }),
   z.object({ op: z.literal('activity'), query: activityQuery.default({}) }),
   z.object({ op: z.literal('record'), action: itemAction, why: z.string().optional() }),
+  z.object({ op: z.literal('projects'), query: projectQuery.default({}) }),
+  z.object({ op: z.literal('change-project'), action: projectAction }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -27,6 +30,8 @@ export type ItemStoreResults = {
   get: ItemView | null;
   activity: ActivityEntry[];
   record: ActivityEntry;
+  projects: Project[];
+  'change-project': Project;
 };
 
 export const itemStoreResult = {
@@ -34,6 +39,8 @@ export const itemStoreResult = {
   get: itemView.nullable(),
   activity: z.array(activityEntry),
   record: activityEntry,
+  projects: z.array(project),
+  'change-project': project,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

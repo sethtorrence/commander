@@ -20,6 +20,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.activity(request.query) };
       case 'record':
         return { ok: true, result: store.record(request.action, { by: { kind: 'user' }, why: request.why }) };
+      case 'projects':
+        return { ok: true, result: store.projects(request.query) };
+      case 'change-project':
+        return { ok: true, result: store.changeProject(request.action) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

@@ -1,5 +1,7 @@
 import { DrawingGrid, RulerX, RulerY } from '@commander/ui';
 import { useCallback, useMemo, useState } from 'react';
+import { ProjectsProvider } from '../projects/context';
+import { projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
 import { FrameControlsProvider, SectionProvider } from '../sections/section';
 import { SettingsScreen } from '../settings/SettingsScreen';
@@ -40,12 +42,14 @@ function SectionView({
 /**
  * The app frame: the Industrial header, the rulers and exposed grid, the numbered notebook tabs,
  * and the open Section's sheet. Sections stay mounted while another is open, so they keep their
- * state. The frame's own keys: 1–9 open Sections, `,` Settings, `?` the cheat sheet.
+ * state. The frame's own keys: 1–9 open Sections, `,` Settings, `?` the cheat sheet. It also holds
+ * the Projects and the one Project filter every Section shares (projects/context.tsx).
  */
 export function Frame() {
   const [open, setOpen] = useState<string>(SECTIONS[0]?.id ?? SETTINGS);
   const [lastSection, setLastSection] = useState(open);
   const [cheatSheet, setCheatSheet] = useState(false);
+  const projects = useMemo(() => projectsIn(window.commander.itemStore), []);
 
   const openSection = useCallback((id: string) => {
     setOpen(id);
@@ -101,7 +105,7 @@ export function Frame() {
     : { eyebrow: 'Commander / Settings', title: 'Settings' };
 
   return (
-    <>
+    <ProjectsProvider client={projects}>
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
       <Header {...header} onBand={() => openSection('dashboard')} />
       <RulerX className="fixed top-(--hdr) right-0 left-0 z-24" />
@@ -126,6 +130,6 @@ export function Frame() {
         </section>
       </main>
       <CheatSheet open={cheatSheet} onOpenChange={setCheatSheet} />
-    </>
+    </ProjectsProvider>
   );
 }

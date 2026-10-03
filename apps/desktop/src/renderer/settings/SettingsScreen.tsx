@@ -9,6 +9,7 @@ import {
 } from '@commander/ui';
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
+import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { AccountsPanel } from './AccountsPanel';
 import { AresSettings } from './ares/AresSettings';
 import { Diagnostics } from './Diagnostics';
@@ -51,7 +52,7 @@ export function SettingsScreen() {
         title="Settings"
         subtitle={
           <>
-            <b>Appearance, start-up and security</b> · kept on this machine
+            <b>Appearance, Projects, start-up and security</b> · kept on this machine
           </>
         }
       />
@@ -69,13 +70,14 @@ export function SettingsScreen() {
           <SignalColourPicker className="max-w-[820px]" />
         </SettingRow>
       </SettingsGroup>
-      <SettingsGroup no="02" title="Start-up" note="Tray">
+      <ProjectsSettings no="02" />
+      <SettingsGroup no="03" title="Start-up" note="Tray">
         <StartAtLogin />
       </SettingsGroup>
-      <AccountsPanel no="03" />
-      <SecurityPanel no="04" />
-      <Diagnostics no="05" />
-      <SettingsGroup no="06" title="Design" note="Industrial design system">
+      <AccountsPanel no="04" />
+      <SecurityPanel no="05" />
+      <Diagnostics no="06" />
+      <SettingsGroup no="07" title="Design" note="Industrial design system">
         <SettingRow label="Design gallery" description="Every token and component, dark and light.">
           <Button asChild>
             <a href="#/design" className="no-underline">
@@ -84,7 +86,7 @@ export function SettingsScreen() {
           </Button>
         </SettingRow>
       </SettingsGroup>
-      <AresSettings no="07" usageNo="08" />
+      <AresSettings no="08" usageNo="09" />
     </Sheet>
   );
 }

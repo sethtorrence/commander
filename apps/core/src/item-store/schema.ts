@@ -142,3 +142,21 @@ export const modelSettings = sqliteTable('model_settings', {
   settings: text('settings', { mode: 'json' }).notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+
+// Projects, which Items are filed into (items.project_id). Not Items themselves (ADR 0002).
+export const projects = sqliteTable(
+  'projects',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    // Two upper-case letters, unique across every Project, archived ones included.
+    code: text('code').notNull(),
+    // A palette accent's name, or a custom colour as #RRGGBB.
+    accent: text('accent').notNull(),
+    // Place in the filter bar and the Badge picker.
+    position: integer('position').notNull(),
+    archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('projects_code').on(t.code)],
+);

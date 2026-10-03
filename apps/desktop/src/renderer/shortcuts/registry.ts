@@ -11,13 +11,20 @@
     Section's scope (its id, e.g. "todos"), so a Section's own keys work only while it is shown.
     An active scope's shortcut wins over an app-wide one on the same key.
   - Registering a key that is already taken in the same scope throws, so clashes show up at once.
+  - A sequence is keys pressed in turn, written with a space: "p 1" is p then 1. After its first
+    key, the next key either finishes a sequence or cancels it (and does nothing else); the first
+    key is forgotten after a pause. `pending()` is the first key while it waits, for hints on screen.
+    A single key can't also start a sequence in the same scope.
 
   In React, register through `useShortcuts` (shortcuts/react.tsx): inside a Section it fills in the
   scope and group by itself, and it unregisters when the component goes away.
 */
 
 export interface Shortcut {
-  /** The key as `KeyboardEvent.key` names it, with modifiers first: "3", "?", "x", "Escape", "Ctrl+K". */
+  /**
+   * The key as `KeyboardEvent.key` names it, with modifiers first: "3", "?", "x", "Escape", "Ctrl+K".
+   * Keys pressed in turn are separated by a space: "p 1".
+   */
   keys: string;
   /** What it does, for the cheat sheet: "Todos", "Tick a Todo". */
   label: string;
@@ -36,8 +43,10 @@ export interface Shortcut {
 
 /** A shortcut as the cheat sheet shows it. */
 export interface ListedShortcut {
-  /** The key caps to draw, e.g. ["Ctrl", "K"]. */
+  /** The key caps to draw, e.g. ["Ctrl", "K"], or each key of a sequence in turn: ["P", "1"]. */
   keys: string[];
+  /** Whether the keys are pressed in turn rather than together. */
+  sequence: boolean;
   label: string;
   group: string;
   scope: string | undefined;
@@ -54,9 +63,14 @@ export interface ShortcutRegistry {
   handle(event: KeyboardEvent): boolean;
   /** Every registered shortcut in registration order. The same array until something changes. */
   list(): readonly ListedShortcut[];
-  /** Called after any change to `list()`. Returns the unsubscribe function. */
+  /** The first key of a sequence while it waits for the next ("p"), or null. */
+  pending(): string | null;
+  /** Called after any change to `list()` or `pending()`. Returns the unsubscribe function. */
   subscribe(listener: () => void): () => void;
 }
+
+/** How long the first key of a sequence waits for the next. */
+export const SEQUENCE_TIMEOUT_MS = 2400;
 
 // Input types that take no typing, so keys pressed on them are still shortcuts.
 const NON_TEXT_INPUTS = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file']);
@@ -109,33 +123,67 @@ function chordOfEvent(event: KeyboardEvent): string {
 // A key typed as text: one character, with no Ctrl, Alt or Meta (Shift is already folded in).
 const isTypedKey = (chord: string) => chord.length === 1;
 
-type Entry = Shortcut & { chord: string; caps: string[] };
+// A shortcut ready to match: `chords` is one chord, or each chord of a sequence in turn.
+type Entry = Shortcut & { chords: string[]; caps: string[] };
+
+function parseKeys(keys: string): Pick<Entry, 'chords' | 'caps'> {
+  // A space between keys makes a sequence; the space key on its own is " ".
+  const steps = keys.length > 1 && keys.includes(' ') ? keys.split(' ') : [keys];
+  const parsed = steps.map(splitKeys);
+  return {
+    chords: parsed.map(({ modifiers, key }) => chord(new Set(modifiers), key)),
+    caps: parsed.flatMap(({ modifiers, key }) => [...modifiers, key.length === 1 ? key.toUpperCase() : key]),
+  };
+}
 
 export function createShortcutRegistry(): ShortcutRegistry {
   let entries: Entry[] = [];
   let activeScopes = new Set<string>();
   let listed: readonly ListedShortcut[] | null = null;
+  let pending: { chord: string; timer: ReturnType<typeof setTimeout> } | null = null;
   const listeners = new Set<() => void>();
 
+  const notify = () => {
+    for (const listener of listeners) listener();
+  };
   const changed = () => {
     listed = null;
-    for (const listener of listeners) listener();
+    notify();
   };
   const isActive = (entry: Entry) => entry.scope === undefined || activeScopes.has(entry.scope);
 
+  const setPending = (next: string | null) => {
+    if (pending) clearTimeout(pending.timer);
+    pending = next ? { chord: next, timer: setTimeout(() => setPending(null), SEQUENCE_TIMEOUT_MS) } : null;
+    notify();
+  };
+
+  // Whether an entry may run for this key press, leaving aside which key it is.
+  const canRun = (e: Entry, typing: boolean, dialog: boolean) =>
+    isActive(e) && (!typing || e.inFields) && (!dialog || e.inDialogs) && (e.when?.() ?? true);
+
+  const run = (match: Entry, event: KeyboardEvent) => {
+    event.preventDefault();
+    match.run(event);
+    return true;
+  };
+
+  // Two entries in the same scope clash when one's keys equal, or start, the other's.
+  const clashes = (a: Entry, b: Entry) => {
+    const n = Math.min(a.chords.length, b.chords.length);
+    return a.scope === b.scope && a.chords.slice(0, n).join(' ') === b.chords.slice(0, n).join(' ');
+  };
+
   return {
     register(shortcut) {
-      const { modifiers, key } = splitKeys(shortcut.keys);
-      const entry: Entry = {
-        ...shortcut,
-        chord: chord(new Set(modifiers), key),
-        caps: [...modifiers, key.length === 1 ? key.toUpperCase() : key],
-      };
-      if (entry.inFields && isTypedKey(entry.chord))
+      const entry: Entry = { ...shortcut, ...parseKeys(shortcut.keys) };
+      if (entry.inFields && entry.chords.some(isTypedKey))
         throw new Error(
           `"${shortcut.keys}" (${shortcut.label}) can't run in fields: it would swallow typing`,
         );
-      const taken = entries.find((e) => e.chord === entry.chord && e.scope === entry.scope);
+      const taken = entries.find((e) => clashes(e, entry));
+      if (taken && taken.chords.length > entry.chords.length)
+        throw new Error(`"${shortcut.keys}" starts "${taken.keys}" (${taken.label}, ${taken.group})`);
       if (taken) throw new Error(`"${shortcut.keys}" is already ${taken.label} (${taken.group})`);
       entries = [...entries, entry];
       changed();
@@ -154,32 +202,50 @@ export function createShortcutRegistry(): ShortcutRegistry {
     handle(event) {
       if (event.defaultPrevented || event.isComposing) return false;
       const pressed = chordOfEvent(event);
+      if (['Shift', 'Control', 'Alt', 'Meta'].includes(event.key)) return false;
       const typing = isTypingTarget(event.target);
       const dialog = inDialog(event.target);
-      const candidates = entries.filter(
-        (e) =>
-          e.chord === pressed &&
-          isActive(e) &&
-          (!typing || e.inFields) &&
-          (!dialog || e.inDialogs) &&
-          (e.when?.() ?? true),
-      );
-      const match = candidates.find((e) => e.scope !== undefined) ?? candidates[0];
-      if (!match) return false;
-      event.preventDefault();
-      match.run(event);
-      return true;
+      const eligible = entries.filter((e) => canRun(e, typing, dialog));
+      const scopedFirst = (candidates: Entry[]) =>
+        candidates.find((e) => e.scope !== undefined) ?? candidates[0];
+
+      // The second key of a sequence: it finishes one, or cancels and does nothing else.
+      if (pending) {
+        const first = pending.chord;
+        setPending(null);
+        const match = scopedFirst(
+          eligible.filter((e) => e.chords.length === 2 && e.chords[0] === first && e.chords[1] === pressed),
+        );
+        if (match) return run(match, event);
+        event.preventDefault();
+        return true;
+      }
+
+      const singles = eligible.filter((e) => e.chords.length === 1 && e.chords[0] === pressed);
+      const single = scopedFirst(singles);
+      const starts = eligible.some((e) => e.chords.length > 1 && e.chords[0] === pressed);
+      if (starts && single?.scope === undefined) {
+        setPending(pressed);
+        event.preventDefault();
+        return true;
+      }
+      return single ? run(single, event) : false;
     },
 
     list() {
       listed ??= entries.map((e) => ({
         keys: e.caps,
+        sequence: e.chords.length > 1,
         label: e.label,
         group: e.group,
         scope: e.scope,
         active: isActive(e),
       }));
       return listed;
+    },
+
+    pending() {
+      return pending?.chord ?? null;
     },
 
     subscribe(listener) {

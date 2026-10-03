@@ -1,16 +1,21 @@
-import type { ActivityEntry, Item } from '@commander/domain';
+import type { ActivityEntry, Filing, Item } from '@commander/domain';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TodoLink, Todos } from './todos';
 
 export interface TodosState {
-  /** Every Todo: the open ones in the order they were added, then the ticked ones; null until the first load. */
+  /**
+   * Every Todo shown (those the Project filter lets through): the open ones in the order they were
+   * added, then the ticked ones; null until the first load.
+   */
   list: Item[] | null;
+  /** Every open Todo, shown or not, for the Project filter's counts. */
+  allOpen: Item[];
   /** The open Todos, in the order they were added. */
   open: Item[];
   /** The ticked Todos, most recently changed first. */
   done: Item[];
-  /** How many Todos are open, for the notebook tab. */
+  /** How many Todos are open, shown or not, for the notebook tab. */
   openCount: number;
   /** Whether the Done group is expanded. It starts collapsed. */
   doneShown: boolean;
@@ -30,8 +35,8 @@ export interface TodosState {
   jumpTo(todoId: string): void;
   /** Moves the selection down (1) or up (-1) the shown Todos. */
   moveSelection(step: 1 | -1): void;
-  /** Adds a Todo and selects it. Resolves false when nothing was added. */
-  add(title: string): Promise<boolean>;
+  /** Adds a Todo (filed, when a filing is given) and selects it. Resolves false when nothing was added. */
+  add(title: string, filing?: Filing): Promise<boolean>;
   /** Ticks an open Todo or unticks a ticked one; the selected Todo when no id is given. */
   toggle(todoId?: string): Promise<ActivityEntry | null>;
   /** Changes a Todo's title (the selected one's by default). Resolves false when nothing changed. */
@@ -42,15 +47,18 @@ export interface TodosState {
   undo(entryId?: number): Promise<void>;
   /** Reads the Todos again, for changes made outside this Section. */
   refresh(): void;
+  /** Makes a change through another module (filing a Todo), so it reloads and can be undone here. */
+  apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
 }
 
 /**
  * The Todos Section's state, kept in step with the Item store: it reloads after every change it
  * makes (and on `refresh`), and remembers the changes made this session so they can be undone in
- * turn. Failures are shown as a toast.
+ * turn. Failures are shown as a toast. `include` narrows the Todos shown (and moved through), e.g.
+ * to the Project filter.
  */
-export function useTodos(todos: Todos): TodosState {
-  const [list, setList] = useState<Item[] | null>(null);
+export function useTodos(todos: Todos, include?: (todo: Item) => boolean): TodosState {
+  const [all, setAll] = useState<Item[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doneShown, setDoneShown] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -67,12 +75,14 @@ export function useTodos(todos: Todos): TodosState {
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload after a change
   useEffect(() => {
     let current = true;
-    todos.list().then((next) => current && setList(next), report);
+    todos.list().then((next) => current && setAll(next), report);
     return () => {
       current = false;
     };
   }, [todos, version]);
 
+  const list = useMemo(() => (include && all ? all.filter(include) : all), [all, include]);
+  const allOpen = useMemo(() => all?.filter((todo) => todo.status !== 'done') ?? [], [all]);
   const open = useMemo(() => list?.filter((todo) => todo.status !== 'done') ?? [], [list]);
   const done = useMemo(() => list?.filter((todo) => todo.status === 'done') ?? [], [list]);
   const shown = useMemo(() => (doneShown ? [...open, ...done] : open), [open, done, doneShown]);
@@ -157,9 +167,9 @@ export function useTodos(todos: Todos): TodosState {
   );
 
   const add = useCallback(
-    async (title: string) => {
+    async (title: string, filing?: Filing) => {
       if (!title.trim()) return false;
-      const entry = await run(() => todos.add(title));
+      const entry = await run(() => todos.add(title, filing));
       if (entry) setSelectedId(entry.itemId);
       return !!entry;
     },
@@ -218,9 +228,10 @@ export function useTodos(todos: Todos): TodosState {
 
   return {
     list,
+    allOpen,
     open,
     done,
-    openCount: open.length,
+    openCount: allOpen.length,
     doneShown,
     showDone,
     selected,
@@ -237,6 +248,7 @@ export function useTodos(todos: Todos): TodosState {
     remove,
     undo,
     refresh: changed,
+    apply: run,
   };
 }
 

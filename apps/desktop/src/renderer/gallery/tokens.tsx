@@ -2,6 +2,7 @@ import {
   Badge,
   contrastRatio,
   PROJECT_ACCENTS,
+  ProjectFilterBar,
   SHEET_COLOUR,
   type Theme,
   useAppearance,
@@ -137,6 +138,20 @@ export function AccentTokens({ theme }: { theme: Theme }) {
           <Badge code="LT" project="Longtail" accent="blue" size="lg" />
           <Caption>sm · default · lg</Caption>
         </span>
+      </div>
+      <div className="overflow-x-auto border-t border-line2">
+        <ProjectFilterBar
+          className="w-max min-w-full border-b-0"
+          projects={[
+            { id: 'lt', code: 'LT', name: 'Longtail', accent: 'blue', count: 3 },
+            { id: 'tl', code: 'TL', name: 'Titanlink', accent: 'teal', count: 5 },
+            { id: 'tx', code: 'TX', name: 'Tactics', accent: 'violet', count: 0 },
+          ]}
+          everything={9}
+          unfiled={1}
+          selected="lt"
+          onSelect={() => {}}
+        />
       </div>
     </div>
   );

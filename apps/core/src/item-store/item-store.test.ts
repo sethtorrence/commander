@@ -7,6 +7,8 @@ import { type ItemStore, openItemStore } from '.';
 
 const migrationsFolder = join(import.meta.dirname, '../../drizzle');
 const user: ActionContext = { by: { kind: 'user' } };
+// Stands for the Longtail Project's id in test tables, which is only known once it is created.
+const LONGTAIL = '<longtail>';
 
 let dir: string;
 let clock: number;
@@ -127,6 +129,10 @@ describe('saving Items from a Source', () => {
 describe('querying Items', () => {
   function stocked() {
     const store = open();
+    const longtail = store.changeProject({
+      type: 'create',
+      project: { name: 'Longtail', code: 'LT', accent: 'blue' },
+    });
     store.saveFromSource(emails({ externalId: 'm1', title: 'Longtail invoice' }));
     clock += 1;
     store.saveFromSource({
@@ -143,22 +149,26 @@ describe('querying Items', () => {
       {
         type: 'update',
         itemId: todo.itemId,
-        changes: { filing: { projectId: 'longtail', filedBy: 'user' } },
+        changes: { filing: { projectId: longtail.id, filedBy: 'user' } },
       },
       user,
     );
-    return store;
+    return { store, longtail };
   }
 
   const titles = (items: { title: string }[]) => items.map((item) => item.title);
 
   it('returns the most recently changed first', () => {
-    expect(titles(stocked().query())).toEqual(['Call the LONGTAIL bank', 'Ship tactics', 'Longtail invoice']);
+    expect(titles(stocked().store.query())).toEqual([
+      'Call the LONGTAIL bank',
+      'Ship tactics',
+      'Longtail invoice',
+    ]);
   });
 
   it.each<[ItemQuery, string[]]>([
     [{ kinds: ['email', 'todo'] }, ['Call the LONGTAIL bank', 'Longtail invoice']],
-    [{ projectId: 'longtail' }, ['Call the LONGTAIL bank']],
+    [{ projectId: LONGTAIL }, ['Call the LONGTAIL bank']],
     [{ projectId: null }, ['Ship tactics', 'Longtail invoice']],
     [{ source: 'linear' }, ['Ship tactics']],
     [{ account: 'work@example.com' }, ['Longtail invoice']],
@@ -167,7 +177,9 @@ describe('querying Items', () => {
     [{ titleContains: '%' }, []],
     [{ limit: 1 }, ['Call the LONGTAIL bank']],
   ])('filters by %j', (query, expected) => {
-    expect(titles(stocked().query(query))).toEqual(expected);
+    const { store, longtail } = stocked();
+    const projectId = query.projectId === LONGTAIL ? longtail.id : query.projectId;
+    expect(titles(store.query({ ...query, projectId }))).toEqual(expected);
   });
 });
 
@@ -324,7 +336,11 @@ describe('recording actions made in Commander', () => {
   it('files an Item into a Project, and a re-sync keeps the filing', () => {
     const store = open();
     const id = firstCreated(store, emails({ externalId: 'm1', title: 'Longtail invoice' }));
-    const filing = { projectId: 'longtail', filedBy: 'rule' } as const;
+    const longtail = store.changeProject({
+      type: 'create',
+      project: { name: 'Longtail', code: 'LT', accent: 'blue' },
+    });
+    const filing = { projectId: longtail.id, filedBy: 'rule' } as const;
 
     store.record({ type: 'update', itemId: id, changes: { filing } }, { by: { kind: 'rule', ruleId: 'r1' } });
     store.saveFromSource(emails({ externalId: 'm1', title: 'Longtail invoice (paid)' }));
@@ -483,7 +499,11 @@ describe('undo', () => {
 
   it('puts back only what the undone action changed', () => {
     const { store, todo } = todoStore();
-    const filing = { projectId: 'tactics', filedBy: 'ares' } as const;
+    const tactics = store.changeProject({
+      type: 'create',
+      project: { name: 'Tactics', code: 'TX', accent: 'violet' },
+    });
+    const filing = { projectId: tactics.id, filedBy: 'ares' } as const;
     const filed = store.record(
       { type: 'update', itemId: todo, changes: { filing } },
       { by: { kind: 'ares' } },

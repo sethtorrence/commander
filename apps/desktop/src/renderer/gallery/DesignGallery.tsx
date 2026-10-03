@@ -43,7 +43,7 @@ export function DesignGallery() {
         <Plate no="01" title="Colour" note="Tokens · per theme">
           {() => <ColourTokens />}
         </Plate>
-        <Plate no="02" title="Project accents" note="Badges · 3:1 on both sheets">
+        <Plate no="02" title="Project accents" note="Badges · Project filter · 3:1 on both sheets">
           {(theme) => <AccentTokens theme={theme} />}
         </Plate>
         <Plate no="03" title="Type" note="Archivo · IBM Plex Mono">

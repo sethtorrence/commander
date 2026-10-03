@@ -1,4 +1,15 @@
-import type { ActivityEntry, Actor, Item, ItemChange, ItemRef, LinkType, Source } from '@commander/domain';
+import type {
+  ActivityEntry,
+  Actor,
+  Filing,
+  Item,
+  ItemChange,
+  ItemRef,
+  LinkType,
+  Project,
+  Source,
+} from '@commander/domain';
+import { describeFiling } from '../../projects/projects';
 
 /*
   The Todos Section's view of the Item store: everything it reads or changes goes through here, so
@@ -24,8 +35,8 @@ export interface Todos {
    * ticked ones, most recently changed first.
    */
   list(): Promise<Item[]>;
-  /** Adds a Todo the User typed: origin manual, Unfiled. Returns its activity entry. */
-  add(title: string): Promise<ActivityEntry>;
+  /** Adds a Todo the User typed: origin manual, Unfiled unless filed. Returns its activity entry. */
+  add(title: string, filing?: Filing): Promise<ActivityEntry>;
   /** Ticks a Todo (done) or unticks it. */
   setDone(todoId: string, done: boolean): Promise<ActivityEntry>;
   /** Changes a Todo's title. */
@@ -53,7 +64,7 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
       return [...open.sort((a, b) => a.createdAt - b.createdAt), ...done];
     },
 
-    add(title) {
+    add(title, filing = null) {
       const trimmed = title.trim();
       if (!trimmed) return Promise.reject(new Error(EMPTY));
       return itemStore({
@@ -63,7 +74,7 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
           item: {
             kind: 'todo',
             title: trimmed,
-            filing: null,
+            filing,
             detail: { kind: 'todo', origin: 'manual', dueOn: null, backedBy: null },
           },
         },
@@ -133,7 +144,7 @@ function byWhom(actor: Actor): string {
 }
 
 // What an entry did, as [past tense, noun]: ["Ticked", "Tick"].
-function whatItDid(entry: ActivityEntry): [string, string] {
+function whatItDid(entry: ActivityEntry, projects: readonly Project[]): [string, string] {
   switch (entry.action) {
     case 'create':
       return ['Added', 'Add'];
@@ -145,11 +156,13 @@ function whatItDid(entry: ActivityEntry): [string, string] {
     case 'unlink':
       return ['Unlinked', 'Unlink'];
     default:
-      return whatChanged(entry.changes);
+      return whatChanged(entry.changes, projects);
   }
 }
 
-function whatChanged(changes: ItemChange[]): [string, string] {
+function whatChanged(changes: ItemChange[], projects: readonly Project[]): [string, string] {
+  const filing = changes.length === 1 && changes[0]?.field === 'filing' ? changes[0] : null;
+  if (filing) return [describeFiling(filing, projects), 'Filing'];
   const status = changes.find((change) => change.field === 'status');
   if (status?.after === 'done') return ['Ticked', 'Tick'];
   if (status?.before === 'done') return ['Unticked', 'Untick'];
@@ -159,13 +172,18 @@ function whatChanged(changes: ItemChange[]): [string, string] {
 
 /**
  * One line of a Todo's history: "Added by you", "Ticked by you", "Tick undone by you". `history`
- * is the rest of the log, to name what an undo reversed.
+ * is the rest of the log, to name what an undo reversed; `projects` names Projects by their code
+ * ("Filed under LT by you").
  */
-export function describeEntry(entry: ActivityEntry, history: readonly ActivityEntry[]): string {
+export function describeEntry(
+  entry: ActivityEntry,
+  history: readonly ActivityEntry[],
+  projects: readonly Project[] = [],
+): string {
   const who = byWhom(entry.by);
-  if (entry.action !== 'undo') return `${whatItDid(entry)[0]} ${who}`;
+  if (entry.action !== 'undo') return `${whatItDid(entry, projects)[0]} ${who}`;
   const undone = history.find((other) => other.id === entry.undoes);
   if (!undone) return `Undone ${who}`;
   if (undone.action === 'undo') return `Redone ${who}`;
-  return `${whatItDid(undone)[1]} undone ${who}`;
+  return `${whatItDid(undone, projects)[1]} undone ${who}`;
 }

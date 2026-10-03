@@ -3,6 +3,8 @@ import type { ItemStore } from '@commander/core/src/item-store';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ProjectsProvider } from '../../projects/context';
+import { type ProjectsClient, projectsIn } from '../../projects/projects';
 import { ShortcutProvider, ShortcutScope, useActiveScopes, useShortcutList } from '../../shortcuts/react';
 import { FrameControlsProvider, SectionProvider } from '../section';
 import { todos as definition } from '.';
@@ -12,6 +14,7 @@ import { type Todos, todosIn } from './todos';
 
 let store: ItemStore;
 let todos: Todos;
+let projects: ProjectsClient;
 let close: () => void;
 const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
 
@@ -19,6 +22,8 @@ beforeEach(() => {
   const opened = openTestItemStore();
   ({ store, close } = opened);
   todos = todosIn(opened.client);
+  projects = projectsIn(opened.client);
+  localStorage.clear();
   controls.openSection.mockReset();
   controls.setTabCount.mockReset();
   // jsdom has no layout, so nothing scrolls.
@@ -40,15 +45,17 @@ const place = { definition, number: 3, total: 8, active: true };
 function renderSheet() {
   return render(
     <ShortcutProvider>
-      <FrameControlsProvider value={controls}>
-        <SectionProvider place={place}>
-          <ShortcutScope scope="todos" group="Todos">
-            <Active>
-              <TodosSheet todos={todos} />
-            </Active>
-          </ShortcutScope>
-        </SectionProvider>
-      </FrameControlsProvider>
+      <ProjectsProvider client={projects} storage={localStorage}>
+        <FrameControlsProvider value={controls}>
+          <SectionProvider place={place}>
+            <ShortcutScope scope="todos" group="Todos">
+              <Active>
+                <TodosSheet todos={todos} />
+              </Active>
+            </ShortcutScope>
+          </SectionProvider>
+        </FrameControlsProvider>
+      </ProjectsProvider>
     </ShortcutProvider>,
   );
 }
@@ -243,11 +250,13 @@ describe('the Todos sheet', () => {
     }
     render(
       <ShortcutProvider>
-        <SectionProvider place={place}>
-          <ShortcutScope scope="todos" group="Todos">
-            <TodosSheet todos={todos} />
-          </ShortcutScope>
-        </SectionProvider>
+        <ProjectsProvider client={projects} storage={localStorage}>
+          <SectionProvider place={place}>
+            <ShortcutScope scope="todos" group="Todos">
+              <TodosSheet todos={todos} />
+            </ShortcutScope>
+          </SectionProvider>
+        </ProjectsProvider>
         <Listed />
       </ShortcutProvider>,
     );
@@ -260,7 +269,105 @@ describe('the Todos sheet', () => {
         'Escape Close the Todo',
         'X Tick or untick',
         'Delete Delete the Todo',
+        'B File under a Project',
       ]),
     );
+  });
+});
+
+describe('Projects in the Todos sheet', () => {
+  const create = (name: string, code: string, accent: string) =>
+    store.changeProject({ type: 'create', project: { name, code, accent } });
+  const row = (title: string) =>
+    within(openGroup())
+      .getAllByRole('listitem')
+      .find((item) => item.textContent?.includes(title)) as HTMLElement;
+  const bar = () => screen.getByRole('group', { name: 'Project filter' });
+  const picker = () => screen.queryByRole('dialog', { name: 'Badge picker' });
+
+  it('shows each row’s Badge, or a faint — when Unfiled, and the Project in the detail pane', async () => {
+    const lt = create('Longtail', 'LT', 'blue');
+    await todos.add('Ship the beta', { projectId: lt.id, filedBy: 'user' });
+    await todos.add('Call the bank');
+    renderSheet();
+
+    await waitFor(() =>
+      expect(within(row('Ship the beta')).getByRole('img', { name: 'Longtail' })).toBeTruthy(),
+    );
+    expect(within(row('Call the bank')).getByRole('img', { name: 'Unfiled' }).textContent).toBe('—');
+
+    fireEvent.click(within(openGroup()).getByText('Ship the beta'));
+    expect(within(detail() as HTMLElement).getByText('Longtail')).toBeTruthy();
+  });
+
+  it('files the selected Todo with b, records it, and undo reverts it', async () => {
+    const lt = create('Longtail', 'LT', 'blue');
+    create('Titanlink', 'TL', 'teal');
+    renderSheet();
+    await addTodo('Ship the beta');
+    await waitFor(() => expect(within(bar()).getByRole('button', { name: /Titanlink/ })).toBeTruthy());
+
+    await press('b');
+    const input = within(picker() as HTMLElement).getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'lt' } });
+    await press('Enter', input);
+
+    await waitFor(() =>
+      expect(within(row('Ship the beta')).getByRole('img', { name: 'Longtail' })).toBeTruthy(),
+    );
+    expect(picker()).toBeNull();
+    const todo = store.query({ kinds: ['todo'] })[0];
+    expect(todo?.filing).toEqual({ projectId: lt.id, filedBy: 'user' });
+    await press('Enter');
+    await waitFor(() =>
+      expect(within(detail() as HTMLElement).getByText('Filed under LT by you')).toBeTruthy(),
+    );
+
+    await press('z', document.body, { ctrlKey: true });
+    await waitFor(() => expect(store.query({ kinds: ['todo'] })[0]?.filing).toBeNull());
+  });
+
+  it('opens the picker from a click on a row’s Badge', async () => {
+    create('Longtail', 'LT', 'blue');
+    renderSheet();
+    await addTodo('Ship the beta');
+
+    fireEvent.click(within(row('Ship the beta')).getByRole('button', { name: 'Project of Ship the beta' }));
+
+    expect(picker()).not.toBeNull();
+    expect(detail()).toBeNull();
+  });
+
+  it('narrows the list to the filter, with live counts of open Todos', async () => {
+    const lt = create('Longtail', 'LT', 'blue');
+    await todos.add('Ship the beta', { projectId: lt.id, filedBy: 'user' });
+    await todos.add('Call the bank');
+    renderSheet();
+    await waitFor(() => expect(rows(openGroup())).toHaveLength(2));
+
+    expect(within(bar()).getByRole('button', { name: /Everything/ }).textContent).toMatch(/02$/);
+    expect(within(bar()).getByRole('button', { name: /Longtail/ }).textContent).toMatch(/01$/);
+    expect(within(bar()).getByRole('button', { name: /Unfiled/ }).textContent).toMatch(/01$/);
+
+    await press('p');
+    await press('1');
+    await waitFor(() => expect(rows(openGroup())).toHaveLength(1));
+    expect(rows(openGroup())[0]).toContain('Ship the beta');
+
+    fireEvent.click(within(bar()).getByRole('button', { name: /Unfiled/ }));
+    await waitFor(() => expect(rows(openGroup())[0]).toContain('Call the bank'));
+    expect(controls.setTabCount).toHaveBeenLastCalledWith('todos', 2);
+  });
+
+  it('files a Todo added while a Project is selected under that Project', async () => {
+    const lt = create('Longtail', 'LT', 'blue');
+    renderSheet();
+    await waitFor(() => expect(within(bar()).getByRole('button', { name: /Longtail/ })).toBeTruthy());
+    fireEvent.click(within(bar()).getByRole('button', { name: /Longtail/ }));
+    await waitFor(() => expect(newTodo().getAttribute('placeholder')).toBe('New Todo in Longtail…'));
+
+    await addTodo('Ship the beta');
+
+    expect(store.query({ kinds: ['todo'] })[0]?.filing).toEqual({ projectId: lt.id, filedBy: 'user' });
   });
 });

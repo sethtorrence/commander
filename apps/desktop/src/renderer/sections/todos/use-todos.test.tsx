@@ -1,19 +1,22 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
+import type { Item } from '@commander/domain';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { projectsIn } from '../../projects/projects';
 import { openTestItemStore } from './test-item-store';
 import { describeEntry, type Todos, todosIn } from './todos';
 import { type TodosState, useTodos } from './use-todos';
 
 let store: ItemStore;
 let todos: Todos;
+let client: ReturnType<typeof openTestItemStore>['client'];
 let close: () => void;
 
 beforeEach(() => {
   const opened = openTestItemStore();
-  ({ store, close } = opened);
-  todos = todosIn(opened.client);
+  ({ store, close, client } = opened);
+  todos = todosIn(client);
 });
 
 afterEach(() => {
@@ -203,5 +206,51 @@ describe('useTodos', () => {
 
     await expect(act(() => hook.result.current.add('   '))).resolves.toBe(false);
     expect(hook.result.current.list).toEqual([]);
+  });
+
+  describe('with Projects', () => {
+    const longtail = () =>
+      store.changeProject({ type: 'create', project: { name: 'Longtail', code: 'LT', accent: 'blue' } });
+
+    it('shows only the Todos it is asked to include, moves among them, and counts every open one', async () => {
+      const lt = longtail();
+      const filing = { projectId: lt.id, filedBy: 'user' } as const;
+      await todos.add('First, in Longtail', filing);
+      await todos.add('Second, Unfiled');
+      await todos.add('Third, in Longtail', filing);
+      const inLongtail = (todo: Item) => todo.filing?.projectId === lt.id;
+      const { result } = renderHook(() => useTodos(todos, inLongtail));
+      await waitFor(() => expect(result.current.allOpen).toHaveLength(3));
+
+      expect(titles(result.current.open)).toEqual(['First, in Longtail', 'Third, in Longtail']);
+      expect(result.current.openCount).toBe(3);
+      expect(result.current.selected?.title).toBe('First, in Longtail');
+      act(() => result.current.moveSelection(1));
+      expect(result.current.selected?.title).toBe('Third, in Longtail');
+    });
+
+    it('adds a Todo filed into a Project', async () => {
+      const lt = longtail();
+      const { result } = await renderTodos();
+
+      await act(() => result.current.add('Ship the beta', { projectId: lt.id, filedBy: 'user' }));
+
+      await waitFor(() =>
+        expect(result.current.selected?.filing).toEqual({ projectId: lt.id, filedBy: 'user' }),
+      );
+    });
+
+    it('takes a change made through another module (filing) into its undo', async () => {
+      const lt = longtail();
+      const hook = await renderTodos();
+      await addTodos(hook, 'Ship the beta');
+      const todoId = hook.result.current.selected?.id ?? '';
+
+      await act(() => hook.result.current.apply(() => projectsIn(client).file(todoId, lt.id)));
+      await waitFor(() => expect(hook.result.current.selected?.filing?.projectId).toBe(lt.id));
+
+      await act(() => hook.result.current.undo());
+      await waitFor(() => expect(hook.result.current.selected?.filing).toBeNull());
+    });
   });
 });

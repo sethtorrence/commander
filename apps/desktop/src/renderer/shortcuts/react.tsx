@@ -30,6 +30,7 @@ import {
 
   - useActiveScopes([...]) says which scopes run (the frame passes the open Section).
   - useShortcutList() is everything registered, for the cheat sheet.
+  - usePendingKeys() is the first key of a sequence while it waits for the next ("p"), or null.
 */
 
 const RegistryContext = createContext<ShortcutRegistry | null>(null);
@@ -105,4 +106,9 @@ export function useActiveScopes(scopes: readonly string[]): void {
 export function useShortcutList(): readonly ListedShortcut[] {
   const registry = useShortcutRegistry();
   return useSyncExternalStore(registry.subscribe, registry.list);
+}
+
+export function usePendingKeys(): string | null {
+  const registry = useShortcutRegistry();
+  return useSyncExternalStore(registry.subscribe, registry.pending);
 }
