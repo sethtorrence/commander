@@ -245,4 +245,46 @@ describe('the Project page', () => {
     await waitFor(() => expect(onOpenPage).toHaveBeenCalledWith(tx.id));
     expect(store.query({ projectId: tx.id })).toHaveLength(1);
   });
+
+  it('lists the Rules filing into the Project, each opening in the editor, and counts Rule filings', async () => {
+    const rule = (projectId: string, key: string) =>
+      store.changeRule({
+        type: 'create',
+        rule: {
+          target: { kind: 'project', projectId },
+          when: {
+            join: 'and',
+            terms: [{ field: 'linear.team', op: 'is', value: `team-${key}`, label: key }],
+          },
+        },
+      });
+    rule(tx.id, 'OPS');
+    rule(lt.id, 'ENG');
+    store.saveFromSource({
+      source: 'linear',
+      account: 'linear:org-acme',
+      items: [{ externalId: 'a', kind: 'linear-issue', title: 'Fix the login loop', detail: null }],
+    });
+    const [issue] = store.query({ kinds: ['linear-issue'] });
+    store.record(
+      { type: 'update', itemId: issue?.id ?? '', changes: { filing: { projectId: lt.id, filedBy: 'rule' } } },
+      { by: { kind: 'rule', ruleId: 'r' } },
+    );
+    await renderLoadedPage();
+
+    const mapping = await screen.findByRole('region', { name: 'Mapping Rules' });
+    const listed = await within(mapping).findByRole('list', { name: 'Rules filing into this Project' });
+    expect(
+      within(listed)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    ).toEqual(['02team is ENG']);
+    await waitFor(() => expect(filingRow('By Rule').textContent).toMatch(/01$/));
+
+    fireEvent.click(within(listed).getByRole('button', { name: /team is ENG/ }));
+    const editor = await screen.findByRole('dialog', { name: 'Edit Rule' });
+    expect((within(editor).getByRole('combobox', { name: 'Files into' }) as HTMLSelectElement).value).toBe(
+      lt.id,
+    );
+  });
 });

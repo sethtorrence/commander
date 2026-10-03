@@ -64,6 +64,13 @@
       "when": 1791069505136,
       "tag": "0008_managing_projects",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1791070822419,
+      "tag": "0009_rules",
+      "breakpoints": true
     }
   ]
 }

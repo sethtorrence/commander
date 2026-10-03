@@ -10,6 +10,7 @@ import {
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
+import { RulesSettings } from '../rules/RulesSettings';
 import { DailyTemplateSettings } from '../sections/notes/DailyTemplateSettings';
 import { AccountsPanel } from './AccountsPanel';
 import { AutonomyPanel } from './AutonomyPanel';
@@ -91,6 +92,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
       <AresSettings no="08" usageNo="09" />
       <AutonomyPanel no="10" shown={open} />
       <DailyTemplateSettings no="11" />
+      <RulesSettings no="12" shown={open} />
     </Sheet>
   );
 }

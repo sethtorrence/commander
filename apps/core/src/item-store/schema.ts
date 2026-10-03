@@ -15,6 +15,8 @@ import type {
   ProjectChangeAction,
   ProposalRecord,
   ProposalStatus,
+  RuleTarget,
+  RuleWhen,
   Source,
   SyncOutcomeKind,
   SyncProblem,
@@ -306,6 +308,8 @@ export const projectChanges = sqliteTable(
     before: text('before', { mode: 'json' }).$type<ProjectRowState[]>().notNull(),
     after: text('after', { mode: 'json' }).$type<ProjectRowState[]>().notNull(),
     itemEntries: text('item_entries', { mode: 'json' }).$type<number[]>().notNull(),
+    // For a merge, and undoing one: the Rules it moved from one Project to the other.
+    ruleMoves: text('rule_moves', { mode: 'json' }).$type<RuleMove[]>().notNull().default(sql`'[]'`),
     undoes: integer('undoes').references((): AnySQLiteColumn => projectChanges.id),
   },
   (t) => [uniqueIndex('project_changes_undoes').on(t.undoes)],
@@ -313,3 +317,19 @@ export const projectChanges = sqliteTable(
 
 // A Project row as the Project log keeps it.
 export type ProjectRowState = typeof projects.$inferSelect;
+
+// A Rule moved from one Project to another by a merge (or undoing one).
+export type RuleMove = { ruleId: string; from: string; to: string };
+
+// Rules: one list the User orders (position 0 is checked first), each filing the Items it matches
+// into its target. Not Items, so changing one isn't in the activity log; the Items a Rule files are.
+export const rules = sqliteTable('rules', {
+  id: text('id').primaryKey(),
+  // Its place among the Rules that aren't deleted; a deleted one keeps the place it had, for restoring.
+  position: integer('position').notNull(),
+  target: text('target', { mode: 'json' }).$type<RuleTarget>().notNull(),
+  when: text('when', { mode: 'json' }).$type<RuleWhen>().notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  deletedAt: integer('deleted_at'),
+});

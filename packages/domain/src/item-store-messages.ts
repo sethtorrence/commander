@@ -26,6 +26,16 @@ import {
   projectChange,
   projectQuery,
 } from './projects';
+import {
+  type Rule,
+  type RuleChange,
+  type RulePreview,
+  rule,
+  ruleAction,
+  ruleChange,
+  rulePreview,
+  rulePreviewRequest,
+} from './rules';
 
 // What the window may ask of the Item store. It reaches the store only through these requests,
 // validated in the main process and again in the Core. Actions from the window are always the User's.
@@ -59,6 +69,13 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
       .custom<Uint8Array>((value) => value instanceof Uint8Array, 'Expected the image’s bytes')
       .refine((bytes) => bytes.byteLength <= attachmentMaxBytes, 'Images can be up to 20 MB.'),
   }),
+  // Settings → Rules: the one ordered list, changing it, the editor's live preview, and re-filing
+  // existing Items after a change (one undoable change, undone with `undo-refile`).
+  z.object({ op: z.literal('rules') }),
+  z.object({ op: z.literal('change-rule'), action: ruleAction }),
+  z.object({ op: z.literal('preview-rule'), request: rulePreviewRequest }),
+  z.object({ op: z.literal('refile'), itemIds: z.array(z.string().min(1)).min(1).max(1000) }),
+  z.object({ op: z.literal('undo-refile'), entryIds: z.array(z.number().int().positive()).min(1).max(1000) }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -78,6 +95,11 @@ export type ItemStoreResults = {
   'save-daily-template': DailyTemplate;
   'block-todos': BlockTodo[];
   'save-attachment': { name: string };
+  rules: Rule[];
+  'change-rule': RuleChange;
+  'preview-rule': RulePreview;
+  refile: ActivityEntry[];
+  'undo-refile': ActivityEntry[];
 };
 
 export const itemStoreResult = {
@@ -95,6 +117,11 @@ export const itemStoreResult = {
   'save-daily-template': dailyTemplate,
   'block-todos': z.array(blockTodo),
   'save-attachment': z.object({ name: z.string().regex(attachmentNamePattern) }),
+  rules: z.array(rule),
+  'change-rule': ruleChange,
+  'preview-rule': rulePreview,
+  refile: z.array(activityEntry),
+  'undo-refile': z.array(activityEntry),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

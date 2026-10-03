@@ -18,6 +18,9 @@ import {
   type DailyNoteQuery,
   type DailyTemplate,
   dailyNoteQuery,
+  describeRule,
+  type Filing,
+  firstMatch,
   type Item,
   type ItemAction,
   type ItemDetail,
@@ -33,13 +36,21 @@ import {
   type ProjectAction,
   type ProjectChange,
   type ProjectQuery,
+  type RefileCandidate,
+  type Rule,
+  type RuleAction,
+  type RuleChange,
+  type RulePreview,
+  type RulePreviewRequest,
+  ruleMatches,
+  rulePreviewRequest,
   type SaveResult,
   type Source,
   type SourceBatch,
   sourceBatch,
 } from '@commander/domain';
 import Database from 'better-sqlite3';
-import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
@@ -63,6 +74,7 @@ import {
   toEntry,
   toItem,
 } from './rows';
+import { type ListChange, rulesIn } from './rules';
 import * as schema from './schema';
 import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
@@ -104,6 +116,20 @@ export type ItemStore = {
   // Creates, renames, recolours, reorders, archives, merges a Project, or undoes such a change. Kept
   // in the Project log, not the activity log, except for the Items a merge moves (one entry each).
   changeProject(action: ProjectAction): ProjectChange;
+  // The Rules in their order: the first that matches an Item files it. Whenever Items are saved from
+  // a Source, each one not filed by the User goes to its first matching Rule's Project (a Rule wins
+  // over Ares and over inheritance); no match leaves its filing alone.
+  rules(): Rule[];
+  // Creates, edits, moves, deletes or restores a Rule. Also answers which existing Items the changed
+  // list now files elsewhere (never hand-filed ones), for the User to re-file or not.
+  changeRule(action: RuleAction): RuleChange;
+  // How many Items a Rule as drafted matches, a sample of them, and the Rules it overlaps.
+  previewRule(request: RulePreviewRequest): RulePreview;
+  // Re-files these Items by the Rules, as one change: one activity entry each, with the Rule that
+  // matched as the actor. Skips any the Rules no longer move (filed by hand since, say).
+  refile(itemIds: string[]): ActivityEntry[];
+  // Undoes a re-filing, all at once, by the User. Skips Items filed elsewhere since.
+  undoRefile(entryIds: number[]): ActivityEntry[];
   // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet. With
   // `fromTemplate` (the day is being made as today), a new one starts with copies of the daily
   // template's Blocks, made in the same transaction; a Daily Note that already exists never does.
@@ -204,36 +230,105 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const template = dailyTemplateIn(db, now);
   // Project changes come only from the User (the window); a merge's Item moves are recorded as theirs.
   const byUser: Actor = { kind: 'user' };
-  const projects = projectsIn(db, now, (message) => new ItemStoreError('invalid', message), {
-    refile(from, into, why) {
-      const rows = db.select().from(schema.items).where(eq(schema.items.projectId, from)).all();
-      return withDetails(rows).map((item) => {
-        const at = now();
-        const before = stateOf(item);
-        const filedBy = before.filing?.filedBy ?? 'user';
-        const after = writeState(item, { ...before, filing: { projectId: into, filedBy } }, at);
-        return log({ by: byUser, action: 'update', itemId: item.id, why, before, after }, at).id;
-      });
+  const projects = projectsIn(
+    db,
+    now,
+    (message) => new ItemStoreError('invalid', message),
+    {
+      refile(from, into, why) {
+        const rows = db.select().from(schema.items).where(eq(schema.items.projectId, from)).all();
+        return withDetails(rows).map((item) => {
+          const at = now();
+          const before = stateOf(item);
+          const filedBy = before.filing?.filedBy ?? 'user';
+          const after = writeState(item, { ...before, filing: { projectId: into, filedBy } }, at);
+          return log({ by: byUser, action: 'update', itemId: item.id, why, before, after }, at).id;
+        });
+      },
+      undo: (entryIds, why) => undoFilings(entryIds, why).map((entry) => entry.id),
     },
-    undo(entryIds, why) {
-      const { activity } = schema;
-      const undone: number[] = [];
-      for (const entryId of entryIds) {
-        const target = db.select().from(activity).where(eq(activity.id, entryId)).get();
-        if (!target || db.select().from(activity).where(eq(activity.undoes, entryId)).get()) continue;
-        const item = readItem(target.itemId);
-        const moved = (target.after as ItemState | null)?.filing;
-        if (!item || !isDeepStrictEqual(item.filing, moved)) continue;
-        undone.push(undo(entryId, { by: byUser, why }, now()).id);
-      }
-      return undone;
-    },
-  });
+    { retarget: (from, into) => rules.retarget(from, into), reverse: (moves) => rules.reverse(moves) },
+  );
+  const rules = rulesIn(
+    db,
+    now,
+    (message) => new ItemStoreError('invalid', message),
+    (projectId) => projects.checkFiling({ projectId, filedBy: 'rule' }),
+  );
   const attachments = attachmentFolder({
     dir: options.attachmentsDir ?? join(dirname(options.path), 'attachments'),
     now,
     invalid: (message) => new ItemStoreError('invalid', message),
   });
+
+  // Undoes entries that filed Items (a merge, or only a Rule's when `byRule`), as the User, skipping
+  // any already undone and any Item filed elsewhere since.
+  function undoFilings(entryIds: readonly number[], why: string, byRule = false): ActivityEntry[] {
+    const { activity } = schema;
+    const undone: ActivityEntry[] = [];
+    for (const entryId of entryIds) {
+      const target = db.select().from(activity).where(eq(activity.id, entryId)).get();
+      if (!target || (byRule && target.actor !== 'rule')) continue;
+      if (db.select().from(activity).where(eq(activity.undoes, entryId)).get()) continue;
+      const item = readItem(target.itemId);
+      const moved = (target.after as ItemState | null)?.filing;
+      if (!item || !isDeepStrictEqual(item.filing, moved)) continue;
+      undone.push(undo(entryId, { by: byUser, why }, now()));
+    }
+    return undone;
+  }
+
+  // The live Items from Sources: the ones Rules file.
+  function sourceItems(): Item[] {
+    const { items } = schema;
+    const rows = db
+      .select()
+      .from(items)
+      .where(and(isNotNull(items.source), isNull(items.deletedAt)))
+      .orderBy(desc(items.updatedAt), desc(items.createdAt))
+      .all();
+    return withDetails(rows);
+  }
+
+  // Where the Rules file an Item, when that differs from where it is: never for an Item the User
+  // filed by hand, and not when no Rule matches.
+  function ruleFiling(item: Item, list: readonly Rule[]): { rule: Rule; filing: Filing } | null {
+    if (item.filing?.filedBy === 'user') return null;
+    const rule = firstMatch(list, item);
+    if (!rule) return null;
+    const filing: Filing = { projectId: rule.target.projectId, filedBy: 'rule' };
+    return isDeepStrictEqual(item.filing, filing) ? null : { rule, filing };
+  }
+
+  function fileByRule(item: Item, { rule, filing }: { rule: Rule; filing: Filing }, at: number) {
+    const before = stateOf(item);
+    const after = writeState(item, { ...before, filing }, at);
+    const why = `Rule: ${describeRule(rule.when)}`;
+    return log(
+      { by: { kind: 'rule', ruleId: rule.id }, action: 'update', itemId: item.id, why, before, after },
+      at,
+    );
+  }
+
+  // The existing Items a change to the list moves: those whose first matching Rule (or its Project)
+  // differs from before, and which it files somewhere other than where they are.
+  function refileCandidates({ before, after }: Pick<ListChange, 'before' | 'after'>): RefileCandidate[] {
+    const candidates: RefileCandidate[] = [];
+    for (const item of sourceItems()) {
+      if (item.filing?.filedBy === 'user') continue;
+      const match = firstMatch(after, item);
+      if (!match || item.filing?.projectId === match.target.projectId) continue;
+      const was = firstMatch(before, item);
+      if (was?.id === match.id && was.target.projectId === match.target.projectId) continue;
+      candidates.push({
+        item: refOf(item),
+        from: item.filing,
+        to: { projectId: match.target.projectId, filedBy: 'rule' },
+        ruleId: match.id,
+      });
+    }
+    return candidates;
+  }
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
     const { items } = schema;
@@ -706,6 +801,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const batch = sourceBatch.parse(input);
     const by: Actor = { kind: 'source', source: batch.source, account: batch.account };
     const result: SaveResult = { created: [], updated: [], tombstoned: [], unchanged: [] };
+    const active = rules.list();
+    const applyRules = (itemId: string, at: number) => {
+      const item = requireItem(itemId);
+      const filed = ruleFiling(item, active);
+      if (filed) fileByRule(item, filed, at);
+    };
     for (const incoming of batch.items) {
       const at = now();
       const existing = findBySourceIdentity(batch.source, batch.account, incoming.externalId);
@@ -725,6 +826,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         }
         writeState(existing, after, at);
         log({ by, action: 'update', itemId: existing.id, before, after }, at);
+        applyRules(existing.id, at);
         result.updated.push(existing.id);
         continue;
       }
@@ -744,6 +846,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       };
       const { id, state: stored } = insertItem(identity, state, at);
       log({ by, action: 'create', itemId: id, before: null, after: stored }, at);
+      applyRules(id, at);
       result.created.push(id);
     }
     for (const externalId of batch.deleted) {
@@ -853,6 +956,46 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     projects: (query) => projects.list(query),
 
     changeProject: sqlite.transaction((action: ProjectAction) => projects.change(action)),
+
+    rules: () => rules.list(),
+
+    changeRule: sqlite.transaction((action: RuleAction): RuleChange => {
+      const change = rules.change(action);
+      // Deleting a Rule leaves Items where they are, and so does bringing it back.
+      const leavesItems = action.type === 'delete' || action.type === 'restore';
+      return { rule: change.rule, refile: leavesItems ? [] : refileCandidates(change) };
+    }),
+
+    previewRule(input) {
+      const request = rulePreviewRequest.parse(input);
+      const matching = sourceItems().filter((item) => ruleMatches(request.rule.when, item));
+      const overlaps = rules
+        .list()
+        .filter(
+          (rule) => rule.id !== request.ruleId && matching.some((item) => ruleMatches(rule.when, item)),
+        );
+      return {
+        count: matching.length,
+        sample: matching.slice(0, request.sampleSize ?? 8).map(refOf),
+        overlaps,
+      };
+    },
+
+    refile: sqlite.transaction((itemIds: string[]): ActivityEntry[] => {
+      const active = rules.list();
+      const entries: ActivityEntry[] = [];
+      for (const itemId of new Set(itemIds)) {
+        const item = readItem(itemId);
+        if (!item || item.source === null || item.deletedAt !== null) continue;
+        const filed = ruleFiling(item, active);
+        if (filed) entries.push(fileByRule(item, filed, now()));
+      }
+      return entries;
+    }),
+
+    undoRefile: sqlite.transaction((entryIds: number[]): ActivityEntry[] =>
+      undoFilings(entryIds, 'Undid re-filing by Rules', true),
+    ),
 
     entry(entryId) {
       const row = db.select().from(schema.activity).where(eq(schema.activity.id, entryId)).get();

@@ -16,6 +16,7 @@ import {
 import { and, asc, eq, isNull, max } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { z } from 'zod';
+import type { Rules } from './rules';
 import * as schema from './schema';
 
 type ProjectRow = schema.ProjectRowState;
@@ -56,6 +57,8 @@ export function projectsIn(
   now: () => number,
   invalid: (message: string) => Error,
   items: ProjectItems,
+  // A merge moves the merged Project's Rules too, and undoing it moves them back.
+  rules: Pick<Rules, 'retarget' | 'reverse'>,
 ): Projects {
   const { projects, projectChanges } = schema;
   const live = isNull(projects.mergedInto);
@@ -130,6 +133,7 @@ export function projectsIn(
     before: ProjectRow[];
     after: ProjectRow[];
     itemEntries?: number[];
+    ruleMoves?: schema.RuleMove[];
     undoes?: number | null;
   }): ProjectChange {
     const row = db
@@ -142,6 +146,7 @@ export function projectsIn(
         before: entry.before,
         after: entry.after,
         itemEntries: entry.itemEntries ?? [],
+        ruleMoves: entry.ruleMoves ?? [],
         undoes: entry.undoes ?? null,
       })
       .returning()
@@ -200,7 +205,7 @@ export function projectsIn(
     const from = requireProject(projectId);
     const into = requireProject(intoId);
     const itemEntries = items.refile(from.id, into.id, `Merged ${label(from)} into ${label(into)}`);
-    // Rules (M2) move here too: every Rule filing into `from` should file into `into` instead.
+    const ruleMoves = rules.retarget(from.id, into.id);
     const gone = write({ ...from, mergedInto: into.id });
     return log({
       action: 'merge',
@@ -209,6 +214,7 @@ export function projectsIn(
       before: [from],
       after: [gone],
       itemEntries,
+      ruleMoves,
     });
   }
 
@@ -234,6 +240,7 @@ export function projectsIn(
       const why = target.action === 'undo' ? `Redid ${what}` : `Undid ${what}`;
       itemEntries = items.undo(target.itemEntries, why);
     }
+    const ruleMoves = rules.reverse(target.ruleMoves);
     return log({
       action: 'undo',
       projectId: target.projectId,
@@ -241,6 +248,7 @@ export function projectsIn(
       before: current,
       after: target.before,
       itemEntries,
+      ruleMoves,
       undoes: target.id,
     });
   }

@@ -223,3 +223,46 @@ describe('answering Item store requests from the window', () => {
     expect(answerItemStoreRequest(store, 'hello')).toBeNull();
   });
 });
+
+describe('Rules from the window', () => {
+  it('previews, creates and lists Rules, and re-files and undoes re-filing as asked', () => {
+    const project = ask(1, {
+      op: 'change-project',
+      action: { type: 'create', project: { name: 'Titanlink', code: 'TL', accent: 'teal' } },
+    });
+    const resultOf = <T>(reply: ReturnType<typeof ask>) =>
+      (reply?.response.ok ? reply.response.result : null) as T;
+    const projectId = resultOf<{ project: { id: string } }>(project).project.id;
+    store.saveFromSource({
+      source: 'linear',
+      account: 'linear:acme',
+      items: [{ externalId: 'a', kind: 'linear-issue', title: 'Fix the login loop' }],
+    });
+    const rule = {
+      target: { kind: 'project', projectId },
+      when: {
+        join: 'and',
+        terms: [{ field: 'linear.title', op: 'contains', value: 'login', label: 'login' }],
+      },
+    };
+
+    expect(ask(2, { op: 'preview-rule', request: { rule } })).toMatchObject({
+      response: { ok: true, result: { count: 1, overlaps: [] } },
+    });
+    expect(ask(3, { op: 'change-rule', action: { type: 'create', rule } })).toMatchObject({
+      response: { ok: true, result: { refile: [{ to: { projectId } }] } },
+    });
+    expect(ask(4, { op: 'rules' })).toMatchObject({
+      response: { ok: true, result: [{ target: { projectId } }] },
+    });
+
+    const [item] = store.query({ kinds: ['linear-issue'] });
+    const refiled = ask(5, { op: 'refile', itemIds: [item?.id] });
+    expect(refiled).toMatchObject({ response: { ok: true, result: [{ by: { kind: 'rule' } }] } });
+    const entryId = resultOf<{ id: number }[]>(refiled)[0]?.id;
+    expect(ask(6, { op: 'undo-refile', entryIds: [entryId] })).toMatchObject({
+      response: { ok: true, result: [{ action: 'undo', by: { kind: 'user' } }] },
+    });
+    expect(store.query({ kinds: ['linear-issue'] })[0]?.filing).toBeNull();
+  });
+});
