@@ -41,15 +41,17 @@ if (!tok.access_token) { console.error('Token exchange failed:', tok); process.e
 async function G(path, tries = 5) {
   for (let i = 0; i < tries; i++) {
     const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { headers: { Authorization: `Bearer ${tok.access_token}` } });
-    if (r.status === 429 || r.status >= 500) { await new Promise(res => setTimeout(res, 1000 * 2 ** i)); continue; }
-    return r.json();
+    if (r.status === 429 || r.status >= 500) { console.log(`  Gmail ${r.status}, retrying in ${2 ** i}s`); await new Promise(res => setTimeout(res, 1000 * 2 ** i)); continue; }
+    const j = await r.json(); if (j.error) console.log(`  Gmail error ${r.status}: ${j.error.message}`); return j;
   }
-  return {};
+  return { error: { message: 'gave up after retries' } };
 }
 
+const prof = await G('profile'); console.log(`Signed in as a mailbox with ${prof.messagesTotal ?? '?'} messages.`);
 const ids = []; let pageToken = '';
 while (ids.length < n) {
   const page = await G(`messages?maxResults=100&q=${encodeURIComponent('-in:chats -in:spam -in:trash')}${pageToken ? `&pageToken=${pageToken}` : ''}`);
+  if (page.error) { console.log('List failed:', page.error.message); break; }
   ids.push(...(page.messages || []).map(m => m.id)); if (!page.nextPageToken) break; pageToken = page.nextPageToken;
 }
 const dec = (d) => Buffer.from(d.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
