@@ -3,6 +3,8 @@ export const ipc = {
   coreMessage: 'core-message',
   diagnostics: 'diagnostics',
   secretStorageStatus: 'secret-storage-status',
+  // Item store requests from the window; see item-store-messages.ts for the validated contract.
+  itemStore: 'item-store',
 } as const;
 
 // How the window reaches the screen. 'xwayland' means a Wayland session fell back to X11.

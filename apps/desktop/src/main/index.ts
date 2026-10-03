@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
 import { app, BrowserWindow, ipcMain, utilityProcess } from 'electron';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
+import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
 import { setUpSecretStorage } from './secret-storage';
 import { windowWebPreferences } from './window-config';
@@ -42,8 +43,12 @@ async function diagnostics(): Promise<Diagnostics> {
 }
 
 function startCore() {
-  const core = utilityProcess.fork(join(__dirname, 'core.js'));
+  // The Core keeps the database in userData (which --user-data-dir overrides, e.g. in e2e tests).
+  const core = utilityProcess.fork(join(__dirname, 'core.js'), [`--data-dir=${app.getPath('userData')}`]);
+  const itemStore = createItemStoreChannel((message) => core.postMessage(message));
+  ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));
   core.on('message', (raw: unknown) => {
+    if (itemStore.settle(raw)) return;
     const parsed = parseCoreMessage(raw);
     if (!parsed.ok) {
       console.warn('Rejected malformed message from core:', parsed.error);

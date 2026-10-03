@@ -1,9 +1,8 @@
-import { _electron as electron, expect, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { launchCommander } from './launch-commander';
 
 test('Commander launches and shows the core heartbeat climbing', async () => {
-  const app = await electron.launch({
-    args: ['.'],
-  });
+  const { app } = await launchCommander();
   const window = await app.firstWindow();
 
   const beats = window.getByTestId('core-heartbeat');
@@ -18,9 +17,7 @@ test('Commander launches and shows the core heartbeat climbing', async () => {
 
 test('on a Wayland session Commander runs as a native Wayland client with the keyring store', async () => {
   test.skip(!process.env.WAYLAND_DISPLAY, 'needs a Wayland session');
-  const app = await electron.launch({
-    args: ['.'],
-  });
+  const { app } = await launchCommander();
   const window = await app.firstWindow();
 
   await expect(window.getByTestId('display-server')).toHaveText('wayland');

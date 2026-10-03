@@ -1,0 +1,35 @@
+// Answers the window's Item store requests, relayed by the main process. Requests are validated
+// again here because the Core is the database's only writer, and every action is recorded as the User's.
+import { type CoreItemStoreReply, itemStoreRequest } from '@commander/domain';
+import { z } from 'zod';
+import type { ItemStore } from './item-store';
+
+const envelope = z.object({ type: z.literal('item-store-request'), id: z.number().int().positive() });
+
+function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] {
+  const parsed = itemStoreRequest.safeParse(raw);
+  if (!parsed.success) return { ok: false, error: `Malformed Item store request: ${parsed.error.message}` };
+  const request = parsed.data;
+  try {
+    switch (request.op) {
+      case 'query':
+        return { ok: true, result: store.query(request.query) };
+      case 'get':
+        return { ok: true, result: store.get(request.itemId) };
+      case 'activity':
+        return { ok: true, result: store.activity(request.query) };
+      case 'record':
+        return { ok: true, result: store.record(request.action, { by: { kind: 'user' }, why: request.why }) };
+    }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+// Returns the reply to send back, or null when the message is not an Item store request.
+export function answerItemStoreRequest(store: ItemStore, message: unknown): CoreItemStoreReply | null {
+  const parsed = envelope.safeParse(message);
+  if (!parsed.success) return null;
+  const { request } = message as { request?: unknown };
+  return { type: 'item-store-reply', id: parsed.data.id, response: answer(store, request) };
+}

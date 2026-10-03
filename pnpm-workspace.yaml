@@ -4,3 +4,6 @@ packages:
 allowBuilds:
   electron: true
   esbuild: true
+  # better-sqlite3 ships Node-API prebuilds that load in both Node and Electron, so its
+  # node-gyp fallback build is never needed.
+  better-sqlite3: false
