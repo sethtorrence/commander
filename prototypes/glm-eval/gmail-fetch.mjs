@@ -38,7 +38,14 @@ const code = await new Promise((resolve, reject) => {
 const tok = await (await fetch(c.token_uri, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({
   code: code.code, client_id: c.client_id, client_secret: c.client_secret || '', redirect_uri: `http://127.0.0.1:${code.port}`, grant_type: 'authorization_code', code_verifier: verifier }) })).json();
 if (!tok.access_token) { console.error('Token exchange failed:', tok); process.exit(1); }
-const G = (path) => fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { headers: { Authorization: `Bearer ${tok.access_token}` } }).then(r => r.json());
+async function G(path, tries = 5) {
+  for (let i = 0; i < tries; i++) {
+    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/${path}`, { headers: { Authorization: `Bearer ${tok.access_token}` } });
+    if (r.status === 429 || r.status >= 500) { await new Promise(res => setTimeout(res, 1000 * 2 ** i)); continue; }
+    return r.json();
+  }
+  return {};
+}
 
 const ids = []; let pageToken = '';
 while (ids.length < n) {
@@ -46,10 +53,11 @@ while (ids.length < n) {
   ids.push(...(page.messages || []).map(m => m.id)); if (!page.nextPageToken) break; pageToken = page.nextPageToken;
 }
 const dec = (d) => Buffer.from(d.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
-const findPart = (p, mime) => p.mimeType === mime && p.body?.data ? p.body.data : (p.parts || []).map(x => findPart(x, mime)).find(Boolean);
+const findPart = (p, mime) => !p ? null : p.mimeType === mime && p.body?.data ? p.body.data : (p.parts || []).map(x => findPart(x, mime)).find(Boolean);
 const emails = [];
 for (const id of ids.slice(0, n)) {
   const m = await G(`messages/${id}?format=full`);
+  if (!m.payload) { console.log(`skipped ${id} (${m.error?.message || 'no body'})`); continue; }
   const h = Object.fromEntries((m.payload?.headers || []).map(x => [x.name.toLowerCase(), x.value]));
   let text = findPart(m.payload, 'text/plain'); text = text ? dec(text) : (findPart(m.payload, 'text/html') ? dec(findPart(m.payload, 'text/html')).replace(/<style[\s\S]*?<\/style>|<[^>]+>/g, ' ').replace(/\s+/g, ' ') : (m.snippet || ''));
   text = text.split(/\n(?:On .{5,120}wrote:|-----Original Message-----)/)[0].replace(/\n>.*$/gm, '').trim().slice(0, 4000);
