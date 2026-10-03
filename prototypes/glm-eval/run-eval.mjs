@@ -41,6 +41,10 @@ for (const level of (githubOnly ? [] : levels)) {
     confidentBucketAccuracy: +(ok.filter(r => (r.conf ?? 0) >= 0.8 && r.bucketOk).length / Math.max(ok.filter(r => (r.conf ?? 0) >= 0.8).length, 1)).toFixed(3),
     firstError: rows.find(r => r.error)?.error || null,
   };
+  const per = {}; for (const b of Object.keys(cfg.buckets)) { const of = rows.filter(r => r.truth.bucket === b); if (of.length) per[b] = `${of.filter(r => r.bucketOk).length}/${of.length}`; }
+  s.bucketRecall = per;
+  s.alwaysMajorityBaseline = +(Math.max(...Object.values(rows.reduce((a, r) => (a[r.truth.bucket] = (a[r.truth.bucket] || 0) + 1, a), {}))) / n).toFixed(3);
+  save(`rows-${level}.json`, rows.map(r => ({ truth: r.truth, got: r.got, conf: r.conf, ms: r.ms, ok: r.ok, valid: r.valid })));
   summary.levels[level] = s;
   md += `\n## Thinking: ${level}\n\n${Object.entries(s).map(([k, v]) => `- ${k}: ${v}`).join('\n')}\n\nMisses (truth → got):\n${rows.filter(r => !r.bucketOk || !r.projectOk).slice(0, 25).map(r => `- ${r.truth.bucket}/${r.truth.project} → ${r.got?.bucket}/${r.got?.project}`).join('\n')}\n`;
   console.log(`thinking=${level}:`, s);
