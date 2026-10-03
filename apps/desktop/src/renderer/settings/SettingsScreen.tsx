@@ -10,6 +10,7 @@ import {
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
 import { AccountsPanel } from './AccountsPanel';
+import { AresSettings } from './ares/AresSettings';
 import { Diagnostics } from './Diagnostics';
 import { SettingRow, SettingsGroup } from './parts';
 import { SecurityPanel } from './SecurityPanel';
@@ -83,6 +84,7 @@ export function SettingsScreen() {
           </Button>
         </SettingRow>
       </SettingsGroup>
+      <AresSettings no="07" usageNo="08" />
     </Sheet>
   );
 }

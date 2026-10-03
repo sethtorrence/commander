@@ -6,6 +6,9 @@ import type {
   ItemKind,
   ItemStatus,
   LinkType,
+  ModelCall,
+  ModelProvider,
+  ModelTier,
   Source,
   TodoOrigin,
 } from '@commander/domain';
@@ -13,6 +16,7 @@ import {
   type AnySQLiteColumn,
   index,
   integer,
+  real,
   sqliteTable,
   text,
   uniqueIndex,
@@ -100,3 +104,41 @@ export const activity = sqliteTable(
     uniqueIndex('activity_undoes').on(t.undoes),
   ],
 );
+
+// The usage ledger: one row per request sent to a model provider. Tokens, latency and cost only;
+// no prompt or reply text is ever stored.
+export const modelCalls = sqliteTable(
+  'model_calls',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    at: integer('at').notNull(),
+    job: text('job').notNull(),
+    tier: text('tier').$type<ModelTier>().notNull(),
+    provider: text('provider').$type<ModelProvider>().notNull(),
+    model: text('model').notNull(),
+    inputTokens: integer('input_tokens').notNull(),
+    cachedTokens: integer('cached_tokens').notNull(),
+    outputTokens: integer('output_tokens').notNull(),
+    latencyMs: integer('latency_ms').notNull(),
+    // US dollars; null for a model with no known price.
+    costUsd: real('cost_usd'),
+    // 'ok', or why the call failed.
+    outcome: text('outcome').$type<ModelCall['outcome']>().notNull(),
+  },
+  (t) => [index('model_calls_at').on(t.at)],
+);
+
+// The 80%-of-cap warning, at most one per calendar month, for Ares to mention in an Update.
+export const modelCapWarnings = sqliteTable('model_cap_warnings', {
+  month: text('month').primaryKey(),
+  at: integer('at').notNull(),
+  spentUsd: real('spent_usd').notNull(),
+  capUsd: real('cap_usd').notNull(),
+});
+
+// Settings → Ares (tiers, per-job overrides, cap) as one validated document in a single row.
+export const modelSettings = sqliteTable('model_settings', {
+  id: integer('id').primaryKey(),
+  settings: text('settings', { mode: 'json' }).notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

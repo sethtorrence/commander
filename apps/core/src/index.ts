@@ -7,6 +7,7 @@ import { createAccessTokens } from './access-tokens';
 import { answerRemoveAccountItems } from './account-requests';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
+import { setUpModels } from './models';
 
 const port = process.parentPort;
 let beats = 0;
@@ -35,9 +36,12 @@ setInterval(() => itemStore.takeDailySnapshot(), 60 * 60 * 1000);
 
 // Sources borrow their Accounts' access tokens from the main process through this, in memory only.
 const accessTokens = createAccessTokens((message) => port.postMessage(message));
+// Model calls for Ares; the API key is borrowed the same way, for each call.
+const models = setUpModels(itemStore, { send: (message) => port.postMessage(message), accessTokens });
 
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
+  if (models.handle(data)) return;
   const reply = answerRemoveAccountItems(itemStore, data) ?? answerItemStoreRequest(itemStore, data);
   if (reply) port.postMessage(reply);
 });

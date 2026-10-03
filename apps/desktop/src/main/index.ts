@@ -8,6 +8,7 @@ import { claimSingleInstance, runInBackground, startsHidden } from './background
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
+import { setUpModels } from './models';
 import { revealWhenPainted } from './reveal';
 import { setUpSecretStorage } from './secret-storage';
 import type { Secrets } from './secrets';
@@ -53,8 +54,11 @@ function startCore(secrets: Secrets) {
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));
   const accounts = setUpAccounts({ secrets, sendToCore: (message) => core.postMessage(message) });
+  const models = setUpModels(secrets, core);
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw)) return;
+    // Before Accounts: it answers the Core's token requests for model API keys.
+    if (models(raw)) return;
     if (accounts.fromCore(raw)) return;
     const parsed = parseCoreMessage(raw);
     if (!parsed.ok) {

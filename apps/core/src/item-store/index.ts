@@ -29,6 +29,7 @@ import Database from 'better-sqlite3';
 import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { type ModelStore, openModelStore } from './models';
 import {
   actorColumns,
   changesBetween,
@@ -70,6 +71,8 @@ export type ItemStore = {
   activity(query?: ActivityQuery): ActivityEntry[];
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7.
   takeDailySnapshot(): Snapshot | null;
+  // The usage ledger and Settings → Ares, in the same database.
+  models: ModelStore;
   close(): void;
 };
 
@@ -401,6 +404,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   );
 
   return {
+    models: openModelStore(db, now),
+
     saveFromSource,
     removeAccountItems,
 

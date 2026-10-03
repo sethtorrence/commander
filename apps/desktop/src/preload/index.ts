@@ -1,4 +1,12 @@
-import type { CoreMessage, ItemStoreRequest, ItemStoreResponse, ItemStoreResults } from '@commander/domain';
+import type {
+  CoreMessage,
+  ItemStoreRequest,
+  ItemStoreResponse,
+  ItemStoreResults,
+  ModelProvider,
+  ModelsRequest,
+  ModelsResponse,
+} from '@commander/domain';
 // The ipc subpath keeps zod (and the schemas) out of the sandboxed preload bundle.
 import {
   type AccountsRequest,
@@ -6,6 +14,8 @@ import {
   type AccountsState,
   type Diagnostics,
   ipc,
+  type ModelKeyStatus,
+  type SaveModelKeyResult,
   type SecretStorageStatus,
 } from '@commander/domain/ipc';
 import { contextBridge, ipcRenderer } from 'electron';
@@ -28,6 +38,16 @@ const commander = {
     if (!response.ok) throw new Error(response.error);
     return response.result;
   },
+  // Settings → Ares, answered by the Core. Resolves with the response, failures included, so the
+  // window can tell an over-cap or refused-key failure apart.
+  models: <R extends ModelsRequest>(request: R): Promise<ModelsResponse<R['op']>> =>
+    ipcRenderer.invoke(ipc.models, request),
+  // A model provider's API key goes to the main process (and the keyring) only; it is never read back.
+  modelKeyStatus: (provider: ModelProvider): Promise<ModelKeyStatus> =>
+    ipcRenderer.invoke(ipc.modelKeyStatus, provider),
+  saveModelKey: (provider: ModelProvider, key: string): Promise<SaveModelKeyResult> =>
+    ipcRenderer.invoke(ipc.saveModelKey, provider, key),
+  clearModelKey: (provider: ModelProvider): Promise<void> => ipcRenderer.invoke(ipc.clearModelKey, provider),
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
   // Settings → Accounts. Answers carry Account summaries, never a token or key.
