@@ -27,7 +27,7 @@ Anything Commander tracks, whether it comes from a Source (an email, event, Line
 _Avoid_: Record, entity, object, thing
 
 **Link**:
-A typed connection between two Items (made from, refers to, finishes, about, caused by), visible from both ends.
+A typed connection between two Items (made from, refers to, finishes, about, caused by), visible from both ends; a refers-to Link may instead point at a Project.
 _Avoid_: Relation, reference, edge
 
 **Activity log**:
@@ -91,7 +91,7 @@ An item on your to-do lists: a Linear issue (labelled as Linear), a suggestion t
 _Avoid_: Task, action item
 
 **Daily Note**:
-The single note for one calendar day, in the Notes Section.
+The single note for one calendar day, in the Notes Section; itself an Item, holding its Blocks.
 _Avoid_: Journal, entry, page
 
 **Block**:
