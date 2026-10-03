@@ -5,12 +5,13 @@ import { writeFileSync } from 'node:fs';
 import { load, save, p, config, chat, cost } from './common.mjs';
 
 const levels = (process.argv[2] || 'low,high').split(',');
+const githubOnly = process.argv.includes('--github-only');
 const limit = Number(process.argv[3] || 1e9);
 const cfg = config();
 const emails = load('emails.json', []);
 const labels = load('labels.json', {});
 const sample = emails.filter(e => labels[e.id]?.bucket && labels[e.id]?.project).slice(0, limit);
-if (!sample.length) { console.error('No labelled emails yet: run label-server.mjs first.'); process.exit(1); }
+if (!sample.length && !githubOnly) { console.error('No labelled emails yet: run label-server.mjs first.'); process.exit(1); }
 
 const system = `You sort one email for the User. Reply with JSON only: {"bucket": <one of the Bucket names>, "project": <one of the Project codes>, "confidence": <0..1>}.
 Buckets:\n${Object.entries(cfg.buckets).map(([k, v]) => `- ${k}: ${v}`).join('\n')}
@@ -21,7 +22,7 @@ async function pool(items, n, fn) { const out = []; let i = 0; await Promise.all
 
 const summary = { model: cfg.model, emails: sample.length, levels: {} };
 let md = `# GLM eval report (local only)\n\nModel ${cfg.model}, ${sample.length} labelled emails.\n`;
-for (const level of levels) {
+for (const level of (githubOnly ? [] : levels)) {
   const rows = await pool(sample, 4, async (e) => {
     const r = await chat([{ role: 'system', content: system }, { role: 'user', content: `<email>\nFrom: ${e.from}\nSubject: ${e.subject}\n\n${e.text}\n</email>` }], { thinking: level, maxTokens: 4096 });
     const truth = labels[e.id];

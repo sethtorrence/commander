@@ -40,7 +40,7 @@ export async function chat(messages, { json = true, thinking = null, maxTokens =
   const cfg = config();
   const body = { model: cfg.model, messages, max_tokens: maxTokens, temperature: 0 };
   if (json) body.response_format = { type: 'json_object' };
-  if (thinking) body.thinking = { type: thinking }; // GLM-5.3-Flash: 'low' | 'high' | 'max' (cannot be disabled)
+  if (thinking) body.reasoning_effort = thinking; // GLM-5.3-Flash: 'low' | 'high' | 'max'. Thinking can't be disabled; omitted = model default.
   const t0 = Date.now();
   let res, data;
   try {
