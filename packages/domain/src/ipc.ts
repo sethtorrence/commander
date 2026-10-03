@@ -7,6 +7,8 @@ export const ipc = {
   itemStore: 'item-store',
   startAtLogin: 'start-at-login',
   setStartAtLogin: 'set-start-at-login',
+  // The window has painted its first frame, in the User's theme, so it can be shown.
+  framePainted: 'frame-painted',
 } as const;
 
 // How the window reaches the screen. 'xwayland' means a Wayland session fell back to X11.

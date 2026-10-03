@@ -1,9 +1,11 @@
 import { expect, type Page, test } from '@playwright/test';
+import { openSettings } from './frame';
 import { launchCommander } from './launch-commander';
 
 const PLATES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
 
 async function openGallery(window: Page) {
+  await openSettings(window);
   await window.getByRole('link', { name: /design gallery/i }).click();
   await expect(window.getByTestId('design-gallery')).toBeVisible();
 }
@@ -58,7 +60,7 @@ test('the theme toggle switches light and dark, and the choice survives a restar
 
   const again = await launchCommander({ userDataDir: first.userDataDir });
   const reopened = await again.app.firstWindow();
-  await expect(reopened.getByTestId('core-heartbeat')).toBeVisible();
+  await expect(reopened.getByRole('navigation', { name: 'Sections' })).toBeVisible();
   await expect(reopened.locator('html')).toHaveAttribute('data-theme', 'light');
   await again.close();
 });
@@ -82,7 +84,7 @@ test('picking a signal colour recolours live things at once and is remembered', 
 
   const again = await launchCommander({ userDataDir: first.userDataDir });
   const reopened = await again.app.firstWindow();
-  await expect(reopened.getByTestId('core-heartbeat')).toBeVisible();
+  await expect(reopened.getByRole('navigation', { name: 'Sections' })).toBeVisible();
   await expect.poll(() => rootVariable(reopened, '--signal')).toBe('#00E676');
   await again.close();
 });

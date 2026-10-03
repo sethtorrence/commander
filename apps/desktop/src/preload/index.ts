@@ -23,6 +23,8 @@ const commander = {
   },
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
+  // Tells the app the first frame is on screen (in the saved theme), so the window can be shown.
+  framePainted: (): void => ipcRenderer.send(ipc.framePainted),
 };
 
 export type CommanderBridge = typeof commander;

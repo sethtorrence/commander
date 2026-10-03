@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { openSettings } from './frame';
 import { launchCommander } from './launch-commander';
 
 // On Linux/Wayland (the author's Hyprland) Commander launches with --password-store=gnome-libsecret,
@@ -9,8 +10,10 @@ test('Settings → Security shows the libsecret keyring protecting secrets', asy
   test.skip(!onLinuxWayland, 'needs a Linux Wayland session with a Secret Service keyring');
   const { app } = await launchCommander();
   const window = await app.firstWindow();
+  await openSettings(window);
 
   const panel = window.getByTestId('security-panel');
+  await expect(panel).toBeVisible();
   await expect(panel.getByTestId('security-backend')).toHaveText('gnome_libsecret');
   await expect(panel.getByTestId('security-protected')).toHaveText('Protected by the system keyring');
   await expect(panel.getByTestId('security-problem')).toHaveCount(0);
