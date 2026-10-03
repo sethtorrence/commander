@@ -1,4 +1,5 @@
 import type { ItemStore } from '@commander/core/src/item-store';
+import type { Project } from '@commander/domain';
 import type { AccountSummary, AccountSyncStatus } from '@commander/domain/ipc';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestItemStore } from '../../item-store/test-item-store';
@@ -55,7 +56,7 @@ describe('reading Linear issues', () => {
     const lt = store.changeProject({
       type: 'create',
       project: { name: 'Longtail', code: 'LT', accent: 'blue' },
-    });
+    }).project as Project;
     const todo = store.record(
       { type: 'create', item: { kind: 'todo', title: 'Follow up on ENG-1' } },
       { by: { kind: 'user' } },

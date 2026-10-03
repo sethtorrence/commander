@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { SourceItem } from '@commander/domain';
+import type { Project, SourceItem } from '@commander/domain';
 import {
   RateLimited,
   SignInRefused,
@@ -405,7 +405,7 @@ describe('what a sync saves', () => {
     const titanlink = store.changeProject({
       type: 'create',
       project: { name: 'Titanlink', code: 'TL', accent: 'blue' },
-    });
+    }).project as Project;
     store.record(
       {
         type: 'update',

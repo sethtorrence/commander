@@ -28,6 +28,7 @@ function fakeClient(projects: Project[]): ProjectsClient {
   return {
     list: async () => projects,
     create: vi.fn(),
+    change: vi.fn(),
     file: vi.fn(async () => ({}) as ActivityEntry),
   };
 }

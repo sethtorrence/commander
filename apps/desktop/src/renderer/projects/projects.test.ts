@@ -50,6 +50,36 @@ describe('the Projects client', () => {
     await projects.file(todo, null);
     expect(store.get(todo)?.item.filing).toBeNull();
   });
+
+  it('lists archived Projects too, so old Items can still show their Badges', async () => {
+    const lt = await projects.create({ name: 'Longtail', code: 'LT', accent: 'blue' });
+    await projects.create({ name: 'Titanlink', code: 'TL', accent: 'teal' });
+
+    await projects.change({ type: 'archive', projectId: lt.id });
+
+    expect((await projects.list()).map((p) => [p.code, p.archived])).toEqual([
+      ['LT', true],
+      ['TL', false],
+    ]);
+  });
+
+  it('merges one Project into another and undoes it, passing on refusals', async () => {
+    const lt = await projects.create({ name: 'Longtail', code: 'LT', accent: 'blue' });
+    const tx = await projects.create({ name: 'Tactics', code: 'TX', accent: 'violet' });
+    const todo = addTodo();
+    await projects.file(todo, tx.id);
+
+    const merged = await projects.change({ type: 'merge', projectId: tx.id, into: lt.id });
+    expect(merged).toMatchObject({ action: 'merge', moved: 1, project: { code: 'LT' } });
+    expect(store.get(todo)?.item.filing?.projectId).toBe(lt.id);
+
+    await projects.change({ type: 'undo', changeId: merged.id });
+    expect(store.get(todo)?.item.filing?.projectId).toBe(tx.id);
+
+    await expect(projects.change({ type: 'merge', projectId: lt.id, into: lt.id })).rejects.toThrow(
+      'A Project can’t be merged into itself',
+    );
+  });
 });
 
 describe('describing a change of filing', () => {

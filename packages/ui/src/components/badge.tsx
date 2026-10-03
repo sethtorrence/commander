@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type { ComponentProps, CSSProperties } from 'react';
 import { cn } from '../lib/cn';
-import { type AccentName, accentColour } from '../projects/accents';
+import { type AccentName, accentColour, accentTextColour } from '../projects/accents';
 
 // A Badge is a Project's two-letter code stamped on its accent colour (.pb in the prototypes).
 export const badgeVariants = cva(
@@ -38,6 +38,8 @@ export type BadgeProps = Omit<ComponentProps<'span'>, 'children'> &
 export function Badge({ code, accent, project, kind, size, className, style, ...props }: BadgeProps) {
   const unfiled = kind === 'unfiled' || !code;
   const colour = accent && accentColour(accent);
+  // A custom accent brings its own Badge text (near-black or white); palette ones use --on-accent.
+  const text = accent && !unfiled && kind !== 'suggested' ? accentTextColour(accent) : undefined;
   const label = unfiled ? 'Unfiled' : (project ?? code);
   return (
     <span
@@ -46,7 +48,7 @@ export function Badge({ code, accent, project, kind, size, className, style, ...
       aria-label={label}
       title={label}
       className={cn(badgeVariants({ kind: unfiled ? 'unfiled' : kind, size }), className)}
-      style={{ '--accent': colour, ...style } as CSSProperties}
+      style={{ '--accent': colour, ...(text && { color: text }), ...style } as CSSProperties}
       {...props}
     >
       {unfiled ? '—' : code}

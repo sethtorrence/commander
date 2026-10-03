@@ -27,6 +27,7 @@ import {
   type LinkType,
   type Project,
   type ProjectAction,
+  type ProjectChange,
   type ProjectQuery,
   type SaveResult,
   type Source,
@@ -92,8 +93,9 @@ export type ItemStore = {
   activity(query?: ActivityQuery): ActivityEntry[];
   // Projects in their order; archived ones only when asked for.
   projects(query?: ProjectQuery): Project[];
-  // Creates (later also renames, reorders, archives) a Project. Not an Item change, so not logged.
-  changeProject(action: ProjectAction): Project;
+  // Creates, renames, recolours, reorders, archives, merges a Project, or undoes such a change. Kept
+  // in the Project log, not the activity log, except for the Items a merge moves (one entry each).
+  changeProject(action: ProjectAction): ProjectChange;
   // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet. With
   // `fromTemplate` (the day is being made as today), a new one starts with copies of the daily
   // template's Blocks, made in the same transaction; a Daily Note that already exists never does.
@@ -186,8 +188,34 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   sqlite.pragma('foreign_keys = ON');
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: options.migrationsFolder });
-  const projects = projectsIn(db, now, (message) => new ItemStoreError('invalid', message));
   const template = dailyTemplateIn(db, now);
+  // Project changes come only from the User (the window); a merge's Item moves are recorded as theirs.
+  const byUser: Actor = { kind: 'user' };
+  const projects = projectsIn(db, now, (message) => new ItemStoreError('invalid', message), {
+    refile(from, into, why) {
+      const rows = db.select().from(schema.items).where(eq(schema.items.projectId, from)).all();
+      return withDetails(rows).map((item) => {
+        const at = now();
+        const before = stateOf(item);
+        const filedBy = before.filing?.filedBy ?? 'user';
+        const after = writeState(item, { ...before, filing: { projectId: into, filedBy } }, at);
+        return log({ by: byUser, action: 'update', itemId: item.id, why, before, after }, at).id;
+      });
+    },
+    undo(entryIds, why) {
+      const { activity } = schema;
+      const undone: number[] = [];
+      for (const entryId of entryIds) {
+        const target = db.select().from(activity).where(eq(activity.id, entryId)).get();
+        if (!target || db.select().from(activity).where(eq(activity.undoes, entryId)).get()) continue;
+        const item = readItem(target.itemId);
+        const moved = (target.after as ItemState | null)?.filing;
+        if (!item || !isDeepStrictEqual(item.filing, moved)) continue;
+        undone.push(undo(entryId, { by: byUser, why }, now()).id);
+      }
+      return undone;
+    },
+  });
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
     const { items } = schema;
@@ -776,7 +804,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
     projects: (query) => projects.list(query),
 
-    changeProject: (action) => projects.change(action),
+    changeProject: sqlite.transaction((action: ProjectAction) => projects.change(action)),
 
     entry(entryId) {
       const row = db.select().from(schema.activity).where(eq(schema.activity.id, entryId)).get();

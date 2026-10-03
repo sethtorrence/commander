@@ -60,7 +60,9 @@ describe('answering Item store requests from the window', () => {
     const created = ask(1, { op: 'change-project', action: { type: 'create', project } });
     const again = ask(2, { op: 'change-project', action: { type: 'create', project } });
 
-    expect(created).toMatchObject({ response: { ok: true, result: { name: 'Longtail', code: 'LT' } } });
+    expect(created).toMatchObject({
+      response: { ok: true, result: { action: 'create', project: { name: 'Longtail', code: 'LT' } } },
+    });
     expect(again).toMatchObject({
       response: { ok: false, error: 'LT is already the Badge code for Longtail' },
     });

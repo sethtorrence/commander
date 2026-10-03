@@ -89,12 +89,12 @@ test('create a Project, file a Todo with b, filter by it, and undo the filing', 
   // The filter bar counts open Todos per Project, and p then 1 narrows to Longtail.
   const bar = todos.getByRole('group', { name: 'Project filter' });
   await expect(bar.getByRole('button', { name: /Everything/ })).toHaveText(/02$/);
-  await expect(bar.getByRole('button', { name: /Longtail/ })).toHaveText(/01$/);
+  await expect(bar.getByRole('button', { name: /^Longtail/ })).toHaveText(/01$/);
   await expect(bar.getByRole('button', { name: /Unfiled/ })).toHaveText(/01$/);
   await window.keyboard.press('p');
   await expect(bar).toHaveAttribute('data-armed', 'true');
   await window.keyboard.press('1');
-  await expect(bar.getByRole('button', { name: /Longtail/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar.getByRole('button', { name: /^Longtail/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(shown(todos)).toHaveText([/Ship the beta/]);
 
   // Clicking Unfiled, then p then 0 for Everything.
@@ -107,7 +107,7 @@ test('create a Project, file a Todo with b, filter by it, and undo the filing', 
   // Undo reverses the filing, and the counts follow.
   await window.keyboard.press('Control+z');
   await expect(row(todos, 'Ship the beta').getByRole('img', { name: 'Unfiled' })).toBeVisible();
-  await expect(bar.getByRole('button', { name: /Longtail/ })).toHaveText(/00$/);
+  await expect(bar.getByRole('button', { name: /^Longtail/ })).toHaveText(/00$/);
   await row(todos, 'Ship the beta').click();
   await expect(history.getByRole('listitem').first()).toHaveText(/^Filing undone by you/i);
   expect((await savedTodos(window)).every((todo) => todo.filing === null)).toBe(true);
@@ -142,7 +142,7 @@ test('a Todo added under a selected Project is filed there, and the filter survi
   window = await second.app.firstWindow();
   todos = await openTodos(window);
   const bar = todos.getByRole('group', { name: 'Project filter' });
-  await expect(bar.getByRole('button', { name: /Tactics/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar.getByRole('button', { name: /^Tactics/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(shown(todos)).toHaveText([/Draft Q4 positioning/]);
 
   await second.close();

@@ -1,4 +1,5 @@
 import { Kbd, ThemeToggle } from '@commander/ui';
+import type { ReactNode } from 'react';
 import type { SectionDefinition } from '../sections';
 
 export interface NotebookTabsProps {
@@ -10,6 +11,8 @@ export interface NotebookTabsProps {
   onOpen: (id: string) => void;
   onOpenSettings: () => void;
   onCloseSettings: () => void;
+  /** Temporary tabs after the Sections, e.g. a Project page's. */
+  temporary?: ReactNode;
 }
 
 const tabCount = (count: number | null | undefined) =>
@@ -37,6 +40,7 @@ export function NotebookTabs({
   onOpen,
   onOpenSettings,
   onCloseSettings,
+  temporary,
 }: NotebookTabsProps) {
   return (
     <nav className="f-tabs" aria-label="Sections">
@@ -57,6 +61,7 @@ export function NotebookTabs({
           <span className="tc">{tabCount(counts[section.id])}</span>
         </button>
       ))}
+      {temporary}
       {open === 'settings' && (
         // A div, so the close button isn't nested in another button.
         <div className="f-tab temp" data-section="settings" aria-current="page" title="Settings · Esc closes">

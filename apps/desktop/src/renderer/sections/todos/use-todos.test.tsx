@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
-import type { Item } from '@commander/domain';
+import type { Item, Project } from '@commander/domain';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -211,7 +211,8 @@ describe('useTodos', () => {
 
   describe('with Projects', () => {
     const longtail = () =>
-      store.changeProject({ type: 'create', project: { name: 'Longtail', code: 'LT', accent: 'blue' } });
+      store.changeProject({ type: 'create', project: { name: 'Longtail', code: 'LT', accent: 'blue' } })
+        .project as Project;
 
     it('shows only the Todos it is asked to include, moves among them, and counts every open one', async () => {
       const lt = longtail();

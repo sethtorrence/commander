@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
+import type { Project } from '@commander/domain';
 import type { AccountSummary, AccountSyncStatus } from '@commander/domain/ipc';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -199,7 +200,7 @@ describe('the Linear sheet', () => {
     const lt = store.changeProject({
       type: 'create',
       project: { name: 'Longtail', code: 'LT', accent: 'blue' },
-    });
+    }).project as Project;
     renderSheet();
     await waitFor(() => expect(listed()).toHaveLength(2));
 
@@ -315,7 +316,7 @@ describe('the Linear sheet', () => {
     const lt = store.changeProject({
       type: 'create',
       project: { name: 'Longtail', code: 'LT', accent: 'blue' },
-    });
+    }).project as Project;
     renderSheet();
     await waitFor(() =>
       expect(

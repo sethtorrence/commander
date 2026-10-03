@@ -1,6 +1,8 @@
 import { DrawingGrid, RulerX, RulerY } from '@commander/ui';
-import { useCallback, useMemo, useState } from 'react';
-import { ProjectsProvider } from '../projects/context';
+import { type ComponentProps, useCallback, useMemo, useRef, useState } from 'react';
+import { ProjectsProvider, useProjects } from '../projects/context';
+import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
+import { ProjectPageTab } from '../projects/page/ProjectPageTab';
 import { projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
 import { FrameControlsProvider, HeaderSlotProvider, SectionProvider } from '../sections/section';
@@ -39,6 +41,13 @@ function SectionView({
   );
 }
 
+/** The header, naming the open Project page's Project when one is shown. */
+function FrameHeader({ page, ...props }: ComponentProps<typeof Header> & { page: string | null }) {
+  const project = useProjects().projectById(page ?? '');
+  const shown = project && { eyebrow: `Project / ${project.code}`, title: project.name };
+  return <Header {...props} {...shown} />;
+}
+
 /**
  * The app frame: the Industrial header, the rulers and exposed grid, the numbered notebook tabs,
  * and the open Section's sheet. Sections stay mounted while another is open, so they keep their
@@ -51,6 +60,11 @@ export function Frame() {
   const [cheatSheet, setCheatSheet] = useState(false);
   const projects = useMemo(() => projectsIn(window.commander.itemStore), []);
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
+  // The open Project page (a temporary tab), and where Esc or × on it goes back to.
+  const [page, setPage] = useState<string | null>(null);
+  const [returnTo, setReturnTo] = useState(open);
+  const openNow = useRef(open);
+  openNow.current = open;
 
   const openSection = useCallback((id: string) => {
     setOpen(id);
@@ -62,6 +76,30 @@ export function Frame() {
     window.scrollTo({ top: 0 });
   }, []);
   const closeSettings = useCallback(() => openSection(lastSection), [openSection, lastSection]);
+
+  const openPage = useCallback((projectId: string) => {
+    if (openNow.current !== PROJECT_PAGE_SCOPE) setReturnTo(openNow.current);
+    setPage(projectId);
+    setOpen(PROJECT_PAGE_SCOPE);
+    window.scrollTo({ top: 0 });
+  }, []);
+  const showPage = useCallback(() => {
+    if (openNow.current !== PROJECT_PAGE_SCOPE) setReturnTo(openNow.current);
+    setOpen(PROJECT_PAGE_SCOPE);
+  }, []);
+  const closePage = useCallback(() => {
+    setPage(null);
+    if (openNow.current !== PROJECT_PAGE_SCOPE) return;
+    if (returnTo === SETTINGS) openSettings();
+    else openSection(returnTo);
+  }, [returnTo, openSettings, openSection]);
+  const back = useMemo(
+    () => ({
+      label: SECTIONS.find((section) => section.id === returnTo)?.label ?? 'Settings',
+      onClick: closePage,
+    }),
+    [returnTo, closePage],
+  );
 
   // The counts Sections put on their tabs (useTabCount).
   const [counts, setCounts] = useState<Record<string, number | null>>({});
@@ -106,10 +144,11 @@ export function Frame() {
     : { eyebrow: 'Commander / Settings', title: 'Settings' };
 
   return (
-    <ProjectsProvider client={projects}>
+    <ProjectsProvider client={projects} onOpenPage={openPage}>
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
-      <Header
+      <FrameHeader
         {...header}
+        page={open === PROJECT_PAGE_SCOPE ? page : null}
         onBand={() => openSection('dashboard')}
         slotRef={setHeaderSlot}
         ares={{ onOpen: () => openSection('ares') }}
@@ -124,6 +163,16 @@ export function Frame() {
         onOpen={openSection}
         onOpenSettings={openSettings}
         onCloseSettings={closeSettings}
+        temporary={
+          page && (
+            <ProjectPageTab
+              projectId={page}
+              current={open === PROJECT_PAGE_SCOPE}
+              onOpen={showPage}
+              onClose={closePage}
+            />
+          )
+        }
       />
       <main className="relative z-1 ml-(--rul) pt-(--body)">
         <FrameControlsProvider value={controls}>
@@ -133,6 +182,23 @@ export function Frame() {
             ))}
           </HeaderSlotProvider>
         </FrameControlsProvider>
+        {page && (
+          <section
+            className="grid grid-cols-8"
+            hidden={open !== PROJECT_PAGE_SCOPE}
+            aria-label="Project page"
+          >
+            <ShortcutScope scope={PROJECT_PAGE_SCOPE} group="Project page">
+              <ProjectPage
+                projectId={page}
+                active={open === PROJECT_PAGE_SCOPE}
+                itemStore={window.commander.itemStore}
+                back={back}
+                onOpenSection={openSection}
+              />
+            </ShortcutScope>
+          </section>
+        )}
         <section className="grid grid-cols-8" hidden={open !== SETTINGS} aria-label="Settings">
           <SettingsScreen open={open === SETTINGS} />
         </section>

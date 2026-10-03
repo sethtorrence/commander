@@ -1,7 +1,7 @@
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ActionContext, ItemQuery, SourceBatch } from '@commander/domain';
+import type { ActionContext, ItemQuery, Project, SourceBatch } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ItemStore, openItemStore } from '.';
 
@@ -132,7 +132,7 @@ describe('querying Items', () => {
     const longtail = store.changeProject({
       type: 'create',
       project: { name: 'Longtail', code: 'LT', accent: 'blue' },
-    });
+    }).project as Project;
     store.saveFromSource(emails({ externalId: 'm1', title: 'Longtail invoice' }));
     clock += 1;
     store.saveFromSource({
@@ -339,7 +339,7 @@ describe('recording actions made in Commander', () => {
     const longtail = store.changeProject({
       type: 'create',
       project: { name: 'Longtail', code: 'LT', accent: 'blue' },
-    });
+    }).project as Project;
     const filing = { projectId: longtail.id, filedBy: 'rule' } as const;
 
     store.record({ type: 'update', itemId: id, changes: { filing } }, { by: { kind: 'rule', ruleId: 'r1' } });
@@ -502,7 +502,7 @@ describe('undo', () => {
     const tactics = store.changeProject({
       type: 'create',
       project: { name: 'Tactics', code: 'TX', accent: 'violet' },
-    });
+    }).project as Project;
     const filing = { projectId: tactics.id, filedBy: 'ares' } as const;
     const filed = store.record(
       { type: 'update', itemId: todo, changes: { filing } },

@@ -1,5 +1,5 @@
 import type { ItemStore } from '@commander/core/src/item-store';
-import type { ActivityEntry } from '@commander/domain';
+import type { ActivityEntry, Project } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { describeEntry, type Todos, todosIn } from './todos';
@@ -47,7 +47,7 @@ describe('adding a Todo', () => {
     const lt = store.changeProject({
       type: 'create',
       project: { name: 'Longtail', code: 'LT', accent: 'blue' },
-    });
+    }).project as Project;
 
     const entry = await todos.add('Ship the beta', { projectId: lt.id, filedBy: 'user' });
 

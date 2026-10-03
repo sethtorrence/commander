@@ -12,6 +12,7 @@ import type {
   ModelCall,
   ModelProvider,
   ModelTier,
+  ProjectChangeAction,
   ProposalRecord,
   ProposalStatus,
   Source,
@@ -20,6 +21,7 @@ import type {
   SyncTrigger,
   TodoOrigin,
 } from '@commander/domain';
+import { sql } from 'drizzle-orm';
 import {
   type AnySQLiteColumn,
   index,
@@ -191,8 +193,11 @@ export const projects = sqliteTable(
     position: integer('position').notNull(),
     archived: integer('archived', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at').notNull(),
+    // Set once the Project is merged into another: it is gone from every list, and its code is free,
+    // but the row stays so undoing the merge can bring it back.
+    mergedInto: text('merged_into'),
   },
-  (t) => [uniqueIndex('projects_code').on(t.code)],
+  (t) => [uniqueIndex('projects_code').on(t.code).where(sql`${t.mergedInto} IS NULL`)],
 );
 
 // Kind-specific detail for Linear issues, as Linear sync reported it (see LinearIssueDetail).
@@ -286,3 +291,25 @@ export const dailyTemplate = sqliteTable('daily_template', {
   template: text('template', { mode: 'json' }).notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+// The Project log: every change to Projects, with the Project rows before and after it, which
+// powers undo. Projects are not Items, so this is kept apart from the activity log. A merge also
+// lists the activity entries of the Items it moved, so undoing it can undo each of them.
+export const projectChanges = sqliteTable(
+  'project_changes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    at: integer('at').notNull(),
+    action: text('action').$type<ProjectChangeAction>().notNull(),
+    // The Project changed (the one kept, for a merge); null for a reorder.
+    projectId: text('project_id'),
+    mergedId: text('merged_id'),
+    before: text('before', { mode: 'json' }).$type<ProjectRowState[]>().notNull(),
+    after: text('after', { mode: 'json' }).$type<ProjectRowState[]>().notNull(),
+    itemEntries: text('item_entries', { mode: 'json' }).$type<number[]>().notNull(),
+    undoes: integer('undoes').references((): AnySQLiteColumn => projectChanges.id),
+  },
+  (t) => [uniqueIndex('project_changes_undoes').on(t.undoes)],
+);
+
+// A Project row as the Project log keeps it.
+export type ProjectRowState = typeof projects.$inferSelect;
