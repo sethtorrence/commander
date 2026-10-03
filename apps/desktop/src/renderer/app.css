@@ -1,0 +1,5 @@
+@import "@commander/ui/styles.css";
+
+/* The renderer's own components use the design system's utilities too. */
+@source "./";
+@source not "./**/*.test.*";

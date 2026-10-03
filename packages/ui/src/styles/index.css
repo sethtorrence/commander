@@ -1,0 +1,66 @@
+/* Commander's Industrial design system. Import once, from the renderer's stylesheet. */
+@import "tailwindcss" source(none);
+@import "./fonts.css";
+@import "./tokens.css";
+@import "./theme.css";
+@import "./drawing.css";
+
+@source "../";
+@source not "../**/*.test.*";
+
+@layer base {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--faint) var(--bg);
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    letter-spacing: var(--tracking-body);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  [data-theme] {
+    color: var(--text);
+  }
+  ::selection {
+    background: var(--signal-sel);
+  }
+  :focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: -2px;
+  }
+  kbd {
+    font: 600 10px / 1 var(--mono);
+    letter-spacing: var(--tracking-mono);
+    min-width: 20px;
+    height: 19px;
+    padding: 0 5px;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
+
+/* Diagonal hatching for empty, past and placeholder areas. */
+@utility hatch {
+  background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 7px);
+}
+@utility hatch-tight {
+  background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 6px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component */
+    animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: reduced motion must win over every component */
+    transition: none !important;
+  }
+}

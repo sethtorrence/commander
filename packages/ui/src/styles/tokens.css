@@ -1,0 +1,101 @@
+/*
+  Commander's Industrial design values, lifted from the locked prototypes
+  (prototype/daily-note-look round-3/industrial.html, prototype/dashboard-section-layout variants/feed.html).
+  Colours are per theme. The signal values below are the derivation for the default, international
+  orange; when the User picks another signal colour, the ThemeProvider overrides them at runtime.
+  tokens.test.ts checks these against the derivation.
+*/
+@layer base {
+  :root {
+    /* Type */
+    --sans: "Archivo Variable", "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    /* Frame metrics: ruler, header, the top edge of the drawing, notebook tabs, Section rail */
+    --rul: 22px;
+    --hdr: 64px;
+    --top: calc(var(--hdr) + var(--rul));
+    --tabs: 46px;
+    --body: calc(var(--top) + var(--tabs));
+    --rail: 72px;
+
+    /* Sheet metrics: title strip, the numbered margin and where row text starts */
+    --strip: 30px;
+    --sheet-margin: 40px;
+    --sheet-gutter: 52px;
+
+    /* Rules */
+    --rule: 1px;
+    --rule-heavy: 2px;
+    --rule-signal: 3px;
+  }
+
+  :root,
+  [data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141516;
+    --sheet: #1b1c1e;
+    --raise: #25262a;
+    --ink: #eeece7;
+    --text: #d3d1cb;
+    --muted: #8f8d87;
+    --faint: #5e5d59;
+    --line: rgba(238, 236, 231, 0.15);
+    --line2: rgba(238, 236, 231, 0.075);
+    --grid: rgba(238, 236, 231, 0.065);
+    --grid2: rgba(238, 236, 231, 0.026);
+    --cross: rgba(238, 236, 231, 0.28);
+    --hatch: rgba(238, 236, 231, 0.08);
+
+    --signal: #ff5f00;
+    --on-signal: #141414;
+    --signal-ink: #ff5f00;
+    --signal-soft: rgba(255, 95, 0, 0.14);
+    --signal-focus: rgba(255, 95, 0, 0.06);
+    --signal-sel: rgba(255, 95, 0, 0.32);
+
+    --accent-blue: #3d7bff;
+    --accent-teal: #00bfa5;
+    --accent-violet: #a970ff;
+    --accent-magenta: #f03ca8;
+    --accent-green: #2fbf4f;
+    --accent-sky: #26b8e8;
+    --accent-lime: #b5c800;
+    --accent-slate: #a3a9b5;
+    --on-accent: #141414;
+  }
+
+  [data-theme="light"] {
+    color-scheme: light;
+    --bg: #d8d5ce;
+    --sheet: #e9e7e2;
+    --raise: #f3f1ed;
+    --ink: #1c1d1f;
+    --text: #2a2b2d;
+    --muted: #67645f;
+    --faint: #9b978f;
+    --line: rgba(28, 29, 31, 0.21);
+    --line2: rgba(28, 29, 31, 0.095);
+    --grid: rgba(28, 29, 31, 0.085);
+    --grid2: rgba(28, 29, 31, 0.035);
+    --cross: rgba(28, 29, 31, 0.36);
+    --hatch: rgba(28, 29, 31, 0.1);
+
+    --signal: #e65600;
+    --on-signal: #141414;
+    --signal-ink: #b24200;
+    --signal-soft: rgba(230, 86, 0, 0.13);
+    --signal-focus: rgba(230, 86, 0, 0.075);
+    --signal-sel: rgba(230, 86, 0, 0.28);
+
+    --accent-blue: #3d7bff;
+    --accent-teal: #009581;
+    --accent-violet: #9d68ed;
+    --accent-magenta: #e93aa3;
+    --accent-green: #25973e;
+    --accent-sky: #1d8eb3;
+    --accent-lime: #7f8c00;
+    --accent-slate: #7f848d;
+    --on-accent: #141414;
+  }
+}
