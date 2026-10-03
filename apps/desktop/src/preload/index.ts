@@ -1,18 +1,18 @@
 import type { CoreMessage } from '@commander/domain';
+// The ipc subpath keeps zod (and the schemas) out of the sandboxed preload bundle.
+import { type Diagnostics, ipc } from '@commander/domain/ipc';
 import { contextBridge, ipcRenderer } from 'electron';
-
-export type Diagnostics = { displayServer: string; passwordStore: string; electron: string };
 
 // The only bridge between the renderer and the app.
 const commander = {
   onCoreMessage(listener: (message: CoreMessage) => void) {
     const handler = (_event: unknown, message: CoreMessage) => listener(message);
-    ipcRenderer.on('core-message', handler);
+    ipcRenderer.on(ipc.coreMessage, handler);
     return () => {
-      ipcRenderer.off('core-message', handler);
+      ipcRenderer.off(ipc.coreMessage, handler);
     };
   },
-  diagnostics: (): Promise<Diagnostics> => ipcRenderer.invoke('diagnostics'),
+  diagnostics: (): Promise<Diagnostics> => ipcRenderer.invoke(ipc.diagnostics),
 };
 
 export type CommanderBridge = typeof commander;

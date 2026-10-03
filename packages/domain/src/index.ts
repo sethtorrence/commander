@@ -1,1 +1,2 @@
-export * from './channel';
+export * from './core-messages';
+export * from './ipc';

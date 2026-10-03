@@ -17,4 +17,4 @@ pnpm lint             # Biome lint + format check
 pnpm typecheck        # TypeScript across the workspace
 ```
 
-Layout: `apps/desktop` (Electron main, preload, React renderer), `apps/core` (Ares's background process, an Electron `utilityProcess`), and `packages/{domain,ui,sources,models}`. The window and the core talk only through validated messages (`packages/domain`).
+Layout: `apps/desktop` (Electron main, preload, React renderer), `apps/core` (the Core: syncs Sources, holds the Items and runs the Agent, as an Electron `utilityProcess`), and `packages/{domain,ui,sources,models}`. The window and the core talk only through validated messages (`packages/domain`).

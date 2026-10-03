@@ -2,7 +2,7 @@ import { _electron as electron, expect, test } from '@playwright/test';
 
 test('Commander launches and shows the core heartbeat climbing', async () => {
   const app = await electron.launch({
-    args: ['.', '--ozone-platform-hint=auto', '--password-store=gnome-libsecret'],
+    args: ['.'],
   });
   const window = await app.firstWindow();
 
@@ -19,11 +19,14 @@ test('Commander launches and shows the core heartbeat climbing', async () => {
 test('on a Wayland session Commander runs as a native Wayland client with the keyring store', async () => {
   test.skip(!process.env.WAYLAND_DISPLAY, 'needs a Wayland session');
   const app = await electron.launch({
-    args: ['.', '--ozone-platform-hint=auto', '--password-store=gnome-libsecret'],
+    args: ['.'],
   });
   const window = await app.firstWindow();
 
   await expect(window.getByTestId('display-server')).toHaveText('wayland');
+  if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {
+    await expect(window.getByTestId('display-source')).toHaveText('compositor');
+  }
   await expect(window.getByTestId('password-store')).toHaveText('gnome-libsecret');
 
   await app.close();

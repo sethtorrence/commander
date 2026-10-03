@@ -1,6 +1,9 @@
+import { execFile } from 'node:child_process';
 import { join } from 'node:path';
-import { parseCoreMessage } from '@commander/domain';
+import { promisify } from 'node:util';
+import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
 import { app, BrowserWindow, ipcMain, utilityProcess } from 'electron';
+import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { launchSwitches } from './launch-switches';
 import { windowWebPreferences } from './window-config';
 
@@ -8,14 +11,30 @@ for (const [name, value] of launchSwitches(process.platform)) app.commandLine.ap
 
 let window: BrowserWindow | null = null;
 
-function diagnostics() {
-  const hint = app.commandLine.getSwitchValue('ozone-platform-hint');
-  const platform = app.commandLine.getSwitchValue('ozone-platform');
-  const wayland =
-    platform === 'wayland' ||
-    (platform === '' && ['auto', 'wayland'].includes(hint) && !!process.env.WAYLAND_DISPLAY);
+async function readDisplayServer(): Promise<Pick<Diagnostics, 'displayServer' | 'displaySource'>> {
+  // The window may not be mapped yet when the renderer first asks, so give Hyprland a moment.
+  for (let attempt = 0; process.env.HYPRLAND_INSTANCE_SIGNATURE && attempt < 10; attempt++) {
+    try {
+      const { stdout } = await promisify(execFile)('hyprctl', ['clients', '-j']);
+      const server = displayServerFromHyprland(stdout, process.pid);
+      if (server) return { displayServer: server, displaySource: 'compositor' };
+    } catch {
+      break; // hyprctl missing or failed: fall back to guessing.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  const displayServer = inferDisplayServer({
+    platform: process.platform,
+    ozonePlatform: app.commandLine.getSwitchValue('ozone-platform'),
+    ozoneHint: app.commandLine.getSwitchValue('ozone-platform-hint'),
+    waylandDisplay: process.env.WAYLAND_DISPLAY,
+  });
+  return { displayServer, displaySource: 'inferred' };
+}
+
+async function diagnostics(): Promise<Diagnostics> {
   return {
-    displayServer: process.platform === 'linux' ? (wayland ? 'wayland' : 'x11') : process.platform,
+    ...(await readDisplayServer()),
     passwordStore: app.commandLine.getSwitchValue('password-store') || 'default',
     electron: process.versions.electron,
   };
@@ -29,13 +48,13 @@ function startCore() {
       console.warn('Rejected malformed message from core:', parsed.error);
       return;
     }
-    window?.webContents.send('core-message', parsed.message);
+    window?.webContents.send(ipc.coreMessage, parsed.message);
   });
   return core;
 }
 
 app.whenReady().then(() => {
-  ipcMain.handle('diagnostics', () => diagnostics());
+  ipcMain.handle(ipc.diagnostics, () => diagnostics());
   window = new BrowserWindow({
     width: 1200,
     height: 800,

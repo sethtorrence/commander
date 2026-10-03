@@ -1,5 +1,6 @@
+import type { Diagnostics } from '@commander/domain';
 import { useEffect, useState } from 'react';
-import type { CommanderBridge, Diagnostics } from '../preload';
+import type { CommanderBridge } from '../preload';
 
 declare global {
   interface Window {
@@ -10,10 +11,10 @@ declare global {
 // Placeholder shell until the Industrial design system and app frame land.
 export function App() {
   const [beats, setBeats] = useState<number | null>(null);
-  const [diag, setDiag] = useState<Diagnostics | null>(null);
+  const [diagnostics, setDiagnostics] = useState<Diagnostics | null>(null);
 
   useEffect(() => {
-    window.commander.diagnostics().then(setDiag);
+    window.commander.diagnostics().then(setDiagnostics);
     return window.commander.onCoreMessage((message) => {
       if (message.type === 'heartbeat') setBeats(message.beats);
     });
@@ -26,9 +27,10 @@ export function App() {
         Core heartbeat: <span data-testid="core-heartbeat">{beats ?? '…'}</span>
       </p>
       <p style={{ color: '#8f8d87', fontFamily: 'monospace' }}>
-        display <span data-testid="display-server">{diag?.displayServer ?? '…'}</span> · keyring{' '}
-        <span data-testid="password-store">{diag?.passwordStore ?? '…'}</span> · electron{' '}
-        {diag?.electron ?? '…'}
+        display <span data-testid="display-server">{diagnostics?.displayServer ?? '…'}</span> (
+        <span data-testid="display-source">{diagnostics?.displaySource ?? '…'}</span>) · keyring{' '}
+        <span data-testid="password-store">{diagnostics?.passwordStore ?? '…'}</span> · electron{' '}
+        {diagnostics?.electron ?? '…'}
       </p>
     </main>
   );

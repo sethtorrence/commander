@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseCoreMessage } from './channel';
+import { parseCoreMessage } from './core-messages';
 
 describe('parseCoreMessage', () => {
   it('accepts a heartbeat from the core', () => {
