@@ -68,6 +68,16 @@ export function useOpenSection(): (id: string) => void {
   return useMemo(() => (id: string) => controls?.openSection(id), [controls]);
 }
 
+// The header's slot across C–E (see Header's slotRef), for the open Section to portal its own strip into.
+const HeaderSlotContext = createContext<HTMLElement | null>(null);
+export const HeaderSlotProvider = HeaderSlotContext.Provider;
+
+/**
+ * The header's slot across C–E, where the open Section may put its own strip (render into it with
+ * createPortal, only while the Section is active). It replaces the date and band meter meanwhile.
+ */
+export const useHeaderSlot = () => useContext(HeaderSlotContext);
+
 /** Where the calling Section sits in the frame. */
 export function useSection(): SectionPlace & { partNumber: string } {
   const place = useContext(SectionContext);

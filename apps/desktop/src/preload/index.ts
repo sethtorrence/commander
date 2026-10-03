@@ -20,6 +20,13 @@ import {
 } from '@commander/domain/ipc';
 import { contextBridge, ipcRenderer } from 'electron';
 
+// What the window must save before Commander quits (see onSaveBeforeQuit).
+const savers = new Set<() => Promise<void>>();
+ipcRenderer.on(ipc.saveBeforeQuit, async (_event, id: number) => {
+  await Promise.allSettled([...savers].map((save) => save()));
+  ipcRenderer.send(ipc.savedBeforeQuit, id);
+});
+
 // The only bridge between the renderer and the app.
 const commander = {
   onCoreMessage(listener: (message: CoreMessage) => void) {
@@ -58,6 +65,14 @@ const commander = {
     ipcRenderer.on(ipc.accountsChanged, handler);
     return () => {
       ipcRenderer.off(ipc.accountsChanged, handler);
+    };
+  },
+  // Runs `save` when Commander quits, before the Core stops, so edits held back (typing saved after a
+  // pause) reach the Item store. Returns the function that stops it.
+  onSaveBeforeQuit(save: () => Promise<void>) {
+    savers.add(save);
+    return () => {
+      savers.delete(save);
     };
   },
   // Tells the app the first frame is on screen (in the saved theme), so the window can be shown.

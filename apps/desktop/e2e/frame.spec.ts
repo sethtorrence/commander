@@ -29,12 +29,14 @@ test('the notebook tabs switch Sections on click and on the number keys', async 
   await commander.close();
 });
 
-test('every Section shows an empty sheet with its title and part number', async () => {
+test('every Section shows a sheet with its title and part number', async () => {
   const commander = await launchCommander();
   const window = await commander.app.firstWindow();
   const year = new Date().getFullYear();
 
   for (const [index, label] of SECTIONS.entries()) {
+    // Notes shows a stream of Daily Note sheets instead (notes.spec.ts).
+    if (label === 'Notes') continue;
     await tab(window, label).click();
     const sheet = openSection(window);
     await expect(sheet.getByRole('heading', { level: 1 })).toHaveText(

@@ -12,6 +12,7 @@ export const itemKinds = [
   'chat',
   'channel-post',
   'todo',
+  'daily-note',
   'block',
 ] as const;
 export const itemKind = z.enum(itemKinds);
@@ -54,7 +55,29 @@ export const todoDetail = z.object({
   // The Item behind a backed Todo (a Linear issue, a review request); ticking writes through to it.
   backedBy: id.nullable(),
 });
-export const itemDetail = z.discriminatedUnion('kind', [todoDetail]);
+// A Daily Note: the single note for one calendar day (ADR 0002), keyed by that local date.
+export const dailyNoteDetail = z.object({
+  kind: z.literal('daily-note'),
+  day: z.iso.date(),
+});
+export type DailyNoteDetail = z.infer<typeof dailyNoteDetail>;
+
+// A Block: one line of a Daily Note. Blocks nest under one another; siblings sort by position, a
+// fractional index ("a0" < "a0V" < "a1") so a move or insert changes only the Block itself. The text
+// is the Block's own, and its Item's title follows it.
+export const blockDetail = z.object({
+  kind: z.literal('block'),
+  dailyNoteId: id,
+  // null for a Block at the top of its Daily Note.
+  parentId: id.nullable(),
+  position: z.string().min(1),
+  text: z.string(),
+  // Whether its children are hidden.
+  folded: z.boolean(),
+});
+export type BlockDetail = z.infer<typeof blockDetail>;
+
+export const itemDetail = z.discriminatedUnion('kind', [todoDetail, dailyNoteDetail, blockDetail]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 
 export const item = z.object({
@@ -138,6 +161,9 @@ export const causedBy = z.object({ itemId: id.optional(), entryId: z.number().in
 export type CausedBy = z.infer<typeof causedBy>;
 
 export const newItem = z.object({
+  // Items made in Commander may come with their id, chosen by the caller (e.g. a Block the window shows
+  // before the Core answers). The Core makes one up otherwise.
+  id: z.uuid().optional(),
   kind: itemKind,
   title: z.string(),
   people: people.default([]),
@@ -231,3 +257,31 @@ export const actionContext = z.object({
   causedBy: causedBy.optional(),
 });
 export type ActionContext = z.input<typeof actionContext>;
+
+// Daily Notes, newest first. `before` and `limit` page through: ask for the days before the oldest one
+// shown so far.
+export const dailyNoteQuery = z.object({
+  from: z.iso.date().optional(),
+  to: z.iso.date().optional(),
+  // Only Daily Notes with at least one Block that has text.
+  withContent: z.boolean().optional(),
+  // Only days before this one: the next page after the oldest day already shown.
+  before: z.iso.date().optional(),
+  limit: z.number().int().positive().max(1000).optional(),
+});
+export type DailyNoteQuery = z.input<typeof dailyNoteQuery>;
+
+export const dailyNoteSummary = z.object({
+  item,
+  day: z.iso.date(),
+  // How many Blocks it holds.
+  blocks: z.number().int().nonnegative(),
+});
+export type DailyNoteSummary = z.infer<typeof dailyNoteSummary>;
+
+// One page of Daily Notes, and how many match the query without its limit (so whether there are more).
+export const dailyNotePage = z.object({
+  notes: z.array(dailyNoteSummary),
+  total: z.number().int().nonnegative(),
+});
+export type DailyNotePage = z.infer<typeof dailyNotePage>;

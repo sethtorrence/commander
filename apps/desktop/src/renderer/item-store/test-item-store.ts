@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ItemStore, openItemStore } from '@commander/core/src/item-store';
 import { answerItemStoreRequest } from '@commander/core/src/item-store-requests';
-import type { ItemStoreClient } from './todos';
+import type { ItemStoreClient } from './client';
 
 // For tests only: a real Item store on a temporary database, and a client that reaches it through
 // the same request handling the Core uses for the window, so every action is recorded as the User's.
@@ -12,11 +12,11 @@ export function openTestItemStore(now?: () => number): {
   client: ItemStoreClient;
   close: () => void;
 } {
-  const dir = mkdtempSync(join(tmpdir(), 'commander-todos-'));
+  const dir = mkdtempSync(join(tmpdir(), 'commander-item-store-'));
   const store = openItemStore({
     path: join(dir, 'commander.db'),
     snapshotDir: join(dir, 'snapshots'),
-    migrationsFolder: join(import.meta.dirname, '../../../../../core/drizzle'),
+    migrationsFolder: join(import.meta.dirname, '../../../../core/drizzle'),
     now,
   });
   let id = 0;

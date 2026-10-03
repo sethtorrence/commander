@@ -1,7 +1,7 @@
 import type { ItemStore } from '@commander/core/src/item-store';
 import type { ItemChange, Project } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { openTestItemStore } from '../sections/todos/test-item-store';
+import { openTestItemStore } from '../item-store/test-item-store';
 import { describeFiling, type ProjectsClient, projectsIn } from './projects';
 
 // The renderer's Projects client against a real Item store on a temporary database.

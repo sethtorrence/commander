@@ -57,6 +57,32 @@ export const todoDetails = sqliteTable('todo_details', {
   backedBy: text('backed_by').references(() => items.id),
 });
 
+// Kind-specific detail for Daily Notes: one per calendar day (YYYY-MM-DD, local).
+export const dailyNoteDetails = sqliteTable('daily_note_details', {
+  itemId: text('item_id')
+    .primaryKey()
+    .references(() => items.id),
+  day: text('day').notNull().unique(),
+});
+
+// Kind-specific detail for Blocks: where each sits in its Daily Note's outline, and its text.
+export const blockDetails = sqliteTable(
+  'block_details',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => items.id),
+    dailyNoteId: text('daily_note_id')
+      .notNull()
+      .references(() => items.id),
+    parentId: text('parent_id').references(() => items.id),
+    position: text('position').notNull(),
+    text: text('text').notNull(),
+    folded: integer('folded', { mode: 'boolean' }).notNull(),
+  },
+  (t) => [index('block_details_daily_note').on(t.dailyNoteId)],
+);
+
 export const links = sqliteTable(
   'links',
   {

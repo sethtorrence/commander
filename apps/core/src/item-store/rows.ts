@@ -15,6 +15,8 @@ export type { ItemState } from '@commander/domain';
 
 export type ItemRow = typeof schema.items.$inferSelect;
 export type TodoDetailRow = typeof schema.todoDetails.$inferSelect;
+export type DailyNoteDetailRow = typeof schema.dailyNoteDetails.$inferSelect;
+export type BlockDetailRow = typeof schema.blockDetails.$inferSelect;
 export type ActivityRow = typeof schema.activity.$inferSelect;
 
 export function stateOf(item: Item): ItemState {
@@ -33,10 +35,28 @@ export function itemColumns(state: ItemState) {
   };
 }
 
-export function toItem(row: ItemRow, todo: TodoDetailRow | undefined): Item {
-  let detail: ItemDetail | null = null;
-  if (row.kind === 'todo' && todo)
-    detail = { kind: 'todo', origin: todo.origin, dueOn: todo.dueOn, backedBy: todo.backedBy };
+export const todoDetailOf = (todo: TodoDetailRow): ItemDetail => ({
+  kind: 'todo',
+  origin: todo.origin,
+  dueOn: todo.dueOn,
+  backedBy: todo.backedBy,
+});
+
+export const dailyNoteDetailOf = (note: DailyNoteDetailRow): ItemDetail => ({
+  kind: 'daily-note',
+  day: note.day,
+});
+
+export const blockDetailOf = (block: BlockDetailRow): ItemDetail => ({
+  kind: 'block',
+  dailyNoteId: block.dailyNoteId,
+  parentId: block.parentId,
+  position: block.position,
+  text: block.text,
+  folded: block.folded,
+});
+
+export function toItem(row: ItemRow, detail: ItemDetail | null): Item {
   return {
     id: row.id,
     kind: row.kind,

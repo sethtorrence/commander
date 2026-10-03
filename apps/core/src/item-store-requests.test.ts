@@ -79,6 +79,47 @@ describe('answering Item store requests from the window', () => {
     expect(ask(4, { op: 'drop-table' })).toMatchObject({ id: 4, response: { ok: false } });
   });
 
+  it('keeps Daily Notes and their Blocks, as the User', () => {
+    const note = ask(1, { op: 'daily-note', day: '2026-10-03' });
+    if (!note?.response.ok) throw new Error('No Daily Note');
+    const noteId = (note.response.result as { id: string }).id;
+    const blockId = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e01';
+
+    const recorded = ask(2, {
+      op: 'record-all',
+      actions: [
+        {
+          type: 'create',
+          item: {
+            id: blockId,
+            kind: 'block',
+            title: '',
+            detail: {
+              kind: 'block',
+              dailyNoteId: noteId,
+              parentId: null,
+              position: 'a0',
+              text: 'Hi',
+              folded: false,
+            },
+          },
+        },
+      ],
+      why: 'Typed in the Daily Note',
+    });
+
+    expect(recorded).toMatchObject({
+      response: { ok: true, result: [{ action: 'create', itemId: blockId, by: { kind: 'user' } }] },
+    });
+    expect(ask(3, { op: 'blocks', dailyNoteIds: [noteId] })).toMatchObject({
+      response: { ok: true, result: [{ id: blockId, title: 'Hi' }] },
+    });
+    expect(ask(4, { op: 'daily-notes', query: { withContent: true } })).toMatchObject({
+      response: { ok: true, result: { notes: [{ day: '2026-10-03', blocks: 1 }], total: 1 } },
+    });
+    expect(store.activity({ itemId: noteId })[0]?.by).toEqual({ kind: 'user' });
+  });
+
   it('ignores messages that are not Item store requests', () => {
     expect(answerItemStoreRequest(store, { type: 'heartbeat' })).toBeNull();
     expect(answerItemStoreRequest(store, 'hello')).toBeNull();

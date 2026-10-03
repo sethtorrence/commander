@@ -96,6 +96,41 @@ describe('stopCoreOnQuit', () => {
     vi.useRealTimers();
   });
 
+  it('lets the window save what it is holding before the Core stops', async () => {
+    const app = new FakeApp();
+    const core = new FakeCore();
+    let saved = () => {};
+    const beforeStop = vi.fn(() => new Promise<void>((resolve) => (saved = resolve)));
+    stopCoreOnQuit(app, core, { beforeStop });
+
+    app.quit();
+    app.quit();
+    expect(beforeStop).toHaveBeenCalledOnce();
+    expect(core.killed).toBe(false);
+
+    saved();
+    await vi.waitFor(() => expect(core.killed).toBe(true));
+    core.exit();
+    expect(app.quitCount).toBe(1);
+  });
+
+  it('stops the Core anyway when saving fails or takes too long', async () => {
+    vi.useFakeTimers();
+    const app = new FakeApp();
+    const core = new FakeCore();
+    stopCoreOnQuit(app, core, { beforeStop: () => new Promise(() => {}), beforeStopTimeoutMs: 2000 });
+    app.quit();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(core.killed).toBe(true);
+    vi.useRealTimers();
+
+    const failing = new FakeCore();
+    const other = new FakeApp();
+    stopCoreOnQuit(other, failing, { beforeStop: () => Promise.reject(new Error('Window gone')) });
+    other.quit();
+    await vi.waitFor(() => expect(failing.killed).toBe(true));
+  });
+
   it('asks the Core to stop only once, however many times quit is pressed', () => {
     const app = new FakeApp();
     const core = new FakeCore();

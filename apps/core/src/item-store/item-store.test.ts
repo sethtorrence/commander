@@ -380,7 +380,7 @@ describe('recording actions made in Commander', () => {
     const store = open();
     const todo = store.record({ type: 'create', item: { kind: 'todo', title: 'Old idea' } }, user).itemId;
     const note = store.record(
-      { type: 'create', item: { kind: 'block', title: 'See [[Old idea]]' } },
+      { type: 'create', item: { kind: 'todo', title: 'Follow up on [[Old idea]]' } },
       user,
     ).itemId;
     store.link({ from: note, linkType: 'refers-to', to: todo }, user);
