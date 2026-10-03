@@ -11,7 +11,9 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { isoWeek } from '../../frame/calendar';
+import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
+import { itemChangesFromCore } from '../../item-store/changes';
 import { useShortcuts } from '../../shortcuts/react';
 import { type SectionDefinition, useHeaderSlot, useSection } from '../section';
 import { DaySheet } from './DaySheet';
@@ -31,6 +33,36 @@ function scrollToDay(day: string, behavior: ScrollBehavior = 'smooth') {
   if (!element) return;
   const top = element.getBoundingClientRect().top + window.scrollY - bodyTop() - 22;
   window.scrollTo({ top: Math.max(0, top), behavior });
+}
+
+// A Block and the Blocks it sits under, nearest first.
+function withParents(state: NotebookSnapshot, blockId: string): string[] {
+  const outline = state.days.find((d) => d.outline.has(blockId))?.outline;
+  const ids = [blockId];
+  for (let parent = outline?.get(blockId)?.parentId; parent && outline?.has(parent); ) {
+    ids.push(parent);
+    parent = outline.get(parent)?.parentId;
+  }
+  return ids;
+}
+
+// Scrolls to a Block once it is on screen and flashes it. A Block folded away shows the nearest
+// Block it sits under instead.
+function highlightBlock(ids: string[], tries = 30) {
+  requestAnimationFrame(() => {
+    const target = ids
+      .map((id) => document.querySelector<HTMLElement>(`[data-notes-stream] [data-block="${id}"]`))
+      .find((element) => element !== null);
+    if (!target) {
+      if (tries > 0) highlightBlock(ids, tries - 1);
+      return;
+    }
+    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    target.classList.remove('flash');
+    void target.offsetWidth;
+    target.classList.add('flash');
+    target.addEventListener('animationend', () => target.classList.remove('flash'), { once: true });
+  });
 }
 
 // The day being read: the last sheet whose top has passed near the top of the window.
@@ -150,6 +182,22 @@ function NotesSection() {
   useEffect(() => {
     if (state.started) void notebook.setToday(today);
   }, [notebook, today, state.started]);
+  // Changes made while Notes is hidden (a Todo ticked or renamed in Todos) show when it comes back.
+  const shown = useRef(active);
+  shown.current = active;
+  useEffect(
+    () =>
+      itemChangesFromCore(() => {
+        if (!shown.current) void notebook.refresh();
+      }),
+    [notebook],
+  );
+  // A Block opened from elsewhere (a Todo's made-from Link): its day comes on screen, and it is
+  // scrolled to and highlighted.
+  useReveal('notes', async (blockId) => {
+    await notebook.start();
+    if (await notebook.reveal(blockId)) highlightBlock(withParents(notebook.snapshot(), blockId));
+  });
   // Typing held back for a pause is saved before Commander quits.
   useEffect(() => window.commander.onSaveBeforeQuit?.(() => notebook.flush()), [notebook]);
 

@@ -91,7 +91,7 @@ _Avoid_: Chat, conversation, thread
 ## Work and notes
 
 **Todo**:
-An item on your to-do lists: a Linear issue (labelled as Linear), a suggestion the Agent drew from your notes, calendar, or email, or one you added yourself.
+An item on your to-do lists: a Linear issue (labelled as Linear), a suggestion the Agent drew from your notes, calendar, or email, one you added yourself, or a Block you made into one in a Daily Note (`[]`).
 _Avoid_: Task, action item
 
 **Daily Note**:

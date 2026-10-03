@@ -1,0 +1,88 @@
+/*
+  Todo Blocks in the Daily Note: the checkbox in place of the bullet, ticked ones struck through, the
+  Todo tag after the text, and the highlight on a Block opened from elsewhere. Ported from the locked
+  prototype (prototype/daily-note-look, round-3/industrial.html: .check, .blk.done, .pill, .blk.flash).
+*/
+@layer components {
+  /* A Todo's checkbox takes its bullet's place. */
+  .n-blk.todo > .n-row > .n-bullet {
+    display: none;
+  }
+  .n-check {
+    flex: 0 0 24px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    background: none;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    color: var(--ink);
+  }
+  .n-check .n-box {
+    width: 14px;
+    height: 14px;
+    border: 1.5px solid var(--muted);
+    display: grid;
+    place-items: center;
+    color: var(--sheet);
+  }
+  .n-check .n-box svg {
+    opacity: 0;
+  }
+  .n-check:hover .n-box {
+    border-color: var(--ink);
+  }
+  .n-blk.done > .n-row .n-check .n-box {
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+  .n-blk.done > .n-row .n-check .n-box svg {
+    opacity: 1;
+  }
+  .n-blk.done > .n-row > .n-content {
+    color: var(--faint);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+  .n-pill {
+    flex: none;
+    margin: 5px 0 0 12px;
+    height: 20px;
+    padding: 0 7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    font: 500 9px / 1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+    user-select: none;
+    cursor: pointer;
+    background: var(--sheet);
+  }
+  .n-pill:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+  }
+  .n-blk.done > .n-row > .n-pill {
+    opacity: 0.55;
+  }
+  .n-blk.flash > .n-row {
+    animation: n-flash 1.8s steps(12, end);
+  }
+  @keyframes n-flash {
+    0%,
+    40% {
+      background: var(--signal-soft);
+      box-shadow: 0 0 0 4px var(--signal-soft);
+    }
+    100% {
+      background: transparent;
+      box-shadow: 0 0 0 4px transparent;
+    }
+  }
+}

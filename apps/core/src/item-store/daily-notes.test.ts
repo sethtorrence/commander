@@ -335,3 +335,63 @@ describe('recording several actions at once', () => {
     expect(store.activity()).toHaveLength(before);
   });
 });
+
+describe('Todos made from Blocks', () => {
+  // Makes a Todo from a Block, as `[]` does: the Todo, origin Daily Note, and its made-from Link.
+  function makeTodo(blockId: string, title: string): string {
+    const todoId = randomUUID();
+    store.recordAll(
+      [
+        {
+          type: 'create',
+          item: {
+            id: todoId,
+            kind: 'todo',
+            title,
+            detail: { kind: 'todo', origin: 'daily-note', dueOn: null, backedBy: null },
+          },
+        },
+        { type: 'link', from: todoId, linkType: 'made-from', to: blockId },
+      ],
+      user,
+    );
+    return todoId;
+  }
+
+  it('are found by their Daily Notes or by the Todos, with the Block and its day', () => {
+    const friday = store.ensureDailyNote('2026-10-02', user).id;
+    const saturday = store.ensureDailyNote('2026-10-03', user).id;
+    const call = addBlock(friday, { text: 'Call Dana' });
+    addBlock(friday, { text: 'Just a note', position: 'a1' });
+    const gift = addBlock(saturday, { text: 'Buy a gift' });
+    const callTodo = makeTodo(call, 'Call Dana');
+    const giftTodo = makeTodo(gift, 'Buy a gift');
+
+    const fromFriday = store.blockTodos({ dailyNoteIds: [friday] });
+    expect(fromFriday.map((found) => [found.todo.id, found.block.id, found.day])).toEqual([
+      [callTodo, call, '2026-10-02'],
+    ]);
+    expect(fromFriday[0]?.todo.detail).toMatchObject({ kind: 'todo', origin: 'daily-note' });
+    expect(detailOf(fromFriday[0]?.block).text).toBe('Call Dana');
+
+    const byTodo = store.blockTodos({ todoIds: [giftTodo, callTodo] });
+    expect(byTodo.map((found) => `${found.todo.id} ${found.day}`).sort()).toEqual(
+      [`${callTodo} 2026-10-02`, `${giftTodo} 2026-10-03`].sort(),
+    );
+  });
+
+  it('leave out deleted Todos and Todos of deleted Blocks', () => {
+    const note = store.ensureDailyNote('2026-10-03', user).id;
+    const kept = addBlock(note, { text: 'Kept' });
+    const gone = addBlock(note, { text: 'Gone', position: 'a1' });
+    const plain = addBlock(note, { text: 'Plain again', position: 'a2' });
+    const keptTodo = makeTodo(kept, 'Kept');
+    makeTodo(gone, 'Gone');
+    const plainTodo = makeTodo(plain, 'Plain again');
+    store.record({ type: 'delete', itemId: gone }, user);
+    store.record({ type: 'delete', itemId: plainTodo }, user);
+
+    expect(store.blockTodos({ dailyNoteIds: [note] }).map((found) => found.todo.id)).toEqual([keptTodo]);
+    expect(store.blockTodos({})).toHaveLength(0);
+  });
+});

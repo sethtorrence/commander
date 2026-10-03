@@ -3,6 +3,7 @@ import { CheckIcon, cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
 import { originLabel } from './origin';
 import { TodoBadge } from './project';
+import type { MadeFrom } from './todos';
 
 const pad = (n: number) => String(n).padStart(3, '0');
 
@@ -10,6 +11,7 @@ const pad = (n: number) => String(n).padStart(3, '0');
 export function TodoRow({
   todo,
   number,
+  madeFrom,
   selected,
   onSelect,
   onOpen,
@@ -17,6 +19,8 @@ export function TodoRow({
 }: {
   todo: Item;
   number: number;
+  /** For a Todo made from a Block: where, for its origin ("Daily Note · 3 Oct"). */
+  madeFrom?: MadeFrom;
   selected: boolean;
   /** Selects the row (clicking its tick box). */
   onSelect: () => void;
@@ -89,7 +93,7 @@ export function TodoRow({
         {todo.title}
       </span>
       <span className="mt-[5px] ml-3 inline-flex h-5 flex-none items-center border border-line bg-sheet px-[7px] font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted">
-        {originLabel(todo)}
+        {originLabel(todo, madeFrom)}
       </span>
     </li>
   );

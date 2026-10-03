@@ -1,6 +1,6 @@
 // Answers the window's Item store requests, relayed by the main process. Requests are validated
 // again here because the Core is the database's only writer, and every action is recorded as the User's.
-import { type CoreItemStoreReply, itemStoreRequest } from '@commander/domain';
+import { type ActivityEntry, type CoreItemStoreReply, itemStoreRequest } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from './item-store';
 
@@ -46,16 +46,43 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.dailyTemplate() };
       case 'save-daily-template':
         return { ok: true, result: store.saveDailyTemplate(request.template) };
+      case 'block-todos':
+        return { ok: true, result: store.blockTodos(request.query) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-// Returns the reply to send back, or null when the message is not an Item store request.
-export function answerItemStoreRequest(store: ItemStore, message: unknown): CoreItemStoreReply | null {
+// The Items a recorded change touched (each changed Item, and both ends of a Link), in order, once each.
+function changedItems(response: CoreItemStoreReply['response']): string[] {
+  if (!response.ok) return [];
+  const result = response.result;
+  const entries = (Array.isArray(result) ? result : [result]) as ActivityEntry[];
+  return [
+    ...new Set(
+      entries.flatMap((entry) => (entry.otherItemId ? [entry.itemId, entry.otherItemId] : [entry.itemId])),
+    ),
+  ];
+}
+
+/**
+ * Returns the reply to send back, or null when the message is not an Item store request. After a
+ * change is recorded, `onChanged` is told which Items it touched, so open views can catch up.
+ */
+export function answerItemStoreRequest(
+  store: ItemStore,
+  message: unknown,
+  onChanged?: (itemIds: string[]) => void,
+): CoreItemStoreReply | null {
   const parsed = envelope.safeParse(message);
   if (!parsed.success) return null;
   const { request } = message as { request?: unknown };
-  return { type: 'item-store-reply', id: parsed.data.id, response: answer(store, request) };
+  const response = answer(store, request);
+  const op = (request as { op?: unknown }).op;
+  if (onChanged && (op === 'record' || op === 'record-all')) {
+    const ids = changedItems(response);
+    if (ids.length) onChanged(ids);
+  }
+  return { type: 'item-store-reply', id: parsed.data.id, response };
 }

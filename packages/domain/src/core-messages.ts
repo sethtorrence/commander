@@ -11,7 +11,13 @@ const heartbeat = z.object({
 // Ares did or suggested something (through the gate): views of his activity reload.
 const aresActivity = z.object({ type: z.literal('ares-activity'), at: z.number().int().nonnegative() });
 
-export const coreMessage = z.discriminatedUnion('type', [heartbeat, aresActivity]);
+// Items were changed in the Item store (by the window, so far): open views showing them catch up.
+const itemsChanged = z.object({
+  type: z.literal('items-changed'),
+  itemIds: z.array(z.string().min(1)).min(1),
+});
+
+export const coreMessage = z.discriminatedUnion('type', [heartbeat, aresActivity, itemsChanged]);
 export type CoreMessage = z.infer<typeof coreMessage>;
 
 export type CoreMessageParseResult = { ok: true; message: CoreMessage } | { ok: false; error: string };

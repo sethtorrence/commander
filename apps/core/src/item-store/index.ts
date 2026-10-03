@@ -9,6 +9,9 @@ import {
   actionContext,
   activityQuery,
   type BlockDetail,
+  type BlockTodo,
+  type BlockTodoQuery,
+  blockTodoQuery,
   type CausedBy,
   type DailyNotePage,
   type DailyNoteQuery,
@@ -38,6 +41,7 @@ import Database from 'better-sqlite3';
 import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
@@ -114,6 +118,8 @@ export type ItemStore = {
   // it is not logged.
   dailyTemplate(): DailyTemplate;
   saveDailyTemplate(template: DailyTemplate): DailyTemplate;
+  // Live Todos made from live Blocks (a made-from Link to the Block), with the Block and its day.
+  blockTodos(query: BlockTodoQuery): BlockTodo[];
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7.
   takeDailySnapshot(): Snapshot | null;
   // The usage ledger and Settings → Ares, in the same database.
@@ -642,6 +648,35 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     };
   }
 
+  function blockTodos(input: BlockTodoQuery): BlockTodo[] {
+    const query = blockTodoQuery.parse(input);
+    if (!query.dailyNoteIds?.length && !query.todoIds?.length) return [];
+    const { items, links, blockDetails, dailyNoteDetails } = schema;
+    const blockItems = alias(items, 'block_items');
+    const rows = db
+      .select({ todo: items, block: blockItems, day: dailyNoteDetails.day })
+      .from(links)
+      .innerJoin(items, eq(items.id, links.fromItemId))
+      .innerJoin(blockItems, eq(blockItems.id, links.toItemId))
+      .innerJoin(blockDetails, eq(blockDetails.itemId, blockItems.id))
+      .innerJoin(dailyNoteDetails, eq(dailyNoteDetails.itemId, blockDetails.dailyNoteId))
+      .where(
+        and(
+          eq(links.type, 'made-from'),
+          eq(items.kind, 'todo'),
+          isNull(items.deletedAt),
+          isNull(blockItems.deletedAt),
+          query.dailyNoteIds?.length ? inArray(blockDetails.dailyNoteId, query.dailyNoteIds) : undefined,
+          query.todoIds?.length ? inArray(items.id, query.todoIds) : undefined,
+        ),
+      )
+      .orderBy(asc(dailyNoteDetails.day), asc(blockDetails.position), asc(items.createdAt))
+      .all();
+    const todos = withDetails(rows.map((row) => row.todo));
+    const blocksFound = withDetails(rows.map((row) => row.block));
+    return rows.map((row, i) => ({ todo: todos[i] as Item, block: blocksFound[i] as Item, day: row.day }));
+  }
+
   function blocks(dailyNoteIds: string[]): Item[] {
     if (!dailyNoteIds.length) return [];
     const { items, blockDetails } = schema;
@@ -784,6 +819,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     blocks,
     dailyTemplate: () => template.read(),
     saveDailyTemplate: (input) => template.save(input),
+    blockTodos,
 
     activity(input = {}) {
       const query = activityQuery.parse(input);

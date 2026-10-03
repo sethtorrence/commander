@@ -30,7 +30,10 @@ export function AddTodo({
         onKeyDown={async (event) => {
           if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
           event.preventDefault();
-          if (await add(title)) setTitle('');
+          // Cleared at once, so a title typed while this one saves is kept; it comes back if not added.
+          const typed = title;
+          setTitle('');
+          if (!(await add(typed))) setTitle((now) => now || typed);
         }}
         className="h-7.5 min-w-0 flex-1 border-0 bg-transparent font-sans text-row leading-[30px] text-ink caret-signal outline-none placeholder:text-faint"
       />

@@ -102,6 +102,20 @@ describe('editing the daily template', () => {
     expect(lines(reopened)).toEqual(expected);
   });
 
+  it('keeps [] as text: the template’s Blocks don’t become Todos', async () => {
+    const editor = openTemplate();
+    await editor.start();
+    const ideas = idOf(editor, 'Ideas');
+
+    expect(editor.type(TEMPLATE_DAY, ideas, '[] Ideas', 3)).toBeNull();
+    expect(editor.makeTodo(TEMPLATE_DAY, ideas)).toBeNull();
+    await editor.flush();
+
+    expect(templateLines()).toContain('[] Ideas');
+    expect(editor.snapshot().days[0]?.outline.get(ideas)?.todo).toBeUndefined();
+    expect(store.query()).toEqual([]);
+  });
+
   it('undoes and redoes edits, and saves each', async () => {
     const editor = openTemplate();
     await editor.start();

@@ -46,8 +46,15 @@ export function templateIn(itemStore: ItemStoreClient): DailyNotes {
   };
 
   return {
+    // The template's Blocks are copied into each new day; a Todo is one Item, so they don't become Todos.
+    todos: false,
+
     async ensure() {
       return TEMPLATE_NOTE;
+    },
+
+    async dayOfBlock() {
+      return null;
     },
 
     async list() {

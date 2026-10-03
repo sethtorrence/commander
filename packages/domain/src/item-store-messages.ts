@@ -4,6 +4,9 @@ import {
   type ActivityEntry,
   activityEntry,
   activityQuery,
+  type BlockTodo,
+  blockTodo,
+  blockTodoQuery,
   type DailyNotePage,
   dailyNotePage,
   dailyNoteQuery,
@@ -46,6 +49,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // Settings → Notes → Daily template. A setting, not an Item change, so not in the activity log.
   z.object({ op: z.literal('daily-template') }),
   z.object({ op: z.literal('save-daily-template'), template: dailyTemplate }),
+  // Todos made from Blocks, by their Daily Notes or by the Todos.
+  z.object({ op: z.literal('block-todos'), query: blockTodoQuery }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -63,6 +68,7 @@ export type ItemStoreResults = {
   blocks: Item[];
   'daily-template': DailyTemplate;
   'save-daily-template': DailyTemplate;
+  'block-todos': BlockTodo[];
 };
 
 export const itemStoreResult = {
@@ -78,6 +84,7 @@ export const itemStoreResult = {
   blocks: z.array(item),
   'daily-template': dailyTemplate,
   'save-daily-template': dailyTemplate,
+  'block-todos': z.array(blockTodo),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

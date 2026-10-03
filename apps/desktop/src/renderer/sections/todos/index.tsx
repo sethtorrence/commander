@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { itemChangesFromCore } from '../../item-store/changes';
 import type { SectionDefinition } from '../section';
 import { TodosSheet } from './TodosSheet';
 import { todosIn } from './todos';
@@ -8,7 +9,7 @@ import { todosIn } from './todos';
 // bridge.
 function TodosSection() {
   const todos = useMemo(() => todosIn(window.commander.itemStore), []);
-  return <TodosSheet todos={todos} />;
+  return <TodosSheet todos={todos} changes={itemChangesFromCore} />;
 }
 
 export const todos: SectionDefinition = {

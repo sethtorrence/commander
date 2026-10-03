@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { shortDate } from '../../../frame/calendar';
 import { originLabel } from '../origin';
 import { TodoProject } from '../project';
-import type { TodoLink } from '../todos';
+import type { MadeFrom, TodoLink } from '../todos';
 import { timeOfDay } from '../when';
 import { Eyebrow } from './parts';
 import { TitleField } from './TitleField';
@@ -17,6 +17,7 @@ import { TodoLinks } from './TodoLinks';
  */
 export function TodoDetail({
   todo,
+  madeFrom,
   links,
   history,
   onRename,
@@ -26,6 +27,8 @@ export function TodoDetail({
   onOpenLink,
 }: {
   todo: Item | null;
+  /** For a Todo made from a Block: where, for its origin. */
+  madeFrom?: MadeFrom;
   links: TodoLink[];
   history: ActivityEntry[];
   onRename: (title: string) => void;
@@ -63,7 +66,7 @@ export function TodoDetail({
             </p>
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact label="Status">{done ? 'Done' : 'Open'}</Fact>
-              <Fact label="Origin">{originLabel(todo)}</Fact>
+              <Fact label="Origin">{originLabel(todo, madeFrom)}</Fact>
               <Fact label="Project">
                 <TodoProject todo={todo} />
               </Fact>
