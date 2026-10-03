@@ -1,0 +1,318 @@
+import type { ActivityEntry, Item } from '@commander/domain';
+import type { AccountSummary } from '@commander/domain/ipc';
+import { toast } from '@commander/ui';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type AccountsById,
+  type FilterKey,
+  type FilterOptions,
+  filterOptions,
+  groupIssues,
+  type Issue,
+  type IssueFilters,
+  type IssueGroup,
+  type IssueView,
+  inFilters,
+  inView,
+  isMine,
+  isOpen,
+  NO_FILTERS,
+  toIssues,
+} from './issues';
+import type { IssueLink, LinearAccountsClient, LinearIssues } from './linear-issues';
+
+export const VIEW_STORAGE_KEY = 'commander.linear.view';
+
+function loadView(storage: Storage): IssueView {
+  try {
+    return storage.getItem(VIEW_STORAGE_KEY) === 'all' ? 'all' : 'mine';
+  } catch {
+    return 'mine';
+  }
+}
+
+export interface LinearState {
+  /** The Linear Accounts, each with who signed in and how it is syncing. */
+  accounts: AccountSummary[];
+  accountsById: AccountsById;
+  /** Whether the issues have loaded once. */
+  loaded: boolean;
+  /** Assigned to me (the default) or All tickets. Remembered across restarts. */
+  view: IssueView;
+  setView(view: IssueView): void;
+  /** How many open issues each view would list under the filters, for the view switch. */
+  viewCounts: Record<IssueView, number>;
+  filters: IssueFilters;
+  setFilter(key: FilterKey, value: string | null): void;
+  clearFilters(): void;
+  /** Each Linear filter's choices, with counts. */
+  options: FilterOptions;
+  /** The open issues the Linear filters let through in this view, for the Project filter's counts. */
+  forProjectFilter: Issue[];
+  /** The listed issues, grouped: started, unstarted, backlog and triage, closed. */
+  groups: IssueGroup[];
+  /** How many issues are listed open (not closed). */
+  openCount: number;
+  /** Open issues assigned to the User, whatever the filters, for the notebook tab. */
+  assignedCount: number;
+  /** Whether the Closed group is expanded. It starts collapsed. */
+  closedShown: boolean;
+  showClosed(shown?: boolean): void;
+  /** The selected issue: always one that is shown. */
+  selected: Issue | null;
+  select(itemId: string): void;
+  moveSelection(step: 1 | -1): void;
+  detailOpen: boolean;
+  setDetailOpen(open: boolean): void;
+  /** The selected issue's activity log (newest first) and Links. */
+  history: ActivityEntry[];
+  links: IssueLink[];
+  /** Makes a change through another module (filing), so it reloads and can be undone here. */
+  apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
+  /** Undoes one change made here: the given entry, or the latest not yet undone. */
+  undo(entryId?: number): Promise<void>;
+  /** Reads the issues again. */
+  reload(): void;
+  /** Asks every connected Linear Account to sync now (the sync engine's refresh). */
+  refresh(): void;
+}
+
+// What changes when a sync finishes: each Account's last sync.
+const syncSignature = (accounts: readonly AccountSummary[]) =>
+  accounts.map((account) => `${account.id}:${account.sync?.lastSyncedAt ?? ''}`).join('|');
+
+/**
+ * The Linear Section's state: the issues and Accounts, the view, the filters (with the Project
+ * filter's `include`) and the selection. It reloads the issues whenever a sync finishes, after its
+ * own changes and on `reload`, and remembers its changes so they can be undone in turn.
+ */
+export function useLinear({
+  issues,
+  accounts: accountsClient,
+  include,
+  now,
+  storage = window.localStorage,
+}: {
+  issues: LinearIssues;
+  accounts: LinearAccountsClient;
+  include: (item: Pick<Item, 'filing'>) => boolean;
+  now: number;
+  storage?: Storage;
+}): LinearState {
+  const [items, setItems] = useState<Item[] | null>(null);
+  // null until the Accounts are first read.
+  const [knownAccounts, setAccounts] = useState<AccountSummary[] | null>(null);
+  const accounts = useMemo(() => knownAccounts ?? [], [knownAccounts]);
+  // A refresh asked for before the Accounts were read waits for them.
+  const [refreshWanted, setRefreshWanted] = useState(false);
+  const [view, setViewState] = useState<IssueView>(() => loadView(storage));
+  const [filters, setFilters] = useState<IssueFilters>(NO_FILTERS);
+  const [closedShown, setClosedShown] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [history, setHistory] = useState<ActivityEntry[]>([]);
+  const [links, setLinks] = useState<IssueLink[]>([]);
+  const [version, setVersion] = useState(0);
+  const undoable = useRef<number[]>([]);
+  const lastIndex = useRef(0);
+
+  const reload = useCallback(() => setVersion((v) => v + 1), []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload
+  useEffect(() => {
+    let current = true;
+    issues.list().then((next) => current && setItems(next), report);
+    return () => {
+      current = false;
+    };
+  }, [issues, version]);
+
+  // The Accounts, kept current; the issues are read again whenever a sync finishes.
+  const synced = useRef<string | null>(null);
+  useEffect(() => {
+    let current = true;
+    const take = (next: AccountSummary[]) => {
+      if (!current) return;
+      setAccounts(next);
+      const signature = syncSignature(next);
+      if (synced.current !== null && synced.current !== signature) reload();
+      synced.current = signature;
+    };
+    accountsClient.list().then(take, report);
+    const stop = accountsClient.onChange(take);
+    return () => {
+      current = false;
+      stop();
+    };
+  }, [accountsClient, reload]);
+
+  const accountsById = useMemo<AccountsById>(
+    () =>
+      new Map(
+        accounts.map((account) => [account.id, { id: account.id, name: account.name, user: account.user }]),
+      ),
+    [accounts],
+  );
+
+  const all = useMemo(() => toIssues(items ?? []), [items]);
+  const viewed = useMemo(
+    () => all.filter((issue) => inView(issue, view, accountsById)),
+    [all, view, accountsById],
+  );
+  const narrowed = useMemo(() => viewed.filter(include), [viewed, include]);
+  const listed = useMemo(
+    () => narrowed.filter((issue) => inFilters(issue, filters, now)),
+    [narrowed, filters, now],
+  );
+  const groups = useMemo(() => groupIssues(listed), [listed]);
+  const options = useMemo(
+    () => filterOptions(narrowed, filters, now, accountsById),
+    [narrowed, filters, now, accountsById],
+  );
+  const forProjectFilter = useMemo(
+    () => viewed.filter((issue) => isOpen(issue) && inFilters(issue, filters, now)),
+    [viewed, filters, now],
+  );
+  const viewCounts = useMemo(() => {
+    const counted = all.filter((issue) => isOpen(issue) && include(issue) && inFilters(issue, filters, now));
+    return { all: counted.length, mine: counted.filter((issue) => isMine(issue, accountsById)).length };
+  }, [all, include, filters, now, accountsById]);
+  const assignedCount = useMemo(
+    () => all.filter((issue) => isOpen(issue) && isMine(issue, accountsById)).length,
+    [all, accountsById],
+  );
+
+  const shown = useMemo(
+    () => groups.flatMap((group) => (group.id === 'closed' && !closedShown ? [] : group.issues)),
+    [groups, closedShown],
+  );
+  const selected =
+    shown.find((issue) => issue.id === selectedId) ??
+    shown[Math.min(lastIndex.current, shown.length - 1)] ??
+    null;
+  const selectedItemId = selected?.id ?? null;
+  useEffect(() => {
+    if (selected) lastIndex.current = shown.indexOf(selected);
+  }, [selected, shown]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload after a change
+  useEffect(() => {
+    if (!selectedItemId) {
+      setHistory([]);
+      setLinks([]);
+      return;
+    }
+    let current = true;
+    issues.history(selectedItemId).then((next) => current && setHistory(next), report);
+    issues.links(selectedItemId).then((next) => current && setLinks(next), report);
+    return () => {
+      current = false;
+    };
+  }, [issues, selectedItemId, version]);
+
+  const setView = useCallback(
+    (next: IssueView) => {
+      setViewState(next);
+      try {
+        storage.setItem(VIEW_STORAGE_KEY, next);
+      } catch {
+        // Storage unavailable: the view still applies for this session.
+      }
+    },
+    [storage],
+  );
+
+  const setFilter = useCallback(
+    (key: FilterKey, value: string | null) => setFilters((now) => ({ ...now, [key]: value })),
+    [],
+  );
+  const clearFilters = useCallback(() => setFilters(NO_FILTERS), []);
+
+  const moveSelection = useCallback(
+    (step: 1 | -1) => {
+      if (!shown.length) return;
+      const index = selected ? shown.indexOf(selected) : -1;
+      const next = shown[Math.min(shown.length - 1, Math.max(0, index + step))];
+      if (next) setSelectedId(next.id);
+    },
+    [shown, selected],
+  );
+
+  const showClosed = useCallback((value?: boolean) => setClosedShown((now) => value ?? !now), []);
+
+  const apply = useCallback(
+    async (change: () => Promise<ActivityEntry>) => {
+      try {
+        const entry = await change();
+        undoable.current.push(entry.id);
+        reload();
+        return entry;
+      } catch (error) {
+        report(error);
+        return null;
+      }
+    },
+    [reload],
+  );
+
+  const undo = useCallback(
+    async (entryId?: number) => {
+      const target = entryId ?? undoable.current.at(-1);
+      if (target === undefined) {
+        toast('Nothing to undo here');
+        return;
+      }
+      undoable.current = undoable.current.filter((id) => id !== target);
+      try {
+        await issues.undo(target);
+      } catch (error) {
+        report(error);
+      }
+      reload();
+    },
+    [issues, reload],
+  );
+
+  const refresh = useCallback(() => setRefreshWanted(true), []);
+  useEffect(() => {
+    if (!refreshWanted || knownAccounts === null) return;
+    setRefreshWanted(false);
+    for (const account of knownAccounts) {
+      if (account.status === 'connected') accountsClient.syncNow(account.id).catch(report);
+    }
+  }, [refreshWanted, knownAccounts, accountsClient]);
+
+  return {
+    accounts,
+    accountsById,
+    loaded: items !== null,
+    view,
+    setView,
+    viewCounts,
+    filters,
+    setFilter,
+    clearFilters,
+    options,
+    forProjectFilter,
+    groups,
+    openCount: listed.filter(isOpen).length,
+    assignedCount,
+    closedShown,
+    showClosed,
+    selected,
+    select: setSelectedId,
+    moveSelection,
+    detailOpen,
+    setDetailOpen,
+    history,
+    links,
+    apply,
+    undo,
+    reload,
+    refresh,
+  };
+}
+
+function report(error: unknown) {
+  toast(error instanceof Error ? error.message : String(error));
+}

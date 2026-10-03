@@ -1,12 +1,15 @@
-import { EmptySheet, type SectionDefinition, SectionSheet } from '../section';
+import { useMemo } from 'react';
+import type { SectionDefinition } from '../section';
+import { LinearSheet } from './LinearSheet';
+import { linearAccountsIn, linearIssuesIn } from './linear-issues';
 
-// The Linear Section: an empty sheet until its own ticket fills it in.
+// The Linear Section: every Linear issue in every connected workspace, opening on those assigned to
+// the User, filtered, opened into a detail pane and filed into Projects. It reaches the app only
+// through linear-issues.ts, via the window's bridge.
 function LinearSection() {
-  return (
-    <SectionSheet span="full" subtitle="Linear issues assigned to you">
-      <EmptySheet>No Linear Account connected yet.</EmptySheet>
-    </SectionSheet>
-  );
+  const issues = useMemo(() => linearIssuesIn(window.commander.itemStore), []);
+  const accounts = useMemo(() => linearAccountsIn(window.commander), []);
+  return <LinearSheet issues={issues} accounts={accounts} />;
 }
 
 export const linear: SectionDefinition = {

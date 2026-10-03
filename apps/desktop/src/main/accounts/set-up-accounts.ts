@@ -47,6 +47,8 @@ export function setUpAccounts({
   });
   const syncAccounts = async () => sync.setAccounts(await linear.list());
   void syncAccounts();
+  // Accounts connected before Commander kept who signed in find out now.
+  void linear.identifyUsers();
   // Syncing pauses while the machine is asleep or offline.
   watchSystemState({
     powerMonitor,

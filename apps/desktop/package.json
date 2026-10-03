@@ -15,6 +15,7 @@
     "@commander/ui": "workspace:*",
     "better-sqlite3": "^13.0.3",
     "fractional-indexing": "^4.0.0",
+    "marked": "^18.0.14",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zod": "^4.6.5"

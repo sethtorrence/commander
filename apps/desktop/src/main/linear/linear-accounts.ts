@@ -3,7 +3,7 @@ import { type AccountRecord, type AccountStore, credentialKey } from '../account
 import type { Secrets } from '../secrets';
 import { RefreshError, refreshTokens, signInWithBrowser, type TokenSet } from './oauth';
 import { SignInError } from './sign-in-error';
-import { type LinearCredential, readWorkspace, type Workspace } from './workspace';
+import { type LinearCredential, readWorkspace, type SignIn, type Workspace } from './workspace';
 
 // Linear Accounts: connecting (OAuth in the browser, or a personal API key), reconnecting,
 // removing, and handing the Core a current access token. Runs in the main process only. Tokens
@@ -63,6 +63,9 @@ export type LinearAccounts = {
   remove(accountId: string): Promise<void>;
   // A current access token, refreshed first when it is near expiry. Rejects with AccessTokenError.
   accessToken(accountId: string): Promise<AccessToken>;
+  // Finds out who the User is in each Account that doesn't know yet (Accounts connected before
+  // Commander kept it). An Account Linear can't be asked about now is left to the next start.
+  identifyUsers(): Promise<void>;
   // Linear refused the Account's token during a sync (e.g. an API key revoked in Linear). An API key
   // Account is marked Reconnect; an OAuth one is refreshed, and marked Reconnect if that fails for good.
   reportRefused(accountId: string): Promise<void>;
@@ -84,8 +87,8 @@ export type LinearAccountsOptions = {
 
 const accountId = (workspace: Workspace) => `linear:${workspace.id}`;
 
-function summary({ id, source, name, urlKey, method, status }: AccountRecord): AccountSummary {
-  return { id, source, name, urlKey, method, status };
+function summary({ id, source, name, urlKey, method, status, user }: AccountRecord): AccountSummary {
+  return { id, source, name, urlKey, method, status, user: user ?? null };
 }
 
 export function createLinearAccounts({
@@ -130,7 +133,7 @@ export function createLinearAccounts({
 
   // Saves the credential (keyring first), then the Account, for a workspace Linear confirmed.
   async function connect(
-    workspace: Workspace,
+    { workspace, user }: SignIn,
     credential: StoredCredential,
     reconnect: string | undefined,
   ): Promise<AccountSummary> {
@@ -157,6 +160,7 @@ export function createLinearAccounts({
       method: credential.kind,
       status: 'connected',
       connectedAt: existing?.connectedAt ?? now(),
+      user,
     };
     await store.put(record);
     changed();
@@ -209,6 +213,19 @@ export function createLinearAccounts({
     return { token: tokens.accessToken, kind: 'oauth' };
   }
 
+  async function accessToken(id: string): Promise<AccessToken> {
+    const record = await store.get(id);
+    if (!record) throw new AccessTokenError('unknown-account', `No Linear Account ${id}`);
+    if (record.status === 'needs-reconnect') {
+      throw new AccessTokenError('needs-reconnect', `The ${record.name} Linear Account needs reconnecting`);
+    }
+    const running = refreshing.get(id);
+    if (running) return running;
+    const run = refresh(record).finally(() => refreshing.delete(id));
+    refreshing.set(id, run);
+    return run;
+  }
+
   return {
     oauthAvailable: Boolean(config.clientId),
 
@@ -248,8 +265,8 @@ export function createLinearAccounts({
         signInEnded = signingIn.catch(() => {});
         const tokens = await signingIn;
         const credential: LinearCredential = { kind: 'oauth', accessToken: tokens.accessToken };
-        const workspace = await readWorkspace({ apiUrl: config.apiUrl, credential });
-        return await connect(workspace, { kind: 'oauth', ...tokens }, reconnect);
+        const signedIn = await readWorkspace({ apiUrl: config.apiUrl, credential });
+        return await connect(signedIn, { kind: 'oauth', ...tokens }, reconnect);
       } finally {
         if (signIn === controller) signIn = null;
       }
@@ -259,11 +276,11 @@ export function createLinearAccounts({
       const apiKey = raw.trim();
       if (!apiKey) throw new SignInError('invalid-credential', 'Paste a Linear personal API key first.');
       requireKeyring();
-      const workspace = await readWorkspace({
+      const signedIn = await readWorkspace({
         apiUrl: config.apiUrl,
         credential: { kind: 'api-key', apiKey },
       });
-      return connect(workspace, { kind: 'api-key', apiKey }, reconnect);
+      return connect(signedIn, { kind: 'api-key', apiKey }, reconnect);
     },
 
     cancelSignIn() {
@@ -280,17 +297,31 @@ export function createLinearAccounts({
       changed();
     },
 
-    async accessToken(id) {
-      const record = await store.get(id);
-      if (!record) throw new AccessTokenError('unknown-account', `No Linear Account ${id}`);
-      if (record.status === 'needs-reconnect') {
-        throw new AccessTokenError('needs-reconnect', `The ${record.name} Linear Account needs reconnecting`);
+    accessToken,
+
+    async identifyUsers() {
+      const unknown = (await store.list()).filter(
+        (record) => record.source === 'linear' && !record.user && record.status === 'connected',
+      );
+      let found = false;
+      for (const record of unknown) {
+        try {
+          const token = await accessToken(record.id);
+          const credential: LinearCredential =
+            token.kind === 'oauth'
+              ? { kind: 'oauth', accessToken: token.token }
+              : { kind: 'api-key', apiKey: token.token };
+          const { workspace, user } = await readWorkspace({ apiUrl: config.apiUrl, credential });
+          if (accountId(workspace) !== record.id) continue;
+          const latest = await store.get(record.id);
+          if (!latest) continue;
+          await store.put({ ...latest, user });
+          found = true;
+        } catch (error) {
+          log(`Couldn't find out who signed in to Linear Account ${record.id} yet: ${String(error)}`);
+        }
       }
-      const running = refreshing.get(id);
-      if (running) return running;
-      const run = refresh(record).finally(() => refreshing.delete(id));
-      refreshing.set(id, run);
-      return run;
+      if (found) changed();
     },
 
     async reportRefused(id) {
