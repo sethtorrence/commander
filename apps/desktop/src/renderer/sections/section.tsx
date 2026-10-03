@@ -1,5 +1,5 @@
 import { cn, SectionHeader, type SectionHeaderProps, Sheet } from '@commander/ui';
-import { type ComponentType, createContext, type ReactNode, useContext, useMemo } from 'react';
+import { type ComponentType, createContext, type ReactNode, useContext, useEffect, useMemo } from 'react';
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
 
@@ -9,7 +9,8 @@ import { useNow } from '../frame/use-now';
   number key. The frame keeps every Section mounted (hidden when another is open), wraps it in a
   shortcut scope named after its id, and passes nothing else: inside, `useSection()` says where it
   sits, `useShortcuts()` adds keys that work only while it is open, and <SectionSheet> draws its
-  sheet with the title strip and part number.
+  sheet with the title strip and part number. `useTabCount()` puts a count on its tab, and
+  `useOpenSection()` opens another Section (to show a linked Item).
 */
 export interface SectionDefinition {
   /** Stable id, also the shortcut scope: "todos". */
@@ -37,6 +38,34 @@ const SectionContext = createContext<SectionPlace | null>(null);
 
 export function SectionProvider({ place, children }: { place: SectionPlace; children: ReactNode }) {
   return <SectionContext.Provider value={place}>{children}</SectionContext.Provider>;
+}
+
+/** What a Section may ask of the frame. */
+export interface FrameControls {
+  openSection(id: string): void;
+  /** The count on a Section's notebook tab, or null for none. */
+  setTabCount(sectionId: string, count: number | null): void;
+}
+
+const FrameControlsContext = createContext<FrameControls | null>(null);
+
+export function FrameControlsProvider({ value, children }: { value: FrameControls; children: ReactNode }) {
+  return <FrameControlsContext.Provider value={value}>{children}</FrameControlsContext.Provider>;
+}
+
+/** Shows a count on the calling Section's notebook tab (null for none), e.g. its open Todos. */
+export function useTabCount(count: number | null): void {
+  const controls = useContext(FrameControlsContext);
+  const id = useContext(SectionContext)?.definition.id;
+  useEffect(() => {
+    if (controls && id) controls.setTabCount(id, count);
+  }, [controls, id, count]);
+}
+
+/** Opens a Section by its id. Does nothing outside the frame (as in a component test). */
+export function useOpenSection(): (id: string) => void {
+  const controls = useContext(FrameControlsContext);
+  return useMemo(() => (id: string) => controls?.openSection(id), [controls]);
 }
 
 /** Where the calling Section sits in the frame. */

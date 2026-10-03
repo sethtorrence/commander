@@ -1,7 +1,7 @@
 import { DrawingGrid, RulerX, RulerY } from '@commander/ui';
 import { useCallback, useMemo, useState } from 'react';
 import { SECTIONS, type SectionDefinition } from '../sections';
-import { SectionProvider } from '../sections/section';
+import { FrameControlsProvider, SectionProvider } from '../sections/section';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { ShortcutScope, useActiveScopes, useShortcuts } from '../shortcuts/react';
 import { isTypingTarget } from '../shortcuts/registry';
@@ -58,6 +58,15 @@ export function Frame() {
   }, []);
   const closeSettings = useCallback(() => openSection(lastSection), [openSection, lastSection]);
 
+  // The counts Sections put on their tabs (useTabCount).
+  const [counts, setCounts] = useState<Record<string, number | null>>({});
+  const setTabCount = useCallback(
+    (id: string, count: number | null) =>
+      setCounts((now) => (now[id] === count ? now : { ...now, [id]: count })),
+    [],
+  );
+  const controls = useMemo(() => ({ openSection, setTabCount }), [openSection, setTabCount]);
+
   useActiveScopes([open]);
   useShortcuts([
     ...SECTIONS.slice(0, 9).map((section, index) => ({
@@ -101,14 +110,17 @@ export function Frame() {
       <NotebookTabs
         sections={SECTIONS}
         open={open}
+        counts={counts}
         onOpen={openSection}
         onOpenSettings={openSettings}
         onCloseSettings={closeSettings}
       />
       <main className="relative z-1 ml-(--rul) pt-(--body)">
-        {SECTIONS.map((section, i) => (
-          <SectionView key={section.id} section={section} number={i + 1} open={open === section.id} />
-        ))}
+        <FrameControlsProvider value={controls}>
+          {SECTIONS.map((section, i) => (
+            <SectionView key={section.id} section={section} number={i + 1} open={open === section.id} />
+          ))}
+        </FrameControlsProvider>
         <section className="grid grid-cols-8" hidden={open !== SETTINGS} aria-label="Settings">
           <SettingsScreen />
         </section>
