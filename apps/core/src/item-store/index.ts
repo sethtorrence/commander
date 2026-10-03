@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { dirname, join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import {
   type ActionContext,
@@ -43,6 +44,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
+import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type ModelStore, openModelStore } from './models';
@@ -62,7 +64,7 @@ import {
   toItem,
 } from './rows';
 import * as schema from './schema';
-import { type Snapshot, takeDailySnapshot } from './snapshots';
+import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
 
 export type { NewProposal } from './autonomy';
@@ -74,6 +76,8 @@ export type ItemStoreOptions = {
   path: string;
   // Where daily snapshots of the database are kept.
   snapshotDir: string;
+  // Where pasted images are kept; `attachments/` next to the database unless given.
+  attachmentsDir?: string;
   // The drizzle-kit migrations folder.
   migrationsFolder: string;
   // The clock, in epoch milliseconds. Injectable for tests.
@@ -120,8 +124,11 @@ export type ItemStore = {
   saveDailyTemplate(template: DailyTemplate): DailyTemplate;
   // Live Todos made from live Blocks (a made-from Link to the Block), with the Block and its day.
   blockTodos(query: BlockTodoQuery): BlockTodo[];
-  // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7.
+  // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
+  // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
+  // Saves a pasted image into attachments/ and returns its file name (attachments.ts).
+  saveAttachment(bytes: Uint8Array): { name: string };
   // The usage ledger and Settings → Ares, in the same database.
   models: ModelStore;
   // Where each Account's sync stands, and its recent sync runs, in the same database.
@@ -221,6 +228,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       }
       return undone;
     },
+  });
+  const attachments = attachmentFolder({
+    dir: options.attachmentsDir ?? join(dirname(options.path), 'attachments'),
+    now,
+    invalid: (message) => new ItemStoreError('invalid', message),
   });
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
@@ -863,8 +875,18 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     takeDailySnapshot() {
-      return takeDailySnapshot(sqlite, options.snapshotDir, now());
+      const snapshot = takeDailySnapshot(sqlite, options.snapshotDir, now());
+      // Looking after the images must never cost the snapshot (or the Core) itself.
+      try {
+        if (snapshot)
+          attachments.afterSnapshot(sqlite, keptSnapshots(options.snapshotDir), options.snapshotDir);
+      } catch (error) {
+        console.warn('Could not snapshot or tidy the attachments:', error);
+      }
+      return snapshot;
     },
+
+    saveAttachment: (bytes) => attachments.save(bytes),
 
     close() {
       sqlite.close();

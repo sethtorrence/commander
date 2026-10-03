@@ -107,6 +107,7 @@ function Legend() {
       >
         move with its children
       </Key>
+      <Key keys={<Kbd>Ctrl B I E</Kbd>}>bold, italic, code</Key>
       <Key keys={<Kbd>Ctrl Z</Kbd>}>undo, add Shift to redo</Key>
     </div>
   );

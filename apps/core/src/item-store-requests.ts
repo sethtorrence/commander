@@ -48,6 +48,8 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.saveDailyTemplate(request.template) };
       case 'block-todos':
         return { ok: true, result: store.blockTodos(request.query) };
+      case 'save-attachment':
+        return { ok: true, result: store.saveAttachment(request.bytes) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

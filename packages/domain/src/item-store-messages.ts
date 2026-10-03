@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { attachmentMaxBytes, attachmentNamePattern } from './attachments';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import {
   type ActivityEntry,
@@ -51,6 +52,13 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('save-daily-template'), template: dailyTemplate }),
   // Todos made from Blocks, by their Daily Notes or by the Todos.
   z.object({ op: z.literal('block-todos'), query: blockTodoQuery }),
+  // A pasted image's bytes, saved by the Core into attachments/ (it checks they are an image).
+  z.object({
+    op: z.literal('save-attachment'),
+    bytes: z
+      .custom<Uint8Array>((value) => value instanceof Uint8Array, 'Expected the image’s bytes')
+      .refine((bytes) => bytes.byteLength <= attachmentMaxBytes, 'Images can be up to 20 MB.'),
+  }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -69,6 +77,7 @@ export type ItemStoreResults = {
   'daily-template': DailyTemplate;
   'save-daily-template': DailyTemplate;
   'block-todos': BlockTodo[];
+  'save-attachment': { name: string };
 };
 
 export const itemStoreResult = {
@@ -85,6 +94,7 @@ export const itemStoreResult = {
   'daily-template': dailyTemplate,
   'save-daily-template': dailyTemplate,
   'block-todos': z.array(blockTodo),
+  'save-attachment': z.object({ name: z.string().regex(attachmentNamePattern) }),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

@@ -1,0 +1,169 @@
+/*
+  Block formatting (markdown.ts) and image Blocks (BlockImage.tsx), in the Industrial look of the locked
+  prototype (prototype/daily-note-look, round-3/industrial.html: .mk2, .wl, .blk[data-type=heading]).
+  Archivo for text and headings, IBM Plex Mono for code and labels.
+*/
+@layer components {
+  /* ================= Marks: faint while editing, hidden otherwise ================= */
+  .n-mk {
+    color: var(--faint);
+    font-weight: 400;
+    font-style: normal;
+  }
+  /* Inline blocks, so a link's underline stops at its marks. */
+  .n-link .n-mk {
+    display: inline-block;
+  }
+  .n-content:not(:focus) .n-mk {
+    display: none;
+  }
+
+  /* ================= Inline formatting ================= */
+  .n-content strong {
+    font-weight: 700;
+  }
+  .n-content em {
+    font-style: italic;
+  }
+  .n-content code {
+    font: 500 0.87em / 1 var(--mono);
+    letter-spacing: 0;
+    color: var(--ink);
+    padding: 1px 4px;
+    background: var(--raise);
+    border: 1px solid var(--line2);
+    border-radius: 0;
+  }
+
+  /* Links, as the prototype's note links (.wl). Clicked open while the Block isn't being edited. */
+  .n-link {
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--muted);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+  }
+  .n-content:not(:focus) .n-link {
+    cursor: pointer;
+  }
+  .n-content:not(:focus) .n-link:hover {
+    background: var(--raise);
+    text-decoration-color: var(--ink);
+  }
+  /* A link that won't open (not http(s) or mailto). */
+  .n-link.n-link-off {
+    text-decoration-style: dashed;
+  }
+
+  /* ================= Headings ================= */
+  /* `# ` is the prototype's section heading; `## ` and `### ` step down from it. */
+  .n-blk[data-heading] > .n-row > .n-content {
+    font-weight: 700;
+    font-stretch: 118%;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-size: 13.5px;
+    line-height: 28px;
+    color: var(--ink);
+  }
+  .n-blk[data-heading] > .n-row {
+    min-height: 32px;
+  }
+  .n-blk[data-heading] > .n-row > .n-bullet {
+    height: 32px;
+  }
+  .n-blk[data-heading] > .n-row > .n-bn {
+    line-height: 32px;
+    color: var(--muted);
+  }
+  /* Under :where so a folded or hovered parent's bullet still shows as such. */
+  .n-blk:where([data-heading]) > .n-row > .n-bullet i {
+    width: 7px;
+    height: 7px;
+    background: var(--ink);
+  }
+  .n-blk[data-heading="2"] > .n-row > .n-content {
+    font-size: 12.5px;
+    font-stretch: 112%;
+    letter-spacing: 0.08em;
+  }
+  .n-blk[data-heading="3"] > .n-row > .n-content {
+    font-size: 12px;
+    font-weight: 600;
+    font-stretch: 100%;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+  }
+  .n-blk:where([data-heading="2"], [data-heading="3"]) > .n-row > .n-bullet i {
+    width: 6px;
+    height: 6px;
+  }
+  /* A top-level `# ` heading opens a section: a rule above it, and room before it. */
+  .n-outline > .n-blk[data-heading="1"] > .n-row {
+    padding-top: 6px;
+  }
+  .n-outline > .n-blk[data-heading="1"] > .n-row > .n-bn {
+    top: 6px;
+  }
+  .n-outline > .n-blk[data-heading="1"] > .n-row::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -40px;
+    right: -28px;
+    height: 1px;
+    background: var(--line);
+  }
+  .n-outline > .n-blk[data-heading="1"]:first-child > .n-row::after {
+    display: none;
+  }
+  .n-outline > .n-blk[data-heading="1"]:not(:first-child) {
+    margin-top: 22px;
+  }
+  .n-outline > .n-blk[data-heading="1"] > .n-kids {
+    margin-top: 2px;
+  }
+
+  /* ================= Image Blocks ================= */
+  .n-image {
+    margin: 0;
+    padding: 5px 0 8px;
+    outline: none;
+    cursor: default;
+    white-space: normal;
+  }
+  .n-image img {
+    display: block;
+    max-width: 100%;
+    max-height: 420px;
+    border: 1px solid var(--line);
+    background: var(--raise);
+  }
+  .n-image:focus img {
+    border-color: var(--ink);
+  }
+  .n-img-cap {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
+    font: 500 9px / 1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+  }
+  .n-image:focus .n-img-cap {
+    color: var(--muted);
+  }
+  .n-img-missing {
+    padding: 16px 20px;
+    border: 1px dashed var(--line);
+    background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 7px);
+    font: 500 9.5px / 1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+}

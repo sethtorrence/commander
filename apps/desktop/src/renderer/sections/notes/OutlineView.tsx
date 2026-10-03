@@ -1,3 +1,4 @@
+import { imageAttachmentOf } from '@commander/domain';
 import { cn } from '@commander/ui';
 import {
   type ClipboardEvent,
@@ -11,8 +12,20 @@ import {
   useMemo,
   useRef,
 } from 'react';
+import { BlockImage } from './BlockImage';
 import { TodoCheck, TodoTag } from './BlockTodo';
+import {
+  formatShortcut,
+  imageFiles,
+  linkClicked,
+  openBlockLink,
+  pasteText,
+  readImages,
+  renderBlockText,
+  showEdit,
+} from './block-editor';
 import { caretX, onFirstLine, onLastLine, placeCaret, placeCaretAtX, selectionIn } from './caret';
+import { headingLevel, toggleMark } from './markdown';
 import type { Notebook } from './notebook';
 import { type Block, blockNumbers, type Caret, descendantCount, type Outline, treeOf } from './outline';
 
@@ -31,7 +44,7 @@ export interface OutlineControls {
 
 export const OutlineContext = createContext<OutlineControls | null>(null);
 
-function useControls(): OutlineControls {
+export function useControls(): OutlineControls {
   const controls = useContext(OutlineContext);
   if (!controls) throw new Error('A Daily Note outline needs its OutlineContext');
   return controls;
@@ -43,7 +56,7 @@ const editors = (element: HTMLElement) => [
   ...(element.closest('[data-notes-stream]') ?? document).querySelectorAll<HTMLElement>('[data-block-text]'),
 ];
 
-function neighbour(element: HTMLElement, step: 1 | -1): HTMLElement | undefined {
+export function neighbour(element: HTMLElement, step: 1 | -1): HTMLElement | undefined {
   const all = editors(element);
   return all[all.indexOf(element) + step];
 }
@@ -135,12 +148,22 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
   const ref = useRef<HTMLDivElement>(null);
   useNativeInputGuard(ref, controls);
 
-  // The text is the browser's while typing; it is set from the outline only when they differ (after
-  // an undo, a join or a split), never on every keystroke.
+  // The text is the browser's while typing (rendered again from it as it changes, markdown.ts); it is
+  // set from the outline only when they differ (after an undo, a join or a split).
   useLayoutEffect(() => {
     const element = ref.current;
-    if (element && element.textContent !== block.text) element.textContent = block.text;
+    if (element && element.textContent !== block.text) renderBlockText(element, block.text);
   }, [block.text]);
+
+  // A formatting shortcut or a pasted link: shown at once, and saved like typing.
+  const apply = (element: HTMLElement, edit: { text: string; start: number; end: number }) => {
+    showEdit(element, edit);
+    notebook.type(day, block.id, edit.text);
+  };
+  const attach = (files: File[]) =>
+    void readImages(files)
+      .then((images) => notebook.attach(day, block.id, images))
+      .then(focus);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing) return;
@@ -165,6 +188,12 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
       focus(notebook.move(day, id, event.key === 'ArrowUp' ? 'up' : 'down', start));
       return;
     }
+    const mark = formatShortcut(event);
+    if (mark) {
+      take();
+      apply(element, toggleMark(element.textContent ?? '', start, end, mark));
+      return;
+    }
     if (sharedKey(event, controls)) return;
     // Ctrl+Enter: a plain Block becomes a Todo; a Todo is ticked or unticked.
     if (event.key === 'Enter' && mod && !event.altKey && !event.shiftKey) {
@@ -184,15 +213,24 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
       focus(event.shiftKey ? notebook.outdent(day, id, start) : notebook.indent(day, id, start));
       return;
     }
+    // Text never joins onto an image Block, nor an image onto text: the caret goes to the image instead.
+    const imageNext = (step: 1 | -1) => {
+      const next = neighbour(element, step);
+      return next?.dataset.image !== undefined ? next : undefined;
+    };
     if (event.key === 'Backspace' && !mod && start === 0 && end === 0) {
       take();
-      focus(notebook.removeBackward(day, id));
+      const image = block.text ? imageNext(-1) : undefined;
+      if (image) image.focus();
+      else focus(notebook.removeBackward(day, id));
       return;
     }
     const length = (element.textContent ?? '').length;
     if (event.key === 'Delete' && !mod && start === length && end === length) {
       take();
-      focus(notebook.joinNext(day, id));
+      const image = imageNext(1);
+      if (image) image.focus();
+      else focus(notebook.joinNext(day, id));
     }
   };
 
@@ -212,12 +250,33 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
       data-block-id={block.id}
       onInput={(event) => {
         const element = event.currentTarget;
+        const text = element.textContent ?? '';
+        if (!(event.nativeEvent as InputEvent).isComposing) renderBlockText(element, text);
         // `[] ` typed at the start makes the Block a Todo: the mark goes, and the caret stays put.
-        focus(notebook.type(day, block.id, element.textContent ?? '', selectionIn(element)[0]));
+        focus(notebook.type(day, block.id, text, selectionIn(element)[0]));
       }}
+      onCompositionEnd={(event) =>
+        renderBlockText(event.currentTarget, event.currentTarget.textContent ?? '')
+      }
       onKeyDown={onKeyDown}
-      onPaste={pastePlain}
-      onDrop={(event) => event.preventDefault()}
+      onPaste={(event) => {
+        const images = imageFiles(event.clipboardData);
+        if (!images.length) return pasteText(event, (edit) => apply(event.currentTarget, edit));
+        event.preventDefault();
+        attach(images);
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        const images = imageFiles(event.dataTransfer);
+        if (images.length) attach(images);
+      }}
+      onMouseDown={(event) => {
+        if (linkClicked(event)) event.preventDefault();
+      }}
+      onClick={(event) => {
+        const href = linkClicked(event);
+        if (href) openBlockLink(href);
+      }}
       onBlur={() => void notebook.flush()}
     />
   );
@@ -248,6 +307,7 @@ function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps
     else focus({ id: block.id, offset: block.text.length });
   };
 
+  const image = imageAttachmentOf(block.text);
   return (
     <div
       className={cn(
@@ -258,6 +318,8 @@ function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps
         block.todo?.done && 'done',
       )}
       data-block={block.id}
+      data-heading={headingLevel(block.text) || undefined}
+      data-image={image ? '' : undefined}
     >
       <div className="n-row" style={{ '--d': depth } as CSSProperties}>
         <span className="n-bn" aria-hidden="true">
@@ -276,7 +338,7 @@ function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps
         >
           <i />
         </button>
-        <BlockText day={day} block={block} />
+        {image ? <BlockImage day={day} block={block} name={image} /> : <BlockText day={day} block={block} />}
         {folded && (
           <button
             type="button"
@@ -362,8 +424,22 @@ function FirstBlock({ day, placeholder }: { day: string; placeholder: string }) 
           }}
           onCompositionEnd={(event) => start(event.currentTarget)}
           onKeyDown={onKeyDown}
-          onPaste={pastePlain}
-          onDrop={(event) => event.preventDefault()}
+          onPaste={(event) => {
+            const images = imageFiles(event.clipboardData);
+            if (!images.length) return pastePlain(event);
+            event.preventDefault();
+            void readImages(images)
+              .then((bytes) => notebook.attach(day, null, bytes))
+              .then(focus);
+          }}
+          onDrop={(event) => {
+            event.preventDefault();
+            const images = imageFiles(event.dataTransfer);
+            if (images.length)
+              void readImages(images)
+                .then((bytes) => notebook.attach(day, null, bytes))
+                .then(focus);
+          }}
         />
       </div>
     </div>

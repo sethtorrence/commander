@@ -5,12 +5,14 @@ import {
   type Edit,
   enter,
   indent,
+  insertBelow,
   joinNext,
   move,
   type Outline,
   outdent,
   outlineOf,
   removeBackward,
+  removeBlock,
   setText,
   startOutline,
   toggleFold,
@@ -287,5 +289,53 @@ describe('typing', () => {
 
   it('records nothing when the text is the same', () => {
     expect(setText(parse('Same'), 'Same', 'Same')).toBeNull();
+  });
+});
+
+describe('putting a Block below another (a pasted image)', () => {
+  it('adds a Block holding the text just below, with the caret on it', () => {
+    const edit = apply(insertBelow(parse(lines('Above', 'Below')), 'Above', 'Image', 'new'));
+
+    expect(print(edit.outline)).toBe(lines('Above', 'Image', 'Below'));
+    expect(edit.changes).toMatchObject([{ type: 'create', block: { id: 'new', text: 'Image' } }]);
+    expect(edit.focus).toEqual({ id: 'new', offset: 5 });
+  });
+
+  it('puts it first under a Block with open children, as Enter would', () => {
+    const edit = apply(insertBelow(parse(lines('Parent', '  Child')), 'Parent', 'Image', 'new'));
+    expect(print(edit.outline)).toBe(lines('Parent', '  Image', '  Child'));
+  });
+
+  it('fills an empty Block instead', () => {
+    const edit = apply(insertBelow(parse(lines('Above', '#empty')), 'empty', 'Image', 'new'));
+
+    expect(print(edit.outline)).toBe(lines('Above', 'Image'));
+    expect(edit.changes).toMatchObject([{ type: 'update', block: { id: 'empty', text: 'Image' } }]);
+    expect(edit.focus).toEqual({ id: 'empty', offset: 5 });
+  });
+});
+
+describe('removing a Block outright (an image Block)', () => {
+  it('deletes it whatever its text, and puts the caret at the end of the Block above', () => {
+    const edit = apply(removeBlock(parse(lines('Above', 'Image', 'Below')), 'Image'));
+
+    expect(print(edit.outline)).toBe(lines('Above', 'Below'));
+    expect(edit.changes).toEqual([{ type: 'delete', id: 'Image' }]);
+    expect(edit.focus).toEqual({ id: 'Above', offset: 5 });
+  });
+
+  it('keeps its children, in its place', () => {
+    const edit = apply(removeBlock(parse(lines('Above', 'Image', '  Child', 'Below')), 'Image'));
+    expect(print(edit.outline)).toBe(lines('Above', 'Child', 'Below'));
+  });
+
+  it('puts the caret at the start of the Block below when it was first, or nowhere when it was alone', () => {
+    expect(apply(removeBlock(parse(lines('Image', 'Below')), 'Image')).focus).toEqual({
+      id: 'Below',
+      offset: 0,
+    });
+    const alone = apply(removeBlock(parse('Image'), 'Image'));
+    expect(print(alone.outline)).toBe('');
+    expect(alone.focus).toBeUndefined();
   });
 });

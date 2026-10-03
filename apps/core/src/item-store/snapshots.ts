@@ -35,3 +35,12 @@ export function takeDailySnapshot(sqlite: BetterSqlite3.Database, dir: string, a
   for (const old of removed) rmSync(old, { force: true });
   return { path, removed };
 }
+
+/** The snapshots kept in a folder, oldest first. */
+export function keptSnapshots(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => snapshotName.test(name))
+    .sort()
+    .map((name) => join(dir, name));
+}

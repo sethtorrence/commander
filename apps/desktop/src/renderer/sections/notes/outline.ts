@@ -269,20 +269,51 @@ export function removeBackward(outline: Outline, id: string): Edit | null {
   // Joining a Block that has children onto another would muddle the tree: just go up.
   if (block.text !== '' && children.length) return { outline, changes: [], focus: end };
 
-  const changes: BlockChange[] = [];
-  if (children.length) {
-    const { next } = siblingsAround(outline, block);
-    const positions = generateNKeysBetween(block.position, next?.position ?? null, children.length);
-    children.forEach((child, i) => {
-      changes.push({
-        type: 'update',
-        block: { ...child, parentId: parentIn(outline, block), position: positions[i] ?? child.position },
-      });
-    });
-  }
+  const changes = liftChildren(outline, block);
   if (block.text !== '') changes.push({ type: 'update', block: { ...above, text: above.text + block.text } });
   changes.push({ type: 'delete', id });
   return change(outline, changes, end);
+}
+
+// The children of a Block that is going, moved up into its place.
+function liftChildren(outline: Outline, block: Block): BlockChange[] {
+  const children = childrenOf(outline, block.id);
+  if (!children.length) return [];
+  const { next } = siblingsAround(outline, block);
+  const positions = generateNKeysBetween(block.position, next?.position ?? null, children.length);
+  return children.map((child, i) => ({
+    type: 'update',
+    block: { ...child, parentId: parentIn(outline, block), position: positions[i] ?? child.position },
+  }));
+}
+
+/**
+ * Removes a Block whatever its text (Backspace or Delete on an image Block). Its children take its
+ * place, and the caret goes to the end of the Block shown above, or the start of the one below.
+ */
+export function removeBlock(outline: Outline, id: string): Edit | null {
+  const block = outline.get(id);
+  if (!block) return null;
+  const above = shownAbove(outline, id);
+  const below = shownBelow(outline, id);
+  const focus = above ? { id: above.id, offset: above.text.length } : below && { id: below.id, offset: 0 };
+  return change(outline, [...liftChildren(outline, block), { type: 'delete', id }], focus);
+}
+
+/**
+ * Puts a new Block holding `text` just below a Block, where Enter at its end would (a pasted image),
+ * with the caret on it. An empty Block is filled instead.
+ */
+export function insertBelow(outline: Outline, id: string, text: string, newId: string): Edit | null {
+  const block = outline.get(id);
+  if (!block) return null;
+  if (block.text === '') {
+    return change(outline, [{ type: 'update', block: { ...block, text } }], { id, offset: text.length });
+  }
+  const split = enter(outline, id, block.text.length, block.text.length, newId);
+  const fresh = split?.outline.get(newId);
+  if (!fresh) return null;
+  return change(outline, [{ type: 'create', block: { ...fresh, text } }], { id: newId, offset: text.length });
 }
 
 /** Delete at the end of a Block: the Block shown below joins onto it, unless that one has children. */
