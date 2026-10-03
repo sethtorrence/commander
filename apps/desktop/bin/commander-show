@@ -1,0 +1,60 @@
+#!/bin/sh
+# commander-show: bring Commander forward from anywhere. Bind it to a key in Hyprland (see README).
+#
+# It sends SIGUSR1 to the running app, which shows its window, then focuses the window through
+# Hyprland's dispatcher, because Wayland doesn't let an app raise its own window. Plain POSIX sh
+# and shell builtins on the hot path: starting Node or a second Electron here is far too slow.
+#
+# Keep in step with apps/desktop/src/main/pid-file.ts (where the pid file lives and what it holds)
+# and apps/desktop/src/main/summon.ts (the window class and the dispatchers).
+
+not_running() {
+  echo "commander-show: Commander is not running" >&2
+  exit 1
+}
+
+if [ -n "$COMMANDER_PID_FILE" ]; then
+  pidfile=$COMMANDER_PID_FILE
+elif [ -n "$XDG_RUNTIME_DIR" ]; then
+  pidfile=$XDG_RUNTIME_DIR/commander.pid
+else
+  pidfile=${TMPDIR:-/tmp}/commander-$(id -u).pid
+fi
+
+# The pid file holds "<pid> <start time>". Check the start time (field 22 of /proc/<pid>/stat,
+# counted after the parenthesised command name) so a stale file never gets a process that has
+# since reused the pid killed: SIGUSR1 terminates a process that doesn't handle it.
+[ -r "$pidfile" ] || not_running
+read -r pid start < "$pidfile"
+case $pid in '' | *[!0-9]*) not_running ;; esac
+[ -r "/proc/$pid/stat" ] || not_running
+read -r stat < "/proc/$pid/stat"
+set -f
+# shellcheck disable=SC2086 # split the stat fields on purpose
+set -- ${stat##*) }
+shift 19
+[ "$1" = "$start" ] || not_running
+
+kill -USR1 "$pid" || not_running
+
+# Outside Hyprland the app's own show and focus are all there is.
+[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] || exit 0
+
+window='class:^(commander)$'
+case $(hyprctl -j status 2>/dev/null) in
+  *'"configProvider"'*'"lua"'*) set -- dispatch "hl.dsp.focus({ window = \"$window\" })" ;;
+  *) set -- dispatch focuswindow "$window" ;;
+esac
+
+# A window coming back from the tray takes a few milliseconds to map: retry until Hyprland finds it.
+tries=0
+while [ "$tries" -lt 50 ]; do
+  case $(hyprctl "$@" 2>&1) in
+    *'ot found'* | *'No such window'*) ;;
+    *) exit 0 ;;
+  esac
+  tries=$((tries + 1))
+  sleep 0.01
+done
+echo "commander-show: Hyprland could not find the Commander window" >&2
+exit 1

@@ -2,6 +2,7 @@ import type { Diagnostics } from '@commander/domain';
 import { useEffect, useState } from 'react';
 import type { CommanderBridge } from '../preload';
 import { SecurityPanel } from './SecurityPanel';
+import { StartAtLogin } from './StartAtLogin';
 
 declare global {
   interface Window {
@@ -34,6 +35,7 @@ export function App() {
         {diagnostics?.electron ?? '…'}
       </p>
       <SecurityPanel />
+      <StartAtLogin />
     </main>
   );
 }

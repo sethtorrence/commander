@@ -5,6 +5,8 @@ export const ipc = {
   secretStorageStatus: 'secret-storage-status',
   // Item store requests from the window; see item-store-messages.ts for the validated contract.
   itemStore: 'item-store',
+  startAtLogin: 'start-at-login',
+  setStartAtLogin: 'set-start-at-login',
 } as const;
 
 // How the window reaches the screen. 'xwayland' means a Wayland session fell back to X11.

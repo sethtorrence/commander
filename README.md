@@ -26,3 +26,35 @@ The Core's Item store is the only writer to Commander's database: one SQLite fil
 - **Schema changes:** edit `apps/core/src/item-store/schema.ts`, run `pnpm --filter @commander/core db:generate`, and commit the generated SQL in `apps/core/drizzle/`. The Core applies pending migrations when it starts.
 - **Native module:** better-sqlite3 ships Node-API prebuilt binaries (Linux, macOS and Windows on x64 and arm64), and Node-API binaries load in both Node (Vitest) and Electron (the Core), so there is no rebuild step. `pnpm-workspace.yaml` therefore declines its node-gyp fallback build; on any other platform, set `better-sqlite3: true` there and have a C++ toolchain installed.
 - **Throwaway data:** pass `--user-data-dir=<folder>` to Electron to run against other data. The end-to-end tests launch every app with a fresh temporary folder, so they never touch your real database.
+
+## Tray and summoning
+
+Commander is meant to stay running. Closing the window hides it to the tray and the Core keeps working. Click the tray icon or use its menu (**Open Commander**, **Quit Commander**) to get it back; **Quit** is the only way to stop it. On Hyprland the tray needs a StatusNotifierItem host in your bar, such as waybar's `tray` module or DankMaterialShell. Launching Commander again while it is running just brings the running window forward.
+
+### A key to summon Commander (Hyprland)
+
+Electron's global shortcuts don't reach Hyprland, so bind a key in Hyprland to the `commander-show` helper instead. It sends `SIGUSR1` to the running app (found through its pid file, `$XDG_RUNTIME_DIR/commander.pid`), then focuses the window with Hyprland's dispatcher. That brings Commander forward from any workspace, or back from the tray, in about 20–35 ms.
+
+Put the helper on your `PATH` once (or use its full path in the bind):
+
+```sh
+ln -s "$PWD/apps/desktop/bin/commander-show" ~/.local/bin/commander-show
+```
+
+Lua config (`~/.config/hypr/hyprland.lua`):
+
+```lua
+hl.bind("CTRL + SHIFT + space", hl.dsp.exec_cmd("commander-show"))
+```
+
+Text config (`~/.config/hypr/hyprland.conf`):
+
+```ini
+bind = CTRL SHIFT, space, exec, commander-show
+```
+
+The helper works out which kind of config you run (from `hyprctl -j status`) and uses the matching focus dispatcher: `hl.dsp.focus({ window = "class:^(commander)$" })` on Lua, `focuswindow class:^(commander)$` on text. Commander's window class (Wayland app_id) is `commander`, if you want window rules for it. `commander-show` exits with status 1 and says so if Commander isn't running.
+
+### Start at login
+
+Off by default. Turning it on writes an XDG autostart entry, `~/.config/autostart/commander.desktop`, which starts Commander hidden in the tray (`--hidden`); turning it off deletes the entry. Hyprland doesn't run XDG autostart entries by itself: they run if your session starts `xdg-desktop-autostart.target` (uwsm does) or runs something like `dex -a`. Otherwise start Commander from your config's start-up commands instead (`exec-once` in a text config).

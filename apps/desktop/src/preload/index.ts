@@ -21,6 +21,8 @@ const commander = {
     if (!response.ok) throw new Error(response.error);
     return response.result;
   },
+  startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
+  setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
 };
 
 export type CommanderBridge = typeof commander;
