@@ -1,0 +1,7 @@
+{
+  "name": "prototype-glm-eval",
+  "private": true,
+  "type": "module",
+  "description": "PROTOTYPE, throwaway: evaluates GLM-5.3-Flash on Ares's jobs for the Commander wayfinder map. Data lives in ~/.local/share/commander-eval, never in git.",
+  "dependencies": { "mailparser": "^3.7.0" }
+}
