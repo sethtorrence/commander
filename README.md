@@ -60,9 +60,18 @@ Restart `pnpm dev` after changing it.
 
 The end-to-end tests never contact Linear: they point sign-in at a fake Linear on this machine through `COMMANDER_TEST_LINEAR`, which only accepts loopback URLs.
 
+### Ares's model (Z.ai)
+
+Ares runs on GLM-5.3-Flash through Z.ai's OpenAI-compatible API, behind one model interface in `packages/models` (`complete({ tier, job, messages, schema?, stream? })`), so other providers can be added later without changing callers.
+
+- **API key:** create a pay-as-you-go key at z.ai, paste it into **Settings → Ares** and press **Test**. The key is kept only in the keyring (through `apps/desktop/src/main/secrets.ts`); the Core asks the main process for it when it makes a call and keeps it in memory only. It is never written to the database, logs or the window.
+- **Tiers:** Quick (thinking `low`) and Deep (thinking `high`), each with its own model, base URL and thinking level, plus per-job thinking overrides. Point a tier's base URL at any OpenAI-compatible server to use it instead.
+- **Usage and the cap:** every call is logged in `commander.db` with its job, tier, model, tokens, latency and cost (never the prompt or reply), and **Settings → Usage** totals it. With a monthly cap set, 80% records one warning for the month; at the cap, Deep-tier calls go to the fallback model if one is set and otherwise fail as over cap, while Quick-tier calls carry on.
+- **Tests never call Z.ai:** they run against a fake OpenAI-compatible server (`@commander/models/testing`).
+
 ## Moving around
 
-Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, security, diagnostics), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
+Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares and usage), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
 
 In Todos, type a Todo in the **New Todo** field (`n` jumps there) and press Enter. `j`/`k` move the selection, `x` ticks the selected Todo (or unticks it), and `Ctrl+Z` undoes your last change there. The side column shows the selected Todo's history from the activity log.
 

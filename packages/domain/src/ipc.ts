@@ -12,7 +12,17 @@ export const ipc = {
   // Settings → Accounts; see account-messages.ts for the validated contract.
   accounts: 'accounts',
   accountsChanged: 'accounts-changed',
+  // Settings → Ares: requests relayed to the Core (model-messages.ts), and the model API key, which
+  // goes to the main process only and is never read back.
+  models: 'models',
+  modelKeyStatus: 'model-key-status',
+  saveModelKey: 'save-model-key',
+  clearModelKey: 'clear-model-key',
 } as const;
+
+// Whether a model provider's API key is in the keyring. The key itself never reaches the window.
+export type ModelKeyStatus = { saved: boolean };
+export type SaveModelKeyResult = { ok: true } | { ok: false; error: string };
 
 // Accounts, as the window sees them: never a token or an API key.
 export type AccountMethod = 'oauth' | 'api-key';
