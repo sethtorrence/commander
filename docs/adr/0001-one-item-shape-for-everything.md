@@ -1,0 +1,3 @@
+# One Item shape for everything Commander tracks
+
+Emails, calendar events, Linear issues, GitHub PRs and review requests, Todos and Daily Note Blocks are all stored as **Items** sharing one core (kind, Source and Account, title, People, Project with how it was filed, timestamps, status), plus kind-specific detail. A Todo is its own Item that can be *backed by* another Item, and Items connect through typed **Links**. We chose this over a separate model per Source because the Dashboard's ranked feed, search, the Project filter, Links, the activity log and Ares all operate across every kind of Item. With separate models, each of those features would be rebuilt once per Source. The cost is a more abstract core table and per-kind detail joins.

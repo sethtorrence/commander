@@ -22,6 +22,14 @@ _Avoid_: Integration, provider, connector
 One signed-in identity on a Source; a Source may have several Accounts (e.g. 3–4 email Accounts).
 _Avoid_: Login, connection, profile
 
+**Item**:
+Anything Commander tracks, whether it comes from a Source (an email, event, Linear issue, PR) or is made in Commander (a Todo, a Block); every Item has a Project or is Unfiled.
+_Avoid_: Record, entity, object, thing
+
+**Link**:
+A typed connection between two Items (made from, refers to, finishes, about, caused by), visible from both ends.
+_Avoid_: Relation, reference, edge
+
 **Two-way sync**:
 Changes made in Commander are written back to the Source, and changes in the Source show up in Commander.
 _Avoid_: Import, mirror
