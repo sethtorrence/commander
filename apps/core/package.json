@@ -1,0 +1,15 @@
+{
+  "name": "@commander/core",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@commander/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^44.5.1"
+  }
+}

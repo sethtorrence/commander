@@ -92,8 +92,12 @@ _Avoid_: Line, paragraph, bullet, node
 
 ## Processing
 
+**Core**:
+The background process that keeps Commander running behind the window: it syncs Sources, holds the Items and runs the Agent.
+_Avoid_: Backend, server, daemon, engine
+
 **Agent**:
-The background process that continually works through incoming information from every Source, sorting it and pulling out what needs your attention.
+The part of the Core that continually works through incoming information from every Source, sorting it and pulling out what needs your attention.
 _Avoid_: Bot, assistant, worker
 
 **Ares**:
