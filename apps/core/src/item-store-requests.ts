@@ -50,6 +50,16 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.blockTodos(request.query) };
       case 'save-attachment':
         return { ok: true, result: store.saveAttachment(request.bytes) };
+      case 'rules':
+        return { ok: true, result: store.rules() };
+      case 'change-rule':
+        return { ok: true, result: store.changeRule(request.action) };
+      case 'preview-rule':
+        return { ok: true, result: store.previewRule(request.request) };
+      case 'refile':
+        return { ok: true, result: store.refile(request.itemIds) };
+      case 'undo-refile':
+        return { ok: true, result: store.undoRefile(request.entryIds) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

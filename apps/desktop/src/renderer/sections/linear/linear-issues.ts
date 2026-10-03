@@ -138,7 +138,8 @@ export function describeIssueEntry(
   history: readonly ActivityEntry[],
   projects: readonly Project[] = [],
 ): string {
-  const who = byWhom(entry.by);
+  // A Rule's entry says which Rule: "by Rule: team is ENG".
+  const who = entry.by.kind === 'rule' && entry.why ? `by ${entry.why}` : byWhom(entry.by);
   if (entry.action === 'create' && entry.by.kind === 'source')
     return `Added from ${SOURCE_NAMES[entry.by.source]}`;
   if (entry.action !== 'undo') return `${whatItDid(entry, projects)[0]} ${who}`;

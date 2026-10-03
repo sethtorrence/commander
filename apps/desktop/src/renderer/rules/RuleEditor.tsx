@@ -1,0 +1,529 @@
+import {
+  type Item,
+  type Project,
+  RULE_FIELDS,
+  RULE_SOURCES,
+  type Rule,
+  type RuleDraft,
+  type RulePreview,
+} from '@commander/domain';
+import {
+  Badge,
+  Button,
+  cn,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '@commander/ui';
+import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
+import { useProjects } from '../projects/context';
+import {
+  type ConditionDraft,
+  fieldChoices,
+  isGroupDraft,
+  newCondition,
+  newGroup,
+  type Placement,
+  placements,
+  type RulesClient,
+  ruleText,
+  type TermDraft,
+  type WhenDraft,
+  whenDraftOf,
+  whenOf,
+} from './rules';
+
+const selectClass =
+  'h-7.5 min-w-0 border border-line bg-sheet px-2 font-sans text-note text-ink outline-none focus-visible:border-ink';
+const labelClass =
+  'mb-1.5 block font-mono text-label leading-none font-semibold uppercase tracking-label text-muted';
+const OPERATOR_NAMES = { is: 'is', 'is-not': 'is not', contains: 'contains' } as const;
+const JOIN_NAMES = { and: 'all of', or: 'any of' } as const;
+
+/** The editor's state for a Rule being made (rule null) or edited. */
+export type Editing = { rule: Rule | null; projectId?: string };
+
+/**
+ * The Rule editor, in a dialog: which Project the Rule files into, and its conditions (AND or OR, with
+ * one level of grouping), with a live count and sample of the Items they match. Saving a Rule that
+ * matches Items another Rule matches too asks where it goes (above or below that Rule) first.
+ */
+export function RuleEditor({
+  editing,
+  rules,
+  client,
+  accountNames,
+  onClose,
+  onSave,
+}: {
+  editing: Editing | null;
+  rules: readonly Rule[];
+  client: RulesClient;
+  /** Workspace names by Account, for the workspace field's choices. */
+  accountNames?: ReadonlyMap<string, string>;
+  onClose: () => void;
+  /** Saves the Rule; `position` is where it goes, when the User placed it. Resolves with why it was refused, or null. */
+  onSave: (rule: RuleDraft, position: number | undefined) => Promise<string | null>;
+}) {
+  return (
+    <Dialog open={editing !== null} onOpenChange={(open) => !open && onClose()}>
+      {editing && (
+        <DialogContent aria-describedby={undefined} className="w-[min(760px,calc(100vw-48px))]">
+          <EditorBody
+            key={editing.rule?.id ?? 'new'}
+            editing={editing}
+            rules={rules}
+            client={client}
+            accountNames={accountNames}
+            onClose={onClose}
+            onSave={onSave}
+          />
+        </DialogContent>
+      )}
+    </Dialog>
+  );
+}
+
+function EditorBody({
+  editing,
+  rules,
+  client,
+  accountNames,
+  onClose,
+  onSave,
+}: {
+  editing: Editing;
+  rules: readonly Rule[];
+  client: RulesClient;
+  accountNames?: ReadonlyMap<string, string>;
+  onClose: () => void;
+  onSave: (rule: RuleDraft, position: number | undefined) => Promise<string | null>;
+}) {
+  const { projects, archived } = useProjects();
+  const everyProject = useMemo(() => [...projects, ...archived], [projects, archived]);
+  const { rule } = editing;
+  const [projectId, setProjectId] = useState(
+    rule?.target.projectId ?? editing.projectId ?? projects[0]?.id ?? '',
+  );
+  const [when, setWhen] = useState<WhenDraft>(() => whenDraftOf(rule?.when));
+  const [items, setItems] = useState<Item[]>([]);
+  const [preview, setPreview] = useState<RulePreview | null>(null);
+  const [placing, setPlacing] = useState<Placement[] | null>(null);
+  const [position, setPosition] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const ids = { project: useId(), join: useId(), error: useId(), place: useId() };
+
+  useEffect(() => {
+    let current = true;
+    client.items().then(
+      (found) => current && setItems(found),
+      () => {},
+    );
+    return () => {
+      current = false;
+    };
+  }, [client]);
+
+  const finished = whenOf(when);
+  const draft: RuleDraft | null =
+    finished && projectId ? { target: { kind: 'project', projectId }, when: finished } : null;
+  const draftKey = draft ? JSON.stringify(draft) : null;
+
+  // The live count and sample, a moment after the conditions stop changing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `draftKey` stands for the draft
+  useEffect(() => {
+    if (!draft) {
+      setPreview(null);
+      return;
+    }
+    let current = true;
+    const timer = setTimeout(() => {
+      client.preview(draft, rule?.id).then(
+        (found) => current && setPreview(found),
+        (reason: unknown) => current && setError(reason instanceof Error ? reason.message : String(reason)),
+      );
+    }, 120);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [client, draftKey, rule?.id]);
+
+  const save = async (at: number | undefined) => {
+    if (!draft) return;
+    setSaving(true);
+    const refused = await onSave(draft, at);
+    setSaving(false);
+    if (refused) setError(refused);
+  };
+
+  const submit = async () => {
+    if (!draft) return;
+    setError(null);
+    // Asked afresh, so the overlaps are those of the Rule exactly as saved.
+    const latest = await client.preview(draft, rule?.id).catch((reason: unknown) => {
+      setError(reason instanceof Error ? reason.message : String(reason));
+      return null;
+    });
+    if (!latest) return;
+    setPreview(latest);
+    if (latest.overlaps.length) {
+      setPlacing(placements(rules, latest.overlaps, everyProject, rule?.id));
+      setPosition(null);
+      return;
+    }
+    await save(undefined);
+  };
+
+  const target = everyProject.find((p) => p.id === projectId);
+
+  if (placing) {
+    return (
+      <>
+        <DialogHeader partNumber="RUL">
+          <DialogTitle>Where does this Rule go?</DialogTitle>
+        </DialogHeader>
+        <DialogBody className="flex flex-col gap-3.5">
+          <p className="m-0 text-row leading-[1.55] text-text">
+            <b className="text-ink">{draft && ruleText(draft, everyProject)}</b> matches Items that{' '}
+            {preview?.overlaps.length === 1 ? 'another Rule matches' : 'other Rules match'} too. The first
+            match from the top wins, so choose its place.
+          </p>
+          <div role="radiogroup" aria-labelledby={ids.place} className="flex flex-col gap-1.5">
+            <span id={ids.place} className={labelClass}>
+              Where the Rule goes
+            </span>
+            {placing.map((placement) => (
+              <label
+                key={placement.position}
+                className="flex cursor-pointer items-center gap-2 text-note leading-[19px] text-ink"
+              >
+                <input
+                  type="radio"
+                  name={ids.place}
+                  checked={position === placement.position}
+                  onChange={() => setPosition(placement.position)}
+                  className="m-0 accent-(--ink)"
+                />
+                {placement.label}
+              </label>
+            ))}
+          </div>
+          {error && <ErrorLine id={ids.error}>{error}</ErrorLine>}
+        </DialogBody>
+        <DialogFooter>
+          <Button onClick={() => setPlacing(null)}>Back</Button>
+          <Button
+            variant="primary"
+            disabled={position === null || saving}
+            onClick={() => position !== null && save(position)}
+          >
+            Save here
+          </Button>
+        </DialogFooter>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <DialogHeader partNumber="RUL">
+        <DialogTitle>{rule ? 'Edit Rule' : 'New Rule'}</DialogTitle>
+      </DialogHeader>
+      <DialogBody className="flex max-h-[min(70vh,640px)] flex-col gap-4 overflow-auto">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label htmlFor={ids.project} className={labelClass}>
+              Files into
+            </label>
+            <select
+              id={ids.project}
+              value={projectId}
+              onChange={(event) => setProjectId(event.target.value)}
+              className={cn(selectClass, 'w-56')}
+            >
+              {!target && <option value="">Choose a Project…</option>}
+              {(target?.archived ? [...projects, target] : projects).map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.code} · {option.name}
+                  {option.archived ? ' (archived)' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex h-7.5 items-center" aria-hidden="true">
+            {target ? <Badge code={target.code} accent={target.accent} /> : <Badge kind="unfiled" />}
+          </div>
+          <div>
+            <label htmlFor={ids.join} className={labelClass}>
+              When an Item matches
+            </label>
+            <select
+              id={ids.join}
+              value={when.join}
+              onChange={(event) => setWhen({ ...when, join: event.target.value as WhenDraft['join'] })}
+              className={selectClass}
+            >
+              <option value="and">all of these (AND)</option>
+              <option value="or">any of these (OR)</option>
+            </select>
+          </div>
+        </div>
+        <Terms when={when} onChange={setWhen} items={items} accountNames={accountNames} />
+        <MatchPreview preview={draft ? preview : null} projects={everyProject} />
+        {error && <ErrorLine id={ids.error}>{error}</ErrorLine>}
+      </DialogBody>
+      <DialogFooter>
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!draft || saving} onClick={submit}>
+          Save Rule
+        </Button>
+      </DialogFooter>
+    </>
+  );
+}
+
+function ErrorLine({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <p id={id} role="alert" className="m-0 text-note leading-[19px] font-semibold text-signal-ink">
+      {children}
+    </p>
+  );
+}
+
+function Terms({
+  when,
+  onChange,
+  items,
+  accountNames,
+}: {
+  when: WhenDraft;
+  onChange: (when: WhenDraft) => void;
+  items: readonly Item[];
+  accountNames?: ReadonlyMap<string, string>;
+}) {
+  const setTerm = (index: number, term: TermDraft | null) => {
+    const terms = when.terms.flatMap((each, i) => (i !== index ? [each] : term ? [term] : []));
+    onChange({ ...when, terms });
+  };
+  const joinWord = when.join === 'and' ? 'AND' : 'OR';
+  return (
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className={labelClass}>Conditions · {JOIN_NAMES[when.join]} these</legend>
+      <ol aria-label="Conditions" className="m-0 flex list-none flex-col gap-2 p-0">
+        {when.terms.map((term, index) => {
+          const no = String(index + 1);
+          return (
+            // biome-ignore lint/suspicious/noArrayIndexKey: conditions have no ids; their place is who they are
+            <li key={index} className="flex flex-col gap-2">
+              {index > 0 && (
+                <span className="font-mono text-label font-semibold tracking-label text-muted">
+                  {joinWord}
+                </span>
+              )}
+              {isGroupDraft(term) ? (
+                <fieldset
+                  aria-label={`Group ${no}`}
+                  className="m-0 flex min-w-0 flex-col gap-2 border border-line2 p-2.5"
+                >
+                  <div className="flex items-center gap-2">
+                    <select
+                      aria-label={`Group ${no} matches`}
+                      value={term.join}
+                      onChange={(event) =>
+                        setTerm(index, { ...term, join: event.target.value as WhenDraft['join'] })
+                      }
+                      className={selectClass}
+                    >
+                      <option value="or">any of these (OR)</option>
+                      <option value="and">all of these (AND)</option>
+                    </select>
+                    <span className="flex-1" />
+                    <Button size="sm" variant="ghost" onClick={() => setTerm(index, null)}>
+                      Remove group {no}
+                    </Button>
+                  </div>
+                  {term.conditions.map((condition, inner) => {
+                    const innerNo = `${no}.${inner + 1}`;
+                    const setInner = (next: ConditionDraft | null) => {
+                      const conditions = term.conditions.flatMap((each, i) =>
+                        i !== inner ? [each] : next ? [next] : [],
+                      );
+                      setTerm(index, conditions.length ? { ...term, conditions } : null);
+                    };
+                    return (
+                      <ConditionRow
+                        // biome-ignore lint/suspicious/noArrayIndexKey: as above
+                        key={inner}
+                        no={innerNo}
+                        condition={condition}
+                        onChange={setInner}
+                        items={items}
+                        accountNames={accountNames}
+                      />
+                    );
+                  })}
+                  <div>
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        setTerm(index, {
+                          ...term,
+                          conditions: [...term.conditions, newCondition('linear.label')],
+                        })
+                      }
+                    >
+                      Add condition to group {no}
+                    </Button>
+                  </div>
+                </fieldset>
+              ) : (
+                <ConditionRow
+                  no={no}
+                  condition={term}
+                  onChange={(next) => setTerm(index, next)}
+                  items={items}
+                  accountNames={accountNames}
+                />
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => onChange({ ...when, terms: [...when.terms, newCondition()] })}>
+          Add condition
+        </Button>
+        <Button size="sm" onClick={() => onChange({ ...when, terms: [...when.terms, newGroup()] })}>
+          Add group
+        </Button>
+      </div>
+    </fieldset>
+  );
+}
+
+function ConditionRow({
+  no,
+  condition,
+  onChange,
+  items,
+  accountNames,
+}: {
+  no: string;
+  condition: ConditionDraft;
+  onChange: (condition: ConditionDraft | null) => void;
+  items: readonly Item[];
+  accountNames?: ReadonlyMap<string, string>;
+}) {
+  const field = RULE_FIELDS.get(condition.field);
+  const choices = useMemo(
+    () => fieldChoices(items, condition.field, accountNames),
+    [items, condition.field, accountNames],
+  );
+  // A value no held Item has any more (from an older Rule) is still offered, as the Rule has it.
+  const offered =
+    condition.value && !choices.some((choice) => choice.value === condition.value)
+      ? [...choices, { value: condition.value, label: condition.label || condition.value }]
+      : choices;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        aria-label={`Field ${no}`}
+        value={condition.field}
+        onChange={(event) => onChange(newCondition(event.target.value))}
+        className={cn(selectClass, 'w-40')}
+      >
+        {RULE_SOURCES.map((source) => (
+          <optgroup key={source.source} label={source.name}>
+            {source.fields.map((each) => (
+              <option key={each.id} value={each.id}>
+                {each.label}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <select
+        aria-label={`Comparison ${no}`}
+        value={condition.op}
+        onChange={(event) => onChange({ ...condition, op: event.target.value as ConditionDraft['op'] })}
+        className={cn(selectClass, 'w-28')}
+      >
+        {(field?.ops ?? ['is']).map((op) => (
+          <option key={op} value={op}>
+            {OPERATOR_NAMES[op]}
+          </option>
+        ))}
+      </select>
+      {condition.op === 'contains' ? (
+        <Input
+          aria-label={`Value ${no}`}
+          value={condition.value}
+          placeholder="Some text"
+          autoComplete="off"
+          onChange={(event) =>
+            onChange({ ...condition, value: event.target.value, label: event.target.value })
+          }
+          className="w-56"
+        />
+      ) : (
+        <select
+          aria-label={`Value ${no}`}
+          value={condition.value}
+          onChange={(event) => {
+            const choice = offered.find((each) => each.value === event.target.value);
+            onChange({ ...condition, value: event.target.value, label: choice?.label ?? '' });
+          }}
+          className={cn(selectClass, 'w-56')}
+        >
+          <option value="">{offered.length ? 'Choose…' : 'No values yet'}</option>
+          {offered.map((choice) => (
+            <option key={choice.value} value={choice.value}>
+              {choice.label}
+            </option>
+          ))}
+        </select>
+      )}
+      <Button size="sm" variant="ghost" onClick={() => onChange(null)} aria-label={`Remove condition ${no}`}>
+        ×
+      </Button>
+    </div>
+  );
+}
+
+function MatchPreview({ preview, projects }: { preview: RulePreview | null; projects: readonly Project[] }) {
+  return (
+    <section aria-label="Matching Items" className="border border-line">
+      <h3 className="m-0 flex h-7 items-center justify-between border-b border-line2 px-2.5 font-mono text-label leading-none font-semibold uppercase tracking-label text-ink">
+        <span>
+          {preview
+            ? `Matches ${preview.count} Item${preview.count === 1 ? '' : 's'}`
+            : 'Finish the conditions to see what they match'}
+        </span>
+      </h3>
+      {preview && preview.sample.length > 0 && (
+        <ul className="m-0 list-none p-0">
+          {preview.sample.map((item) => (
+            <li
+              key={item.id}
+              className="truncate border-b border-line2 px-2.5 py-1.5 text-note leading-[18px] text-text last:border-b-0"
+            >
+              {item.title}
+            </li>
+          ))}
+        </ul>
+      )}
+      {preview && preview.overlaps.length > 0 && (
+        <p className="m-0 border-t border-line2 px-2.5 py-1.5 text-note leading-[18px] text-muted">
+          Also matched by {preview.overlaps.map((other) => ruleText(other, projects)).join('; ')}: you’ll
+          choose its place when you save.
+        </p>
+      )}
+    </section>
+  );
+}

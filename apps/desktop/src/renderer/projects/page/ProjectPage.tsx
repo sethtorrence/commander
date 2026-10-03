@@ -3,6 +3,7 @@ import { Badge, Kbd, SectionHeader, Sheet, SheetStripCell, toast } from '@comman
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNow } from '../../frame/use-now';
 import type { ItemStoreClient } from '../../item-store/client';
+import { MappingRules } from '../../rules/MappingRules';
 import { TodoGroup } from '../../sections/todos/TodoGroup';
 import { TodoList } from '../../sections/todos/TodoList';
 import { todosIn } from '../../sections/todos/todos';
@@ -34,8 +35,8 @@ export interface ProjectPageProps {
 /**
  * A Project's page, opened as a temporary tab: the sheet header with its Badge, per-Section counts,
  * the Project's open Todos (which behave as in the Todos Section: `j`/`k`, `x`, `b`), and in the side
- * column how its Items were filed and the controls to rename, recolour, archive and merge it. The
- * scoped feed, schedule and mapping Rules join it with the Dashboard, Calendar and Rules milestones.
+ * column how its Items were filed, its mapping Rules, and the controls to rename, recolour, archive
+ * and merge it. The scoped feed and schedule join it with the Dashboard and Calendar milestones.
  */
 export function ProjectPage({ projectId, active, itemStore, back, onOpenSection }: ProjectPageProps) {
   const { projectById, setFilter, openPage, loaded } = useProjects();
@@ -195,6 +196,7 @@ export function ProjectPage({ projectId, active, itemStore, back, onOpenSection 
       <aside className="relative col-span-2 min-w-0" aria-label={`${project.name}: filing and management`}>
         <div className="sticky top-(--body) mr-4 ml-3.5 flex max-h-[calc(100vh-var(--body))] flex-col gap-3.5 overflow-auto pt-3.5 pb-6 [scrollbar-width:none]">
           <FiledCard project={project} items={items.own} />
+          <MappingRules project={project} itemStore={itemStore} active={active} onChanged={refresh} />
           <ManageProject project={project} itemStore={itemStore} onChanged={refresh} />
         </div>
       </aside>

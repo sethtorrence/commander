@@ -84,6 +84,29 @@ describe('reading Linear issues', () => {
     expect(describeIssueEntry(after[0] as (typeof after)[0], after, [lt])).toBe('Filing undone by you');
   });
 
+  it('says which Rule filed an issue that arrived matching it', async () => {
+    const tl = store.changeProject({
+      type: 'create',
+      project: { name: 'Titanlink', code: 'TL', accent: 'teal' },
+    }).project as Project;
+    store.changeRule({
+      type: 'create',
+      rule: {
+        target: { kind: 'project', projectId: tl.id },
+        when: { join: 'and', terms: [{ field: 'linear.team', op: 'is', value: 'team-eng', label: 'ENG' }] },
+      },
+    });
+
+    save(issue({ identifier: 'ENG-1' }));
+    const [item] = await issues.list();
+    const history = await issues.history(item?.id ?? '');
+
+    expect(history.map((entry) => describeIssueEntry(entry, history, [tl]))).toEqual([
+      'Filed under TL by Rule: team is ENG',
+      'Added from Linear',
+    ]);
+  });
+
   it('words what Linear changed: closed, reopened, renamed, deleted', async () => {
     save(issue({ identifier: 'ENG-1', title: 'Old' }));
     save(issue({ identifier: 'ENG-1', title: 'Old', state: STATES.done }));
