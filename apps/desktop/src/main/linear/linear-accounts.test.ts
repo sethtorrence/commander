@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createAccountStore, credentialKey } from '../accounts/account-store';
 import { fakeSafeStorage } from '../fake-safe-storage';
 import { createSecrets, type Secrets } from '../secrets';
-import { ACME, type FakeLinear, type FakeWorkspace, startFakeLinear } from './fake-linear-server';
+import { ACME, type FakeLinear, type FakeWorkspace, startFakeLinear, viewerOf } from './fake-linear-server';
 import { createLinearAccounts, type LinearAccounts, type LinearConfig } from './linear-accounts';
 
 const GLOBEX: FakeWorkspace = { id: 'org-globex', name: 'Globex', urlKey: 'globex' };
@@ -85,6 +85,7 @@ describe('connecting with a personal API key', () => {
       urlKey: 'acme',
       method: 'api-key',
       status: 'connected',
+      user: { id: viewerOf(ACME).id, name: 'Sam Rivera' },
     };
     expect(account).toEqual(expected);
     expect(await accounts.list()).toEqual([expected]);
@@ -160,6 +161,41 @@ describe('connecting with a personal API key', () => {
   });
 });
 
+describe('knowing who the User is in each workspace', () => {
+  it('finds out for an Account connected before Commander kept it, and keeps it', async () => {
+    linear.addApiKey('lin_api_acme', ACME);
+    await start().connectWithApiKey('lin_api_acme');
+    // As the Accounts file was before Commander kept the signed-in user.
+    const file = join(dir, 'accounts.json');
+    const records = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>[];
+    await writeFile(file, JSON.stringify(records.map(({ user: _user, ...record }) => record)));
+    const accounts = start();
+    const changes = vi.fn();
+    accounts.onChange(changes);
+    expect(await accounts.list()).toMatchObject([{ user: null }]);
+
+    await accounts.identifyUsers();
+
+    expect(await accounts.list()).toMatchObject([{ user: { id: viewerOf(ACME).id, name: 'Sam Rivera' } }]);
+    expect(changes).toHaveBeenCalledTimes(1);
+    expect(await start().list()).toMatchObject([{ user: { id: viewerOf(ACME).id } }]);
+  });
+
+  it('leaves an Account it can’t ask about as it is, to try again later', async () => {
+    linear.addApiKey('lin_api_acme', ACME);
+    await start().connectWithApiKey('lin_api_acme');
+    const file = join(dir, 'accounts.json');
+    const records = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>[];
+    await writeFile(file, JSON.stringify(records.map(({ user: _user, ...record }) => record)));
+    linear.revokeApiKey('lin_api_acme');
+    const accounts = start();
+
+    await accounts.identifyUsers();
+
+    expect(await accounts.list()).toMatchObject([{ status: 'connected', user: null }]);
+  });
+});
+
 describe('connecting through the browser (OAuth)', () => {
   it('is not offered when the build has no client ID', async () => {
     const accounts = start({ config: { clientId: null } });
@@ -182,6 +218,7 @@ describe('connecting through the browser (OAuth)', () => {
       urlKey: 'acme',
       method: 'oauth',
       status: 'connected',
+      user: { id: viewerOf(ACME).id, name: 'Sam Rivera' },
     });
   });
 

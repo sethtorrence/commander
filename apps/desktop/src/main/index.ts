@@ -2,11 +2,12 @@ import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
-import { app, BrowserWindow, ipcMain, utilityProcess } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, utilityProcess } from 'electron';
 import { setUpAccounts } from './accounts/set-up-accounts';
 import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
+import { keepLinksInBrowser } from './external-links';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
 import { setUpModels } from './models';
@@ -96,6 +97,9 @@ app.whenReady().then(() => {
     webPreferences: windowWebPreferences(join(__dirname, '../preload/index.cjs')),
   });
   const created = window;
+  // Links in the window open in the system browser (read at call time, so the end-to-end tests can
+  // stand in for it).
+  keepLinksInBrowser(created.webContents, (url) => void shell.openExternal(url));
   revealWhenPainted({
     window: created,
     startsHidden: startsHidden(process.argv),

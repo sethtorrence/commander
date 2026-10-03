@@ -1,11 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { createFakeIssues, type FakeIssues } from './fake-linear-issues';
+import { createFakeIssues, type FakeIssues, type FakeUser } from './fake-linear-issues';
 
 // A stand-in for Linear's OAuth and GraphQL endpoints, for tests only (unit and end-to-end). It
 // behaves like Linear where Commander depends on it: PKCE with no client secret, refresh tokens
-// that rotate on every refresh, the `viewer { organization }` query, and the issue queries Linear
+// that rotate on every refresh, the `viewer { … organization }` query, and the issue queries Linear
 // sync sends (see fake-linear-issues.ts). Nothing here talks to the real Linear.
 
 export type FakeWorkspace = { id: string; name: string; urlKey: string };
@@ -56,6 +56,16 @@ export type FakeLinear = {
 };
 
 export const ACME: FakeWorkspace = { id: 'org-acme', name: 'Acme', urlKey: 'acme' };
+
+// Who signs in to a workspace (the `viewer`): the same person in every test, with an id per workspace.
+export function viewerOf(workspace: FakeWorkspace): FakeUser {
+  return {
+    id: `user-me-${workspace.id}`,
+    name: 'Sam Rivera',
+    displayName: 'sam',
+    email: `sam@${workspace.urlKey}.test`,
+  };
+}
 
 const token = (prefix: string) => `${prefix}_${randomBytes(18).toString('hex')}`;
 
@@ -216,9 +226,9 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
     }
     const answer = fake.issues.answer(workspace.id, sent.operationName ?? '', sent.variables ?? {});
     if (answer !== null) return json(response, 200, { data: answer }, { 'x-complexity': '42' });
-    if (!/viewer\s*{\s*organization\s*{/.test(query))
+    if (!/viewer\s*{[^{}]*organization\s*{/.test(query))
       return json(response, 400, { errors: [{ message: 'unknown' }] });
-    return json(response, 200, { data: { viewer: { organization: workspace } } });
+    return json(response, 200, { data: { viewer: { ...viewerOf(workspace), organization: workspace } } });
   }
 
   const server = createServer((request, response) => {

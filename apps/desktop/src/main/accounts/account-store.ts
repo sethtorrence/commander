@@ -16,6 +16,9 @@ export type AccountRecord = {
   method: AccountMethod;
   status: AccountStatus;
   connectedAt: number;
+  // Who the User is in the workspace (their Linear user). Missing from Accounts connected before
+  // Commander kept it, until it is found out (LinearAccounts.identifyUsers).
+  user?: { id: string; name: string };
 };
 
 export type AccountStore = {

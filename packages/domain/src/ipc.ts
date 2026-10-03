@@ -41,6 +41,8 @@ export type AccountSummary = {
   urlKey: string;
   method: AccountMethod;
   status: AccountStatus;
+  // Who the User is in the Account (their Linear user), for "assigned to me"; null until known.
+  user: { id: string; name: string } | null;
   // Where the Account's syncing stands; null until the Core first reports it.
   sync: AccountSyncStatus | null;
 };

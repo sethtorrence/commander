@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ACME, type FakeLinear, startFakeLinear } from './fake-linear-server';
+import { ACME, type FakeLinear, startFakeLinear, viewerOf } from './fake-linear-server';
 import { authorizationFor, readWorkspace } from './workspace';
 
 let linear: FakeLinear;
@@ -13,15 +13,18 @@ afterEach(async () => {
 });
 
 describe('reading which workspace a credential belongs to', () => {
-  it('names the workspace of a personal API key', async () => {
+  it('names the workspace of a personal API key, and whose key it is', async () => {
     linear.addApiKey('lin_api_good', ACME);
 
-    const workspace = await readWorkspace({
+    const signedIn = await readWorkspace({
       apiUrl: linear.apiUrl,
       credential: { kind: 'api-key', apiKey: 'lin_api_good' },
     });
 
-    expect(workspace).toEqual({ id: 'org-acme', name: 'Acme', urlKey: 'acme' });
+    expect(signedIn).toEqual({
+      workspace: { id: 'org-acme', name: 'Acme', urlKey: 'acme' },
+      user: { id: viewerOf(ACME).id, name: viewerOf(ACME).name },
+    });
   });
 
   it('refuses a key Linear does not accept', async () => {
