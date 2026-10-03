@@ -36,4 +36,17 @@ port.on('message', ({ data }) => {
   if (reply) port.postMessage(reply);
 });
 
-process.on('exit', () => itemStore.close());
+// Closing the last connection checkpoints the WAL into commander.db.
+let closed = false;
+const closeStore = () => {
+  if (closed) return;
+  closed = true;
+  itemStore.close();
+};
+process.on('exit', closeStore);
+// Quit stops the Core with SIGTERM (utilityProcess.kill()), which would otherwise end the
+// process without running 'exit' handlers.
+process.on('SIGTERM', () => {
+  closeStore();
+  process.exit(0);
+});

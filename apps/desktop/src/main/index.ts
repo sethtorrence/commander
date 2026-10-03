@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
 import { app, BrowserWindow, ipcMain, utilityProcess } from 'electron';
+import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
@@ -10,6 +11,7 @@ import { setUpSecretStorage } from './secret-storage';
 import { windowWebPreferences } from './window-config';
 
 for (const [name, value] of launchSwitches(process.platform)) app.commandLine.appendSwitch(name, value);
+const primary = claimSingleInstance();
 
 let window: BrowserWindow | null = null;
 
@@ -60,6 +62,7 @@ function startCore() {
 }
 
 app.whenReady().then(() => {
+  if (!primary) return;
   ipcMain.handle(ipc.diagnostics, () => diagnostics());
   setUpSecretStorage();
   window = new BrowserWindow({
@@ -67,11 +70,10 @@ app.whenReady().then(() => {
     height: 800,
     title: 'Commander',
     backgroundColor: '#141516',
+    show: !startsHidden(process.argv),
     webPreferences: windowWebPreferences(join(__dirname, '../preload/index.cjs')),
   });
   if (process.env.ELECTRON_RENDERER_URL) window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else window.loadFile(join(__dirname, '../renderer/index.html'));
-  startCore();
+  runInBackground(window, startCore());
 });
-
-app.on('window-all-closed', () => app.quit());
