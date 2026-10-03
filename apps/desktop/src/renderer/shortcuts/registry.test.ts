@@ -192,10 +192,24 @@ describe('the shortcut registry', () => {
     registry.setActiveScopes(['email']);
 
     expect(registry.list()).toEqual([
-      { keys: ['1'], label: 'Dashboard', group: 'Sections', scope: undefined, active: true },
-      { keys: ['?'], label: 'Keyboard shortcuts', group: 'General', scope: undefined, active: true },
-      { keys: ['X'], label: 'Tick a Todo', group: 'Todos', scope: 'todos', active: false },
-      { keys: ['Ctrl', 'K'], label: 'Palette', group: 'General', scope: undefined, active: true },
+      { keys: ['1'], sequence: false, label: 'Dashboard', group: 'Sections', scope: undefined, active: true },
+      {
+        keys: ['?'],
+        sequence: false,
+        label: 'Keyboard shortcuts',
+        group: 'General',
+        scope: undefined,
+        active: true,
+      },
+      { keys: ['X'], sequence: false, label: 'Tick a Todo', group: 'Todos', scope: 'todos', active: false },
+      {
+        keys: ['Ctrl', 'K'],
+        sequence: false,
+        label: 'Palette',
+        group: 'General',
+        scope: undefined,
+        active: true,
+      },
     ]);
   });
 
@@ -274,5 +288,114 @@ describe('the shortcut registry', () => {
     press(registry, '3');
 
     expect(run).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('key sequences ("p then 1")', () => {
+  function withSequence() {
+    const registry = createShortcutRegistry();
+    const filter = vi.fn();
+    const section = vi.fn();
+    registry.register({ keys: 'p 1', label: 'Filter: Longtail', group: 'Projects', run: filter });
+    registry.register({ keys: '1', label: 'Dashboard', group: 'Sections', run: section });
+    return { registry, filter, section };
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('runs when its keys are pressed in turn, and the second key does nothing else', () => {
+    const { registry, filter, section } = withSequence();
+
+    expect(press(registry, 'p').handled).toBe(true);
+    expect(filter).not.toHaveBeenCalled();
+    press(registry, '1');
+
+    expect(filter).toHaveBeenCalledOnce();
+    expect(section).not.toHaveBeenCalled();
+  });
+
+  it('says which first key is waiting for its second, and tells subscribers', () => {
+    const { registry } = withSequence();
+    const listener = vi.fn();
+    registry.subscribe(listener);
+    const list = registry.list();
+
+    press(registry, 'p');
+    expect(registry.pending()).toBe('p');
+    expect(listener).toHaveBeenCalled();
+    press(registry, '1');
+    expect(registry.pending()).toBeNull();
+    expect(registry.list()).toBe(list);
+  });
+
+  it('forgets the first key after a pause', () => {
+    vi.useFakeTimers();
+    const { registry, filter, section } = withSequence();
+
+    press(registry, 'p');
+    vi.advanceTimersByTime(2500);
+    expect(registry.pending()).toBeNull();
+    press(registry, '1');
+
+    expect(filter).not.toHaveBeenCalled();
+    expect(section).toHaveBeenCalledOnce();
+  });
+
+  it('is cancelled by a second key that finishes no sequence, which then does nothing', () => {
+    const { registry, filter, section } = withSequence();
+    const next = vi.fn();
+    registry.register({ keys: 'j', label: 'Next', group: 'Todos', run: next });
+
+    press(registry, 'p');
+    expect(press(registry, 'j').handled).toBe(true);
+    press(registry, '1');
+
+    expect([filter, next].map((run) => run.mock.calls.length)).toEqual([0, 0]);
+    expect(section).toHaveBeenCalledOnce();
+  });
+
+  it('never starts while typing in a field', () => {
+    const { registry, filter } = withSequence();
+    document.body.innerHTML = '<input type="text">';
+    (document.querySelector('input') as HTMLElement).focus();
+
+    expect(press(registry, 'p').handled).toBe(false);
+    expect(press(registry, '1').handled).toBe(false);
+    expect(filter).not.toHaveBeenCalled();
+  });
+
+  it('only starts when one of its sequences can run', () => {
+    const registry = createShortcutRegistry();
+    registry.register({ keys: 'p 1', label: 'Filter', group: 'Todos', scope: 'todos', run: vi.fn() });
+
+    expect(press(registry, 'p').handled).toBe(false);
+    expect(registry.pending()).toBeNull();
+  });
+
+  it('is listed for the cheat sheet with each key in turn', () => {
+    const { registry } = withSequence();
+
+    expect(registry.list()[0]).toEqual({
+      keys: ['P', '1'],
+      sequence: true,
+      label: 'Filter: Longtail',
+      group: 'Projects',
+      scope: undefined,
+      active: true,
+    });
+    expect(registry.list()[1]?.sequence).toBe(false);
+  });
+
+  it('refuses a single key that starts a sequence in the same scope, and the reverse', () => {
+    const { registry } = withSequence();
+
+    expect(() => registry.register({ keys: 'p', label: 'Print', group: 'General', run: vi.fn() })).toThrow(
+      /starts "p 1"/,
+    );
+    expect(() => registry.register({ keys: '1 2', label: 'Twelve', group: 'General', run: vi.fn() })).toThrow(
+      /already Dashboard/,
+    );
   });
 });

@@ -14,6 +14,7 @@ const KEYS: [ReactNode, string][] = [
   [<Kbd key="del">Del</Kbd>, 'Delete'],
   [<Kbd key="n">N</Kbd>, 'New'],
   [<Kbd key="z">Ctrl Z</Kbd>, 'Undo'],
+  [<Kbd key="b">B</Kbd>, 'Project'],
 ];
 
 /** The Section's main keys at a glance, beside its title. All of them are in the `?` cheat sheet. */

@@ -43,6 +43,17 @@ describe('adding a Todo', () => {
     expect(entry).toMatchObject({ action: 'create', by: { kind: 'user' } });
   });
 
+  it('files it into a Project when one is given', async () => {
+    const lt = store.changeProject({
+      type: 'create',
+      project: { name: 'Longtail', code: 'LT', accent: 'blue' },
+    });
+
+    const entry = await todos.add('Ship the beta', { projectId: lt.id, filedBy: 'user' });
+
+    expect(store.get(entry.itemId)?.item.filing).toEqual({ projectId: lt.id, filedBy: 'user' });
+  });
+
   it('trims the title and refuses an empty one', async () => {
     await todos.add('  Water the plants  ');
 
@@ -214,6 +225,20 @@ describe('describing an activity entry', () => {
 
     expect(describeEntry(undo, [undo, added])).toBe('Add undone by you');
     expect(describeEntry(undo, [undo])).toBe('Undone by you');
+  });
+
+  it('says which Project a Todo was filed under, by its code', () => {
+    const projects = [
+      { id: 'p-lt', name: 'Longtail', code: 'LT', accent: 'blue', order: 0, archived: false, createdAt: 0 },
+    ];
+    const filing = { projectId: 'p-lt', filedBy: 'user' } as const;
+    const filed = entry({ id: 1, changes: [{ field: 'filing', before: null, after: filing }] });
+    const unfiled = entry({ id: 2, changes: [{ field: 'filing', before: filing, after: null }] });
+    const undo = entry({ id: 3, action: 'undo', undoes: 1 });
+
+    expect(describeEntry(filed, [filed], projects)).toBe('Filed under LT by you');
+    expect(describeEntry(unfiled, [unfiled], projects)).toBe('Unfiled by you');
+    expect(describeEntry(undo, [undo, filed], projects)).toBe('Filing undone by you');
   });
 
   it('names a title change that was undone', () => {

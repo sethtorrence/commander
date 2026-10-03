@@ -38,3 +38,8 @@ export const PROJECT_ACCENTS: readonly ProjectAccent[] = ACCENT_NAMES.map(derive
 export function accentFor(name: string): ProjectAccent | undefined {
   return PROJECT_ACCENTS.find((accent) => accent.name === name);
 }
+
+/** The CSS colour for a Project accent: a palette accent's per-theme token, or a custom colour as is. */
+export function accentColour(accent: string): string {
+  return accentFor(accent) ? `var(--accent-${accent})` : accent;
+}

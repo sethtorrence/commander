@@ -27,6 +27,12 @@ export {
 export { CheckIcon, ChevronIcon, ThemeIcon } from './components/icons';
 export { Input, inputVariants } from './components/input';
 export { Kbd, Led } from './components/marks';
+export {
+  ProjectFilterBar,
+  type ProjectFilterBarProps,
+  type ProjectFilterProject,
+  type ProjectFilterValue,
+} from './components/project-filter-bar';
 export { SectionHeader, type SectionHeaderProps } from './components/section-header';
 export {
   Select,
@@ -54,6 +60,7 @@ export { cn } from './lib/cn';
 export {
   ACCENT_NAMES,
   type AccentName,
+  accentColour,
   accentFor,
   PROJECT_ACCENTS,
   type ProjectAccent,

@@ -20,6 +20,9 @@ import {
   itemQuery,
   type Link,
   type LinkType,
+  type Project,
+  type ProjectAction,
+  type ProjectQuery,
   type SaveResult,
   type Source,
   type SourceBatch,
@@ -30,6 +33,7 @@ import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { type ModelStore, openModelStore } from './models';
+import { projectsIn } from './projects';
 import {
   actorColumns,
   changesBetween,
@@ -69,6 +73,10 @@ export type ItemStore = {
   // Every change made in Commander goes through here, and each one records an activity entry.
   record(action: ItemAction, context: ActionContext): ActivityEntry;
   activity(query?: ActivityQuery): ActivityEntry[];
+  // Projects in their order; archived ones only when asked for.
+  projects(query?: ProjectQuery): Project[];
+  // Creates (later also renames, reorders, archives) a Project. Not an Item change, so not logged.
+  changeProject(action: ProjectAction): Project;
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7.
   takeDailySnapshot(): Snapshot | null;
   // The usage ledger and Settings → Ares, in the same database.
@@ -111,6 +119,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   sqlite.pragma('foreign_keys = ON');
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: options.migrationsFolder });
+  const projects = projectsIn(db, now, (message) => new ItemStoreError('invalid', message));
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
     const { items } = schema;
@@ -238,12 +247,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     switch (action.type) {
       case 'create': {
         const { kind, ...fields } = action.item;
+        projects.checkFiling(fields.filing);
         const state: ItemState = { ...fields, deletedAt: null };
         const id = insertItem({ kind, source: null, account: null, externalId: null }, state, at);
         return log({ ...entry, action: 'create', itemId: id, before: null, after: state }, at);
       }
       case 'update': {
         const item = requireItem(action.itemId);
+        projects.checkFiling(action.changes.filing);
         const before = stateOf(item);
         const after: ItemState = { ...before, ...action.changes };
         writeState(item, after, at);
@@ -463,6 +474,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         .all()
         .map(toEntry);
     },
+
+    projects: (query) => projects.list(query),
+
+    changeProject: (action) => projects.change(action),
 
     takeDailySnapshot() {
       return takeDailySnapshot(sqlite, options.snapshotDir, now());

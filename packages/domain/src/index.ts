@@ -5,3 +5,4 @@ export * from './item-store-messages';
 export * from './items';
 export * from './model-messages';
 export * from './models';
+export * from './projects';

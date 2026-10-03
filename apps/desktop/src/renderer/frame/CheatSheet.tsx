@@ -1,5 +1,5 @@
 import { cn, Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Kbd } from '@commander/ui';
-import { useRef } from 'react';
+import { Fragment, useRef } from 'react';
 import { useShortcutList } from '../shortcuts/react';
 import type { ListedShortcut } from '../shortcuts/registry';
 
@@ -62,9 +62,17 @@ export function CheatSheet({ open, onOpenChange }: { open: boolean; onOpenChange
                       !shortcut.active && 'opacity-60',
                     )}
                   >
-                    <dt className="flex gap-1">
-                      {shortcut.keys.map((key) => (
-                        <Kbd key={key}>{CAPS[key] ?? key}</Kbd>
+                    <dt className="flex items-center gap-1">
+                      {shortcut.keys.map((key, index) => (
+                        // biome-ignore lint/suspicious/noArrayIndexKey: a shortcut's caps never reorder, and may repeat ("g g")
+                        <Fragment key={`${index}:${key}`}>
+                          {shortcut.sequence && index > 0 && (
+                            <span className="font-mono text-label uppercase tracking-label text-faint">
+                              then
+                            </span>
+                          )}
+                          <Kbd>{CAPS[key] ?? key}</Kbd>
+                        </Fragment>
                       ))}
                     </dt>
                     <dd className="m-0 text-text">{shortcut.label}</dd>

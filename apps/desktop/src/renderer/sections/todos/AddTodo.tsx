@@ -1,13 +1,17 @@
-import { Kbd } from '@commander/ui';
+import type { Project } from '@commander/domain';
+import { Badge, Kbd } from '@commander/ui';
 import { type RefObject, useState } from 'react';
 
 /** The New Todo field at the foot of the open list (.addrow): type a title and press Enter. */
 export function AddTodo({
   input,
   add,
+  project,
 }: {
   input: RefObject<HTMLInputElement | null>;
   add: (title: string) => Promise<boolean>;
+  /** The Project selected in the Project filter, which a new Todo is filed under. */
+  project?: Project;
 }) {
   const [title, setTitle] = useState('');
   return (
@@ -19,7 +23,7 @@ export function AddTodo({
         ref={input}
         type="text"
         aria-label="New Todo"
-        placeholder="New Todo…"
+        placeholder={project ? `New Todo in ${project.name}…` : 'New Todo…'}
         autoComplete="off"
         value={title}
         onChange={(event) => setTitle(event.target.value)}
@@ -30,6 +34,7 @@ export function AddTodo({
         }}
         className="h-7.5 min-w-0 flex-1 border-0 bg-transparent font-sans text-row leading-[30px] text-ink caret-signal outline-none placeholder:text-faint"
       />
+      {project && <Badge code={project.code} accent={project.accent} project={project.name} />}
       <Kbd className="opacity-70">↵</Kbd>
     </label>
   );

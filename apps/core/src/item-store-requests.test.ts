@@ -55,6 +55,18 @@ describe('answering Item store requests from the window', () => {
     expect(store.activity()[0]?.by).toEqual({ kind: 'user' });
   });
 
+  it('creates and lists Projects, and answers a refused one with its reason', () => {
+    const project = { name: 'Longtail', code: 'lt', accent: 'blue' };
+    const created = ask(1, { op: 'change-project', action: { type: 'create', project } });
+    const again = ask(2, { op: 'change-project', action: { type: 'create', project } });
+
+    expect(created).toMatchObject({ response: { ok: true, result: { name: 'Longtail', code: 'LT' } } });
+    expect(again).toMatchObject({
+      response: { ok: false, error: 'LT is already the Badge code for Longtail' },
+    });
+    expect(ask(3, { op: 'projects' })).toMatchObject({ response: { ok: true, result: [{ code: 'LT' }] } });
+  });
+
   it('answers a failed action with its reason', () => {
     expect(ask(3, { op: 'record', action: { type: 'delete', itemId: 'missing' } })).toEqual({
       type: 'item-store-reply',
