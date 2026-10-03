@@ -80,7 +80,7 @@
   window.check.onUpdate((s) => {
     document.getElementById('env').textContent = `${s.env.desktop} · ${s.env.session} · Electron ${s.env.electron} · ozone ${s.ozonePlatform}`;
     document.getElementById('tray').innerHTML = rows({ 'tray created': s.tray.created, 'close hides to tray': s.tray.closeHidesToTray ?? null, 'tray click opened window': s.tray.clickOpenedWindow ?? null, 'tray menu worked': s.tray.menuOpenWorked ?? null, 'background beats': s.worker.beats, 'alive while hidden': s.worker.aliveWhileHidden });
-    document.getElementById('shortcut').innerHTML = rows({ accelerator: s.shortcut.accelerator, registered: s.shortcut.registered, 'times fired': s.shortcut.fired ?? 0, ...(s.shortcut.error ? { error: s.shortcut.error } : {}) });
+    document.getElementById('shortcut').innerHTML = rows({ accelerator: s.shortcut.accelerator, registered: s.shortcut.registered, 'times fired (Electron)': s.shortcut.fired ?? 0, 'Hyprland bind (second instance)': s.shortcut.secondInstanceShow ?? 0, 'Hyprland bind (signal)': s.shortcut.signalShow ?? 0, ...(s.shortcut.error ? { error: s.shortcut.error } : {}) });
     document.getElementById('safe').innerHTML = rows(s.safeStorage);
     document.getElementById('display').innerHTML = rows({ 'scale factor': s.display.scaleFactor, 'screen': `${s.display.size?.width}×${s.display.size?.height}` });
     document.getElementById('sandbox').innerHTML = rows(s.emailSandbox);

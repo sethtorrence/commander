@@ -44,7 +44,11 @@ app.on('second-instance', (_e, argv) => {
   if (argv.includes('--show')) { state.shortcut.secondInstanceShow = (state.shortcut.secondInstanceShow || 0) + 1; if (win) { win.show(); win.focus(); } push(); save(); }
 });
 
+// Faster Hyprland path: the bind sends SIGUSR1 to the running app (pid file below); no second Electron starts.
+process.on('SIGUSR1', () => { state.shortcut.signalShow = (state.shortcut.signalShow || 0) + 1; if (win) { win.show(); win.focus(); } push(); save(); });
+
 app.whenReady().then(async () => {
+  fs.writeFileSync(path.join(__dirname, 'app.pid'), String(process.pid));
   state.ozonePlatform = app.commandLine.getSwitchValue('ozone-platform') || app.commandLine.getSwitchValue('ozone-platform-hint') || '(default)';
   state.passwordStore = app.commandLine.getSwitchValue('password-store') || '(default)';
 
