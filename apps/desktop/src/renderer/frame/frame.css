@@ -220,6 +220,33 @@
     width: 3px;
     background: var(--signal);
   }
+  .f-ares > * {
+    grid-row: 1;
+  }
+  .f-ares-open {
+    grid-column: 1 / 3;
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+  }
+  .f-ares-open:hover {
+    background: color-mix(in srgb, var(--raise) 55%, transparent);
+  }
+  .f-ares-open:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: -2px;
+  }
+  .f-ares-count,
+  .f-ares-info {
+    pointer-events: none;
+  }
+  .f-ares-count {
+    grid-column: 1;
+  }
+  .f-ares-info {
+    grid-column: 2;
+  }
   .f-ares-count {
     display: flex;
     flex-direction: column;
@@ -281,6 +308,7 @@
     text-overflow: ellipsis;
   }
   .f-ask {
+    grid-column: 3;
     border: 0;
     border-left: 1px solid var(--line);
     background: none;

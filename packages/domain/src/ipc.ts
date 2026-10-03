@@ -5,6 +5,8 @@ export const ipc = {
   secretStorageStatus: 'secret-storage-status',
   // Item store requests from the window; see item-store-messages.ts for the validated contract.
   itemStore: 'item-store',
+  // Autonomy settings and Ares's activity; see autonomy-messages.ts for the validated contract.
+  autonomy: 'autonomy',
   startAtLogin: 'start-at-login',
   setStartAtLogin: 'set-start-at-login',
   // The window has painted its first frame, in the User's theme, so it can be shown.

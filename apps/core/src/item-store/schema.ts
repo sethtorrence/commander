@@ -1,7 +1,9 @@
 // The database schema behind the Item store. Migrations in ../../drizzle are generated from this
 // file with `pnpm --filter @commander/core db:generate`; never edit them by hand.
 import type {
+  ActionKind,
   ActivityAction,
+  AutonomySection,
   FiledBy,
   ItemKind,
   ItemStatus,
@@ -10,6 +12,8 @@ import type {
   ModelCall,
   ModelProvider,
   ModelTier,
+  ProposalRecord,
+  ProposalStatus,
   Source,
   SyncOutcomeKind,
   SyncProblem,
@@ -239,4 +243,38 @@ export const syncRuns = sqliteTable(
     error: text('error'),
   },
   (t) => [index('sync_runs_account').on(t.account, t.startedAt)],
+);
+
+// The Autonomy settings (Everywhere, Section and per-action levels) as one validated document.
+export const autonomySettings = sqliteTable('autonomy_settings', {
+  id: integer('id').primaryKey(),
+  settings: text('settings', { mode: 'json' }).notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Proposals from Ares that the gate kept: Ask suggestions (pending until the User accepts or
+// dismisses them) and actions he carried out automatically, with the activity entries they recorded.
+export const proposals = sqliteTable(
+  'proposals',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    at: integer('at').notNull(),
+    actionKind: text('action_kind').$type<ActionKind>().notNull(),
+    action: text('action').notNull(),
+    section: text('section').$type<AutonomySection>(),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id),
+    itemActions: text('item_actions', { mode: 'json' }).$type<ProposalRecord['itemActions']>().notNull(),
+    confidence: real('confidence').notNull(),
+    reason: text('reason').notNull(),
+    causedByItemId: text('caused_by_item_id').references(() => items.id),
+    causedByEntryId: integer('caused_by_entry_id').references(() => activity.id),
+    chained: integer('chained', { mode: 'boolean' }).notNull(),
+    decision: text('decision').$type<'ask' | 'auto'>().notNull(),
+    status: text('status').$type<ProposalStatus>().notNull(),
+    settledAt: integer('settled_at'),
+    entryIds: text('entry_ids', { mode: 'json' }).$type<number[]>().notNull(),
+  },
+  (t) => [index('proposals_item').on(t.itemId), index('proposals_status').on(t.status)],
 );

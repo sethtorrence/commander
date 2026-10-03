@@ -128,6 +128,10 @@ _Avoid_: Knowledge base, context, history, profile
 Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it.
 _Avoid_: Notification, alert, briefing, digest
 
+**Suggestion**:
+Something Ares has prepared and left on its Item for the User to accept or dismiss (what Ask means); nothing happens until it is accepted, and one suggested because of another Item says what caused it.
+_Avoid_: Recommendation, proposal (that's what Ares's jobs hand the gate), prompt, nudge
+
 **Autonomy setting**:
 A User's choice, per Action kind and optionally per Section, of the Autonomy level the Agent works at.
 _Avoid_: Permission, mode, policy

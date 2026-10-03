@@ -8,7 +8,10 @@ const heartbeat = z.object({
   at: z.number().int().nonnegative(),
 });
 
-export const coreMessage = z.discriminatedUnion('type', [heartbeat]);
+// Ares did or suggested something (through the gate): views of his activity reload.
+const aresActivity = z.object({ type: z.literal('ares-activity'), at: z.number().int().nonnegative() });
+
+export const coreMessage = z.discriminatedUnion('type', [heartbeat, aresActivity]);
 export type CoreMessage = z.infer<typeof coreMessage>;
 
 export type CoreMessageParseResult = { ok: true; message: CoreMessage } | { ok: false; error: string };

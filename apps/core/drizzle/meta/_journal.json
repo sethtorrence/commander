@@ -43,6 +43,13 @@
       "when": 1791067943258,
       "tag": "0005_linear_sync",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791068159169,
+      "tag": "0006_autonomy",
+      "breakpoints": true
     }
   ]
 }

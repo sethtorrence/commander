@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import { type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
 import { app, BrowserWindow, ipcMain, utilityProcess } from 'electron';
 import { setUpAccounts } from './accounts/set-up-accounts';
+import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { createItemStoreChannel } from './item-store-channel';
@@ -48,15 +49,25 @@ async function diagnostics(): Promise<Diagnostics> {
   };
 }
 
+// End-to-end tests set COMMANDER_TEST_HOOKS=1 to propose as Ares's jobs would. The hook is reachable
+// only from the main process (Playwright's app.evaluate), never from the window.
+const testHooks = process.env.COMMANDER_TEST_HOOKS === '1';
+
 function startCore(secrets: Secrets) {
   // The Core keeps the database in userData (which --user-data-dir overrides, e.g. in e2e tests).
-  const core = utilityProcess.fork(join(__dirname, 'core.js'), [`--data-dir=${app.getPath('userData')}`]);
+  const core = utilityProcess.fork(join(__dirname, 'core.js'), [
+    `--data-dir=${app.getPath('userData')}`,
+    ...(testHooks ? ['--test-hooks'] : []),
+  ]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));
   const accounts = setUpAccounts({ secrets, sendToCore: (message) => core.postMessage(message) });
   const models = setUpModels(secrets, core);
+  const autonomy = createAutonomyChannels((message) => core.postMessage(message));
+  ipcMain.handle(ipc.autonomy, (_event, request: unknown) => autonomy.window.request(request));
+  if (testHooks) Object.assign(globalThis, { commanderTestHooks: { autonomy: autonomy.test.request } });
   core.on('message', (raw: unknown) => {
-    if (itemStore.settle(raw)) return;
+    if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.
     if (models(raw)) return;
     if (accounts.fromCore(raw)) return;

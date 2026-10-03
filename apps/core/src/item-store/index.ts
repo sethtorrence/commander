@@ -37,6 +37,7 @@ import { and, asc, desc, eq, gte, inArray, isNull, lt, lte, or, sql } from 'driz
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { z } from 'zod';
+import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { type ModelStore, openModelStore } from './models';
 import { projectsIn } from './projects';
 import {
@@ -57,6 +58,7 @@ import * as schema from './schema';
 import { type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
 
+export type { NewProposal } from './autonomy';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
 
@@ -96,12 +98,20 @@ export type ItemStore = {
   dailyNotes(query?: DailyNoteQuery): DailyNotePage;
   // The live Blocks of these Daily Notes, each note's in position order.
   blocks(dailyNoteIds: string[]): Item[];
+  // One activity entry, or null.
+  entry(entryId: number): ActivityEntry | null;
+  // Which of the given activity entries have been undone.
+  undone(entryIds: number[]): number[];
+  // Runs fn as one change: everything it records happens, or (when it throws) none of it does.
+  transaction<T>(fn: () => T): T;
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7.
   takeDailySnapshot(): Snapshot | null;
   // The usage ledger and Settings → Ares, in the same database.
   models: ModelStore;
   // Where each Account's sync stands, and its recent sync runs, in the same database.
   syncState: SyncStateStore;
+  // The Autonomy settings and the gate's proposals, in the same database.
+  autonomy: AutonomyStore;
   close(): void;
 };
 
@@ -648,6 +658,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   return {
     models: openModelStore(db, now),
     syncState: openSyncStateStore(db),
+    autonomy: openAutonomyStore(db, now),
 
     saveFromSource,
     removeAccountItems,
@@ -714,6 +725,26 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     projects: (query) => projects.list(query),
 
     changeProject: (action) => projects.change(action),
+
+    entry(entryId) {
+      const row = db.select().from(schema.activity).where(eq(schema.activity.id, entryId)).get();
+      return row ? toEntry(row) : null;
+    },
+
+    undone(entryIds) {
+      if (!entryIds.length) return [];
+      const { activity } = schema;
+      return db
+        .select({ undoes: activity.undoes })
+        .from(activity)
+        .where(inArray(activity.undoes, entryIds))
+        .all()
+        .map((row) => row.undoes as number);
+    },
+
+    transaction<T>(fn: () => T): T {
+      return sqlite.transaction(fn)();
+    },
 
     takeDailySnapshot() {
       return takeDailySnapshot(sqlite, options.snapshotDir, now());
