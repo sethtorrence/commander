@@ -2,7 +2,7 @@ import { expect, type Page, test } from '@playwright/test';
 import { openSettings, tab } from './frame';
 import { launchCommander } from './launch-commander';
 
-const SECTIONS = ['Dashboard', 'Notes', 'Todos', 'Linear', 'Email', 'Calendar', 'GitHub', 'Ares'];
+const SECTIONS = ['Dashboard', 'Notes', 'Todos', 'Linear', 'Email', 'Calendar', 'GitHub', 'Teams', 'Ares'];
 
 const openSection = (window: Page) => window.locator('main > section:not([hidden])');
 

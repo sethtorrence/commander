@@ -51,6 +51,7 @@ export const graphMessage = z.object({
   messageType: z.string().nullish(),
   createdDateTime: z.iso.datetime({ offset: true }),
   lastModifiedDateTime: z.iso.datetime({ offset: true }).nullish(),
+  lastEditedDateTime: text,
   deletedDateTime: text,
   from: identitySet,
   body: z.object({ contentType: z.string().nullish(), content: text }).nullish(),
@@ -110,6 +111,7 @@ export function toMessage(message: GraphMessage): ChatMessage {
     event: system ? eventName(message.eventDetail?.['@odata.type']) : null,
     createdAt: at(message.createdDateTime),
     modifiedAt: at(message.lastModifiedDateTime ?? message.createdDateTime),
+    ...(message.lastEditedDateTime && !deleted ? { editedAt: at(message.lastEditedDateTime) } : {}),
     deleted,
     text: deleted
       ? ''

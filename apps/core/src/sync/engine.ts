@@ -393,15 +393,18 @@ export function createSyncEngine({
               })),
             accessToken: () => accessTokens.request(account),
             recheck,
+            excluded: store.chatSettings.excluded(account),
             saveCatalog(catalog) {
               if (!signal.aborted) store.syncState.saveCatalog(account, source, catalog, now());
             },
             save(page) {
               if (signal.aborted) throw new Error('The sync was stopped');
+              // Read now: the User may have excluded a Chat since the sync started.
+              const excluded = new Set(store.chatSettings.excluded(account));
               const outcome = store.saveFromSource({
                 source,
                 account,
-                items: page.items,
+                items: page.items.filter((item) => !excluded.has(item.externalId)),
                 deleted: page.deleted,
                 me: entry.account.me ?? null,
               });

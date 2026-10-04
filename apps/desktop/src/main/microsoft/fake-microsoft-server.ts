@@ -24,6 +24,8 @@ export type FakeChatMessage = {
   html: string;
   createdAt: number;
   modifiedAt: number;
+  // Users it @mentions (each <at id="n"> in the HTML, in order).
+  mentions: FakeMicrosoftUser[];
 };
 export type FakeChat = {
   id: string;
@@ -64,8 +66,14 @@ export type FakeMicrosoft = {
   addChat(
     chat: Pick<FakeChat, 'id' | 'members'> & Partial<Pick<FakeChat, 'topic' | 'chatType' | 'updatedAt'>>,
   ): void;
-  // Posts a message to a Chat; returns its id.
-  postMessage(chatId: string, from: FakeMicrosoftUser, html: string, at?: number): string;
+  // Posts a message to a Chat, @mentioning `mentions` (<at id="0">…</at> and on); returns its id.
+  postMessage(
+    chatId: string,
+    from: FakeMicrosoftUser,
+    html: string,
+    at?: number,
+    mentions?: FakeMicrosoftUser[],
+  ): string;
   // The next Graph requests are refused with this status and Retry-After (seconds), until switched back.
   throttleGraph(answer: { status: 429 | 503; retryAfter: number } | null): void;
   // How many refreshes Microsoft accepted.
@@ -185,11 +193,11 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     addChat: ({ id, members, topic = null, chatType = 'group', updatedAt = Date.now() }) => {
       chats.push({ id, members, topic, chatType, updatedAt, messages: [] });
     },
-    postMessage: (chatId, from, html, at = Date.now()) => {
+    postMessage: (chatId, from, html, at = Date.now(), mentions = []) => {
       const chat = chats.find((each) => each.id === chatId);
       if (!chat) throw new Error(`No fake chat ${chatId}`);
       const id = String(at + chat.messages.length);
-      chat.messages.push({ id, from, html, createdAt: at, modifiedAt: at });
+      chat.messages.push({ id, from, html, createdAt: at, modifiedAt: at, mentions });
       return id;
     },
     throttleGraph: (answer) => {
@@ -403,7 +411,11 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
         from: identity(message.from),
         body: { contentType: 'html', content: message.html },
         attachments: [],
-        mentions: [],
+        mentions: message.mentions.map((user, index) => ({
+          id: index,
+          mentionText: user.displayName,
+          mentioned: { user: { id: user.id, displayName: user.displayName, userIdentityType: 'aadUser' } },
+        })),
         reactions: [],
       }));
     return paged(response, url, messages);

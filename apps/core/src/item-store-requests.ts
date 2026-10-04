@@ -1,6 +1,11 @@
 // Answers the window's Item store requests, relayed by the main process. Requests are validated
 // again here because the Core is the database's only writer, and every action is recorded as the User's.
-import { type ActivityEntry, type CoreItemStoreReply, itemStoreRequest } from '@commander/domain';
+import {
+  type ActivityEntry,
+  type ChatSettingChange,
+  type CoreItemStoreReply,
+  itemStoreRequest,
+} from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from './item-store';
 
@@ -87,6 +92,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.dashboard.state() };
       case 'save-dashboard-clears':
         return { ok: true, result: store.dashboard.saveClears(request.clears) };
+      case 'chat-settings':
+        return { ok: true, result: store.chatSettings.list(request.account) };
+      case 'change-chat-setting':
+        return { ok: true, result: store.chatSettings.change(request.action, { by: { kind: 'user' } }) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -95,10 +104,12 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
 
 // The Items a recorded change touched, in order, once each: each changed Item, both ends of a Link,
 // and the Items re-filed along with it (the Blocks under a re-filed Block, the Todos that follow them),
-// which are in the activity log after the last entry before the change.
+// which are in the activity log after the last entry before the change. A change to a Chat's setting
+// touches its Chat.
 function changedItems(store: ItemStore, response: CoreItemStoreReply['response'], since: number): string[] {
   if (!response.ok) return [];
   const result = response.result;
+  if (isChatSettingChange(result)) return result.itemId ? [result.itemId] : [];
   const entries = (Array.isArray(result) ? result : [result]) as ActivityEntry[];
   const alongside = store.activity({ after: since, limit: 1000 }).reverse();
   return [
@@ -109,6 +120,12 @@ function changedItems(store: ItemStore, response: CoreItemStoreReply['response']
     ),
   ];
 }
+
+const isChatSettingChange = (result: unknown): result is ChatSettingChange =>
+  typeof result === 'object' && result !== null && 'setting' in result && 'itemId' in result;
+
+// The requests that change Items, after which `onChanged` hears which.
+const CHANGES = new Set(['record', 'record-all', 'send-to-linear', 'change-chat-setting']);
 
 /**
  * Returns the reply to send back, or null when the message is not an Item store request. After a
@@ -123,7 +140,7 @@ export function answerItemStoreRequest(
   if (!parsed.success) return null;
   const { request } = message as { request?: unknown };
   const op = (request as { op?: unknown } | undefined)?.op;
-  const records = onChanged && (op === 'record' || op === 'record-all' || op === 'send-to-linear');
+  const records = onChanged && typeof op === 'string' && CHANGES.has(op);
   const since = records ? (store.activity({ limit: 1 })[0]?.id ?? 0) : 0;
   const response = answer(store, request);
   if (onChanged && records) {

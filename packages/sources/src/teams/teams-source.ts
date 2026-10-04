@@ -20,7 +20,8 @@ import {
 // - The check (every sync): page through `GET /me/chats?$expand=lastMessagePreview`. A Chat whose
 //   last message, or `lastUpdatedDateTime` (renamed, members changed), is newer than the cursor has
 //   changed; one whose read state or hidden flag changed is saved again without another request.
-//   Chats no longer listed (left or deleted) become tombstones.
+//   Chats no longer listed (left or deleted) become tombstones. Chats the User excluded from
+//   Commander are skipped entirely.
 // - Messages only for changed Chats: `GET /chats/{id}/messages` newest-modified first, filtered on
 //   `lastModifiedDateTime` after the newest change already seen there, paged until done. Members
 //   (`GET /chats/{id}/members`) only for new Chats and those whose members or name changed.
@@ -144,6 +145,7 @@ export function createTeamsSource({
       const started = now();
       const previous = teamsCursor.safeParse(request.cursor);
       const marks: Record<string, ChatMark> = previous.success ? previous.data.chats : {};
+      const excluded = new Set(request.excluded ?? []);
 
       // The check: every Chat the User is in.
       const chats = await graph.all(`/me/chats?$expand=lastMessagePreview&$top=${PAGE_SIZE}`, chatsPage);
@@ -159,6 +161,9 @@ export function createTeamsSource({
       const plans: Plan[] = [];
       const next: Record<string, ChatMark> = {};
       for (const chat of chats) {
+        // Excluded by the User: nothing fetched, nothing handed over, and its mark forgotten, so
+        // including it again brings it back as a new Chat.
+        if (excluded.has(chat.id)) continue;
         const mark = marks[chat.id];
         const kept = stored.get(chat.id) ?? null;
         const known = mark && kept?.detail?.kind === 'chat' ? kept : null;

@@ -81,7 +81,10 @@ export function teamsText(content: string, contentType: 'html' | 'text' = 'html'
   const block = () => {
     out += '\n\n';
   };
-  const tokens = content.matchAll(/<!--[\s\S]*?-->|<\/?([a-zA-Z][a-zA-Z0-9-]*)([^>]*)>|[^<]+|</g);
+  // A tag's attributes may hold a quoted `>` (an address with markup in it), which doesn't end it.
+  const tokens = content.matchAll(
+    /<!--[\s\S]*?-->|<\/?([a-zA-Z][a-zA-Z0-9-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>|[^<]+|</g,
+  );
   for (const [token, rawName] of tokens) {
     const name = rawName?.toLowerCase();
     const closing = token.startsWith('</');

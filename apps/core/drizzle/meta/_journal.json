@@ -148,6 +148,13 @@
       "when": 1791087970810,
       "tag": "0020_github_watch",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1791088728587,
+      "tag": "0021_teams_chat_settings",
+      "breakpoints": true
     }
   ]
 }
