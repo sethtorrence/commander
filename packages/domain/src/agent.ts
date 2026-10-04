@@ -56,6 +56,7 @@ export const AGENT_JOB_NAMES: Record<string, string> = {
   'prepare-meetings': 'Prepare for meetings',
   'spot-waiting-on-you': 'Spot what’s waiting on you',
   'summarise-chat': 'Summarise Chat',
+  'block-time-for-todos': 'Block time for Todos',
 };
 
 export const jobDisplayName = (job: string): string => AGENT_JOB_NAMES[job] ?? job;

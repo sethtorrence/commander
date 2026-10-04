@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { itemChangesFromCore } from '../../item-store/changes';
+import { planFocusTime } from '../calendar/focus-time';
 import type { SectionDefinition } from '../section';
 import { TodosSheet } from './TodosSheet';
 import { todosIn } from './todos';
@@ -9,7 +10,13 @@ import { todosIn } from './todos';
 // bridge.
 function TodosSection() {
   const todos = useMemo(() => todosIn(window.commander.itemStore), []);
-  return <TodosSheet todos={todos} changes={itemChangesFromCore} />;
+  return (
+    <TodosSheet
+      todos={todos}
+      changes={itemChangesFromCore}
+      planFocusTime={() => planFocusTime(window.commander.autonomy)}
+    />
+  );
 }
 
 export const todos: SectionDefinition = {

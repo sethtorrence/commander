@@ -93,7 +93,7 @@ export function openGate({
     const check = (target: StepTarget, index: number) => {
       if (typeof target === 'string') return;
       const step = parsed.itemActions[target.step];
-      if (target.step >= index || step?.type !== 'create') {
+      if (target.step >= index || (step?.type !== 'create' && step?.type !== 'create-event')) {
         throw new GateError(
           'invalid',
           `Step ${index} points at step ${target.step}, which creates no Item before it`,
@@ -126,6 +126,10 @@ export function openGate({
       // Synced fields exist only to write back to a Source.
       if (step.type === 'edit-fields' && action.actionKind === 'organise') {
         refuse('changes an Item at its Source', 'tidy-sources');
+      }
+      // An event goes in one of the User's calendars, at its Source.
+      if (step.type === 'create-event' && action.actionKind === 'organise') {
+        refuse('writes an event to a calendar', 'tidy-sources');
       }
       if (step.type !== 'update' || action.actionKind !== 'organise') continue;
       if (typeof step.itemId !== 'string') continue; // an Item this proposal creates is Commander's own
@@ -165,6 +169,9 @@ export function openGate({
       switch (action.type) {
         case 'create':
           entry = itemStore.record(action, context);
+          break;
+        case 'create-event':
+          entry = itemStore.createEvent(action.event, context);
           break;
         case 'update': {
           const { filing } = action.changes;
@@ -233,6 +240,7 @@ export function openGate({
         touch(step.to);
       }
       if (step.type === 'create') for (const target of createdIn(step.item.detail)) touch(target);
+      if (step.type === 'create-event' && step.event.copyOf) touch(step.event.copyOf);
     }
     return [...touched].some((itemId) => itemId !== causeItemId);
   }

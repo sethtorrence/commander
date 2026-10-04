@@ -249,6 +249,7 @@ function touched(proposal: JobProposal): Set<string> {
       'from' in step ? step.from : undefined,
       'to' in step ? step.to : undefined,
       ...(step.type === 'create' ? createdIn(step.item.detail) : []),
+      ...(step.type === 'create-event' && step.event.copyOf ? [step.event.copyOf] : []),
     ]) {
       if (typeof target === 'string') ids.add(target);
     }

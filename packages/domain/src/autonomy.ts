@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { commanderEventDraft } from './commander-events';
 import { activityEntry, causedBy, itemChanges, itemRef, linkType, newItem } from './items';
 
 // Autonomy settings: how far Ares may go on his own, per Action kind, with Section and per-action
@@ -128,7 +129,7 @@ const entryId = z.number().int().positive();
 const timestamp = z.number().int().nonnegative();
 
 // The Item a proposed step acts on: an existing Item's id, or the Item an earlier step of the same
-// proposal creates ({ step: 0 } is the Item the first step creates).
+// proposal creates ({ step: 0 } is the Item the first step creates, an Item or an event).
 export const stepTarget = z.union([id, z.object({ step: z.number().int().nonnegative() })]);
 export type StepTarget = z.infer<typeof stepTarget>;
 
@@ -147,6 +148,8 @@ export const proposedItemAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('delete'), itemId: stepTarget }),
   z.object({ type: z.literal('link'), from: stepTarget, linkType, to: stepTarget }),
   z.object({ type: z.literal('unlink'), from: stepTarget, linkType, to: stepTarget }),
+  // An event Commander writes to a calendar (a focus block, a busy copy): at least Tidy your Sources.
+  z.object({ type: z.literal('create-event'), event: commanderEventDraft }),
 ]);
 export type ProposedItemAction = z.input<typeof proposedItemAction>;
 

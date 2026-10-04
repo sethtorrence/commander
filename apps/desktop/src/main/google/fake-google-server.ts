@@ -20,8 +20,16 @@ import { createFakeGmail, type FakeGmail } from './fake-gmail';
 // rateLimitExceeded). Answering invitations (#129): `events.get` for one event, and `events.patch` of
 // the User's own attendee line (`attendeesOmitted`), on an instance or on a whole series (every
 // instance of it follows), each recorded with its `sendUpdates`. And it serves each user's mailbox
-// through the Gmail API (fake-gmail.ts), at `gmailUrl`, for the tokens it issued. Nothing here talks
-// to the real Google.
+// through the Gmail API (fake-gmail.ts), at `gmailUrl`, for the tokens it issued.
+//
+// And it takes the writes Commander makes for its own events (#131): `calendars.insert` (a new
+// calendar the user owns, listed by `calendarList` from then on), and `events.insert` (honouring a
+// client-supplied id, and answering 409 for an id the calendar already has, cancelled or not),
+// `events.patch` of anything but an answer (merged into the event, null clearing a field) and
+// `events.delete` (cancelling it, so incremental reads report it; 410 when already cancelled, 404 when
+// unknown). An inserted event is stored as sent, so `extendedProperties`, `visibility` and
+// `transparency` come back through `events.list` and incremental sync. Only owned and writable
+// calendars take writes. Nothing here talks to the real Google.
 
 export type FakeGoogleUser = { sub: string; email: string; name: string };
 
@@ -74,15 +82,22 @@ export type FakeGoogle = {
   calendarUrl: string;
   // Every Calendar API request, as its path and query (decoded), oldest first.
   calendarRequests: string[];
+  // Every Calendar API write (and `events.get`), as its method, decoded path and JSON body (null for
+  // none), oldest first.
+  calendarWrites: { method: string; path: string; body: unknown }[];
   // Gives a user these calendars (replacing any), each with these events.
   setCalendars(sub: string, calendars: { calendar: FakeCalendar; events: FakeCalendarEvent[] }[]): void;
   // Adds or changes an event on one of a user's calendars.
   putEvent(sub: string, calendarId: string, event: FakeCalendarEvent): void;
   // Cancels (deletes) an event: incremental reads report it as cancelled.
   cancelEvent(sub: string, calendarId: string, eventId: string): void;
+  // A user's live (not cancelled) events on one of their calendars, as stored.
+  eventsOn(sub: string, calendarId: string): FakeCalendarEvent[];
+  // A user's calendars, those the app made included.
+  calendarsOf(sub: string): FakeCalendar[];
   // Every sync token issued so far answers 410 Gone from now on.
   expireSyncTokens(): void;
-  // The next `count` events requests answer 403 rateLimitExceeded.
+  // The next `count` events requests (reads and writes) answer 403 rateLimitExceeded.
   rateLimitCalendar(count: number): void;
   // Every answer to an invitation Commander sent (events.patch), oldest first.
   rsvps: {
@@ -199,6 +214,7 @@ export async function startFakeGoogle(
     issuedTokens: () => [...issued],
     calendarUrl: '',
     calendarRequests: [],
+    calendarWrites: [],
     setCalendars: (sub, calendars) => {
       changes += 1;
       userCalendars.set(
@@ -228,6 +244,11 @@ export async function startFakeGoogle(
       const stored = calendarOf(sub, calendarId).events.get(eventId);
       if (stored) Object.assign(stored, { changed: changes, cancelled: true });
     },
+    eventsOn: (sub, calendarId) =>
+      [...calendarOf(sub, calendarId).events.values()]
+        .filter((each) => !each.cancelled)
+        .map((each) => each.event),
+    calendarsOf: (sub) => (userCalendars.get(sub) ?? []).map(({ calendar }) => calendar),
     expireSyncTokens: () => {
       changes += 1;
       expiredBefore = changes;
@@ -383,15 +404,169 @@ export async function startFakeGoogle(
     return [at(event.start), at(event.end)];
   }
 
-  function calendarApi(request: IncomingMessage, url: URL, response: ServerResponse) {
+  const calendarError = (response: ServerResponse, status: number, message: string, reason: string) =>
+    json(response, status, {
+      error: { code: status, message, errors: [{ domain: 'global', reason, message }] },
+    });
+
+  // Google's ids for events: base32hex (a–v, 0–9), 5 to 1024 characters.
+  const isEventId = (id: unknown): id is string => typeof id === 'string' && /^[a-v0-9]{5,1024}$/.test(id);
+
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value);
+
+  // A patch merged into an event as Google merges one: nested objects field by field, null clearing.
+  function merge(target: Record<string, unknown>, patch: Record<string, unknown>) {
+    for (const [field, value] of Object.entries(patch)) {
+      if (field === 'id') continue;
+      const current = target[field];
+      if (value === null) delete target[field];
+      else if (isRecord(value) && isRecord(current)) merge(current, value);
+      else target[field] = structuredClone(value);
+    }
+  }
+
+  // Calendar API writes, for the calendars and events Commander makes.
+  async function calendarWrite(
+    method: string,
+    path: string,
+    sent: unknown,
+    user: FakeGoogleUser,
+    response: ServerResponse,
+  ) {
+    const calendars = userCalendars.get(user.sub) ?? [];
+    if (method === 'POST' && path === '/calendars') {
+      const summary = isRecord(sent) && typeof sent.summary === 'string' ? sent.summary.trim() : '';
+      if (!summary) return calendarError(response, 400, 'Missing title.', 'required');
+      const calendar: FakeCalendar = {
+        id: `c_${randomBytes(16).toString('hex')}@group.calendar.google.com`,
+        summary,
+        accessRole: 'owner',
+        backgroundColor: '#7986cb',
+        timeZone: 'UTC',
+      };
+      changes += 1;
+      userCalendars.set(user.sub, [...calendars, { calendar, events: new Map() }]);
+      return json(response, 200, {
+        kind: 'calendar#calendar',
+        etag: `"${changes}"`,
+        id: calendar.id,
+        summary,
+        ...(isRecord(sent) && typeof sent.description === 'string' && { description: sent.description }),
+        timeZone: calendar.timeZone,
+      });
+    }
+    const match = /^\/calendars\/([^/]+)\/events(?:\/([^/]+))?$/.exec(path);
+    const found = match && calendars.find((each) => each.calendar.id === decodeURIComponent(match[1] ?? ''));
+    if (!match || !found) return calendarError(response, 404, 'Not Found', 'notFound');
+    const eventId = match[2] === undefined ? null : decodeURIComponent(match[2]);
+    if (method !== 'GET' && found.calendar.accessRole !== 'owner' && found.calendar.accessRole !== 'writer') {
+      return calendarError(
+        response,
+        403,
+        'You need to have writer access to this calendar.',
+        'requiredAccessLevel',
+      );
+    }
+    const answer = (stored: StoredEvent) =>
+      json(response, 200, {
+        kind: 'calendar#event',
+        ...stored.event,
+        status: stored.cancelled ? 'cancelled' : 'confirmed',
+      });
+
+    if (method === 'POST' && eventId === null) {
+      if (!isRecord(sent)) return calendarError(response, 400, 'Bad Request', 'badRequest');
+      const id = sent.id === undefined ? randomBytes(16).toString('hex') : sent.id;
+      if (!isEventId(id)) return calendarError(response, 400, 'Invalid resource id value.', 'invalid');
+      if (found.events.has(id)) {
+        return calendarError(response, 409, 'The requested identifier already exists.', 'duplicate');
+      }
+      const now = new Date().toISOString();
+      changes += 1;
+      const stored: StoredEvent = {
+        event: {
+          ...structuredClone(sent),
+          id,
+          etag: `"${changes}"`,
+          status: 'confirmed',
+          htmlLink: `https://www.google.com/calendar/event?eid=${Buffer.from(`${id} ${found.calendar.id}`).toString('base64url')}`,
+          created: now,
+          updated: now,
+          creator: { email: user.email, self: true },
+          organizer: found.calendar.primary
+            ? { email: user.email, self: true }
+            : { email: found.calendar.id, displayName: found.calendar.summary, self: true },
+          iCalUID: `${id}@google.com`,
+          sequence: 0,
+        },
+        changed: changes,
+        cancelled: false,
+      };
+      found.events.set(id, stored);
+      return answer(stored);
+    }
+    const stored = eventId === null ? undefined : found.events.get(eventId);
+    if (eventId === null || !stored) return calendarError(response, 404, 'Not Found', 'notFound');
+    if (method === 'GET') return answer(stored);
+    if (stored.cancelled) return calendarError(response, 410, 'Resource has been deleted', 'deleted');
+    if (method === 'PATCH') {
+      if (!isRecord(sent)) return calendarError(response, 400, 'Bad Request', 'badRequest');
+      changes += 1;
+      merge(stored.event, sent);
+      Object.assign(stored.event, {
+        etag: `"${changes}"`,
+        updated: new Date().toISOString(),
+        sequence: Number(stored.event.sequence ?? 0) + 1,
+      });
+      stored.changed = changes;
+      return answer(stored);
+    }
+    if (method === 'DELETE') {
+      changes += 1;
+      Object.assign(stored, { changed: changes, cancelled: true });
+      return void response.writeHead(204).end();
+    }
+    return calendarError(response, 405, 'Method Not Allowed', 'methodNotAllowed');
+  }
+
+  async function calendarApi(request: IncomingMessage, url: URL, response: ServerResponse) {
+    const method = request.method ?? 'GET';
     fake.calendarRequests.push(decodeURIComponent(`${url.pathname}${url.search}`));
+    const path = url.pathname.slice('/calendar/v3'.length);
+    const text = method === 'GET' ? '' : await body(request);
+    let sent: unknown = null;
+    try {
+      sent = text ? JSON.parse(text) : null;
+    } catch {
+      return calendarError(response, 400, 'Parse Error', 'parseError');
+    }
+    const isEventRead = method === 'GET' && /^\/calendars\/[^/]+\/events\/[^/]+$/.test(path);
+    if (method !== 'GET' || isEventRead) {
+      fake.calendarWrites.push({ method, path: decodeURIComponent(path), body: sent });
+    }
     const authorization = request.headers.authorization ?? '';
     const user = authorization.startsWith('Bearer ')
       ? accessTokens.get(authorization.slice('Bearer '.length))
       : undefined;
     if (!user) return json(response, 401, { error: { code: 401, message: 'Invalid Credentials' } });
+    if (rateLimited > 0 && /^\/calendars\/[^/]+\/events/.test(path)) {
+      rateLimited -= 1;
+      return json(response, 403, {
+        error: {
+          code: 403,
+          message: 'Rate Limit Exceeded',
+          errors: [{ domain: 'usageLimits', reason: 'rateLimitExceeded' }],
+        },
+      });
+    }
     const calendars = userCalendars.get(user.sub) ?? [];
-    const path = url.pathname.slice('/calendar/v3'.length);
+    const one = /^\/calendars\/([^/]+)\/events\/([^/]+)$/.exec(path);
+    // Reading one event, and answering an invitation (#129); every other write is Commander's own event's.
+    const answering = method === 'PATCH' && (sent as { attendeesOmitted?: unknown } | null)?.attendeesOmitted;
+    if (one && (isEventRead || answering))
+      return oneEvent(request, url, response, user, calendars, one, sent);
+    if (method !== 'GET') return calendarWrite(method, path, sent, user, response);
     const max = Number(url.searchParams.get('maxResults') ?? 250);
     const offset = Number(url.searchParams.get('pageToken') ?? 0);
     const page = <T>(all: T[]) => ({
@@ -408,21 +583,9 @@ export async function startFakeGoogle(
         ...(next ? { nextPageToken: next } : { nextSyncToken: `fake-list-${changes}` }),
       });
     }
-    const one = /^\/calendars\/([^/]+)\/events\/([^/]+)$/.exec(path);
-    if (one) return void oneEvent(request, url, response, user, calendars, one);
     const match = /^\/calendars\/([^/]+)\/events$/.exec(path);
     const found = match && calendars.find((each) => each.calendar.id === decodeURIComponent(match[1] ?? ''));
     if (!found) return json(response, 404, { error: { code: 404, message: 'Not Found' } });
-    if (rateLimited > 0) {
-      rateLimited -= 1;
-      return json(response, 403, {
-        error: {
-          code: 403,
-          message: 'Rate Limit Exceeded',
-          errors: [{ domain: 'usageLimits', reason: 'rateLimitExceeded' }],
-        },
-      });
-    }
     const syncToken = url.searchParams.get('syncToken');
     let events: StoredEvent[] = [...found.events.values()];
     if (syncToken) {
@@ -470,13 +633,14 @@ export async function startFakeGoogle(
   });
 
   // events.get and events.patch (the User's own answer only) on one event, or a whole series.
-  async function oneEvent(
+  function oneEvent(
     request: IncomingMessage,
     url: URL,
     response: ServerResponse,
     user: FakeGoogleUser,
     calendars: { calendar: FakeCalendar; events: Map<string, StoredEvent> }[],
     [, calendarPart, eventPart]: RegExpExecArray,
+    sent: unknown,
   ) {
     const calendarId = decodeURIComponent(calendarPart ?? '');
     const eventId = decodeURIComponent(eventPart ?? '');
@@ -494,7 +658,7 @@ export async function startFakeGoogle(
     if (request.method === 'GET') return json(response, 200, shown(target));
     if (request.method !== 'PATCH')
       return json(response, 405, { error: { code: 405, message: 'Method not allowed' } });
-    const patch = JSON.parse((await body(request)) || '{}') as {
+    const patch = (sent ?? {}) as {
       attendeesOmitted?: boolean;
       attendees?: { email?: string; responseStatus?: string }[];
     };
@@ -541,8 +705,7 @@ export async function startFakeGoogle(
 
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
-    if ((request.method === 'GET' || request.method === 'PATCH') && url.pathname.startsWith('/calendar/v3/'))
-      return calendarApi(request, url, response);
+    if (url.pathname.startsWith('/calendar/v3/')) return void calendarApi(request, url, response);
     if (request.method === 'GET' && url.pathname === '/o/oauth2/v2/auth') return authorize(url, response);
     if (request.method === 'POST' && url.pathname === '/token') return void tokenEndpoint(request, response);
     if (request.method === 'GET' && url.pathname === '/v1/userinfo') return userinfo(request, response);

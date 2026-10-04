@@ -1,0 +1,2167 @@
+{
+  "first-focus-block": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-titanlink=",
+              "name": "Titanlink",
+              "color": "lightGreen",
+              "hexColor": "#33b679",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Titanlink",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars",
+        "body": {
+          "name": "Commander"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars/$entity",
+          "id": "AAMkAGI2-cal-commander=",
+          "name": "Commander",
+          "color": "auto",
+          "hexColor": "",
+          "isDefaultCalendar": false,
+          "changeKey": "ck-Commander",
+          "canShare": true,
+          "canViewPrivateItems": true,
+          "canEdit": true,
+          "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+          "defaultOnlineMeetingProvider": "teamsForBusiness",
+          "isTallyingResponses": true,
+          "isRemovable": true,
+          "owner": {
+            "name": "Sam Rivera",
+            "address": "sam@contoso.test"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Write the quarterly plan",
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-commander%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+          "id": "AAMkAGI2-evt-focus1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-focus1",
+          "categories": [],
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+          "uid": "040000008200E00074C5B7101A82E008-focus1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Write the quarterly plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    }
+  ],
+  "retried-create": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-commander=",
+              "name": "Commander",
+              "color": "lightTeal",
+              "hexColor": "",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Commander",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Write the quarterly plan",
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 504,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "UnknownError",
+            "message": "Gateway Timeout",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Write the quarterly plan",
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-commander%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+          "id": "AAMkAGI2-evt-focus1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-focus1",
+          "categories": [],
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+          "uid": "040000008200E00074C5B7101A82E008-focus1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Write the quarterly plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    }
+  ],
+  "existing-commander-calendar": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-dana-commander=",
+              "name": "Commander",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Commander",
+              "canShare": false,
+              "canViewPrivateItems": true,
+              "canEdit": false,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Dana Ruiz",
+                "address": "dana@titanlink.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-commander=",
+              "name": "Commander",
+              "color": "lightTeal",
+              "hexColor": "",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Commander",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Write the quarterly plan",
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-commander%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+          "id": "AAMkAGI2-evt-focus1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-focus1",
+          "categories": [],
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+          "uid": "040000008200E00074C5B7101A82E008-focus1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Write the quarterly plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Review the hiring plan",
+          "start": {
+            "dateTime": "2026-10-07T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-07T10:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-commander%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus2\"",
+          "id": "AAMkAGI2-evt-focus2=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-focus2",
+          "categories": [],
+          "transactionId": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus2",
+          "uid": "040000008200E00074C5B7101A82E008-focus2",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Review the hiring plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus2%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-07T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-07T10:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    }
+  ],
+  "busy-copy": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-titanlink=",
+              "name": "Titanlink",
+              "color": "lightGreen",
+              "hexColor": "#33b679",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Titanlink",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-default=/events",
+        "body": {
+          "subject": "Busy",
+          "start": {
+            "dateTime": "2026-10-08T00:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-09T00:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "isAllDay": true,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "busy-block:c4e6a8b0-2d4f-4a6c-8e0b-1d3f5a7c9e2b",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "busy-block:c4e6a8b0-2d4f-4a6c-8e0b-1d3f5a7c9e2b"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-default%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABbusy1\"",
+          "id": "AAMkAGI2-evt-busy1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-busy1",
+          "categories": [],
+          "transactionId": "busy-block:c4e6a8b0-2d4f-4a6c-8e0b-1d3f5a7c9e2b",
+          "originalStartTimeZone": "UTC",
+          "originalEndTimeZone": "UTC",
+          "iCalUId": "040000008200E00074C5B7101A82E008-busy1",
+          "uid": "040000008200E00074C5B7101A82E008-busy1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Busy",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": true,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-busy1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-08T00:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-09T00:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    }
+  ],
+  "move": [
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/events/AAMkAGI2-evt-focus1=",
+        "body": {
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:30:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+          "id": "AAMkAGI2-evt-focus1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:05:00.0000000Z",
+          "changeKey": "ck-focus1",
+          "categories": [],
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+          "uid": "040000008200E00074C5B7101A82E008-focus1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Write the quarterly plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:30:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-focus1=/calendar"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/events('AAMkAGI2-evt-focus1%3D')/calendar/$entity",
+          "id": "AAMkAGI2-cal-commander=",
+          "name": "Commander",
+          "color": "lightTeal",
+          "hexColor": "",
+          "isDefaultCalendar": false,
+          "changeKey": "ck-Commander",
+          "canShare": true,
+          "canViewPrivateItems": true,
+          "canEdit": true,
+          "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+          "defaultOnlineMeetingProvider": "teamsForBusiness",
+          "isTallyingResponses": true,
+          "isRemovable": true,
+          "owner": {
+            "name": "Sam Rivera",
+            "address": "sam@contoso.test"
+          }
+        }
+      }
+    }
+  ],
+  "move-gone": [
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/events/AAMkAGI2-evt-focus1=",
+        "body": {
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:30:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorItemNotFound",
+            "message": "The specified object was not found in the store.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "create-and-move": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-commander=",
+              "name": "Commander",
+              "color": "lightTeal",
+              "hexColor": "",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Commander",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Write the quarterly plan",
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-commander%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+          "id": "AAMkAGI2-evt-focus1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-focus1",
+          "categories": [],
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+          "uid": "040000008200E00074C5B7101A82E008-focus1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Write the quarterly plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/events/AAMkAGI2-evt-focus1=",
+        "body": {
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:30:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+          "id": "AAMkAGI2-evt-focus1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:05:00.0000000Z",
+          "changeKey": "ck-focus1",
+          "categories": [],
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+          "uid": "040000008200E00074C5B7101A82E008-focus1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Write the quarterly plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:30:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    }
+  ],
+  "delete-confirmed": [
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/events/AAMkAGI2-evt-focus1="
+      },
+      "response": {
+        "status": 204,
+        "headers": {},
+        "body": null
+      }
+    }
+  ],
+  "delete-gone": [
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/events/AAMkAGI2-evt-focus1="
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorItemNotFound",
+            "message": "The specified object was not found in the store.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "delete-placeholder-found": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderEvent' and ep/value eq 'focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f')&$select=id"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/events(id)",
+          "value": [
+            {
+              "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+              "id": "AAMkAGI2-evt-focus1="
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/events/AAMkAGI2-evt-focus1="
+      },
+      "response": {
+        "status": 204,
+        "headers": {},
+        "body": null
+      }
+    }
+  ],
+  "delete-placeholder-not-found": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderEvent' and ep/value eq 'focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f')&$select=id"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/events(id)",
+          "value": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderEvent' and ep/value eq 'busy-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f')&$select=id"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/events(id)",
+          "value": []
+        }
+      }
+    }
+  ],
+  "cached-calendar-gone": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-commander=",
+              "name": "Commander",
+              "color": "lightTeal",
+              "hexColor": "",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Commander",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Write the quarterly plan",
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-commander%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+          "id": "AAMkAGI2-evt-focus1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-focus1",
+          "categories": [],
+          "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+          "uid": "040000008200E00074C5B7101A82E008-focus1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Write the quarterly plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T11:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/events",
+        "body": {
+          "subject": "Review the hiring plan",
+          "start": {
+            "dateTime": "2026-10-07T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-07T10:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorItemNotFound",
+            "message": "The specified object was not found in the store.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars",
+        "body": {
+          "name": "Commander"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars/$entity",
+          "id": "AAMkAGI2-cal-commander-2=",
+          "name": "Commander",
+          "color": "auto",
+          "hexColor": "",
+          "isDefaultCalendar": false,
+          "changeKey": "ck-Commander",
+          "canShare": true,
+          "canViewPrivateItems": true,
+          "canEdit": true,
+          "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+          "defaultOnlineMeetingProvider": "teamsForBusiness",
+          "isTallyingResponses": true,
+          "isRemovable": true,
+          "owner": {
+            "name": "Sam Rivera",
+            "address": "sam@contoso.test"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-commander-2=/events",
+        "body": {
+          "subject": "Review the hiring plan",
+          "start": {
+            "dateTime": "2026-10-07T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-07T10:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "sensitivity": "private",
+          "isReminderOn": false,
+          "transactionId": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-commander-2%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABfocus2\"",
+          "id": "AAMkAGI2-evt-focus2=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-focus2",
+          "categories": [],
+          "transactionId": "focus-block:7a9d2e4f-1b3c-4d5e-8f6a-b7c8d9e0f1a2",
+          "originalStartTimeZone": "Europe/London",
+          "originalEndTimeZone": "Europe/London",
+          "iCalUId": "040000008200E00074C5B7101A82E008-focus2",
+          "uid": "040000008200E00074C5B7101A82E008-focus2",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": false,
+          "hasAttachments": false,
+          "subject": "Review the hiring plan",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "private",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus2%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-07T09:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-07T10:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    }
+  ],
+  "rate-limited": [
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/events/AAMkAGI2-evt-focus1="
+      },
+      "response": {
+        "status": 429,
+        "headers": {
+          "content-type": "application/json",
+          "retry-after": "30"
+        },
+        "body": {
+          "error": {
+            "code": "ApplicationThrottled",
+            "message": "Application is over its MailboxConcurrency limit.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "sign-in-refused": [
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/events/AAMkAGI2-evt-focus1="
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "InvalidAuthenticationToken",
+            "message": "Lifetime validation failed, the token is expired.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "forbidden": [
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/events/AAMkAGI2-evt-focus1="
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorAccessDenied",
+            "message": "Access is denied. Check credentials and try again.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "bad-request": [
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/events/AAMkAGI2-evt-focus1=",
+        "body": {
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:30:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorInvalidRequest",
+            "message": "Your request can't be completed. The end time must be after the start time.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "unavailable": [
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/events/AAMkAGI2-evt-focus1="
+      },
+      "response": {
+        "status": 500,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorInternalServerError",
+            "message": "An internal server error occurred. The operation failed.",
+            "innerError": {
+              "date": "2026-10-03T12:00:00",
+              "request-id": "5c1f0000-0000-4000-8000-000000000001",
+              "client-request-id": "5c1f0000-0000-4000-8000-000000000001"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "sync-recognises-commander-events": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-commander=",
+              "name": "Commander",
+              "color": "lightTeal",
+              "hexColor": "",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Commander",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars/AAMkAGI2-cal-default=/calendarView/delta?startDateTime=2026-09-03T12:00:00.000Z&endDateTime=2027-10-03T12:00:00.000Z"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#Collection(event)",
+          "@odata.deltaLink": "https://graph.test/v1.0/me/calendars/AAMkAGI2-cal-default=/calendarView/delta?$deltatoken=default-delta-1",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.event",
+              "@odata.etag": "W/\"DwAAABYAAABbusy1\"",
+              "id": "AAMkAGI2-evt-busy1=",
+              "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+              "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+              "changeKey": "ck-busy1",
+              "categories": [],
+              "transactionId": "busy-block:c4e6a8b0-2d4f-4a6c-8e0b-1d3f5a7c9e2b",
+              "originalStartTimeZone": "UTC",
+              "originalEndTimeZone": "UTC",
+              "iCalUId": "040000008200E00074C5B7101A82E008-busy1",
+              "uid": "040000008200E00074C5B7101A82E008-busy1",
+              "reminderMinutesBeforeStart": 15,
+              "isReminderOn": false,
+              "hasAttachments": false,
+              "subject": "Busy",
+              "bodyPreview": "",
+              "importance": "normal",
+              "sensitivity": "private",
+              "isAllDay": true,
+              "isCancelled": false,
+              "isOrganizer": true,
+              "responseRequested": true,
+              "seriesMasterId": null,
+              "showAs": "busy",
+              "type": "singleInstance",
+              "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-busy1%3D&exvsurl=1&path=/calendar/item",
+              "onlineMeetingUrl": null,
+              "isOnlineMeeting": false,
+              "onlineMeetingProvider": "unknown",
+              "allowNewTimeProposals": true,
+              "isDraft": false,
+              "hideAttendees": false,
+              "responseStatus": {
+                "response": "organizer",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "body": {
+                "contentType": "html",
+                "content": ""
+              },
+              "start": {
+                "dateTime": "2026-10-08T00:00:00.0000000",
+                "timeZone": "UTC"
+              },
+              "end": {
+                "dateTime": "2026-10-09T00:00:00.0000000",
+                "timeZone": "UTC"
+              },
+              "location": {
+                "displayName": "",
+                "locationType": "default",
+                "uniqueIdType": "unknown",
+                "address": {},
+                "coordinates": {}
+              },
+              "locations": [],
+              "recurrence": null,
+              "attendees": [],
+              "organizer": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "onlineMeeting": null
+            },
+            {
+              "@odata.type": "#microsoft.graph.event",
+              "@odata.etag": "W/\"DwAAABYAAABlunch\"",
+              "id": "AAMkAGI2-evt-lunch=",
+              "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+              "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+              "changeKey": "ck-lunch",
+              "categories": [],
+              "transactionId": "6b0e3f52-9d1c-4e7a-8b2f-1c3d5e7f9a0b",
+              "originalStartTimeZone": "GMT Standard Time",
+              "originalEndTimeZone": "GMT Standard Time",
+              "iCalUId": "040000008200E00074C5B7101A82E008-lunch",
+              "uid": "040000008200E00074C5B7101A82E008-lunch",
+              "reminderMinutesBeforeStart": 15,
+              "isReminderOn": false,
+              "hasAttachments": false,
+              "subject": "Lunch with Leo",
+              "bodyPreview": "",
+              "importance": "normal",
+              "sensitivity": "normal",
+              "isAllDay": false,
+              "isCancelled": false,
+              "isOrganizer": true,
+              "responseRequested": true,
+              "seriesMasterId": null,
+              "showAs": "busy",
+              "type": "singleInstance",
+              "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-lunch%3D&exvsurl=1&path=/calendar/item",
+              "onlineMeetingUrl": null,
+              "isOnlineMeeting": false,
+              "onlineMeetingProvider": "unknown",
+              "allowNewTimeProposals": true,
+              "isDraft": false,
+              "hideAttendees": false,
+              "responseStatus": {
+                "response": "organizer",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "body": {
+                "contentType": "html",
+                "content": ""
+              },
+              "start": {
+                "dateTime": "2026-10-06T11:30:00.0000000",
+                "timeZone": "UTC"
+              },
+              "end": {
+                "dateTime": "2026-10-06T12:30:00.0000000",
+                "timeZone": "UTC"
+              },
+              "location": {
+                "displayName": "",
+                "locationType": "default",
+                "uniqueIdType": "unknown",
+                "address": {},
+                "coordinates": {}
+              },
+              "locations": [],
+              "recurrence": null,
+              "attendees": [],
+              "organizer": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "onlineMeeting": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars/AAMkAGI2-cal-commander=/calendarView/delta?startDateTime=2026-09-03T12:00:00.000Z&endDateTime=2027-10-03T12:00:00.000Z"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#Collection(event)",
+          "@odata.deltaLink": "https://graph.test/v1.0/me/calendars/AAMkAGI2-cal-commander=/calendarView/delta?$deltatoken=commander-delta-1",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.event",
+              "@odata.etag": "W/\"DwAAABYAAABfocus1\"",
+              "id": "AAMkAGI2-evt-focus1=",
+              "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+              "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+              "changeKey": "ck-focus1",
+              "categories": [],
+              "transactionId": "focus-block:3f2b8c1e-5d4a-4c6b-9e8f-0a1b2c3d4e5f",
+              "originalStartTimeZone": "Europe/London",
+              "originalEndTimeZone": "Europe/London",
+              "iCalUId": "040000008200E00074C5B7101A82E008-focus1",
+              "uid": "040000008200E00074C5B7101A82E008-focus1",
+              "reminderMinutesBeforeStart": 15,
+              "isReminderOn": false,
+              "hasAttachments": false,
+              "subject": "Write the quarterly plan",
+              "bodyPreview": "",
+              "importance": "normal",
+              "sensitivity": "private",
+              "isAllDay": false,
+              "isCancelled": false,
+              "isOrganizer": true,
+              "responseRequested": true,
+              "seriesMasterId": null,
+              "showAs": "busy",
+              "type": "singleInstance",
+              "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-focus1%3D&exvsurl=1&path=/calendar/item",
+              "onlineMeetingUrl": null,
+              "isOnlineMeeting": false,
+              "onlineMeetingProvider": "unknown",
+              "allowNewTimeProposals": true,
+              "isDraft": false,
+              "hideAttendees": false,
+              "responseStatus": {
+                "response": "organizer",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "body": {
+                "contentType": "html",
+                "content": ""
+              },
+              "start": {
+                "dateTime": "2026-10-06T08:00:00.0000000",
+                "timeZone": "UTC"
+              },
+              "end": {
+                "dateTime": "2026-10-06T10:00:00.0000000",
+                "timeZone": "UTC"
+              },
+              "location": {
+                "displayName": "",
+                "locationType": "default",
+                "uniqueIdType": "unknown",
+                "address": {},
+                "coordinates": {}
+              },
+              "locations": [],
+              "recurrence": null,
+              "attendees": [],
+              "organizer": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "onlineMeeting": null
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

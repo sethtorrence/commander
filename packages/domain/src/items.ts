@@ -171,6 +171,9 @@ export const sourceItem = z.object({
   // Who its people are, where the Source knows more than the detail holds (a GitHub login's email
   // and name): Person matching reads these first (see people.ts). Not kept on the Item.
   identities: z.array(identity).optional(),
+  // An event Commander made (commander-events.ts): the id of its Item, which holds a placeholder
+  // external id until the Source's answer gives it the real one.
+  commanderItemId: id.optional(),
 });
 export type SourceItem = z.input<typeof sourceItem>;
 

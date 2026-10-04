@@ -6,6 +6,12 @@ import { calendarSettingsIn } from './calendar-settings';
 import { EventPrep } from './EventPrep';
 import { invitationsIn } from './invitations';
 
+// Ares's focus block suggestions are read again whenever the Core says he did or suggested something.
+const onAresActivity = (listener: () => void) =>
+  window.commander.onCoreMessage((message) => {
+    if (message.type === 'ares-activity') listener();
+  });
+
 // The Calendar Section: the events of every calendar switched on in every connected Google and
 // Outlook Account, as one Agenda, opened into a detail pane and filed into Projects. Making and
 // changing events is the provider's: Edit and New event hand over to Google Calendar or Outlook on
@@ -23,6 +29,8 @@ function CalendarSection() {
       settings={settings}
       Prep={EventPrep}
       invitations={invitations}
+      autonomy={window.commander.autonomy}
+      onAresActivity={onAresActivity}
     />
   );
 }

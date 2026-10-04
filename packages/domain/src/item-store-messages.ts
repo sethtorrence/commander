@@ -16,6 +16,7 @@ import {
   emailThreadList,
   emailThreadQuery,
 } from './email-threads';
+import { type FocusSettings, focusSettings } from './focus-time';
 import {
   type ActivityEntry,
   activityEntry,
@@ -169,6 +170,10 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('change-people'), action: peopleAction }),
   // Invitations still to come that wait for the User's answer, earliest first (the Dashboard's Today).
   z.object({ op: z.literal('invitations') }),
+  // Settings → Calendar's focus time (#131): working hours, the Account focus blocks go in, and the
+  // pairs of Block time across Accounts.
+  z.object({ op: z.literal('focus-settings') }),
+  z.object({ op: z.literal('save-focus-settings'), settings: focusSettings }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -228,6 +233,8 @@ export type ItemStoreResults = {
   people: Person[];
   'change-people': PeopleChange;
   invitations: Item[];
+  'focus-settings': FocusSettings;
+  'save-focus-settings': FocusSettings;
 };
 
 export const itemStoreResult = {
@@ -276,6 +283,8 @@ export const itemStoreResult = {
   people: z.array(person),
   'change-people': peopleChange,
   invitations: z.array(item),
+  'focus-settings': focusSettings,
+  'save-focus-settings': focusSettings,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

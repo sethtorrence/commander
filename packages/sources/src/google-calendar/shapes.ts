@@ -51,6 +51,8 @@ export const googleEvent = z.object({
   description: text,
   location: text,
   organizer: person,
+  // Who made it: for an event Commander made, the User (`self`), whose address the Account is.
+  creator: person,
   start: time,
   end: time,
   recurringEventId: text,
@@ -77,6 +79,9 @@ export const googleEvent = z.object({
 });
 export type GoogleEvent = z.infer<typeof googleEvent>;
 
+// A calendar as `calendars.insert` answers it.
+export const googleCalendar = z.object({ id: z.string().min(1), summary: text });
+
 export const eventsPage = z.object({
   items: z.array(googleEvent).nullish(),
   // The calendar's own time zone, for events that don't name one.
@@ -96,7 +101,7 @@ export type ListedCalendar = {
 };
 
 // Google's default calendar colour, for a calendar listed without one.
-const DEFAULT_COLOUR = '#4285f4';
+export const DEFAULT_COLOUR = '#4285f4';
 
 export function toListedCalendar(entry: CalendarListEntry): ListedCalendar {
   const colour = entry.backgroundColor?.trim() ?? '';
@@ -153,11 +158,22 @@ function meetingUrl(event: GoogleEvent): string | null {
   return isWebLink(video?.uri) ? video.uri.trim() : null;
 }
 
-function commanderKind(event: GoogleEvent): CommanderEventKind | null {
-  const marked = event.extendedProperties?.private?.commander;
+// The marks Commander leaves on the events it makes (private extended properties, which only travel
+// with this copy of the event): what kind it is, and Commander's id for it, its Item's id.
+export const COMMANDER_KIND_PROPERTY = 'commander';
+export const COMMANDER_ID_PROPERTY = 'commanderId';
+
+export function commanderKind(event: GoogleEvent): CommanderEventKind | null {
+  const marked = event.extendedProperties?.private?.[COMMANDER_KIND_PROPERTY];
   return (commanderEventKinds as readonly string[]).includes(marked ?? '')
     ? (marked as CommanderEventKind)
     : null;
+}
+
+// The Item an event Commander made belongs to, when it carries a well-formed id.
+function commanderItemId(event: GoogleEvent): string | null {
+  const marked = event.extendedProperties?.private?.[COMMANDER_ID_PROPERTY];
+  return z.uuid().safeParse(marked).success ? (marked as string) : null;
 }
 
 /**
@@ -217,6 +233,7 @@ export function toEventItem(
   const people = new Set<string>();
   if (organizer) people.add(organizer.email.toLowerCase());
   for (const each of attendees) if (!each.resource) people.add(each.email.toLowerCase());
+  const madeBy = commanderItemId(event);
   return {
     externalId: eventExternalId(calendar.id, event.id),
     kind: 'event',
@@ -224,5 +241,6 @@ export function toEventItem(
     people: [...people],
     status: 'open',
     detail,
+    ...(madeBy && { commanderItemId: madeBy }),
   };
 }

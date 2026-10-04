@@ -1,10 +1,12 @@
-import type {
-  EventAttendee,
-  EventCalendar,
-  EventDetail,
-  EventResponse,
-  EventTime,
-  SourceItem,
+import {
+  type CommanderEventKind,
+  commanderEventKind,
+  type EventAttendee,
+  type EventCalendar,
+  type EventDetail,
+  type EventResponse,
+  type EventTime,
+  type SourceItem,
 } from '@commander/domain';
 import { z } from 'zod';
 import type { ListedCalendar } from '../google-calendar/shapes';
@@ -78,6 +80,11 @@ export const graphEvent = z.object({
   lastModifiedDateTime: text,
   onlineMeeting: z.object({ joinUrl: text }).nullish(),
   onlineMeetingUrl: text,
+  // The id a client gave the event when it made it, so Graph ignores a retried POST. Commander's are
+  // `<kind>:<Commander's id>`; Outlook's own apps set theirs too.
+  transactionId: text,
+  // Only when asked for with $expand, which calendarView and delta don't allow: writes' answers.
+  singleValueExtendedProperties: z.array(z.object({ id: text, value: text })).nullish(),
 });
 export type GraphEvent = z.infer<typeof graphEvent>;
 
@@ -176,6 +183,71 @@ function meetingUrl(event: GraphEvent): string | null {
   return isWebLink(event.onlineMeetingUrl) ? event.onlineMeetingUrl.trim() : null;
 }
 
+// Commander's marker on the events it makes: a named string property in the PS_PUBLIC_STRINGS set,
+// valued `<kind>:<Commander's id>`. Graph can find events by it, though sync can't read it.
+export const COMMANDER_EVENT_PROPERTY = 'String {00020329-0000-0000-C000-000000000046} Name CommanderEvent';
+
+// `<kind>:<Commander's id>`, the transactionId and marker of an event Commander made.
+export const commanderEventTag = (kind: CommanderEventKind, commanderId: string) => `${kind}:${commanderId}`;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function readTag(tag: string | null | undefined): { kind: CommanderEventKind; commanderId: string } | null {
+  const [kind, commanderId, ...rest] = (tag ?? '').trim().split(':');
+  const known = commanderEventKind.safeParse(kind);
+  if (!known.success || !commanderId || rest.length || !UUID.test(commanderId)) return null;
+  return { kind: known.data, commanderId };
+}
+
+/**
+ * Which of Commander's events this is, if it made it: by its transactionId (which every answer
+ * carries), or by Commander's marker when an answer includes extended properties.
+ */
+export function commanderEventOf(
+  event: GraphEvent,
+): { kind: CommanderEventKind; commanderId: string } | null {
+  const marker = (event.singleValueExtendedProperties ?? []).find(
+    (each) => each.id?.trim().toLowerCase() === COMMANDER_EVENT_PROPERTY.toLowerCase(),
+  );
+  return readTag(event.transactionId) ?? readTag(marker?.value);
+}
+
+const wallClocks = new Map<string, Intl.DateTimeFormat>();
+
+// An instant as a wall clock in a zone, written as Graph writes times: 2026-10-06T09:00:00.0000000.
+function wallClock(at: number, zone: string): string {
+  let format = wallClocks.get(zone);
+  if (!format) {
+    format = new Intl.DateTimeFormat('en-GB', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    });
+    wallClocks.set(zone, format);
+  }
+  const parts = format.formatToParts(at);
+  const part = (type: string) => parts.find((each) => each.type === type)?.value ?? '00';
+  return `${part('year')}-${part('month')}-${part('day')}T${part('hour')}:${part('minute')}:${part('second')}.0000000`;
+}
+
+/**
+ * One end of an event as Graph takes it: the wall clock in the event's own zone (UTC when it has none,
+ * or one Graph mightn't know); an all-day event's day at midnight, in UTC, as Outlook writes them.
+ */
+export function graphTime(time: EventTime, allDay: boolean): { dateTime: string; timeZone: string } {
+  if (allDay) {
+    const day = time.date ?? new Date(time.at).toISOString().slice(0, 10);
+    return { dateTime: `${day}T00:00:00.0000000`, timeZone: 'UTC' };
+  }
+  const zone = ianaZone(time.timeZone) ?? 'UTC';
+  return { dateTime: wallClock(time.at, zone), timeZone: zone };
+}
+
 // Whether an answer from Graph says the event no longer happens for the User.
 export const isGone = (event: GraphEvent) => !!event['@removed'] || event.isCancelled === true;
 
@@ -220,6 +292,7 @@ export function toEventItem(
   if (event.isOrganizer === true) myResponse = attendees.some((each) => !each.self) ? 'accepted' : null;
   else if (invited) myResponse = responseOf(status);
   const allDay = event.isAllDay === true;
+  const commander = commanderEventOf(event);
   const start = toTime(event.start, allDay, event.originalStartTimeZone ?? null);
   const end = toTime(event.end, allDay, event.originalEndTimeZone ?? event.originalStartTimeZone ?? null);
   const detail: EventDetail = {
@@ -240,8 +313,8 @@ export function toEventItem(
     private: event.sensitivity === 'private' || event.sensitivity === 'confidential',
     seriesId: event.seriesMasterId?.trim() || null,
     webUrl: isWebLink(event.webLink) ? event.webLink.trim() : null,
-    // Commander's own events (focus and busy blocks) come with the tickets that make them.
-    createdByCommander: null,
+    // Commander's own events (focus blocks and busy copies), known by their transactionId.
+    createdByCommander: commander?.kind ?? null,
   };
   const people = new Set<string>();
   if (isAddress(organiserAddress)) people.add(organiserAddress.toLowerCase());
@@ -254,5 +327,7 @@ export function toEventItem(
     people: [...people],
     status: 'open',
     detail,
+    // Names the Item Commander made for it, which may still hold a placeholder external id.
+    ...(commander && { commanderItemId: commander.commanderId }),
   };
 }

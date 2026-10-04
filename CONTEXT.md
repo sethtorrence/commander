@@ -138,6 +138,14 @@ _Avoid_: Meeting block, event card, meeting note
 Ares's short homework for a meeting, made half an hour before it: what it is about, what was said last time, what is open with the people in it and what is worth raising, each line linked to the Items it rests on; shown folded under the Meeting chip, never as Blocks.
 _Avoid_: Briefing, agenda, meeting notes
 
+**Focus block**:
+An event holding time to work on one Todo, suggested by Ares in the User's free time and, once accepted, put busy and private in the "Commander" calendar of the Account the User chose, Linked to its Todo (made from).
+_Avoid_: Time block, hold, focus time (that's the Calendar Section's panel of suggestions)
+
+**Busy copy**:
+The private event titled "Busy" that Block time across Accounts puts on another Account's main calendar for a busy event, carrying nothing else of it, and moving and going with it; Commander never copies one again.
+_Avoid_: Mirror, shadow event, blocker
+
 **Daily template**:
 The Blocks each new Daily Note starts with, edited in Settings; a new day gets copies of them, not links to them.
 _Avoid_: Default note, skeleton, boilerplate

@@ -78,6 +78,9 @@ export type OutgoingQueue = OutgoingStore & {
   // A sync brought the Source's values for an Item: records them as the last-synced values, drops
   // pending changes the Source already has, and returns the changes still to show on top.
   synced(itemId: string, sourceFields: Record<string, unknown>): OutgoingRow[];
+  // The Item made in Commander now has the Source's id (an event Commander made): changes still queued
+  // for it name that id from now on.
+  rekey(itemId: string, externalId: string): void;
 };
 
 type Row = typeof schema.outgoingChanges.$inferSelect;
@@ -164,6 +167,10 @@ export function openOutgoingQueue(db: BetterSQLite3Database<typeof schema>): Out
         kept.push(toRow({ ...row, synced: now }));
       }
       return kept;
+    },
+
+    rekey(itemId, externalId) {
+      db.update(table).set({ externalId }).where(eq(table.itemId, itemId)).run();
     },
 
     list(input = {}) {

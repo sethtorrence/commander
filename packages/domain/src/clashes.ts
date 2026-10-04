@@ -9,7 +9,7 @@ import type { Item } from './items';
     User hasn't declined and that isn't cancelled. Tentative and unanswered invitations count.
   - Overlapping means sharing some time: back-to-back events don't clash.
   - One meeting the User is invited to through both Accounts (the same title, start and end) is taken
-    for one meeting seen twice, not a clash.
+    for one meeting seen twice, not a clash; nor is Commander's busy copy of an event (#131).
 
   Double-bookings (#129) use the same rules, but across every Account and calendar, the same Account
   included: `overlapping` finds what double-books the User with an invitation, for Ares to judge.
@@ -28,7 +28,9 @@ export function busyForClashes(event: ClashingEvent): boolean {
     !detail.allDay &&
     detail.busy &&
     detail.myResponse !== 'declined' &&
-    detail.end.at > detail.start.at
+    detail.end.at > detail.start.at &&
+    // A busy copy (#131) stands for an event in another Account: it isn't a second commitment.
+    detail.createdByCommander !== 'busy-block'
   );
 }
 
