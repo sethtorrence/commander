@@ -10,6 +10,7 @@ import {
   DialogHeading,
   DialogTitle,
   Kbd,
+  toast,
 } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useReveal } from '../../frame/reveal';
@@ -25,6 +26,7 @@ import { ChatFilterBar } from './ChatFilterBar';
 import { ChatRow } from './ChatRow';
 import { ChatView } from './ChatView';
 import type { Chat } from './chats';
+import { inReplyBox, ReplyBox } from './ReplyBox';
 import { type ChatLink, checkLine, type TeamsAccountsClient, type TeamsChats } from './teams-chats';
 import { useTeams } from './use-teams';
 
@@ -42,6 +44,8 @@ const KEYS: [ReactNode, string][] = [
   [<Kbd key="enter">↵</Kbd>, 'Open'],
   [<Kbd key="esc">Esc</Kbd>, 'Back'],
   [<Kbd key="b">B</Kbd>, 'Project'],
+  [<Kbd key="send">Ctrl ↵</Kbd>, 'Send reply'],
+  [<Kbd key="u">Ctrl U</Kbd>, 'Unread'],
   [<Kbd key="z">Ctrl Z</Kbd>, 'Undo'],
 ];
 
@@ -117,6 +121,8 @@ export function TeamsSheet({
   const badges = useBadgePicker(state.apply, state.undo);
   const openSection = useOpenSection();
   const [excluding, setExcluding] = useState<Chat | null>(null);
+  // Each Chat's unsent reply, kept while moving between Chats.
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const several = state.accounts.length > 1;
 
   useTabCount(state.loaded ? state.unreadCount : null);
@@ -131,6 +137,30 @@ export function TeamsSheet({
     const section = sectionFor(other.kind);
     if (section && section !== 'teams') openSection(section);
     else if (other.kind === 'chat') state.reveal(other.id);
+  };
+
+  const draftOf = (chat: Chat | null) => (chat ? (drafts[chat.id] ?? '') : '');
+  const setDraft = (chatId: string, text: string) => setDrafts((now) => ({ ...now, [chatId]: text }));
+
+  const sendReply = async () => {
+    const chat = selected;
+    const text = draftOf(chat).trim();
+    if (!chat || !text) return;
+    if (await state.reply(chat, text)) setDraft(chat.id, '');
+  };
+
+  // Mark as unread (or read again, while it is unread), undoable from the toast or with Ctrl+Z.
+  const canToggleRead = (chat: Chat | null): chat is Chat =>
+    !!chat && (chat.detail.unreadCount > 0 || state.canMarkUnread(chat));
+  const toggleRead = async () => {
+    if (!canToggleRead(selected)) return;
+    const chat = selected;
+    const read = chat.detail.unreadCount > 0;
+    const entry = await state.setRead(chat, read);
+    if (!entry) return;
+    toast(read ? `Marked read: ${chat.title}` : `Marked unread: ${chat.title}`, {
+      action: { label: 'Undo', onClick: () => void state.undo(entry.id) },
+    });
   };
 
   const openChat = (itemId: string) => {
@@ -149,6 +179,19 @@ export function TeamsSheet({
       run: () => setOpen(false),
     },
     { keys: 'b', label: 'File under a Project', run: () => file() },
+    {
+      keys: 'Ctrl+Enter',
+      label: 'Send the reply',
+      inFields: true,
+      when: () => open && inReplyBox(document.activeElement),
+      run: () => void sendReply(),
+    },
+    {
+      keys: 'Ctrl+u',
+      label: 'Mark the chat as unread (or read)',
+      when: () => canToggleRead(selected),
+      run: () => void toggleRead(),
+    },
     { keys: 'Ctrl+z', label: 'Undo', run: () => state.undo() },
   ]);
   // From the palette: open a Chat it found, whatever the filters were hiding; from the Dashboard, at
@@ -231,6 +274,20 @@ export function TeamsSheet({
                 onExclude={() => setExcluding(selected)}
                 onClose={() => setOpen(false)}
                 onOpenLink={openLink}
+                outgoing={selected ? state.outgoingFor(selected) : []}
+                waiting={selected ? state.waitingFor(selected) : null}
+                onRetry={() => selected && state.retry(selected)}
+                onToggleRead={canToggleRead(selected) ? () => void toggleRead() : null}
+                reply={
+                  selected && (
+                    <ReplyBox
+                      to={selected.title}
+                      draft={draftOf(selected)}
+                      onDraft={(text) => setDraft(selected.id, text)}
+                      onSend={() => void sendReply()}
+                    />
+                  )
+                }
               />
             )}
           </div>

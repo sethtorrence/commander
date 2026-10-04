@@ -1,6 +1,6 @@
 import type { ChatMember, ChatMessage, SourceItem } from '@commander/domain';
 import { z } from 'zod';
-import type { Cadence, SourceAdapter, StoredItem, SyncRequest } from '../source';
+import type { Cadence, SourceAdapter, StoredItem, SyncRequest, WriteRequest } from '../source';
 import { ChatUnreadable, connectGraph, type Graph } from './graph';
 import {
   chatsPage,
@@ -12,6 +12,7 @@ import {
   toMember,
   toMessage,
 } from './shapes';
+import { writeChat } from './write';
 
 // Microsoft Teams as a Source: the User's Chats (one-to-one, group and meeting) through Microsoft
 // Graph v1.0 over fetch, each Chat a `chat` Item with its recent messages. Graph has no delegated
@@ -31,6 +32,10 @@ import {
 //   the last-message preview misses edits, deletions and reactions in quiet Chats. A light sync
 //   (refresh, and the check after every other Source's sync) never does.
 // - At most one request a second per Chat; 429s, and 503s with Retry-After, stop the sync at once.
+//
+// Two-way sync (#106, write.ts): replies to a Chat and its read state go back to Teams, one Chat's
+// queued changes at a time, each request given up after 30 seconds so a stuck answer can't hold up
+// the Account's queue (a reply's retry then checks whether it got through before posting again).
 
 // Microsoft asks apps to poll Teams about once a day: a full sync daily, plus light checks.
 export const TEAMS_CADENCE: Cadence = { defaultMinutes: 1440, choices: [1440], alsoAfterOtherSources: true };
@@ -49,6 +54,8 @@ const DAY_MS = 24 * 60 * 60_000;
 const FIRST_SYNC_DAYS = 30;
 const REREAD_DAYS = 7;
 const PAGE_SIZE = 50;
+// A write's request that takes longer than this is given up on (its outcome unknown).
+export const WRITE_TIMEOUT_MS = 30_000;
 // Chats saved together.
 const SAVE_BATCH = 25;
 
@@ -238,6 +245,20 @@ export function createTeamsSource({
 
       const cursor: TeamsCursor = { chats: next };
       return { cursor, cost: graph.cost };
+    },
+
+    async write(request: WriteRequest) {
+      const graph = connectGraph({
+        graphUrl: graphUrl(),
+        fetch,
+        now,
+        sleep,
+        accessToken: request.accessToken,
+        signal: request.signal,
+        timeoutMs: WRITE_TIMEOUT_MS,
+      });
+      const result = await writeChat(graph, request, messagesPerChat);
+      return { ...result, cost: graph.cost };
     },
   };
 }

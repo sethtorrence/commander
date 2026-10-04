@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
-import type { Project } from '@commander/domain';
+import type { ChatDetail, Project } from '@commander/domain';
 import type { AccountSyncStatus, TeamsAccountSummary } from '@commander/domain/ipc';
+import { Toaster } from '@commander/ui';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -166,6 +167,7 @@ function renderSheet(where = place) {
               <Active>
                 <TeamsSheet chats={chats} accounts={accounts.client} changes={changes} />
               </Active>
+              <Toaster />
             </ShortcutScope>
           </SectionProvider>
         </FrameControlsProvider>
@@ -185,6 +187,9 @@ const typeTab = (name: string) => screen.getByRole('tab', { name: new RegExp(`^$
 const unreadOnly = () => screen.getByRole('switch', { name: /Unread only/ });
 const chatId = (title: string) =>
   store.query({ kinds: ['chat'] }).find((item) => item.title === title)?.id ?? '';
+const detailOf = (title: string) => store.get(chatId(title))?.item.detail as ChatDetail;
+const queued = (title: string) =>
+  store.outgoing.list({ itemIds: [chatId(title)] }).map(({ field, status }) => ({ field, status }));
 
 describe('the Teams sheet', () => {
   it('shows "No Teams Account connected yet." with no Account and no Chats', async () => {
@@ -359,6 +364,9 @@ describe('the Teams sheet', () => {
       expect(within(view() as HTMLElement).getByText('Filed under TL by you')).toBeTruthy(),
     );
 
+    // Opening it read it, the latest change; then the filing.
+    await press('z', document.body, { ctrlKey: true });
+    await waitFor(() => expect(detailOf('Launch crew').unreadCount).toBe(1));
     await press('z', document.body, { ctrlKey: true });
     await waitFor(() => expect(store.get(chatId('Launch crew'))?.item.filing).toBeNull());
   });
@@ -367,6 +375,10 @@ describe('the Teams sheet', () => {
     renderSheet();
     await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('teams', 3));
     await press('Enter');
+    // Opening it read it; undo leaves it unread again.
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('teams', 2));
+    await press('z', document.body, { ctrlKey: true });
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('teams', 3));
     fireEvent.click(within(view() as HTMLElement).getByRole('button', { name: 'Mute' }));
 
     await waitFor(() => expect(listed()).toEqual(['Social', 'Priya Patel', 'Launch crew', 'Daily standup']));
@@ -377,7 +389,7 @@ describe('the Teams sheet', () => {
     expect(store.chatSettings.list()).toMatchObject([{ chatId: '19:launch@thread.v2', muted: true }]);
 
     await press('z', document.body, { ctrlKey: true });
-    await waitFor(() => expect(listed()[0]).toBe('Launch crew'));
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('teams', 3));
     expect(store.chatSettings.list()).toEqual([]);
   });
 
@@ -478,5 +490,149 @@ describe('opened from the Dashboard (#107)', () => {
     expect(focused.getAttribute('data-message-id')).toBe(mention?.id);
     expect(focused.getAttribute('aria-label')).toMatch(/^Priya Patel at /);
     expect(scrolled).toContain(focused);
+  });
+});
+
+describe('replying and read state', () => {
+  const open = async (title: string) => {
+    renderSheet();
+    await waitFor(() => expect(listed()).toHaveLength(4));
+    fireEvent.click(screen.getByText(title));
+    return view() as HTMLElement;
+  };
+  const box = (chatView: HTMLElement) => within(chatView).getByRole('textbox', { name: 'Reply' });
+  const blur = () => (document.activeElement as HTMLElement | null)?.blur();
+
+  it('reads an unread Chat when it is opened, as the User’s change, queued for Teams and undoable', async () => {
+    const chatView = await open('Social');
+    await waitFor(() => expect(detailOf('Social').unreadCount).toBe(0));
+    expect(queued('Social')).toEqual([{ field: 'read', status: 'pending' }]);
+    await waitFor(() => expect(within(chatView).getByText('Marked read by you')).toBeTruthy());
+
+    await press('z', document.body, { ctrlKey: true });
+    await waitFor(() => expect(detailOf('Social').unreadCount).toBe(1));
+    expect(queued('Social')).toEqual([]);
+  });
+
+  it('sends a reply with Ctrl+Enter: it shows at once as Sending…, queued under its own id, and the box empties', async () => {
+    const chatView = await open('Priya Patel');
+    fireEvent.change(box(chatView), { target: { value: 'On it.\nBack at 3.' } });
+    box(chatView).focus();
+    await press('Enter', box(chatView), { ctrlKey: true });
+
+    const sending = await within(chatView).findByTestId('chat-reply');
+    expect(sending.textContent).toContain('Sending…');
+    expect(sending.textContent).toContain('On it.\nBack at 3.');
+    expect((box(chatView) as HTMLTextAreaElement).value).toBe('');
+    expect(detailOf('Priya Patel').replies).toEqual([
+      { clientId: expect.stringMatching(/^[0-9a-f-]{36}$/), text: 'On it.\nBack at 3.', createdAt: NOW },
+    ]);
+    expect(queued('Priya Patel')).toEqual(
+      expect.arrayContaining([{ field: expect.stringMatching(/^message:/), status: 'pending' }]),
+    );
+    await waitFor(() => expect(within(chatView).getByText('Replied by you · sending to Teams')).toBeTruthy());
+  });
+
+  it('says when it waits for the connection, shows Couldn’t sync with Retry, and Retry sends it again', async () => {
+    accounts = fakeAccounts([samAccount(syncStatus({ activity: 'offline' }))]);
+    const chatView = await open('Priya Patel');
+    fireEvent.change(box(chatView), { target: { value: 'Written offline' } });
+    fireEvent.click(within(chatView).getByRole('button', { name: 'Send' }));
+    const reply = await within(chatView).findByTestId('chat-reply');
+    await waitFor(() => expect(reply.textContent).toContain('Offline · sends to Teams when back online'));
+
+    const ids = store.outgoing
+      .list({ itemIds: [chatId('Priya Patel')] })
+      .filter((change) => change.field.startsWith('message:'))
+      .map((change) => change.id);
+    store.outgoing.fail(ids, { error: 'Teams refused this reply.', failed: true, nextAttemptAt: null });
+    accounts.change([samAccount(syncStatus({ outgoing: { pending: 1, failed: 1 } }))]);
+    const alert = await within(chatView).findByRole('alert');
+    expect(alert.textContent).toContain('Couldn’t sync');
+    expect(alert.textContent).toContain('Teams refused this reply.');
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(queued('Priya Patel').every((change) => change.status === 'pending')).toBe(true),
+    );
+  });
+
+  it('cancels a reply still queued with Ctrl+Z, and says a sent one can’t be recalled', async () => {
+    const chatView = await open('Priya Patel');
+    fireEvent.change(box(chatView), { target: { value: 'Never mind' } });
+    box(chatView).focus();
+    await press('Enter', box(chatView), { ctrlKey: true });
+    await within(chatView).findByTestId('chat-reply');
+    blur();
+    await press('z', document.body, { ctrlKey: true });
+    await waitFor(() => expect(within(chatView).queryByTestId('chat-reply')).toBeNull());
+    expect(queued('Priya Patel').filter((change) => change.field.startsWith('message:'))).toEqual([]);
+
+    fireEvent.change(box(chatView), { target: { value: 'Shipping it' } });
+    box(chatView).focus();
+    await press('Enter', box(chatView), { ctrlKey: true });
+    await within(chatView).findByTestId('chat-reply');
+    // Teams has it now.
+    store.outgoing.settle(
+      store.outgoing
+        .list({ itemIds: [chatId('Priya Patel')] })
+        .filter((change) => change.field.startsWith('message:'))
+        .map((change) => change.id),
+    );
+    blur();
+    await press('z', document.body, { ctrlKey: true });
+    expect(
+      await screen.findByText('Sent to Teams: a message that reached other people can’t be recalled.'),
+    ).toBeTruthy();
+    expect(detailOf('Priya Patel').replies).toHaveLength(1);
+  });
+
+  it('marks a read Chat unread, keeps it so while open, and Undo or Ctrl+U reads it again', async () => {
+    const chatView = await open('Daily standup');
+    expect(detailOf('Daily standup').unreadCount).toBe(0);
+    fireEvent.click(within(chatView).getByRole('button', { name: /Mark as unread/ }));
+    await waitFor(() => expect(detailOf('Daily standup').unreadCount).toBe(1));
+    expect(queued('Daily standup')).toEqual([{ field: 'read', status: 'pending' }]);
+    await waitFor(() => expect(within(chatView).getByRole('button', { name: /Mark as read/ })).toBeTruthy());
+    expect(detailOf('Daily standup').unreadCount).toBe(1);
+
+    const toast = (await screen.findByText('Marked unread: Daily standup')).closest('li') as HTMLElement;
+    fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(detailOf('Daily standup').unreadCount).toBe(0));
+    expect(queued('Daily standup')).toEqual([]);
+
+    await waitFor(() =>
+      expect(within(chatView).getByRole('button', { name: /Mark as unread/ })).toBeTruthy(),
+    );
+    await press('u', document.body, { ctrlKey: true });
+    await waitFor(() => expect(detailOf('Daily standup').unreadCount).toBe(1));
+    await waitFor(() => expect(within(chatView).getByRole('button', { name: /Mark as read/ })).toBeTruthy());
+    await press('u', document.body, { ctrlKey: true });
+    await waitFor(() => expect(detailOf('Daily standup').unreadCount).toBe(0));
+  });
+
+  it('lists sending a reply and marking unread in the cheat sheet', async () => {
+    let shortcuts: string[] = [];
+    function Listed() {
+      shortcuts = useShortcutList()
+        .filter((shortcut) => shortcut.group === 'Teams')
+        .map((shortcut) => `${shortcut.keys.join('+')} ${shortcut.label}`);
+      return null;
+    }
+    render(
+      <ShortcutProvider>
+        <ProjectsProvider client={projects} storage={localStorage}>
+          <SectionProvider place={place}>
+            <ShortcutScope scope="teams" group="Teams">
+              <TeamsSheet chats={chats} accounts={accounts.client} />
+            </ShortcutScope>
+          </SectionProvider>
+        </ProjectsProvider>
+        <Listed />
+      </ShortcutProvider>,
+    );
+    expect(shortcuts).toEqual(
+      expect.arrayContaining(['Ctrl+Enter Send the reply', 'Ctrl+U Mark the chat as unread (or read)']),
+    );
   });
 });

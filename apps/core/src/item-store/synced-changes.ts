@@ -5,16 +5,18 @@
 import { isDeepStrictEqual } from 'node:util';
 import {
   type ActivityEntry,
+  type Actor,
   type Item,
   type ItemDetail,
   type ItemState,
   isSyncedField,
+  isUnrecallableField,
   itemDetail,
   statusFromDetail,
   syncedFieldsOf,
   withSyncedFields,
 } from '@commander/domain';
-import type { OutgoingQueue } from './outgoing';
+import type { OutgoingQueue, OutgoingStore } from './outgoing';
 
 type Invalid = (message: string) => Error;
 
@@ -107,4 +109,47 @@ export function withQueuedOnTop(
   for (const change of queued) shown[change.field] = change.value;
   const detail = withSyncedFields(incoming.detail, shown);
   return { detail, status: statusFromDetail(detail, incoming.status) };
+}
+
+/**
+ * Why a change may not be made by this actor: only the User sends something the Source can't take
+ * back (a reply to a Teams Chat). Ares can draft one for the User to send, never send it himself.
+ */
+export function onlyTheUserSends(
+  item: Item,
+  before: ItemState | null,
+  after: ItemState,
+  by: Actor,
+): string | null {
+  if (by.kind === 'user' || by.kind === 'source') return null;
+  const was = syncedFieldsOf(before?.detail ?? null) ?? {};
+  const now = syncedFieldsOf(after.detail) ?? {};
+  const sends = Object.entries(now).some(
+    ([field, value]) => value && !was[field] && isUnrecallableField(item.kind, field),
+  );
+  return sends ? 'Only you can send a message to Teams: Ares can draft one for you to send.' : null;
+}
+
+/**
+ * Why an entry can't be undone: it sent something the Source can't take back (a reply to a Teams
+ * Chat, which reached other people), and that is on its way or already there. Null when nothing
+ * stands in the way: undoing a reply still queued (offline, retrying, Couldn't sync) cancels it.
+ */
+export function unrecallable(
+  queue: Pick<OutgoingStore, 'forItem'>,
+  item: Item,
+  before: ItemState | null,
+  after: ItemState,
+): string | null {
+  const was = syncedFieldsOf(before?.detail ?? null);
+  const now = syncedFieldsOf(after.detail);
+  if (!was || !now) return null;
+  const rows = queue.forItem(item.id);
+  for (const [field, value] of Object.entries(now)) {
+    if (!value || was[field] || !isUnrecallableField(item.kind, field)) continue;
+    const row = rows.find((each) => each.field === field);
+    if (row?.status === 'sending') return 'This reply is on its way to Teams, so it can’t be recalled now.';
+    if (!row) return 'Sent to Teams: a message that reached other people can’t be recalled.';
+  }
+  return null;
 }

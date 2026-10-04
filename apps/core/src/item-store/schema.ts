@@ -358,6 +358,10 @@ export const outgoingChanges = sqliteTable(
     entryId: integer('entry_id').references(() => activity.id),
     status: text('status').$type<OutgoingStatus>().notNull(),
     attempts: integer('attempts').notNull().default(0),
+    // When the first attempt to send it began, if one has: a later attempt can't be sure the first
+    // didn't reach the Source (a timeout, a dropped connection, a crash), so it checks before sending
+    // again what the Source can't take twice (a Teams message).
+    attemptedAt: integer('attempted_at'),
     // When to try again after a failure; null means as soon as possible.
     nextAttemptAt: integer('next_attempt_at'),
     error: text('error'),

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { LinearIssueDetail } from './linear';
-import { isSyncedField, statusFromDetail, syncedFieldsOf, withSyncedFields } from './synced-fields';
+import {
+  isSyncedField,
+  isUnrecallableField,
+  statusFromDetail,
+  syncedFieldsOf,
+  withSyncedFields,
+} from './synced-fields';
+import type { ChatDetail, ChatMessage, ChatReply } from './teams';
 
 const priya = { id: 'user-priya', name: 'Priya Patel', displayName: 'priya', email: null };
 const bug = { id: 'label-bug', name: 'Bug', color: '#eb5757' };
@@ -91,5 +98,113 @@ describe('a Linear issue’s synced fields', () => {
     expect(statusFromDetail(done, 'open')).toBe('done');
     expect(statusFromDetail(detail, 'done')).toBe('open');
     expect(statusFromDetail(null, 'archived')).toBe('archived');
+  });
+});
+
+const T = Date.UTC(2026, 9, 3, 9);
+const MIN = 60_000;
+const ME = 'u-sam';
+const said = (id: string, at: number, from: string): ChatMessage => ({
+  id,
+  from: { userId: from, name: from },
+  event: null,
+  createdAt: at,
+  modifiedAt: at,
+  deleted: false,
+  text: `Message ${id}`,
+  mentions: [],
+  reactions: [],
+  attachments: [],
+  replyTo: null,
+});
+const reply = (clientId: string, createdAt: number): ChatReply => ({
+  clientId,
+  text: `Reply ${clientId}`,
+  createdAt,
+});
+
+// Priya wrote twice since the User last read the Chat, the second time mentioning them.
+const chat: ChatDetail = {
+  kind: 'chat',
+  chatType: 'one-on-one',
+  topic: null,
+  webUrl: null,
+  members: [],
+  lastReadAt: T,
+  hidden: false,
+  joinUrl: null,
+  messages: [said('1', T - MIN, ME), said('2', T + MIN, 'u-priya'), said('3', T + 2 * MIN, 'u-priya')],
+  unreadCount: 2,
+  mentionsMe: true,
+  latestFromMe: false,
+  lastMessageAt: T + 2 * MIN,
+};
+const read: ChatDetail = { ...chat, lastReadAt: T + 2 * MIN, unreadCount: 0, mentionsMe: false };
+
+describe('a Chat’s synced fields', () => {
+  it('keys whether it is read, and each reply not yet in Teams', () => {
+    expect(syncedFieldsOf(chat)).toEqual({ read: false });
+    const replying = { ...read, replies: [reply('c1', T + 3 * MIN)] };
+    expect(syncedFieldsOf(replying)).toEqual({ read: true, 'message:c1': replying.replies[0] });
+  });
+
+  it('keeps replies oldest first, and none at all once the last one has gone', () => {
+    const fields = {
+      read: true,
+      'message:c2': reply('c2', T + 4 * MIN),
+      'message:c1': reply('c1', T + 3 * MIN),
+    };
+    expect(withSyncedFields(read, fields).replies).toEqual([
+      reply('c1', T + 3 * MIN),
+      reply('c2', T + 4 * MIN),
+    ]);
+    const replying = { ...read, replies: [reply('c1', T + 3 * MIN)] };
+    expect(withSyncedFields(replying, { read: true, 'message:c1': null })).toEqual(read);
+    expect(withSyncedFields(read, { read: true })).toEqual(read);
+  });
+
+  it('reads the Chat up to its latest message', () => {
+    expect(withSyncedFields(chat, { read: true })).toEqual({
+      ...chat,
+      lastReadAt: T + 2 * MIN,
+      unreadCount: 0,
+      mentionsMe: false,
+    });
+  });
+
+  it('marks it unread from its latest message from someone else', () => {
+    expect(withSyncedFields(read, { read: false })).toEqual({
+      ...read,
+      lastReadAt: T + 2 * MIN - 1,
+      unreadCount: 1,
+    });
+    // The User spoke last: Priya's message before it is the one left unread.
+    const spokeLast: ChatDetail = {
+      ...read,
+      messages: [...read.messages, said('4', T + 5 * MIN, ME)],
+      lastReadAt: T + 5 * MIN,
+      latestFromMe: true,
+      lastMessageAt: T + 5 * MIN,
+    };
+    expect(withSyncedFields(spokeLast, { read: false })).toMatchObject({
+      lastReadAt: T + 2 * MIN - 1,
+      unreadCount: 1,
+    });
+    // Nothing from anyone else: nothing to leave unread.
+    const alone: ChatDetail = { ...spokeLast, messages: [said('4', T + 5 * MIN, ME)] };
+    expect(withSyncedFields(alone, { read: false })).toEqual(alone);
+  });
+
+  it('names which fields are synced, and which can’t be taken back once sent', () => {
+    expect(
+      ['read', 'message:c1', 'message:', 'topic', 'messages'].map((f) => isSyncedField('chat', f)),
+    ).toEqual([true, true, false, false, false]);
+    expect(isUnrecallableField('chat', 'message:c1')).toBe(true);
+    expect(isUnrecallableField('chat', 'read')).toBe(false);
+    expect(isUnrecallableField('linear-issue', 'comment:c1')).toBe(false);
+  });
+
+  it('never changes the Item’s status', () => {
+    expect(statusFromDetail(chat, 'open')).toBe('open');
   });
 });

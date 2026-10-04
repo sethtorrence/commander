@@ -1,0 +1,1 @@
+ALTER TABLE `outgoing_changes` ADD `attempted_at` integer;

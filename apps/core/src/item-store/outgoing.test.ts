@@ -239,7 +239,7 @@ describe('the queue', () => {
   it('hands out what is due per Item, retries failed changes, and counts them per Account', () => {
     edit({ priority: 1 });
     const [ids] = store.outgoing.due(ACME, clock).map((group) => group.map((row) => row.id));
-    store.outgoing.markSending(ids ?? []);
+    store.outgoing.markSending(ids ?? [], clock);
     expect(store.outgoing.counts(ACME)).toEqual({ pending: 1, failed: 0 });
 
     store.outgoing.fail(ids ?? [], { error: 'Linear refused it', failed: true, nextAttemptAt: null });
@@ -254,7 +254,10 @@ describe('the queue', () => {
 
   it('queues a new change to a field being sent after it, rather than into it', () => {
     edit({ priority: 1 });
-    store.outgoing.markSending(store.outgoing.forItem(saved().id).map((row) => row.id));
+    store.outgoing.markSending(
+      store.outgoing.forItem(saved().id).map((row) => row.id),
+      clock,
+    );
     edit({ priority: 4 });
 
     expect(queued()).toEqual([

@@ -42,6 +42,20 @@ export const chatMessage = z.object({
 });
 export type ChatMessage = z.infer<typeof chatMessage>;
 
+// The most text one reply may hold (Teams takes about 28 KB of HTML in a message).
+export const MAX_REPLY_LENGTH = 20_000;
+
+// A reply the User wrote in Commander that Teams doesn't have yet (#106): plain text with line
+// breaks, under an id made in Commander. It is the Chat's synced field `message:<clientId>` (see
+// synced-fields.ts), queued for Teams until it gets there; then it is one of the Chat's messages,
+// under Teams's own id, and leaves `replies`.
+export const chatReply = z.object({
+  clientId: id,
+  text: z.string().trim().min(1).max(MAX_REPLY_LENGTH),
+  createdAt: timestamp,
+});
+export type ChatReply = z.infer<typeof chatReply>;
+
 export const chatDetail = z.object({
   kind: z.literal('chat'),
   chatType,
@@ -62,6 +76,8 @@ export const chatDetail = z.object({
   mentionsMe: z.boolean(),
   latestFromMe: z.boolean(),
   lastMessageAt: timestamp.nullable(),
+  // Replies written in Commander on their way to Teams, oldest first (absent when there are none).
+  replies: z.array(chatReply).optional(),
 });
 export type ChatDetail = z.infer<typeof chatDetail>;
 
@@ -89,6 +105,16 @@ export function chatFlags(
     latestFromMe: latest !== null && fromMe(latest),
     lastMessageAt: latest?.createdAt ?? null,
   };
+}
+
+// The latest message from someone other than the User (`me`; anyone's when not known), if any:
+// where marking a Chat unread starts from. Deleted messages and system events don't count.
+export function latestFromOthers(messages: readonly ChatMessage[], me: string | null): ChatMessage | null {
+  return messages.reduce<ChatMessage | null>((newest, message) => {
+    if (message.from === null || message.deleted || (me !== null && message.from.userId === me))
+      return newest;
+    return newest === null || message.createdAt >= newest.createdAt ? message : newest;
+  }, null);
 }
 
 // What the User chose for a Chat in Commander (#105). Commander settings only: nothing changes in

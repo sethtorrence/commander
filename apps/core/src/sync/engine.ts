@@ -36,6 +36,7 @@ import {
   SignInRefused,
   type SourceAdapter,
   SourceUnavailable,
+  type StoredItem,
   type Superseded,
   type SyncCost,
   type SyncMode,
@@ -220,6 +221,16 @@ export function createSyncEngine({
     );
   }
 
+  // The Account's Items with these external ids, as last saved, for adapters that fetch only part of one.
+  const storedItems = (source: Source, account: string, externalIds: string[]): StoredItem[] =>
+    store.fromSource({ source, account }, externalIds).map((item) => ({
+      externalId: item.externalId ?? '',
+      title: item.title,
+      people: item.people,
+      status: item.status,
+      detail: item.detail,
+    }));
+
   // Whether the Source has a light sync (a cheap check) beside its full one.
   const hasLightSync = (lane: Lane) => lane.adapter.cadence.alsoAfterOtherSources === true;
   const checksAlongside = (lane: Lane, state: SyncState) =>
@@ -397,14 +408,7 @@ export function createSyncEngine({
             cursor,
             mode,
             me: entry.account.me ?? null,
-            stored: (externalIds) =>
-              store.fromSource({ source, account }, externalIds).map((item) => ({
-                externalId: item.externalId ?? '',
-                title: item.title,
-                people: item.people,
-                status: item.status,
-                detail: item.detail,
-              })),
+            stored: (externalIds) => storedItems(source, account, externalIds),
             accessToken: () => accessTokens.request(account),
             recheck,
             excluded: store.chatSettings.excluded(account),
@@ -660,7 +664,7 @@ export function createSyncEngine({
     if (!first || !lane?.adapter.write) return 'stop';
     const { source } = lane;
     const ids = changes.map((change) => change.id);
-    store.outgoing.markSending(ids);
+    store.outgoing.markSending(ids, now());
     emit();
     const abort = new AbortController();
     entry.writeAbort = abort;
@@ -668,7 +672,16 @@ export function createSyncEngine({
       const result = await lane.adapter.write({
         account,
         externalId: first.externalId,
-        changes: changes.map(({ field, value, synced, madeAt }) => ({ field, value, synced, madeAt })),
+        // An earlier attempt's time tells the adapter its outcome may be unknown.
+        changes: changes.map(({ field, value, synced, madeAt, attemptedAt }) => ({
+          field,
+          value,
+          synced,
+          madeAt,
+          ...(attemptedAt !== null ? { attemptedAt } : {}),
+        })),
+        me: entry.account.me ?? null,
+        stored: (externalIds) => storedItems(source, account, externalIds),
         accessToken: () => accessTokens.request(account),
         signal: abort.signal,
       });
@@ -683,7 +696,9 @@ export function createSyncEngine({
           at,
         );
         lane.written.add(first.itemId);
-        if (result.item) {
+        // Not a Chat the User excluded while the write was on its way.
+        const excluded = result.item && store.chatSettings.excluded(account).includes(result.item.externalId);
+        if (result.item && !excluded) {
           const why = supersededNote(source, result.superseded);
           const saved = store.saveFromSource({
             source,

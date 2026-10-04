@@ -218,12 +218,18 @@ test('filter the Chats, open one, file it, mute another and exclude a third', as
     ]);
   expect(image.hits()).toBe(0);
 
+  // Opening a Chat reads it (in Teams too, #106): Social, clicked first, and this one leave the unread.
+  await expect(tab(window, 'Teams').locator('.tc')).toHaveText('02');
+  await expect(rows(section)).toHaveText([/Priya Patel/, /Daily standup/, /Social/, /Launch crew/]);
+
   // File it with b: the activity log says so, and the Project filter finds it.
   await window.keyboard.press('b');
   const picker = window.getByRole('dialog', { name: 'Badge picker' });
   await picker.getByRole('combobox').fill('tl');
   await picker.getByRole('combobox').press('Enter');
-  await expect(rows(section).first().getByRole('img', { name: 'Titanlink' })).toBeVisible();
+  await expect(
+    rows(section).filter({ hasText: 'Launch crew' }).getByRole('img', { name: 'Titanlink' }),
+  ).toBeVisible();
   const activity = view.getByRole('region', { name: 'Activity' });
   await expect(activity.getByRole('listitem').first()).toContainText('Filed under TL by you');
   await window.keyboard.press('Escape');
@@ -236,21 +242,25 @@ test('filter the Chats, open one, file it, mute another and exclude a third', as
     .click();
   await expect(rows(section)).toHaveCount(4);
 
-  // Mute Social: it leaves the unread Chats and the tab count.
+  // Mute Social (read, so marked unread again first): it leaves the unread Chats and the tab count.
   await rows(section).filter({ hasText: 'Social' }).click();
-  await view.getByRole('button', { name: 'Mute' }).click();
-  await expect(rows(section)).toHaveText([/Launch crew/, /Priya Patel/, /Daily standup/, /Social/]);
+  await expect(view.getByRole('heading', { name: 'Social' })).toBeVisible();
+  await view.getByRole('button', { name: 'Mark as unread' }).click();
   await expect(tab(window, 'Teams').locator('.tc')).toHaveText('03');
+  await view.getByRole('button', { name: 'Mute' }).click();
+  await expect(rows(section)).toHaveText([/Priya Patel/, /Daily standup/, /Social/, /Launch crew/]);
+  await expect(tab(window, 'Teams').locator('.tc')).toHaveText('02');
   await section.getByRole('switch', { name: /Unread only/ }).click();
-  await expect(rows(section)).toHaveText([/Launch crew/, /Priya Patel/, /Daily standup/]);
+  await expect(rows(section)).toHaveText([/Priya Patel/, /Daily standup/]);
   await section.getByRole('switch', { name: /Unread only/ }).click();
 
-  // Exclude the standup, after a confirmation: it goes, and the next sync skips it.
+  // Exclude the standup (read in Teams once opened), after a confirmation: it goes, and the next sync skips it.
   await rows(section).filter({ hasText: 'Daily standup' }).click();
+  await expect.poll(() => microsoft.chat(STANDUP_CHAT).readBy[SAM.id]).toBeDefined();
   await view.getByRole('button', { name: 'Exclude…' }).click();
   const confirm = window.getByRole('dialog', { name: /Exclude this Chat/ });
   await confirm.getByRole('button', { name: 'Exclude', exact: true }).click();
-  await expect(rows(section)).toHaveText([/Launch crew/, /Priya Patel/, /Social/]);
+  await expect(rows(section)).toHaveText([/Priya Patel/, /Social/, /Launch crew/]);
   microsoft.postMessage(STANDUP_CHAT, PRIYA, '<p>One more thing</p>');
   const beforeSync = microsoft.graphRequests.length;
   await syncNow(window);
@@ -270,6 +280,7 @@ test('filter the Chats, open one, file it, mute another and exclude a third', as
   await expect(excluded).toBeHidden();
   await window.keyboard.press('Escape');
   await tab(window, 'Teams').click();
-  await expect(rows(section)).toHaveText([/Launch crew/, /Daily standup/, /Priya Patel/, /Social/]);
+  // Read before it was excluded, so only Priya's new message is unread.
+  await expect(rows(section)).toHaveText([/Daily standup/, /Priya Patel/, /Social/, /Launch crew/]);
   expect(image.hits()).toBe(0);
 });

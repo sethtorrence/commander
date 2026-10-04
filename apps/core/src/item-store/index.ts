@@ -72,6 +72,7 @@ import {
   type SourceBatch,
   sourceBatch,
   statusFromDetail,
+  withoutUntouched,
 } from '@commander/domain';
 import Database from 'better-sqlite3';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
@@ -120,7 +121,14 @@ import { type ListChange, rulesIn } from './rules';
 import * as schema from './schema';
 import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
-import { editedState, queueChanges, undoneDetail, withQueuedOnTop } from './synced-changes';
+import {
+  editedState,
+  onlyTheUserSends,
+  queueChanges,
+  undoneDetail,
+  unrecallable,
+  withQueuedOnTop,
+} from './synced-changes';
 import { openUpdateStore, type UpdateStore } from './updates';
 
 export type { Search } from '../search';
@@ -799,19 +807,26 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   // What the log keeps of an entry: a Source's changes to an Item have the detail fields the log
-  // keeps only in summary (a Chat's messages) emptied, and summarised (the domain's logged-fields.ts).
+  // keeps only in summary (a Chat's messages) emptied, and summarised (the domain's logged-fields.ts);
+  // changes made in Commander have those fields emptied only where they left them as they were.
   function forTheLog(entry: NewEntry): { before: unknown; after: unknown; summary: FieldSummary[] | null } {
     const isState = (state: unknown): state is ItemState =>
       typeof state === 'object' && state !== null && 'detail' in state;
     const { before, after } = entry;
     const itemEntry = !entry.otherItemId && !entry.otherProjectId;
-    if (
-      entry.by.kind !== 'source' ||
-      !itemEntry ||
-      !isState(after) ||
-      (before !== null && !isState(before))
-    ) {
+    if (!itemEntry || !isState(after) || (before !== null && !isState(before))) {
       return { before, after, summary: null };
+    }
+    if (entry.by.kind !== 'source') {
+      // Changes made in Commander: whole, but for what they left alone (a Chat's messages).
+      if (!before) return { before, after, summary: null };
+      const kept = withoutUntouched(before.detail, after.detail);
+      if (kept.after === after.detail) return { before, after, summary: null };
+      return {
+        before: { ...before, detail: kept.before },
+        after: { ...after, detail: kept.after },
+        summary: null,
+      };
     }
     const compact = compactForLog(before?.detail ?? null, after.detail);
     if (compact.summaries.length === 0) return { before, after, summary: null };
@@ -1165,6 +1180,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const current = stateOf(item);
     const before = target.before as ItemState | null;
     const after = target.after as ItemState;
+    // A reply that reached Teams (or is on its way) can't be recalled.
+    const refusal = unrecallable(outgoing, item, before, after);
+    if (refusal) throw new ItemStoreError('invalid', refusal);
     // Undoing a creation deletes the Item; it stays as a tombstone so its history survives.
     let restored: ItemState = { ...current, deletedAt: at };
     if (before) {
@@ -1216,6 +1234,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   // Logs a change, and queues what it changed in a Source Item's synced fields for the Source (Two-way
   // sync), in the same transaction.
   function logAndQueue(item: Item, entry: NewEntry, at: number): ActivityEntry {
+    const refusal = onlyTheUserSends(
+      item,
+      entry.before as ItemState | null,
+      entry.after as ItemState,
+      entry.by,
+    );
+    if (refusal) throw new ItemStoreError('invalid', refusal);
     const logged = log(entry, at);
     queueChanges(outgoing, item, entry.before as ItemState, entry.after as ItemState, logged);
     return logged;

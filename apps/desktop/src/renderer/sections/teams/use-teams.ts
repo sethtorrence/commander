@@ -1,4 +1,11 @@
-import type { ActivityEntry, ChatSetting, ChatSettingChangeKind, Item } from '@commander/domain';
+import {
+  type ActivityEntry,
+  type ChatSetting,
+  type ChatSettingChangeKind,
+  type Item,
+  latestFromOthers,
+  type OutgoingChange,
+} from '@commander/domain';
 import type { TeamsAccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -53,6 +60,18 @@ export interface TeamsState {
   meIn(chat: Chat): string | null;
   /** Mutes, unmutes or excludes a Chat; mute and unmute can be undone here. */
   changeSetting(chat: Chat, change: Exclude<ChatSettingChangeKind, 'include'>): Promise<void>;
+  /** The changes made here still on their way to Teams (or that couldn't sync), for one Chat. */
+  outgoingFor(chat: Chat): OutgoingChange[];
+  /** Why changes on their way can't go yet (offline, needs reconnecting), for a Chat's Account. */
+  waitingFor(chat: Chat): string | null;
+  /** Replies to a Chat; resolves with whether the reply was taken (shown at once, sent in the background). */
+  reply(chat: Chat, text: string): Promise<boolean>;
+  /** Whether the Chat can be marked unread: it is read, and someone else has written in it. */
+  canMarkUnread(chat: Chat): boolean;
+  /** Marks a Chat read or unread (undoable here). Opening an unread Chat marks it read by itself. */
+  setRead(chat: Chat, read: boolean): Promise<ActivityEntry | null>;
+  /** Sends a Chat's changes that couldn't sync again. */
+  retry(chat: Chat): void;
   /** Makes a change through another module (filing), so it reloads and can be undone here. */
   apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
   /** Undoes one change made here: the given entry, or the latest not yet undone. */
@@ -68,9 +87,14 @@ export type MessageFocus = { chatId: string; messageId: string; nonce: number };
 // A change made here that can be undone: an activity entry (filing), or a mute to reverse.
 type Undoable = { kind: 'entry'; entryId: number } | { kind: 'mute'; chat: Chat; muted: boolean };
 
-// What changes when a sync finishes: each Account's last sync.
+// What changes when a sync finishes or a change reaches Teams: each Account's last sync and outgoing changes.
 const syncSignature = (accounts: readonly TeamsAccountSummary[]) =>
-  accounts.map((account) => `${account.id}:${account.sync?.lastSyncedAt ?? ''}`).join('|');
+  accounts
+    .map((account) => {
+      const outgoing = account.sync?.outgoing;
+      return `${account.id}:${account.sync?.lastSyncedAt ?? ''}:${outgoing?.pending ?? 0}/${outgoing?.failed ?? 0}`;
+    })
+    .join('|');
 
 /**
  * The Teams Section's state: the Chats, the User's settings for them and the Accounts, the filters
@@ -100,6 +124,7 @@ export function useTeams({
   const [focusAsked, setFocusAsked] = useState<MessageFocus | null>(null);
   const [history, setHistory] = useState<ActivityEntry[]>([]);
   const [links, setLinks] = useState<ChatLink[]>([]);
+  const [outgoing, setOutgoing] = useState<OutgoingChange[]>([]);
   const [version, setVersion] = useState(0);
   const undoable = useRef<Undoable[]>([]);
   const lastIndex = useRef(0);
@@ -109,11 +134,15 @@ export function useTeams({
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload
   useEffect(() => {
     let current = true;
-    Promise.all([client.list(), client.settings()]).then(([nextItems, nextSettings]) => {
-      if (!current) return;
-      setItems(nextItems);
-      setSettings(nextSettings);
-    }, report);
+    Promise.all([client.list(), client.settings(), client.outgoing()]).then(
+      ([nextItems, nextSettings, nextOutgoing]) => {
+        if (!current) return;
+        setItems(nextItems);
+        setSettings(nextSettings);
+        setOutgoing(nextOutgoing);
+      },
+      report,
+    );
     return () => {
       current = false;
     };
@@ -174,6 +203,15 @@ export function useTeams({
       current = false;
     };
   }, [client, selectedItemId, version]);
+
+  // Opening the view keeps it on the Chat it opened, even when reading it moves it in the list.
+  const openView = useCallback(
+    (next: boolean) => {
+      if (next && selectedItemId) setSelectedId((current) => current ?? selectedItemId);
+      setOpen(next);
+    },
+    [selectedItemId],
+  );
 
   const setFilters = useCallback(
     (change: Partial<ChatFilters>) => setFilterState((now) => ({ ...now, ...change })),
@@ -293,6 +331,70 @@ export function useTeams({
     [accounts],
   );
 
+  const outgoingFor = useCallback(
+    (chat: Chat) => outgoing.filter((change) => change.itemId === chat.id),
+    [outgoing],
+  );
+
+  const waitingFor = useCallback(
+    (chat: Chat) => {
+      const account = accounts.find((each) => each.id === chat.account);
+      if (account?.status === 'needs-reconnect' || account?.sync?.activity === 'needs-reconnect')
+        return 'Waiting · reconnect this Teams Account in Settings → Accounts';
+      if (account?.sync?.activity === 'offline') return 'Offline · sends to Teams when back online';
+      return null;
+    },
+    [accounts],
+  );
+
+  const reply = useCallback(
+    async (chat: Chat, text: string) => {
+      try {
+        const entry = await client.reply(chat.id, text);
+        undoable.current.push({ kind: 'entry', entryId: entry.id });
+        return true;
+      } catch (error) {
+        report(error);
+        return false;
+      } finally {
+        reload();
+      }
+    },
+    [client, reload],
+  );
+
+  const canMarkUnread = useCallback(
+    (chat: Chat) =>
+      chat.detail.unreadCount === 0 && latestFromOthers(chat.detail.messages, meIn(chat)) !== null,
+    [meIn],
+  );
+
+  const setRead = useCallback(
+    (chat: Chat, read: boolean) => apply(() => client.setRead(chat.id, read)),
+    [apply, client],
+  );
+
+  const retry = useCallback(
+    (chat: Chat) => {
+      client.retry(chat.id).then(reload, report);
+    },
+    [client, reload],
+  );
+
+  // Opening a Chat with unread messages reads it, as the User's change (undoable). Once per opening:
+  // marking it unread while it stays open leaves it unread.
+  const readOnOpen = useRef<string | null>(null);
+  const openedChat = open ? selected : null;
+  useEffect(() => {
+    if (!openedChat) {
+      readOnOpen.current = null;
+      return;
+    }
+    if (readOnOpen.current === openedChat.id) return;
+    readOnOpen.current = openedChat.id;
+    if (openedChat.detail.unreadCount > 0) void setRead(openedChat, true);
+  }, [openedChat, setRead]);
+
   const refresh = useCallback(() => setRefreshWanted(true), []);
   useEffect(() => {
     if (!refreshWanted || knownAccounts === null) return;
@@ -318,10 +420,16 @@ export function useTeams({
     focus,
     moveSelection,
     open,
-    setOpen,
+    setOpen: openView,
     history,
     links,
     meIn,
+    outgoingFor,
+    waitingFor,
+    reply,
+    canMarkUnread,
+    setRead,
+    retry,
     changeSetting,
     apply,
     undo,
