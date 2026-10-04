@@ -17,6 +17,23 @@ function fakeReader(accounts: EmailImageAccount[]) {
 }
 
 describe('Settings → Email', () => {
+  it('says whether opening a thread marks it read, at once unless changed (#135)', async () => {
+    localStorage.clear();
+    const reader = fakeReader([
+      { account: 'google:1', name: 'alex@gmail.test', source: 'gmail', askFirst: false, trustedSenders: [] },
+    ]);
+    render(<EmailSettings no="17" reader={reader} onAccountsChanged={() => () => {}} />);
+
+    const choice = await screen.findByRole('combobox', { name: 'Mark a thread read when I open it' });
+    expect(choice.textContent).toBe('At once');
+    localStorage.setItem('commander.email.markRead', 'never');
+    cleanup();
+    render(<EmailSettings no="17" reader={reader} onAccountsChanged={() => () => {}} />);
+    expect(
+      (await screen.findByRole('combobox', { name: 'Mark a thread read when I open it' })).textContent,
+    ).toBe('Never');
+  });
+
   it('offers Ask before showing images for Gmail Accounts, saying why, and lists trusted senders to remove', async () => {
     const reader = fakeReader([
       { account: 'google:1', name: 'alex@gmail.test', source: 'gmail', askFirst: false, trustedSenders: [] },

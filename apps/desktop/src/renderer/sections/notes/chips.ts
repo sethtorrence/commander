@@ -1,4 +1,4 @@
-import type { BlockLinkTarget } from '@commander/domain';
+import type { BlockLinkTarget, Project } from '@commander/domain';
 import { accentColour, accentTextColour } from '@commander/ui';
 import type { LabelChip } from '../../links/block-text';
 
@@ -22,6 +22,12 @@ const escapeHtml = (text: string) =>
 const attributesHtml = (attributes: [string, string][]) =>
   attributes.map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(' ');
 
+// A Project's accent for its Badge in a chip, as CSS custom properties.
+function accentStyle(project: Project): string {
+  const ink = accentTextColour(project.accent);
+  return `--accent: ${accentColour(project.accent)};${ink ? ` --on-chip: ${ink};` : ''}`;
+}
+
 /**
  * A meeting chip (#128): the event's compact live card, drawn by CSS from empty parts (links.css), so
  * the chip's text is still only its token. The calendar colour, the Badge of the event's Project, the
@@ -31,10 +37,7 @@ const attributesHtml = (attributes: [string, string][]) =>
 function meetingHtml(token: string, shown: ReturnType<LabelChip>): string {
   const card = shown.meeting;
   let style = `--cal: ${card?.colour ?? 'transparent'};`;
-  if (shown.project) {
-    const ink = accentTextColour(shown.project.accent);
-    style += ` --accent: ${accentColour(shown.project.accent)};${ink ? ` --on-chip: ${ink};` : ''}`;
-  }
+  if (shown.project) style += ` ${accentStyle(shown.project)}`;
   const state = card?.struck ? 'struck' : card?.status ? 'moved' : 'on';
   const html = attributesHtml([
     ['class', 'n-chip n-meet'],
@@ -66,10 +69,45 @@ function meetingHtml(token: string, shown: ReturnType<LabelChip>): string {
   return `<span ${html}>${parts.join('')}</span>`;
 }
 
+/**
+ * An email chip (#135): the message's compact live card, drawn by CSS from empty parts as a meeting
+ * card is (links.css): the Badge of its Project, the sender, the subject and the date, struck through
+ * with "Gone" when Commander no longer has it. Clicking it opens the thread in the Email Section.
+ */
+function emailHtml(token: string, shown: ReturnType<LabelChip>): string {
+  const card = shown.email ?? { sender: '', date: '', gone: true };
+  const style = shown.project ? accentStyle(shown.project) : '';
+  const said = card.sender ? `Email from ${card.sender}: ${shown.text}` : shown.text;
+  const note = card.gone ? 'Gone' : card.date;
+  const html = attributesHtml([
+    ['class', 'n-chip n-meet n-mail'],
+    ['contenteditable', 'false'],
+    ['role', 'link'],
+    ['data-chip', 'email'],
+    ['data-token', token],
+    ['data-label', shown.text],
+    ['data-state', card.gone ? 'struck' : 'on'],
+    ['aria-label', note ? `${said}, ${note}` : said],
+    ['title', shown.title],
+    ...(style ? [['style', style] as [string, string]] : []),
+  ]);
+  const parts = [
+    `<span class="n-chip-raw">${escapeHtml(token)}</span>`,
+    shown.project
+      ? `<span class="n-meet-badge" ${attributesHtml([['data-code', shown.project.code]])}></span>`
+      : '',
+    card.sender ? `<span class="n-mail-from" ${attributesHtml([['data-label', card.sender]])}></span>` : '',
+    `<span class="n-meet-label" ${attributesHtml([['data-label', shown.text]])}></span>`,
+    note ? `<span class="n-meet-note" ${attributesHtml([['data-note', note]])}></span>` : '',
+  ];
+  return `<span ${html}>${parts.join('')}</span>`;
+}
+
 /** The markup for one chip: its token, hidden, and its label (data-label) drawn by CSS. */
 export function chipHtml(token: string, target: BlockLinkTarget, label: LabelChip): string {
   const shown = label(target);
   if (target.type === 'event') return meetingHtml(token, shown);
+  if (target.type === 'email') return emailHtml(token, shown);
   const attributes: [string, string][] = [
     ['class', 'n-chip'],
     ['contenteditable', 'false'],
@@ -82,9 +120,7 @@ export function chipHtml(token: string, target: BlockLinkTarget, label: LabelChi
   ];
   if (shown.project) {
     attributes.push(['data-code', shown.project.code]);
-    const ink = accentTextColour(shown.project.accent);
-    const style = `--accent: ${accentColour(shown.project.accent)};${ink ? ` --on-chip: ${ink};` : ''}`;
-    attributes.push(['style', style]);
+    attributes.push(['style', accentStyle(shown.project)]);
   }
   return `<span ${attributesHtml(attributes)}><span class="n-chip-raw">${escapeHtml(token)}</span></span>`;
 }

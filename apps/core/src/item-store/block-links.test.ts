@@ -2,7 +2,13 @@ import { randomUUID } from 'node:crypto';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type ActionContext, type BlockDetail, blockLinkToken } from '@commander/domain';
+import {
+  type ActionContext,
+  type BlockDetail,
+  blockLinkToken,
+  type EmailDetail,
+  type SourceItem,
+} from '@commander/domain';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
@@ -218,6 +224,76 @@ describe('a [[Project]] link from a Block', () => {
     store.changeProject({ type: 'undo', changeId: merge.id });
     expect(store.mentions({ targets: [{ targetType: 'project', id: longtail }] })).toEqual([]);
     expect(store.mentions({ targets: [{ targetType: 'project', id: tail }] })).toHaveLength(1);
+  });
+});
+
+// An email from Gmail, as a sync saves it: one Item per message. Returns its Item id.
+function saveEmail(externalId: string, subject: string): string {
+  const detail: EmailDetail = {
+    kind: 'email',
+    messageId: `<${externalId}@mail.test>`,
+    inReplyTo: null,
+    references: [],
+    threadKey: `mid:<${externalId}@mail.test>`,
+    sourceThreadId: `g-${externalId}`,
+    from: { name: 'Dana Whitfield', address: 'dana@northwind.test' },
+    to: [{ name: 'Alex Kim', address: 'alex@gmail.test' }],
+    cc: [],
+    bcc: [],
+    replyTo: [],
+    subject,
+    sentAt: clock - 60 * 60_000,
+    snippet: '',
+    read: false,
+    starred: false,
+    inInbox: true,
+    sentByMe: false,
+    labels: [{ id: 'INBOX', name: 'Inbox' }],
+    attachments: [],
+    hasInvitation: false,
+    listUnsubscribe: null,
+    listId: null,
+  };
+  const item: SourceItem = {
+    externalId,
+    kind: 'email',
+    title: subject,
+    people: ['dana@northwind.test'],
+    status: 'open',
+    detail,
+    body: { text: 'Body', html: null, textFromHtml: false, truncated: false },
+  };
+  store.saveFromSource({ source: 'gmail', account: 'google:alex', items: [item], deleted: [] });
+  const saved = store.query({ kinds: ['email'], titleContains: subject })[0];
+  if (!saved) throw new Error('No email');
+  return saved.id;
+}
+
+const email = (emailId: string) => blockLinkToken({ type: 'email', emailId });
+
+describe('an [[email]] link from a Block', () => {
+  it('is a refers-to Link to the email’s Item, seen from both ends', () => {
+    const budget = saveEmail('m-1', 'Q4 budget');
+    const { id } = addBlock('2026-10-03', `Answer ${email(budget)}`);
+
+    expect(store.get(id)?.links).toMatchObject([
+      { type: 'refers-to', to: { id: budget, kind: 'email', title: 'Q4 budget' } },
+    ]);
+    expect(store.get(budget)?.backlinks).toMatchObject([{ type: 'refers-to', from: { id, kind: 'block' } }]);
+    expect(store.mentions({ targets: [{ targetType: 'item', id: budget }] }).map((m) => m.block.id)).toEqual([
+      id,
+    ]);
+  });
+
+  it('goes when the token leaves the text, and ignores a token for an Item that is not an email', () => {
+    const budget = saveEmail('m-1', 'Q4 budget');
+    const noteId = store.ensureDailyNote('2026-10-01', user).id;
+    const { id } = addBlock('2026-10-03', `Answer ${email(budget)} ${email(noteId)}`);
+    expect(store.get(id)?.links.map((link) => link.to.id)).toEqual([budget]);
+
+    setText(id, 'Answered');
+    expect(store.get(id)?.links).toEqual([]);
+    expect(store.get(budget)?.backlinks).toEqual([]);
   });
 });
 

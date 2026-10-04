@@ -30,9 +30,15 @@ import {
   dailyNoteQuery,
   describeRule,
   type EmailBody,
+  type EmailDetail,
+  type EmailLabel,
+  type EmailSearchQuery,
+  type EmailSearchResult,
   type EmailThread,
   type EmailThreadList,
   type EmailThreadQuery,
+  type EmailViewCounts,
+  type EmailViewQuery,
   type EventQuery,
   type FieldSummary,
   type Filing,
@@ -321,6 +327,15 @@ export type ItemStore = {
   emailThread(account: string, threadKey: string): EmailThread | null;
   // One email's bodies (the reader's HTML among them), or null when none were kept.
   emailBody(itemId: string): EmailBody | null;
+  // Organising email (#135): each view's counts, Section search, and an Account's labels.
+  emailViews(query?: EmailViewQuery): EmailViewCounts;
+  emailSearch(query: EmailSearchQuery): EmailSearchResult;
+  emailLabels(account?: string): EmailLabel[];
+  // Snooze: brings back the threads whose snooze is due by `at` (top of the inbox, the latest message
+  // unread, "Snoozed until"), as the User's own change. Returns the Items it changed.
+  wakeSnoozed(at: number): string[];
+  // When the next snooze is due, or null.
+  nextSnoozeAt(): number | null;
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
   // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
@@ -507,7 +522,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     invalid: (message) => new ItemStoreError('invalid', message),
   });
   // Emails (emails.ts): their detail, threading as they arrive, and their bodies beside them.
-  const emails = emailsIn(db, { withDetails: (rows) => withDetails(rows) });
+  const emails = emailsIn(db, { withDetails: (rows) => withDetails(rows), now, search: () => search });
 
   // Undoes entries that filed Items (a merge, or only a Rule's when `byRule`), as the User, skipping
   // any already undone and any Item filed elsewhere since.
@@ -1031,8 +1046,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   /*
-    Keeps a Block's `[[` links in step with its text (ADR 0002): a refers-to Link for each day, Project
-    or calendar event token in it, and none for a token no longer there. A day's token makes that day's Daily
+    Keeps a Block's `[[` links in step with its text (ADR 0002): a refers-to Link for each day, Project,
+    calendar event or email token in it, and none for a token no longer there. A day's token makes that day's Daily
     Note if it has none yet. It runs whenever a Block's text is written, by anyone, so undo, redo and
     moves need nothing of their own. Other refers-to Links from the Block (to other kinds of Item) are
     left alone.
@@ -1063,6 +1078,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         wanted.set(`item:${target.eventId}`, { from: blockId, linkType: 'refers-to', to: target.eventId });
         continue;
       }
+      if (target.type === 'email') {
+        // A link to one email message Commander holds (a tombstone too: the card says it is gone).
+        if (readItem(target.emailId)?.kind !== 'email') continue;
+        wanted.set(`item:${target.emailId}`, { from: blockId, linkType: 'refers-to', to: target.emailId });
+        continue;
+      }
       const note = ensureDailyNote(target.day, {
         by: entry.by,
         why: 'Linked from a Block',
@@ -1078,7 +1099,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         and(
           eq(links.fromItemId, blockId),
           eq(links.type, 'refers-to'),
-          or(eq(links.targetType, 'project'), inArray(items.kind, ['daily-note', 'event'])),
+          or(eq(links.targetType, 'project'), inArray(items.kind, ['daily-note', 'event', 'email'])),
         ),
       )
       .all();
@@ -1405,6 +1426,35 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const recordAll = sqlite.transaction((actions: ItemAction[], context: ActionContext): ActivityEntry[] =>
     actions.map((action) => record(action, context)),
   );
+
+  // Snoozed threads whose time has come (#135) go back to the inbox: each snoozed message is marked
+  // back from its snooze, the latest message unread, and (should the thread have left the inbox
+  // meanwhile) back in the inbox. It is the User's snooze, so the change is theirs, not Ares's.
+  const wakeSnoozed = sqlite.transaction((at: number): string[] => {
+    const changed: string[] = [];
+    for (const thread of emails.dueSnoozes(at)) {
+      const messages = emails.messagesOf([thread]);
+      const latest = messages.at(-1);
+      const inInbox = messages.some((item) => (item.detail as EmailDetail).inInbox);
+      const actions: ItemAction[] = [];
+      for (const item of messages) {
+        const detail = item.detail as EmailDetail;
+        const fields: Record<string, unknown> = {};
+        if (detail.snooze && !detail.snooze.returned && detail.snooze.until <= at)
+          fields.snooze = { until: detail.snooze.until, returned: true };
+        if (item === latest) {
+          if (detail.read) fields.read = false;
+          if (!inInbox) fields.inbox = true;
+        }
+        if (Object.keys(fields).length) actions.push({ type: 'edit-fields', itemId: item.id, fields });
+      }
+      for (const action of actions) {
+        record(action, { by: { kind: 'user' }, why: 'Back from snooze' });
+        if (action.type === 'edit-fields') changed.push(action.itemId);
+      }
+    }
+    return changed;
+  });
 
   // Send to Linear (linear-send.ts).
   const linearSend = linearSendIn({
@@ -1805,10 +1855,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           people: incoming.people,
           deletedAt: null,
           // Changes made in Commander still on their way to the Source stay on top.
-          ...withQueuedOnTop(outgoing, existing.id, {
-            status: incoming.status,
-            detail: stillCommanders(existing.detail, incoming.detail),
-          }),
+          ...withQueuedOnTop(
+            outgoing,
+            existing.id,
+            { status: incoming.status, detail: stillCommanders(existing.detail, incoming.detail) },
+            before.detail,
+          ),
         };
         // An email's bodies, beside it: written first, so the search index reads them.
         const bodyChanged = incoming.body ? emails.writeBody(existing.id, incoming.body) : false;
@@ -2113,6 +2165,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     emailThreads: (query) => emails.threads(query),
     emailThread: (account, threadKey) => emails.threadView(account, threadKey),
     emailBody: (itemId) => emails.readBody(itemId),
+    emailViews: (query) => emails.viewCounts(query),
+    emailSearch: (query) => emails.searchThreads(query),
+    emailLabels: (account) => emails.labelsOf(account),
+    wakeSnoozed: (at) => wakeSnoozed(at),
+    nextSnoozeAt: () => emails.nextSnoozeAt(),
 
     fromSource({ source, account }, externalIds) {
       const { items } = schema;

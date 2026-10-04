@@ -142,6 +142,12 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.emailThreads(request.query) };
       case 'email-thread':
         return { ok: true, result: store.emailThread(request.account, request.threadKey) };
+      case 'email-views':
+        return { ok: true, result: store.emailViews(request.query) };
+      case 'email-search':
+        return { ok: true, result: store.emailSearch(request.query) };
+      case 'email-labels':
+        return { ok: true, result: store.emailLabels(request.account) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

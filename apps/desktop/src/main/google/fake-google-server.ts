@@ -714,7 +714,7 @@ export async function startFakeGoogle(
       const user = authorization.startsWith('Bearer ')
         ? accessTokens.get(authorization.slice('Bearer '.length))
         : undefined;
-      return gmail.handle(request, response, url, user?.email ?? null);
+      return void gmail.handle(request, response, url, user?.email ?? null);
     }
     response.writeHead(404).end();
   });

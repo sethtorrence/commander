@@ -2,10 +2,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 // The Gmail API v1 part of the fake Google (fake-google-server.ts), for tests only: each user's
 // mailbox, answering what Commander's Gmail sync asks (`users.getProfile`, `labels.list`,
-// `messages.list` with `q=after:` and `labelIds`, `messages.get?format=full`, `history.list`) the way
-// Gmail does: newest first, Spam and Trash left out of listings, a historyId that rises with every
-// change, history records for messages added and deleted and labels added and removed, a 404 for a
-// history that has expired, and 403 `rateLimitExceeded` when the per-minute quota is spent.
+// `messages.list` with `q=after:` and `labelIds`, `messages.get?format=full|minimal`, `history.list`)
+// and what organising mail writes (#135: `messages.modify`, `messages.batchModify`, `messages.trash`
+// and `messages.untrash`) the way Gmail does: newest first, Spam and Trash left out of listings unless
+// asked for, a historyId that rises with every change, history records for messages added and deleted
+// and labels added and removed, a 404 for a history that has expired or a message it doesn't have, a
+// 400 for a label it doesn't know, and 403 `rateLimitExceeded` when the per-minute quota is spent.
 // Nothing here talks to the real Gmail.
 
 export type FakeGmailMessageInput = {
@@ -37,6 +39,8 @@ type StoredMessage = {
   threadId: string;
   labelIds: string[];
   date: number;
+  // The history record that last changed it.
+  historyId: number;
   json: unknown;
   // Attachment bytes by attachment id.
   parts: Map<string, Buffer>;
@@ -68,12 +72,24 @@ export type FakeGmail = {
   relabel(email: string, id: string, change: { add?: string[]; remove?: string[] }): void;
   // Deletes a message for good.
   remove(email: string, id: string): void;
+  // A message's labels as Gmail has them now (null: no such message).
+  labelsOf(email: string, id: string): string[] | null;
+  // Every write Commander sent (modify, batchModify, trash, untrash), as its path and body.
+  writes: { path: string; body: unknown }[];
+  // Writes are refused (400 "Mail service not enabled", as Gmail answers an Account whose mail is
+  // off) until switched back: Commander shows Couldn't sync at once, with Retry.
+  refuseWrites(refusing: boolean): void;
   // Gmail's history before now expires: the next history.list from an earlier historyId answers 404.
   expireHistory(email: string): void;
   // Every Gmail request answers 403 rateLimitExceeded until switched back.
   throttle(throttled: boolean): void;
   // Answers a Gmail request, for the user its access token belongs to (null: not signed in).
-  handle(request: IncomingMessage, response: ServerResponse, url: URL, email: string | null): void;
+  handle(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL,
+    email: string | null,
+  ): void | Promise<void>;
 };
 
 const SYSTEM_LABELS = [
@@ -89,6 +105,25 @@ const SYSTEM_LABELS = [
   'CATEGORY_UPDATES',
 ];
 const HIDDEN = new Set(['SPAM', 'TRASH']);
+// The User's own labels, beside the system ones.
+const USER_LABELS = [
+  { id: 'Label_1', name: 'Receipts', type: 'user' },
+  { id: 'Label_2', name: 'Travel', type: 'user' },
+];
+const KNOWN_LABELS = new Set([...SYSTEM_LABELS, ...USER_LABELS.map((label) => label.id)]);
+const WRITE_PATH = /^\/messages\/(batchModify|[^/]+\/(modify|trash|untrash))$/;
+
+async function bodyOf(request: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of request) chunks.push(chunk as Buffer);
+  const text = Buffer.concat(chunks).toString('utf8');
+  if (!text) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
 
 const b64 = (text: string) => Buffer.from(text).toString('base64url');
 
@@ -180,6 +215,7 @@ function messageJson(id: string, threadId: string, labelIds: string[], input: Fa
 export function createFakeGmail(): FakeGmail {
   const mailboxes = new Map<string, Mailbox>();
   let throttled = false;
+  let writesRefused = false;
   let nextId = 0x19a000000000;
 
   const mailbox = (email: string): Mailbox => {
@@ -193,6 +229,7 @@ export function createFakeGmail(): FakeGmail {
   const record = (box: Mailbox, entry: Omit<HistoryRecord, 'id'>) => {
     box.historyId += 1;
     box.history.push({ id: box.historyId, ...entry });
+    return box.historyId;
   };
   const refOf = (message: StoredMessage) => ({
     id: message.id,
@@ -200,13 +237,30 @@ export function createFakeGmail(): FakeGmail {
     labelIds: [...message.labelIds],
   });
 
+  // Changes a message's labels, recording the change in its mailbox's history as Gmail does.
+  const changeLabels = (box: Mailbox, message: StoredMessage, add: string[], remove: string[]) => {
+    const adding = add.filter((label) => !message.labelIds.includes(label));
+    const removing = remove.filter((label) => message.labelIds.includes(label));
+    message.labelIds = [...message.labelIds.filter((label) => !removing.includes(label)), ...adding];
+    if (adding.length)
+      message.historyId = record(box, { labelsAdded: [{ message: refOf(message), labelIds: adding }] });
+    if (removing.length)
+      message.historyId = record(box, { labelsRemoved: [{ message: refOf(message), labelIds: removing }] });
+    message.json = {
+      ...(message.json as object),
+      labelIds: message.labelIds,
+      historyId: String(message.historyId),
+    };
+  };
+
   function list(box: Mailbox, url: URL): unknown {
     const after = /after:(\d+)/.exec(url.searchParams.get('q') ?? '')?.[1];
     const labels = url.searchParams.getAll('labelIds');
     const max = Number(url.searchParams.get('maxResults') ?? 100);
     const offset = Number(url.searchParams.get('pageToken') ?? 0);
+    const hidden = url.searchParams.get('includeSpamTrash') === 'true' ? new Set<string>() : HIDDEN;
     const found = [...box.messages.values()]
-      .filter((message) => !message.labelIds.some((label) => HIDDEN.has(label)))
+      .filter((message) => !message.labelIds.some((label) => hidden.has(label) && !labels.includes(label)))
       .filter((message) => after === undefined || message.date >= Number(after) * 1000)
       .filter((message) => labels.every((label) => message.labelIds.includes(label)))
       .sort((a, b) => b.date - a.date);
@@ -236,8 +290,56 @@ export function createFakeGmail(): FakeGmail {
     });
   }
 
+  // messages.modify, batchModify, trash and untrash.
+  async function write(request: IncomingMessage, response: ServerResponse, box: Mailbox, path: string) {
+    const body = (await bodyOf(request)) as
+      | { ids?: string[]; addLabelIds?: string[]; removeLabelIds?: string[] }
+      | undefined;
+    fake.writes.push({ path, body });
+    if (writesRefused) {
+      const refusal = googleError(
+        400,
+        'FAILED_PRECONDITION',
+        'failedPrecondition',
+        'Mail service not enabled',
+      );
+      return json(response, 400, refusal);
+    }
+    const add = body?.addLabelIds ?? [];
+    const remove = body?.removeLabelIds ?? [];
+    const unknown = [...add, ...remove].find((label) => !KNOWN_LABELS.has(label));
+    if (unknown) {
+      const message = `Invalid label: ${unknown}`;
+      return json(response, 400, googleError(400, 'INVALID_ARGUMENT', 'invalidArgument', message));
+    }
+    if (path === '/messages/batchModify') {
+      for (const id of body?.ids ?? []) {
+        const message = box.messages.get(id);
+        if (message) changeLabels(box, message, add, remove);
+      }
+      return void response.writeHead(204).end();
+    }
+    const [, id = '', action] = /^\/messages\/([^/]+)\/(modify|trash|untrash)$/.exec(path) ?? [];
+    const message = box.messages.get(decodeURIComponent(id));
+    if (!message)
+      return json(
+        response,
+        404,
+        googleError(404, 'NOT_FOUND', 'notFound', 'Requested entity was not found.'),
+      );
+    if (action === 'modify') changeLabels(box, message, add, remove);
+    if (action === 'trash') changeLabels(box, message, ['TRASH'], []);
+    if (action === 'untrash') changeLabels(box, message, [], ['TRASH']);
+    return json(response, 200, {
+      id: message.id,
+      threadId: message.threadId,
+      labelIds: [...message.labelIds],
+    });
+  }
+
   const fake: FakeGmail = {
     requests: [],
+    writes: [],
 
     deliver(email, input) {
       const box = mailbox(email);
@@ -249,6 +351,7 @@ export function createFakeGmail(): FakeGmail {
         threadId,
         labelIds,
         date: input.date,
+        historyId: 0,
         json: messageJson(id, threadId, labelIds, input),
         parts: new Map(
           (input.attachments ?? []).map((attachment, index) => [
@@ -258,7 +361,8 @@ export function createFakeGmail(): FakeGmail {
         ),
       };
       box.messages.set(id, message);
-      record(box, { messagesAdded: [{ message: refOf(message) }] });
+      message.historyId = record(box, { messagesAdded: [{ message: refOf(message) }] });
+      message.json = { ...(message.json as object), historyId: String(message.historyId) };
       return id;
     },
 
@@ -266,10 +370,16 @@ export function createFakeGmail(): FakeGmail {
       const box = mailbox(email);
       const message = box.messages.get(id);
       if (!message) throw new Error(`No message ${id}`);
-      message.labelIds = [...message.labelIds.filter((label) => !remove.includes(label)), ...add];
-      message.json = { ...(message.json as object), labelIds: message.labelIds };
-      if (add.length) record(box, { labelsAdded: [{ message: refOf(message), labelIds: add }] });
-      if (remove.length) record(box, { labelsRemoved: [{ message: refOf(message), labelIds: remove }] });
+      changeLabels(box, message, add, remove);
+    },
+
+    labelsOf(email, id) {
+      const message = mailbox(email).messages.get(id);
+      return message ? [...message.labelIds] : null;
+    },
+
+    refuseWrites(refusing) {
+      writesRefused = refusing;
     },
 
     remove(email, id) {
@@ -299,9 +409,10 @@ export function createFakeGmail(): FakeGmail {
           "Quota exceeded for quota metric 'Queries' and limit 'Queries per minute per user' of service 'gmail.googleapis.com'.";
         return json(response, 403, googleError(403, 'PERMISSION_DENIED', 'rateLimitExceeded', message));
       }
-      if (request.method !== 'GET') return json(response, 405, {});
       const box = mailbox(email);
       const path = url.pathname.replace(/^\/gmail\/v1\/users\/me/, '');
+      if (request.method === 'POST' && WRITE_PATH.test(path)) return write(request, response, box, path);
+      if (request.method !== 'GET') return json(response, 405, {});
       if (path === '/profile') {
         return json(response, 200, {
           emailAddress: email,
@@ -312,10 +423,7 @@ export function createFakeGmail(): FakeGmail {
       }
       if (path === '/labels') {
         return json(response, 200, {
-          labels: [
-            ...SYSTEM_LABELS.map((id) => ({ id, name: id, type: 'system' })),
-            { id: 'Label_1', name: 'Receipts', type: 'user' },
-          ],
+          labels: [...SYSTEM_LABELS.map((id) => ({ id, name: id, type: 'system' })), ...USER_LABELS],
         });
       }
       if (path === '/messages') return json(response, 200, list(box, url));
@@ -342,6 +450,10 @@ export function createFakeGmail(): FakeGmail {
             404,
             googleError(404, 'NOT_FOUND', 'notFound', 'Requested entity was not found.'),
           );
+        if (url.searchParams.get('format') === 'minimal') {
+          const { payload: _payload, ...minimal } = message.json as { payload?: unknown };
+          return json(response, 200, minimal);
+        }
         return json(response, 200, message.json);
       }
       return json(response, 404, googleError(404, 'NOT_FOUND', 'notFound', 'Not found.'));

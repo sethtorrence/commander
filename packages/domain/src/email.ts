@@ -15,6 +15,14 @@ export type EmailAddress = z.infer<typeof emailAddress>;
 export const emailLabel = z.object({ id: z.string().min(1), name: z.string() });
 export type EmailLabel = z.infer<typeof emailLabel>;
 
+// What a Gmail Account keeps beside its mail (#135): its labels, the User's own and Gmail's system
+// ones, as its last sync listed them, for the label picker (`l`) and the view list.
+export const gmailCatalog = z.object({
+  kind: z.literal('gmail'),
+  labels: z.array(emailLabel.extend({ system: z.boolean() })),
+});
+export type GmailCatalog = z.infer<typeof gmailCatalog>;
+
 // An attachment's metadata. Attachments are never downloaded during sync; the reading ticket fetches
 // one on demand by its part id (Gmail's attachment ids aren't stable between fetches).
 export const emailAttachment = z.object({
@@ -29,6 +37,12 @@ export const emailAttachment = z.object({
   contentId: z.string().optional(),
 });
 export type EmailAttachment = z.infer<typeof emailAttachment>;
+
+// A snooze (#135): Commander's own, never Gmail's (Gmail's API has none). The thread leaves the inbox
+// views until `until`, then comes back to the top of the inbox, marked unread, with `returned` set so
+// it shows "Snoozed until 09:00" until it is archived.
+export const emailSnooze = z.object({ until: timestamp, returned: z.boolean() });
+export type EmailSnooze = z.infer<typeof emailSnooze>;
 
 export const emailDetail = z.object({
   kind: z.literal('email'),
@@ -53,6 +67,13 @@ export const emailDetail = z.object({
   // Starred in Gmail, flagged in Outlook.
   starred: z.boolean(),
   inInbox: z.boolean(),
+  // In the Source's Trash (Gmail's TRASH label). Absent on mail saved before Trash was kept.
+  inTrash: z.boolean().optional(),
+  // The Source's version of the message when Commander last saw it change (Gmail's historyId): a
+  // write checks what changed at the Source since, so a newer change there wins (#135).
+  sourceVersion: z.string().nullable().optional(),
+  // Snoozed in Commander (see emailSnooze); absent or null when not.
+  snooze: emailSnooze.nullable().optional(),
   // Sent from this Account (Gmail's SENT label).
   sentByMe: z.boolean(),
   // The Source's labels (Gmail, system ones included) or folder (Outlook).
@@ -81,8 +102,9 @@ export const emailBody = z.object({
 });
 export type EmailBody = z.infer<typeof emailBody>;
 
-/** An email's status: open while it is in the inbox, archived once it isn't. */
-export const emailStatus = (detail: Pick<EmailDetail, 'inInbox'>) => (detail.inInbox ? 'open' : 'archived');
+/** An email's status: open while it is in the inbox (and not in Trash), archived otherwise. */
+export const emailStatus = (detail: Pick<EmailDetail, 'inInbox' | 'inTrash'>) =>
+  detail.inInbox && !detail.inTrash ? 'open' : 'archived';
 
 /** How an address reads in a list: its name, or else the address. */
 export const addressName = (address: EmailAddress | null) =>

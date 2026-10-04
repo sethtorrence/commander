@@ -9,12 +9,20 @@ import {
   eventQuery,
 } from './calendar';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
+import type { EmailLabel } from './email';
 import {
+  type EmailSearchResult,
   type EmailThread,
   type EmailThreadList,
+  type EmailViewCounts,
+  emailLabelList,
+  emailSearchQuery,
+  emailSearchResult,
   emailThread,
   emailThreadList,
   emailThreadQuery,
+  emailViewCounts,
+  emailViewQuery,
 } from './email-threads';
 import { type FocusSettings, focusSettings } from './focus-time';
 import {
@@ -169,6 +177,10 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // plain-text bodies.
   z.object({ op: z.literal('email-threads'), query: emailThreadQuery.default({}) }),
   z.object({ op: z.literal('email-thread'), account: z.string().min(1), threadKey: z.string().min(1) }),
+  // Organising email (#135): each view's counts, the Section's search, and the labels to pick from.
+  z.object({ op: z.literal('email-views'), query: emailViewQuery.default({}) }),
+  z.object({ op: z.literal('email-search'), query: emailSearchQuery }),
+  z.object({ op: z.literal('email-labels'), account: z.string().min(1).optional() }),
   // Ares's meeting preps (#130) for these events: at most one each.
   z.object({ op: z.literal('meeting-preps'), eventIds: z.array(z.string().min(1)).max(500) }),
   // The oversight summary (#119): the summary for a range, over everything, one Project (its id) or
@@ -245,6 +257,9 @@ export type ItemStoreResults = {
   'save-calendar-settings': CalendarSettings;
   'email-threads': EmailThreadList;
   'email-thread': EmailThread | null;
+  'email-views': EmailViewCounts;
+  'email-search': EmailSearchResult;
+  'email-labels': EmailLabel[];
   'meeting-preps': Item[];
   'github-oversight': OversightSummary;
   'github-oversight-settings': OversightSettings;
@@ -298,6 +313,9 @@ export const itemStoreResult = {
   'save-calendar-settings': calendarSettings,
   'email-threads': emailThreadList,
   'email-thread': emailThread.nullable(),
+  'email-views': emailViewCounts,
+  'email-search': emailSearchResult,
+  'email-labels': emailLabelList,
   'meeting-preps': z.array(item),
   'github-oversight': oversightSummarySchema,
   'github-oversight-settings': oversightSettings,

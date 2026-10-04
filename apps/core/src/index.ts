@@ -20,6 +20,7 @@ import { setUpMarkdownCopy } from './markdown-copy';
 import { setUpMeetings } from './meetings';
 import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
+import { setUpSnooze } from './snooze';
 import { setUpSync } from './sync';
 import { setUpUpdates, type Updates } from './updates';
 
@@ -217,9 +218,13 @@ sync.engine.onSynced((event) => {
     copiesChanged(busyCopies.reconcile());
   }
 });
+// Snoozed mail (#135) comes back at its time while Commander runs, and at start-up if its time passed
+// while Commander was closed. The end-to-end tests may move its clock on.
+const snooze = setUpSnooze({ store: itemStore, send: (message) => port.postMessage(message), testHooks });
 
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
+  if (snooze.handle(data)) return;
   if (models.handle(data)) return;
   if (sync.handle(data)) return;
   if (markdownCopy.handle(data)) return;
@@ -263,6 +268,8 @@ port.on('message', ({ data }) => {
   if (focusBefore && reply?.type === 'item-store-reply' && reply.response.ok) {
     copiesChanged(busyCopies.settingsSaved(focusBefore, itemStore.focusSettings.read()));
   }
+  // A snooze set or undone: the next one may be due sooner.
+  if (changedIds.length) snooze.changed();
   // Today's Daily Note made (Notes opening, or the date passing midnight): its meeting chips go in.
   if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'daily-note')
     meetings.refresh();
@@ -280,6 +287,7 @@ const closeStore = () => {
   closed = true;
   agent.stop();
   meetings.stop();
+  snooze.stop();
   updates?.stop();
   sync.stop();
   markdownCopy.stop();

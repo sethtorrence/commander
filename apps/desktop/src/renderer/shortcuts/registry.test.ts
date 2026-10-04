@@ -78,6 +78,20 @@ describe('the shortcut registry', () => {
     expect(cheatSheet).toHaveBeenCalledOnce();
   });
 
+  it('tells a letter with Shift from the letter alone, as Gmail’s Shift+I and Shift+U need (#135)', () => {
+    const registry = createShortcutRegistry();
+    const update = vi.fn();
+    const unread = vi.fn();
+    registry.register({ keys: 'u', label: 'Ask for an update', group: 'Ares', run: update });
+    registry.register({ keys: 'Shift+U', label: 'Mark unread', group: 'Email', run: unread });
+
+    expect(press(registry, 'U', { shiftKey: true }).handled).toBe(true);
+    expect(press(registry, 'u').handled).toBe(true);
+    expect(press(registry, 'U').handled).toBe(true); // Caps Lock
+    expect([update, unread].map((f) => f.mock.calls.length)).toEqual([2, 1]);
+    expect(registry.list().find((each) => each.label === 'Mark unread')?.keys).toEqual(['Shift', 'U']);
+  });
+
   it('runs a chord or named key in a field only when it asks to', () => {
     const registry = createShortcutRegistry();
     const palette = vi.fn();

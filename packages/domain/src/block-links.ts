@@ -12,6 +12,9 @@ import { z } from 'zod';
     colour, its meeting link and Badge), read from the event as it is now. A Block that starts with
     one is a **meeting chip** (meetingChipEventId): the Notes of that meeting go under it, and it takes
     the event's Project. Today's Daily Note gets one for each of today's meetings (#128).
+  - An email is `[[email:<item id>]]` (one message's Item): shown as a compact live card (sender,
+    subject, date and Badge) that opens its thread in the Email Section (#135). It is never a meeting
+    chip, wherever it sits.
 
   Tokens are plain text, so they sit inside Markdown formatting (`**see [[2026-10-01]]**`) and come
   through copying and pasting. Anything else in double brackets is just text.
@@ -20,7 +23,8 @@ import { z } from 'zod';
 export type BlockLinkTarget =
   | { type: 'day'; day: string }
   | { type: 'project'; projectId: string }
-  | { type: 'event'; eventId: string };
+  | { type: 'event'; eventId: string }
+  | { type: 'email'; emailId: string };
 
 export interface BlockLinkTokenAt {
   target: BlockLinkTarget;
@@ -29,7 +33,8 @@ export interface BlockLinkTokenAt {
   end: number;
 }
 
-const TOKEN = /\[\[(?:(\d{4}-\d{2}-\d{2})|project:([0-9A-Za-z-]+)|event:([0-9A-Za-z-]+))\]\]/g;
+const TOKEN =
+  /\[\[(?:(\d{4}-\d{2}-\d{2})|project:([0-9A-Za-z-]+)|event:([0-9A-Za-z-]+)|email:([0-9A-Za-z-]+))\]\]/g;
 const LEADING_EVENT = /^\s*\[\[event:([0-9A-Za-z-]+)\]\]/;
 const calendarDay = z.iso.date();
 
@@ -42,6 +47,8 @@ export function blockLinkToken(target: BlockLinkTarget): string {
       return `[[project:${target.projectId}]]`;
     case 'event':
       return `[[event:${target.eventId}]]`;
+    case 'email':
+      return `[[email:${target.emailId}]]`;
   }
 }
 
@@ -49,7 +56,7 @@ export function blockLinkToken(target: BlockLinkTarget): string {
 export function blockLinksIn(text: string): BlockLinkTokenAt[] {
   const found: BlockLinkTokenAt[] = [];
   for (const match of text.matchAll(TOKEN)) {
-    const [whole, day, projectId, eventId] = match;
+    const [whole, day, projectId, eventId, emailId] = match;
     const start = match.index;
     if (day !== undefined && !calendarDay.safeParse(day).success) continue;
     const target: BlockLinkTarget =
@@ -57,7 +64,9 @@ export function blockLinksIn(text: string): BlockLinkTokenAt[] {
         ? { type: 'day', day }
         : projectId !== undefined
           ? { type: 'project', projectId }
-          : { type: 'event', eventId: eventId as string };
+          : eventId !== undefined
+            ? { type: 'event', eventId }
+            : { type: 'email', emailId: emailId as string };
     found.push({ target, start, end: start + whole.length });
   }
   return found;

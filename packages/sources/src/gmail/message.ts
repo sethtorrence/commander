@@ -341,6 +341,8 @@ export function readGmailMessage(message: GmailMessage, labels: ReadonlyMap<stri
     hasInvitation: allLeaves.some((part) => INVITATION_TYPES.has(mimeOf(part))),
     listUnsubscribe: header('List-Unsubscribe'),
     listId: header('List-Id') ? decodeHeader(header('List-Id') as string) : null,
+    ...(labelIds.includes('TRASH') ? { inTrash: true } : {}),
+    ...(message.historyId ? { sourceVersion: message.historyId } : {}),
   };
   detail.threadKey =
     threadMessages([

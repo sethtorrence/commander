@@ -1,4 +1,5 @@
 import type { EventDetail, EventResponse } from './calendar';
+import { type EmailDetail, type EmailLabel, type EmailSnooze, emailStatus } from './email';
 import { canAnswer } from './invitations';
 import type { ItemDetail, ItemKind, ItemStatus } from './items';
 import type { LinearIssueDetail } from './linear';
@@ -23,6 +24,12 @@ import { type ChatDetail, type ChatReply, latestFromOthers } from './teams';
 // has synced fields: `response`, the User's answer, and for an instance of a series `seriesResponse`,
 // their answer to the whole series. Everything else about an event is changed in Google Calendar or
 // Outlook (Edit hands over to them).
+//
+// Emails (#135), one Item per message: `inbox`, `read`, `starred`, `trash` and one `label:<id>` per
+// label beside those (the label, or null once removed), kept in step with the Source's labels (Gmail's
+// INBOX, UNREAD, STARRED and TRASH; the ones Commander can't change, like SENT, stay as they are).
+// `snooze` is Commander's own (a local field): edited, logged and undone like the others, kept through
+// syncs, but never queued for the Source.
 
 export type SyncedFields = Record<string, unknown>;
 
@@ -132,9 +139,80 @@ function withEventFields(detail: EventDetail, fields: SyncedFields): EventDetail
   return next;
 }
 
+const INBOX_FIELD = 'inbox';
+const STARRED_FIELD = 'starred';
+const TRASH_FIELD = 'trash';
+export const SNOOZE_FIELD = 'snooze';
+const EMAIL_FLAGS = [INBOX_FIELD, READ_FIELD, STARRED_FIELD, TRASH_FIELD, SNOOZE_FIELD];
+// The Source labels behind the flags, with the names Gmail gives them.
+const FLAG_LABELS: Record<string, string> = {
+  INBOX: 'Inbox',
+  UNREAD: 'Unread',
+  STARRED: 'Starred',
+  TRASH: 'Trash',
+};
+// Labels Commander never changes: they stay on a message whatever its fields say.
+const FIXED_LABELS = new Set(['SENT', 'DRAFT', 'SPAM', 'CHAT']);
+
+/** Whether a Source label is one of an email's own labels (`label:<id>`), not a flag or a fixed one. */
+export const isEmailLabelField = (labelId: string) => !(labelId in FLAG_LABELS) && !FIXED_LABELS.has(labelId);
+
+function emailFields(detail: EmailDetail): SyncedFields {
+  const fields: SyncedFields = {
+    [INBOX_FIELD]: detail.inInbox,
+    [READ_FIELD]: detail.read,
+    [STARRED_FIELD]: detail.starred,
+    [TRASH_FIELD]: detail.inTrash ?? false,
+    [SNOOZE_FIELD]: detail.snooze ?? null,
+  };
+  for (const label of detail.labels)
+    if (isEmailLabelField(label.id)) fields[`${LABEL_FIELD}${label.id}`] = { id: label.id, name: label.name };
+  return fields;
+}
+
+function withEmailFields(detail: EmailDetail, fields: SyncedFields): EmailDetail {
+  const flags = {
+    INBOX: fields[INBOX_FIELD] === true,
+    UNREAD: fields[READ_FIELD] === false,
+    STARRED: fields[STARRED_FIELD] === true,
+    TRASH: fields[TRASH_FIELD] === true,
+  };
+  const wanted = new Map<string, EmailLabel>();
+  for (const label of detail.labels) if (FIXED_LABELS.has(label.id)) wanted.set(label.id, label);
+  for (const [id, on] of Object.entries(flags)) {
+    if (on)
+      wanted.set(id, detail.labels.find((label) => label.id === id) ?? { id, name: FLAG_LABELS[id] ?? id });
+  }
+  for (const [field, value] of Object.entries(fields)) {
+    if (!field.startsWith(LABEL_FIELD) || !value) continue;
+    const label = value as EmailLabel;
+    wanted.set(label.id, { id: label.id, name: label.name });
+  }
+  // Labels it had keep their place (so an unchanged set compares equal); new ones go after.
+  const kept = detail.labels.filter((label) => wanted.has(label.id)).map((label) => wanted.get(label.id));
+  const added = [...wanted.values()].filter((label) => !detail.labels.some((each) => each.id === label.id));
+  const next: EmailDetail = {
+    ...detail,
+    inInbox: fields[INBOX_FIELD] as boolean,
+    read: fields[READ_FIELD] as boolean,
+    starred: fields[STARRED_FIELD] as boolean,
+    labels: [...kept, ...added] as EmailLabel[],
+  };
+  delete next.inTrash;
+  delete next.snooze;
+  if (flags.TRASH) next.inTrash = true;
+  const snooze = fields[SNOOZE_FIELD] as EmailSnooze | null | undefined;
+  if (snooze) next.snooze = snooze;
+  return next;
+}
+
+const isEmailField = (field: string) =>
+  EMAIL_FLAGS.includes(field) || (field.startsWith(LABEL_FIELD) && field.length > LABEL_FIELD.length);
+
 /** Whether `field` names one of a detail kind's synced fields. */
 export function isSyncedField(kind: ItemDetail['kind'], field: string): boolean {
   if (kind === 'chat') return isChatField(field);
+  if (kind === 'email') return isEmailField(field);
   if (kind === 'event') return field === RESPONSE_FIELD || field === SERIES_RESPONSE_FIELD;
   if (kind !== 'linear-issue') return false;
   return (
@@ -152,8 +230,25 @@ export function isUnrecallableField(kind: ItemKind, field: string): boolean {
   return kind === 'chat' && field.startsWith(MESSAGE_FIELD) && isChatField(field);
 }
 
+/**
+ * Whether a synced field is Commander's own (an email's snooze): changed, logged and undone field by
+ * field like the others, kept through syncs, but never queued for the Source.
+ */
+export function isLocalField(kind: ItemKind, field: string): boolean {
+  return kind === 'email' && field === SNOOZE_FIELD;
+}
+
+/** The detail's own (local) fields among its synced fields, as syncedFieldsOf gives them. */
+export function localFieldsOf(detail: ItemDetail | null): SyncedFields {
+  const fields = syncedFieldsOf(detail) ?? {};
+  return Object.fromEntries(
+    Object.entries(fields).filter(([field]) => detail && isLocalField(detail.kind, field)),
+  );
+}
+
 /** The detail's synced fields, or null for a kind that doesn't write back to a Source. */
 export function syncedFieldsOf(detail: ItemDetail | null): SyncedFields | null {
+  if (detail?.kind === 'email') return emailFields(detail);
   if (detail?.kind === 'linear-issue') return linearIssueFields(detail);
   if (detail?.kind === 'chat') return chatFields(detail);
   if (detail?.kind === 'event') return eventFields(detail);
@@ -168,11 +263,13 @@ export function withSyncedFields<D extends ItemDetail>(detail: D, fields: Synced
   if (detail.kind === 'linear-issue') return withLinearIssueFields(detail, fields) as D;
   if (detail.kind === 'chat') return withChatFields(detail, fields) as D;
   if (detail.kind === 'event') return withEventFields(detail, fields) as D;
+  if (detail.kind === 'email') return withEmailFields(detail, fields) as D;
   return detail;
 }
 
 /** The Item status a detail implies, for kinds where it follows a synced field (a closed Linear state). */
 export function statusFromDetail(detail: ItemDetail | null, otherwise: ItemStatus): ItemStatus {
+  if (detail?.kind === 'email') return emailStatus(detail);
   if (detail?.kind !== 'linear-issue') return otherwise;
   return detail.state.type === 'completed' || detail.state.type === 'canceled' ? 'done' : 'open';
 }

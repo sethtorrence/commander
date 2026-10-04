@@ -1,6 +1,13 @@
-import type { Item, Project } from '@commander/domain';
+import type { EmailDetail, Item, Project } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
-import { dayTargets, eventTargets, projectTargets, resolveDays, searchTargets } from './link-targets';
+import {
+  dayTargets,
+  emailTargets,
+  eventTargets,
+  projectTargets,
+  resolveDays,
+  searchTargets,
+} from './link-targets';
 
 // Saturday 3 October 2026.
 const today = '2026-10-03';
@@ -163,5 +170,96 @@ describe('the Events provider', () => {
         .search('')
         .map((c) => c.key),
     ).toEqual(['event:today', 'event:review', 'event:later']);
+  });
+});
+
+describe('the Emails provider', () => {
+  const at = (hour: number, minute = 0, date = 3, month = 9, year = 2026) =>
+    new Date(year, month, date, hour, minute).getTime();
+  const email = (
+    id: string,
+    subject: string,
+    sentAt: number,
+    fields: Partial<EmailDetail> = {},
+    extra: Partial<Item> = {},
+  ): Item => ({
+    id,
+    kind: 'email',
+    source: 'gmail',
+    account: 'google:alex',
+    externalId: id,
+    title: subject,
+    people: [],
+    filing: null,
+    status: 'open',
+    createdAt: 0,
+    updatedAt: 0,
+    deletedAt: null,
+    detail: {
+      kind: 'email',
+      messageId: null,
+      inReplyTo: null,
+      references: [],
+      threadKey: `t-${id}`,
+      sourceThreadId: null,
+      from: { name: 'Dana Whitfield', address: 'dana@northwind.test' },
+      to: [],
+      cc: [],
+      bcc: [],
+      replyTo: [],
+      subject,
+      sentAt,
+      snippet: '',
+      read: true,
+      starred: false,
+      inInbox: true,
+      sentByMe: false,
+      labels: [],
+      attachments: [],
+      hasInvitation: false,
+      listUnsubscribe: null,
+      listId: null,
+      ...fields,
+    },
+    ...extra,
+  });
+  const priya = { name: 'Priya Natarajan', address: 'priya@longtail.test' };
+  const emails = [
+    email('budget', 'Q4 budget', at(9, 5, 1)),
+    email('budget-re', 'Re: Q4 budget', at(8, 30), { threadKey: 't-budget', from: priya }),
+    email('offsite', 'Offsite venue', at(9, 15)),
+    email('invoice', 'Invoice 2041', at(10, 0, 12, 11, 2025), {
+      from: { name: null, address: 'billing@acme.test' },
+    }),
+    email('binned', 'Q4 budget draft', at(7), { inTrash: true }),
+    email('gone', 'Q4 budget notes', at(6), {}, { deletedAt: at(7) }),
+    email('other-account', 'Re: Q4 budget', at(8), { threadKey: 't-budget' }, { account: 'google:sam' }),
+  ];
+
+  it('finds emails by every word typed, in the subject or the sender, newest first', () => {
+    const search = emailTargets(emails, today).search;
+    expect(search('budget').map((c) => [c.key, c.label, c.hint])).toEqual([
+      ['email:budget-re', 'Re: Q4 budget', 'Priya Natarajan · 08:30'],
+      ['email:other-account', 'Re: Q4 budget', 'Dana Whitfield · 08:00'],
+    ]);
+    expect(search('dana venue').map((c) => c.key)).toEqual(['email:offsite']);
+    expect(search('billing@acme')[0]).toMatchObject({
+      target: { type: 'email', emailId: 'invoice' },
+      hint: 'billing@acme.test · 12 Dec 2025',
+    });
+    expect(search('q4 dana').map((c) => c.key)).toEqual(['email:other-account', 'email:budget']);
+  });
+
+  it('offers the newest of each thread before anything is typed, leaving out Trash and deleted mail', () => {
+    expect(
+      emailTargets(emails, today)
+        .search('')
+        .map((c) => [c.key, c.hint]),
+    ).toEqual([
+      ['email:offsite', 'Dana Whitfield · 09:15'],
+      ['email:budget-re', 'Priya Natarajan · 08:30'],
+      ['email:other-account', 'Dana Whitfield · 08:00'],
+      ['email:invoice', 'billing@acme.test · 12 Dec 2025'],
+    ]);
   });
 });

@@ -18,10 +18,12 @@ import { copyFile, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'n
 import { isAbsolute, join, parse, relative, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import {
+  addressName,
   attachmentsIn,
   type CoreMarkdownCopyReply,
   type CoreMessage,
   coreMarkdownCopyRequest,
+  type Item,
   isOwnFiling,
   type MarkdownCopyStatus,
   meetingLine,
@@ -30,6 +32,14 @@ import type { ItemStore } from '../item-store';
 import { type CopyBlock, type CopyProjects, dailyNoteMarkdown } from './serialize';
 
 export { dailyNoteMarkdown, READ_ONLY_NOTICE } from './serialize';
+
+// An email link as one line: "Email from Dana Whitfield: Q4 budget" (undefined for one Commander lacks).
+function emailLine(item: Item | undefined): string | undefined {
+  if (item?.detail?.kind !== 'email') return undefined;
+  const from = addressName(item.detail.from);
+  const subject = item.detail.subject.trim() || '(no subject)';
+  return from ? `Email from ${from}: ${subject}` : `Email: ${subject}`;
+}
 
 export type MarkdownCopyOptions = {
   store: ItemStore;
@@ -231,7 +241,8 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     if (!existing && !blocks.some((block) => block.text.trim() !== '')) return false;
     // A meeting chip reads as its meeting, as it stands for this day (cancelled, moved).
     const meeting = (eventId: string) => meetingLine(store.get(eventId)?.item, day);
-    const text = dailyNoteMarkdown(blocks, { ...projects, meeting });
+    const email = (emailId: string) => emailLine(store.get(emailId)?.item);
+    const text = dailyNoteMarkdown(blocks, { ...projects, meeting, email });
     await writeImages(into, blocks);
     if (existing?.isFile() && existing.size <= COMPARE_UP_TO) {
       if ((await readFile(path, 'utf8')) === text) return false;

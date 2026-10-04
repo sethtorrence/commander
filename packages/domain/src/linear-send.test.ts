@@ -188,6 +188,17 @@ describe('the title a Block’s text suggests', () => {
     expect(issueTitleFrom('Read [the doc](https://example.com) ~~now~~', projects)).toBe('Read the doc now');
   });
 
+  it('names a calendar event or an email by its Item’s title', () => {
+    const titles = new Map([
+      ['ev-1', 'Weekly sync'],
+      ['em-1', 'Q4 budget'],
+    ]);
+    expect(
+      issueTitleFrom('Answer [[email:em-1]] after [[event:ev-1]]', projects, (id) => titles.get(id)),
+    ).toBe('Answer Q4 budget after Weekly sync');
+    expect(issueTitleFrom('Answer [[email:em-2]]', projects)).toBe('Answer');
+  });
+
   it('leaves text without any as it is, and an image Block empty', () => {
     expect(issueTitleFrom('Call Dana #hashtag', projects)).toBe('Call Dana #hashtag');
     expect(issueTitleFrom('![](attachment:abc.png)', projects)).toBe('');

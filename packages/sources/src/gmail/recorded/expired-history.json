@@ -436,6 +436,20 @@
   },
   {
     "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=TRASH&q=after:1788436800&includeSpamTrash=true"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "resultSizeEstimate": 0
+      }
+    }
+  },
+  {
+    "request": {
       "path": "/gmail/v1/users/me/history?startHistoryId=7100&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
     },
     "response": {

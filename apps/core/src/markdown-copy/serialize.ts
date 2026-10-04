@@ -9,8 +9,9 @@
     except: a Todo gets `[ ]` or `[x]`; a Block's own Project is added as `#LT` unless the text says it
     already (inherited Projects are not repeated); `[[project:<id>]]` becomes `[[Project name]]`; a
     calendar event's `[[event:<id>]]` (a meeting chip) becomes the meeting's line, "10:00–10:30 Weekly
-    sync with Priya" (struck through when cancelled); and text Markdown would read as a list, checkbox
-    or quote is escaped, since Commander shows it as text.
+    sync with Priya" (struck through when cancelled); an email's `[[email:<id>]]` becomes "Email from
+    Dana Whitfield: Q4 budget"; and text Markdown would read as a list, checkbox or quote is escaped,
+    since Commander shows it as text.
 */
 import { blockLinkToken, blockTags, labelBlockLinks } from '@commander/domain';
 
@@ -35,6 +36,8 @@ export interface CopyProjects {
   name(projectId: string): string | undefined;
   /** A calendar event as one line: "10:00–10:30 Weekly sync with Priya". */
   meeting?(eventId: string): string | undefined;
+  /** An email as one line: "Email from Dana Whitfield: Q4 budget". */
+  email?(emailId: string): string | undefined;
 }
 
 // A heading Block, as the Notes Section reads one (`#` straight before letters is a Project code).
@@ -61,6 +64,7 @@ function textOf(block: CopyBlock, projects: CopyProjects): string {
   let text = labelBlockLinks(block.text, (target) => {
     if (target.type === 'day') return blockLinkToken(target);
     if (target.type === 'event') return projects.meeting?.(target.eventId) ?? 'a meeting';
+    if (target.type === 'email') return projects.email?.(target.emailId) ?? 'an email';
     const name = projects.name(target.projectId);
     const safe = name === undefined ? '' : wikiSafe(name);
     return safe ? `[[${safe}]]` : blockLinkToken(target);

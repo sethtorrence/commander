@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { EventDetail } from './calendar';
+import type { EmailDetail } from './email';
 import type { LinearIssueDetail } from './linear';
 import {
+  isLocalField,
   isSyncedField,
   isUnrecallableField,
   statusFromDetail,
@@ -281,5 +283,95 @@ describe('an invitation’s synced fields', () => {
 
   it('never closes or opens the Item', () => {
     expect(statusFromDetail(withSyncedFields(invitation, { response: 'declined' }), 'open')).toBe('open');
+  });
+});
+
+describe('an email’s synced fields', () => {
+  const mail: EmailDetail = {
+    kind: 'email',
+    messageId: '<m1@mail.test>',
+    inReplyTo: null,
+    references: [],
+    threadKey: 'mid:<m1@mail.test>',
+    sourceThreadId: 'g1',
+    from: { name: 'Dana', address: 'dana@northwind.test' },
+    to: [],
+    cc: [],
+    bcc: [],
+    replyTo: [],
+    subject: 'Q4 offsite',
+    sentAt: 1,
+    snippet: '',
+    read: false,
+    starred: false,
+    inInbox: true,
+    sentByMe: false,
+    labels: [
+      { id: 'INBOX', name: 'Inbox' },
+      { id: 'UNREAD', name: 'Unread' },
+      { id: 'CATEGORY_PERSONAL', name: 'Personal' },
+      { id: 'Label_1', name: 'Receipts' },
+    ],
+    attachments: [],
+    hasInvitation: false,
+    listUnsubscribe: null,
+    listId: null,
+  };
+
+  it('has inbox, read, starred, trash, snooze and one label:<id> per label beside those', () => {
+    expect(syncedFieldsOf(mail)).toEqual({
+      inbox: true,
+      read: false,
+      starred: false,
+      trash: false,
+      snooze: null,
+      'label:CATEGORY_PERSONAL': { id: 'CATEGORY_PERSONAL', name: 'Personal' },
+      'label:Label_1': { id: 'Label_1', name: 'Receipts' },
+    });
+    for (const field of ['inbox', 'read', 'starred', 'trash', 'snooze', 'label:Label_2'])
+      expect(isSyncedField('email', field)).toBe(true);
+    expect(isSyncedField('email', 'subject')).toBe(false);
+    expect(isSyncedField('email', 'label:')).toBe(false);
+  });
+
+  it('keeps Gmail’s labels in step with the fields, so read, starred and inbox agree with them', () => {
+    const changed = withSyncedFields(mail, {
+      ...syncedFieldsOf(mail),
+      inbox: false,
+      read: true,
+      starred: true,
+      'label:Label_1': null,
+      'label:Label_2': { id: 'Label_2', name: 'Travel' },
+    });
+    expect(changed).toMatchObject({ inInbox: false, read: true, starred: true });
+    expect(changed.labels.map((label) => label.id)).toEqual(['CATEGORY_PERSONAL', 'STARRED', 'Label_2']);
+    const trashed = withSyncedFields(mail, { ...syncedFieldsOf(mail), trash: true });
+    expect(trashed.inTrash).toBe(true);
+    expect(trashed.labels.map((label) => label.id)).toContain('TRASH');
+  });
+
+  it('keeps labels Commander can’t change (Sent) whatever the fields say', () => {
+    const sent = { ...mail, sentByMe: true, labels: [...mail.labels, { id: 'SENT', name: 'Sent' }] };
+    expect(Object.keys(syncedFieldsOf(sent) ?? {})).not.toContain('label:SENT');
+    expect(
+      withSyncedFields(sent, { ...syncedFieldsOf(sent), inbox: false }).labels.map((l) => l.id),
+    ).toContain('SENT');
+  });
+
+  it('has snooze as Commander’s own field: it never goes to Gmail', () => {
+    const snoozed = withSyncedFields(mail, {
+      ...syncedFieldsOf(mail),
+      snooze: { until: 5, returned: false },
+    });
+    expect(snoozed.snooze).toEqual({ until: 5, returned: false });
+    expect(isLocalField('email', 'snooze')).toBe(true);
+    expect(isLocalField('email', 'read')).toBe(false);
+    expect(isLocalField('linear-issue', 'snooze')).toBe(false);
+  });
+
+  it('is open while in the inbox and out of Trash, archived otherwise', () => {
+    expect(statusFromDetail(mail, 'archived')).toBe('open');
+    expect(statusFromDetail({ ...mail, inInbox: false }, 'open')).toBe('archived');
+    expect(statusFromDetail({ ...mail, inTrash: true }, 'open')).toBe('archived');
   });
 });

@@ -3,6 +3,7 @@ import { blockLinksIn, blockLinkToken, labelBlockLinks, meetingChipEventId } fro
 
 const LT = '0b6c5f7e-2f9a-4b8e-9d1c-3a4b5c6d7e8f';
 const SYNC = '5e1d1a2b-7c3d-4e5f-8a9b-0c1d2e3f4a5b';
+const MAIL = '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d';
 
 describe('[[ link tokens in a Block’s text', () => {
   it('writes a day as its date and a Project by its id', () => {
@@ -46,6 +47,18 @@ describe('[[ link tokens in a Block’s text', () => {
       },
     ]);
   });
+
+  it('writes an email by its Item id, and finds it among the others', () => {
+    expect(blockLinkToken({ type: 'email', emailId: MAIL })).toBe(`[[email:${MAIL}]]`);
+    expect(blockLinksIn(`Reply to [[email:${MAIL}]] before [[event:${SYNC}]]`)).toEqual([
+      { target: { type: 'email', emailId: MAIL }, start: 9, end: 9 + 10 + MAIL.length },
+      {
+        target: { type: 'event', eventId: SYNC },
+        start: 9 + 10 + MAIL.length + 8,
+        end: 9 + 10 + MAIL.length + 8 + 10 + SYNC.length,
+      },
+    ]);
+  });
 });
 
 describe('meeting chips', () => {
@@ -54,6 +67,7 @@ describe('meeting chips', () => {
     expect(meetingChipEventId(`  [[event:${SYNC}]] agenda`)).toBe(SYNC);
     expect(meetingChipEventId(`Prep for [[event:${SYNC}]]`)).toBeNull();
     expect(meetingChipEventId(`[[project:${LT}]]`)).toBeNull();
+    expect(meetingChipEventId(`[[email:${MAIL}]]`)).toBeNull();
     expect(meetingChipEventId('')).toBeNull();
   });
 });

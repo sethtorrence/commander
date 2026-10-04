@@ -192,6 +192,17 @@ describe('the Markdown copy of a Daily Note', () => {
     );
   });
 
+  it('writes an email link as its sender and subject', () => {
+    const emails: CopyProjects = {
+      ...projects,
+      email: (id) => ({ q4: 'Email from Dana Whitfield: Q4 budget' })[id],
+    };
+    const blocks = [block('a', 'Answer [[email:q4]] and [[email:unknown]]')];
+    expect(dailyNoteMarkdown(blocks, emails)).toBe(
+      file('- Answer Email from Dana Whitfield: Q4 budget and an email'),
+    );
+  });
+
   it('keeps a Project name from breaking the [[ link', () => {
     const odd: CopyProjects = { code: () => 'OD', name: () => 'Q3 [draft] | #1 ^x' };
     expect(dailyNoteMarkdown([block('a', 'On [[project:od]]')], odd)).toBe(file('- On [[Q3 draft 1 x]]'));

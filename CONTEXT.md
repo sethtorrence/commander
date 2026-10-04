@@ -90,6 +90,10 @@ _Avoid_: Uncategorised, unfiled (that's for Projects), inbox
 A manual, keyboard-driven pass through email where you decide what happens to each message.
 _Avoid_: Inbox zero, processing
 
+**Snooze**:
+Commander's own hold on an email thread until a chosen time: it leaves the inbox for Snoozed and comes back to the top of the inbox at that time, marked unread, while Commander runs (the window or the tray); nothing about it reaches Gmail.
+_Avoid_: Remind, defer, Muted (that's for Chats)
+
 **Thread**:
 One email conversation in one Account: the messages its reply headers (Message-ID, In-Reply-To, References) tie together, or the Source's own thread for a message without them; the Email Section lists the inbox as threads, while each message stays its own Item.
 _Avoid_: Conversation (that's with Ares), chain

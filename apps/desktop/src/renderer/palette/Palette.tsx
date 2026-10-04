@@ -29,6 +29,8 @@ export interface PaletteProps {
   commands: () => readonly Command[];
   /** Every Account, for `@` chips; the Linear ones with their URL key, for Search in Linear. */
   accounts: readonly { id: string; name: string; source: string; urlKey?: string }[];
+  /** The email Accounts, for Search in Gmail (#135). */
+  gmailAccounts?: readonly { email: string }[];
   now: Date;
   today: string;
   onAction(action: PaletteAction): void;
@@ -99,9 +101,20 @@ export function Palette(props: PaletteProps) {
         projects: props.projects,
         commands,
         linearAccounts,
+        gmailAccounts: props.gmailAccounts ?? [],
         today: props.today,
       }),
-    [query, answer, props.sections, props.current, props.projects, commands, linearAccounts, props.today],
+    [
+      query,
+      answer,
+      props.sections,
+      props.current,
+      props.projects,
+      commands,
+      linearAccounts,
+      props.gmailAccounts,
+      props.today,
+    ],
   );
   const rows = useMemo(() => groups.flatMap((group) => group.rows), [groups]);
   const at = Math.min(selected, Math.max(0, rows.length - 1));
