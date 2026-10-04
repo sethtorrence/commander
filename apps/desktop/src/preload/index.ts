@@ -11,6 +11,9 @@ import type {
   ModelProvider,
   ModelsRequest,
   ModelsResponse,
+  UpdatesRequest,
+  UpdatesResponse,
+  UpdatesResults,
 } from '@commander/domain';
 // The ipc subpath keeps zod (and the schemas) out of the sandboxed preload bundle.
 import {
@@ -67,6 +70,21 @@ const commander = {
     const response: AutonomyResponse<R['op']> = await ipcRenderer.invoke(ipc.autonomy, request);
     if (!response.ok) throw new Error(response.error);
     return response.result;
+  },
+  // Ares's Updates: the quiet count, the Update Skill, Past Updates and acting on a line. Rejects
+  // with the reason.
+  async updates<R extends UpdatesRequest>(request: R): Promise<UpdatesResults[R['op']]> {
+    const response: UpdatesResponse<R['op']> = await ipcRenderer.invoke(ipc.updates, request);
+    if (!response.ok) throw new Error(response.error);
+    return response.result;
+  },
+  // The tray's "Ask for an update" was chosen: the window runs the Update Skill.
+  onAskForUpdate(listener: () => void) {
+    const handler = () => listener();
+    ipcRenderer.on(ipc.askForUpdate, handler);
+    return () => {
+      ipcRenderer.off(ipc.askForUpdate, handler);
+    };
   },
   // Settings → Notes → Markdown copy folder. The folder comes only from the system picker, which the
   // main process shows; resolves with the refusal's reason, if any.

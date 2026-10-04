@@ -14,6 +14,7 @@ import { setUpMarkdownCopy } from './markdown-copy';
 import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
 import { setUpSync } from './sync';
+import { setUpUpdates, type Updates } from './updates';
 
 const port = process.parentPort;
 let beats = 0;
@@ -70,6 +71,8 @@ sync.engine.onSynced(({ itemIds }) => {
 // The gate every Ares action goes through. Test hooks (proposing from end-to-end tests) are on only
 // when the main process asks for them.
 const testHooks = process.argv.includes('--test-hooks');
+// Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
+let updates: Updates | undefined;
 const gate = openGate({
   itemStore,
   onChange: (itemIds) => {
@@ -80,6 +83,7 @@ const gate = openGate({
     markdownCopy.itemsChanged(itemIds);
     // A suggested (or added) Todo is ranked on the Dashboard.
     agent.aresChanged();
+    updates?.sweep();
   },
 });
 
@@ -98,11 +102,28 @@ const agent = setUpAgent(itemStore, {
 });
 sync.engine.onSynced((event) => agent.synced(event));
 
+// Ares's queue and the Update Skill. The main process reports the User's presence (powerMonitor);
+// the queued count and "You're here / away" go to the window as they change, and the machine going
+// idle is the Agent's cue for its catch-up work. Nothing here ever draws the User's attention.
+updates = setUpUpdates({
+  itemStore,
+  gate,
+  client: models.client,
+  secrets,
+  send: (message) => port.postMessage(message),
+  onState: (state) => port.postMessage({ type: 'ares-updates', ...state } satisfies CoreMessage),
+  onIdle: () => agent.idle(),
+  onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
+});
+// Injection warnings arrive with a sync.
+sync.engine.onSynced(() => updates?.sweep());
+
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
   if (models.handle(data)) return;
   if (sync.handle(data)) return;
   if (markdownCopy.handle(data)) return;
+  if (updates?.handle(data)) return;
   let changed: CoreMessage | null = null;
   let changedIds: string[] = [];
   const reply =
@@ -130,6 +151,7 @@ const closeStore = () => {
   if (closed) return;
   closed = true;
   agent.stop();
+  updates?.stop();
   sync.stop();
   markdownCopy.stop();
   itemStore.close();

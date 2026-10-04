@@ -26,6 +26,8 @@ export interface AresStatusProps {
   working?: AresWork;
   /** Opens Ares's activity page. */
   onOpen?: () => void;
+  /** Runs the Update Skill: Ask for an update (`U`). */
+  onAsk?: () => void;
 }
 
 export type AresWork = { working: boolean; running: readonly string[] };
@@ -34,10 +36,17 @@ const things = (n: number) => `${n} thing${n === 1 ? '' : 's'}`;
 const hhmm = (date: Date) => clockTime(date).slice(0, 5);
 
 /**
- * The Ares status module (.ttn): whether he is working or idle, what he is holding, whether you're
- * here, and Ask for an update. The queue, presence and the button arrive with Updates.
+ * The Ares status module (.ttn): whether he is working or idle, the quiet count of what he is
+ * holding for the next Update, whether you're here, and Ask for an update.
  */
-export function AresStatus({ queued = 0, presence = 'here', awaySince, working, onOpen }: AresStatusProps) {
+export function AresStatus({
+  queued = 0,
+  presence = 'here',
+  awaySince,
+  working,
+  onOpen,
+  onAsk,
+}: AresStatusProps) {
   const away = presence === 'away';
   const busy = !!working?.working;
   const line = busy
@@ -76,8 +85,9 @@ export function AresStatus({ queued = 0, presence = 'here', awaySince, working, 
       <button
         type="button"
         className="f-ask"
-        aria-disabled="true"
-        title="Updates from Ares come in a later milestone"
+        onClick={onAsk}
+        aria-label="Ask for an update"
+        title="Ask Ares for an update (U)"
       >
         <span>
           Ask for

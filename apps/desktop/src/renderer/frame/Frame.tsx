@@ -14,10 +14,13 @@ import { FrameControlsProvider, HeaderSlotProvider, SectionProvider } from '../s
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { ShortcutScope, useActiveScopes, useShortcuts } from '../shortcuts/react';
 import { isTypingTarget } from '../shortcuts/registry';
+import { UpdatesProvider, useUpdates } from '../updates/context';
+import type { OpenTarget } from '../updates/updates';
 import { CheatSheet } from './CheatSheet';
 import { Header } from './Header';
 import { NotebookTabs } from './NotebookTabs';
 import { RulerCursor } from './RulerCursor';
+import { requestReveal } from './reveal';
 import { useAresStatus } from './use-ares-status';
 
 const SETTINGS = 'settings';
@@ -48,26 +51,36 @@ function SectionView({
 }
 
 /**
- * What the whole window shares: the Projects with the one Project filter, and the Dashboard's ranked
- * list (read by the Dashboard, the header's band meter and the Project pages).
+ * What the whole window shares: the Projects with the one Project filter, the Dashboard's ranked
+ * list (read by the Dashboard, the header's band meter and the Project pages), and Ares's Updates
+ * (the quiet count, and the Update the User asks for).
  */
 function FrameProviders({
   projects,
   onOpenPage,
   dashboard,
   open,
+  onOpenUpdateLine,
   children,
 }: {
   projects: ProjectsClient;
   onOpenPage: (projectId: string) => void;
   dashboard: DashboardClient;
   open: string;
+  onOpenUpdateLine: (target: OpenTarget) => void;
   children: ReactNode;
 }) {
   return (
     <ProjectsProvider client={projects} onOpenPage={onOpenPage}>
       <DashboardProvider client={dashboard} open={open}>
-        {children}
+        <UpdatesProvider
+          client={window.commander.updates}
+          onCoreMessage={window.commander.onCoreMessage}
+          onAskForUpdate={window.commander.onAskForUpdate}
+          onOpen={onOpenUpdateLine}
+        >
+          {children}
+        </UpdatesProvider>
       </DashboardProvider>
     </ProjectsProvider>
   );
@@ -80,11 +93,20 @@ function FrameProviders({
 function FrameHeader({ page, onBand, ...props }: ComponentProps<typeof Header> & { page: string | null }) {
   const project = useProjects().projectById(page ?? '');
   const { counts, jumpToBand } = useDashboard();
+  const updates = useUpdates();
   const shown = project && { eyebrow: `Project / ${project.code}`, title: project.name };
+  const away = !!updates.presence && updates.presence.state !== 'active';
   return (
     <Header
       {...props}
       {...shown}
+      ares={{
+        ...props.ares,
+        queued: updates.queued,
+        presence: away ? 'away' : 'here',
+        awaySince: away && updates.presence ? new Date(updates.presence.since) : undefined,
+        onAsk: updates.ask,
+      }}
       bands={counts}
       onBand={(band) => {
         onBand?.(band);
@@ -145,6 +167,15 @@ export function Frame() {
     if (returnTo === SETTINGS) openSettings();
     else openSection(returnTo);
   }, [returnTo, openSettings, openSection]);
+  // Open on a line of an Update: its Item where it lives, its Section, or Settings.
+  const openUpdateLine = useCallback(
+    (target: OpenTarget) => {
+      if (target.kind === 'settings') return openSettings();
+      openSection(target.sectionId);
+      if (target.kind === 'item') requestReveal(target.sectionId, target.itemId);
+    },
+    [openSettings, openSection],
+  );
   const back = useMemo(
     () => ({
       label: SECTIONS.find((section) => section.id === returnTo)?.label ?? 'Settings',
@@ -193,6 +224,7 @@ export function Frame() {
       onOpenPage={openPage}
       dashboard={dashboard}
       open={open === PROJECT_PAGE_SCOPE ? `${open}:${page}` : open}
+      onOpenUpdateLine={openUpdateLine}
     >
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
       <FrameHeader

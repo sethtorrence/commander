@@ -2,7 +2,7 @@
 // it when the User changes Items (typing in a Daily Note becomes a pause trigger once it stops, and a
 // change to Todos or Linear issues a Todos-changed one), when Ares did or suggested something, and
 // when a Source has synced; it works out for itself when the machine has been idle long enough for
-// catch-up work. The main process's idle and lock reports (Updates, #70) can call `idle()` too.
+// catch-up work. The main process's idle and lock reports (Updates, #70) call `idle()` too.
 import type { CoreMessage } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import type { Gate } from '../autonomy/gate';
