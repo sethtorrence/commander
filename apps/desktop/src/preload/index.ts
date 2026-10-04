@@ -3,6 +3,8 @@ import type {
   AutonomyResponse,
   AutonomyResults,
   CoreMessage,
+  EmailReaderRequest,
+  EmailReaderResponse,
   GitHubDiscussionRequest,
   GitHubDiscussionResponse,
   GitHubWatchRequest,
@@ -111,6 +113,18 @@ const commander = {
   // Resolves with the response, failures included.
   githubDiscussion: (request: GitHubDiscussionRequest): Promise<GitHubDiscussionResponse> =>
     ipcRenderer.invoke(ipc.githubDiscussion, request),
+  // The email reader: prepares a message's HTML for its sandboxed frame, sizes the frame, saves or
+  // opens attachments, and changes the image rules. Resolves with the response, failures included.
+  emailReader: (request: EmailReaderRequest): Promise<EmailReaderResponse> =>
+    ipcRenderer.invoke(ipc.emailReader, request),
+  // The real destination of the link hovered in an email's frame ('' when none).
+  onEmailLinkHover(listener: (url: string) => void) {
+    const handler = (_event: unknown, url: string) => listener(typeof url === 'string' ? url : '');
+    ipcRenderer.on(ipc.emailLinkHover, handler);
+    return () => {
+      ipcRenderer.off(ipc.emailLinkHover, handler);
+    };
+  },
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
   // Settings → Accounts. Answers carry Account summaries, never a token or key.

@@ -44,6 +44,10 @@ export const ipc = {
   // Main tells the window to show an Item where it lives (a meeting's heads-up was clicked), as an
   // OpenItem.
   openItem: 'open-item',
+  // The email reader (#134); see email-reader.ts for the validated contract. Main tells the window
+  // the real destination of the link hovered in an email's frame (emailLinkHover, '' when none).
+  emailReader: 'email-reader',
+  emailLinkHover: 'email-link-hover',
 } as const;
 
 // An Item to show in its Section: the Calendar Section and the event, for a meeting's heads-up.

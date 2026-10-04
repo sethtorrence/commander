@@ -113,23 +113,24 @@ export function setUpSync(
   let googleCalendarUrl = 'https://www.googleapis.com/calendar/v3';
   let githubApiUrl = 'https://api.github.com';
   let gmailUrl = 'https://gmail.googleapis.com';
+  const adapters: SourceAdapter[] = [
+    linearSource({ apiUrl: () => linearApiUrl }),
+    teamsSource({ graphUrl: () => graphUrl }),
+    googleCalendarSource({
+      apiUrl: () => googleCalendarUrl,
+      calendars: calendarChoicesIn(store, 'google-calendar'),
+    }),
+    // Outlook Calendar reaches Graph where Teams does.
+    outlookCalendarSource({
+      graphUrl: () => graphUrl,
+      calendars: calendarChoicesIn(store, 'outlook-calendar'),
+    }),
+    githubSource({ apiUrl: () => githubApiUrl }),
+    gmailSource({ gmailUrl: () => gmailUrl }),
+  ];
   const engine: SyncEngine = createSyncEngine({
     store,
-    adapters: [
-      linearSource({ apiUrl: () => linearApiUrl }),
-      teamsSource({ graphUrl: () => graphUrl }),
-      googleCalendarSource({
-        apiUrl: () => googleCalendarUrl,
-        calendars: calendarChoicesIn(store, 'google-calendar'),
-      }),
-      // Outlook Calendar reaches Graph where Teams does.
-      outlookCalendarSource({
-        graphUrl: () => graphUrl,
-        calendars: calendarChoicesIn(store, 'outlook-calendar'),
-      }),
-      githubSource({ apiUrl: () => githubApiUrl }),
-      gmailSource({ gmailUrl: () => gmailUrl }),
-    ],
+    adapters,
     accessTokens,
     watchOf: (account, source) =>
       source === 'github' && githubWatch ? githubWatch(account, githubApiUrl) : null,
@@ -165,6 +166,9 @@ export function setUpSync(
 
   return {
     engine,
+
+    // A Source's adapter (the email reader fetches parts through it, paced with its syncs).
+    adapterFor: (source: Source) => adapters.find((adapter) => adapter.source === source),
 
     // A message from the main process. Returns true when it was a sync message, handled here.
     handle(raw: unknown): boolean {

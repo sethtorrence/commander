@@ -24,6 +24,9 @@ export const emailAttachment = z.object({
   partId: z.string(),
   // Shown inside the HTML (Content-ID) rather than listed.
   inline: z.boolean(),
+  // Its Content-ID, as a `cid:` URL names it (normaliseContentId), when it has one. Messages synced
+  // before the reader kept these have none; the reader then asks the Source.
+  contentId: z.string().optional(),
 });
 export type EmailAttachment = z.infer<typeof emailAttachment>;
 

@@ -12,6 +12,7 @@ export * from './commander-events';
 export * from './core-messages';
 export * from './daily-template';
 export * from './email';
+export * from './email-reader';
 export * from './email-threads';
 export * from './filing';
 export * from './focus-time';

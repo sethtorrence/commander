@@ -6,6 +6,7 @@ import {
   type EmailBody,
   type EmailDetail,
   emailStatus,
+  normaliseContentId,
   normaliseMessageId,
   parseMessageIds,
   type SourceItem,
@@ -174,12 +175,12 @@ export function parseAddresses(value: string | null | undefined): EmailAddress[]
 // ---------------------------------------------------------------------------------------------
 // Parts
 
-const headerOf = (part: GmailPart | undefined, name: string): string | null => {
+export const headerOf = (part: GmailPart | undefined, name: string): string | null => {
   const wanted = name.toLowerCase();
   return part?.headers?.find((header) => header.name.toLowerCase() === wanted)?.value ?? null;
 };
 
-const mimeOf = (part: GmailPart) => (part.mimeType ?? '').toLowerCase();
+export const mimeOf = (part: GmailPart) => (part.mimeType ?? '').toLowerCase();
 
 function charsetOf(part: GmailPart): string | null {
   const match = /charset\s*=\s*"?([^";\s]+)"?/i.exec(headerOf(part, 'Content-Type') ?? '');
@@ -234,13 +235,14 @@ function bodiesOf(part: GmailPart): Bodies {
   return { text: null, html: null };
 }
 
-function* leaves(part: GmailPart): Generator<GmailPart> {
+export function* leaves(part: GmailPart): Generator<GmailPart> {
   if (part.parts?.length) for (const child of part.parts) yield* leaves(child);
   else yield part;
 }
 
 function attachmentOf(part: GmailPart): EmailAttachment {
   const disposition = (headerOf(part, 'Content-Disposition') ?? '').toLowerCase();
+  const contentId = normaliseContentId(headerOf(part, 'Content-ID') ?? '');
   const name =
     part.filename ||
     /filename\*?\s*=\s*"?([^";]+)"?/i.exec(headerOf(part, 'Content-Disposition') ?? '')?.[1] ||
@@ -251,6 +253,7 @@ function attachmentOf(part: GmailPart): EmailAttachment {
     size: part.body?.size ?? 0,
     partId: part.partId ?? '',
     inline: disposition.startsWith('inline') || (!disposition && !!headerOf(part, 'Content-ID')),
+    ...(contentId ? { contentId } : {}),
   };
 }
 

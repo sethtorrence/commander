@@ -3,12 +3,14 @@ import { z } from 'zod';
 import {
   type Cadence,
   CursorExpired,
+  type PartRequest,
   type SourceAdapter,
   type StoredItem,
   type SyncRequest,
 } from '../source';
 import { connectGmail, createPacer, type GmailClient, MessageGone, type Pacer } from './client';
 import { labelName, readGmailMessage } from './message';
+import { fetchGmailPart } from './parts';
 import {
   type GmailHistory,
   gmailHistory,
@@ -133,24 +135,27 @@ export function createGmailSource({
   now = Date.now,
   sleep = sleepFor,
 }: GmailSourceOptions): SourceAdapter {
-  // Each Account's quota is paced across its syncs.
+  // Each Account's quota is paced across its syncs (and the reader's part fetches).
   const pacers = new Map<string, Pacer>();
+  const pacerOf = (account: string) => {
+    let pacer = pacers.get(account);
+    if (!pacer) {
+      pacer = createPacer(now, sleep);
+      pacers.set(account, pacer);
+    }
+    return pacer;
+  };
 
   return {
     source: 'gmail',
     cadence: GMAIL_CADENCE,
 
     async sync(request: SyncRequest) {
-      let pacer = pacers.get(request.account);
-      if (!pacer) {
-        pacer = createPacer(now, sleep);
-        pacers.set(request.account, pacer);
-      }
       const gmail = connectGmail({
         gmailUrl: gmailUrl(),
         fetch,
         now,
-        pacer,
+        pacer: pacerOf(request.account),
         accessToken: request.accessToken,
         signal: request.signal,
       });
@@ -178,6 +183,19 @@ export function createGmailSource({
       }
       request.progress?.(null);
       return { cursor, cost: gmail.cost };
+    },
+
+    // The email reader's parts (parts.ts).
+    fetchPart(request: PartRequest) {
+      const gmail = connectGmail({
+        gmailUrl: gmailUrl(),
+        fetch,
+        now,
+        pacer: pacerOf(request.account),
+        accessToken: request.accessToken,
+        signal: request.signal,
+      });
+      return fetchGmailPart(gmail, request);
     },
   };
 }

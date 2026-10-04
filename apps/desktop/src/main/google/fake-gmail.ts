@@ -22,9 +22,25 @@ export type FakeGmailMessageInput = {
   messageId?: string;
   inReplyTo?: string;
   references?: string;
+  // Attachments, and inline images (with a Content-ID), served by `messages.attachments.get`.
+  attachments?: {
+    name: string;
+    type: string;
+    content: Buffer | string;
+    contentId?: string;
+    inline?: boolean;
+  }[];
 };
 
-type StoredMessage = { id: string; threadId: string; labelIds: string[]; date: number; json: unknown };
+type StoredMessage = {
+  id: string;
+  threadId: string;
+  labelIds: string[];
+  date: number;
+  json: unknown;
+  // Attachment bytes by attachment id.
+  parts: Map<string, Buffer>;
+};
 
 type HistoryRecord = {
   id: number;
@@ -103,28 +119,53 @@ function messageJson(id: string, threadId: string, labelIds: string[], input: Fa
     headers: [{ name: 'Content-Type', value: 'text/plain; charset="UTF-8"' }],
     body: { size: Buffer.byteLength(input.text), data: b64(input.text) },
   });
-  const payload = input.html
+  // The message's text (and HTML) as a part numbered `partId`, its children `<partId>.0`, `.1`.
+  const child = (partId: string, index: number) => (partId ? `${partId}.${index}` : String(index));
+  const bodyPart = (partId: string) =>
+    input.html
+      ? {
+          partId,
+          mimeType: 'multipart/alternative',
+          filename: '',
+          headers: [{ name: 'Content-Type', value: 'multipart/alternative; boundary="alt"' }],
+          body: { size: 0 },
+          parts: [
+            textPart(child(partId, 0)),
+            {
+              partId: child(partId, 1),
+              mimeType: 'text/html',
+              filename: '',
+              headers: [{ name: 'Content-Type', value: 'text/html; charset="UTF-8"' }],
+              body: { size: Buffer.byteLength(input.html), data: b64(input.html) },
+            },
+          ],
+        }
+      : textPart(partId);
+  const attachments = (input.attachments ?? []).map((attachment, index) => ({
+    partId: String(index + 1),
+    mimeType: attachment.type,
+    filename: attachment.name,
+    headers: [
+      { name: 'Content-Type', value: `${attachment.type}; name="${attachment.name}"` },
+      {
+        name: 'Content-Disposition',
+        value: `${attachment.inline ? 'inline' : 'attachment'}; filename="${attachment.name}"`,
+      },
+      ...(attachment.contentId ? [{ name: 'Content-ID', value: `<${attachment.contentId}>` }] : []),
+    ],
+    body: { size: Buffer.byteLength(attachment.content), attachmentId: `att-${id}-${index + 1}` },
+  }));
+  const top = attachments.length
     ? {
         partId: '',
-        mimeType: 'multipart/alternative',
+        mimeType: 'multipart/mixed',
         filename: '',
-        headers: [...headers, { name: 'Content-Type', value: 'multipart/alternative; boundary="fake"' }],
+        headers: [{ name: 'Content-Type', value: 'multipart/mixed; boundary="mixed"' }],
         body: { size: 0 },
-        parts: [
-          textPart('0'),
-          {
-            partId: '1',
-            mimeType: 'text/html',
-            filename: '',
-            headers: [{ name: 'Content-Type', value: 'text/html; charset="UTF-8"' }],
-            body: { size: Buffer.byteLength(input.html), data: b64(input.html) },
-          },
-        ],
+        parts: [bodyPart('0'), ...attachments],
       }
-    : {
-        ...textPart(''),
-        headers: [...headers, { name: 'Content-Type', value: 'text/plain; charset="UTF-8"' }],
-      };
+    : bodyPart('');
+  const payload = { ...top, headers: [...headers, ...top.headers] };
   return {
     id,
     threadId,
@@ -209,6 +250,12 @@ export function createFakeGmail(): FakeGmail {
         labelIds,
         date: input.date,
         json: messageJson(id, threadId, labelIds, input),
+        parts: new Map(
+          (input.attachments ?? []).map((attachment, index) => [
+            `att-${id}-${index + 1}`,
+            Buffer.from(attachment.content),
+          ]),
+        ),
       };
       box.messages.set(id, message);
       record(box, { messagesAdded: [{ message: refOf(message) }] });
@@ -273,6 +320,19 @@ export function createFakeGmail(): FakeGmail {
       }
       if (path === '/messages') return json(response, 200, list(box, url));
       if (path === '/history') return history(box, url, response);
+      const attachment = /^\/messages\/([^/]+)\/attachments\/([^/]+)$/.exec(path);
+      if (attachment) {
+        const bytes = box.messages
+          .get(decodeURIComponent(attachment[1] ?? ''))
+          ?.parts.get(decodeURIComponent(attachment[2] ?? ''));
+        if (!bytes)
+          return json(
+            response,
+            404,
+            googleError(404, 'NOT_FOUND', 'notFound', 'Requested entity was not found.'),
+          );
+        return json(response, 200, { size: bytes.length, data: bytes.toString('base64url') });
+      }
       const one = /^\/messages\/([^/]+)$/.exec(path)?.[1];
       if (one) {
         const message = box.messages.get(decodeURIComponent(one));

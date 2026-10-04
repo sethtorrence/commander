@@ -1,3 +1,4 @@
+import { safeMailto } from '@commander/domain';
 import type { WebContents } from 'electron';
 
 // Links clicked in the window (in a Linear issue's description or comments, "Open in Linear") open
@@ -14,7 +15,10 @@ export function externalUrl(raw: string): string | null {
   } catch {
     return null;
   }
-  return EXTERNAL_PROTOCOLS.has(url.protocol) ? url.toString() : null;
+  if (!EXTERNAL_PROTOCOLS.has(url.protocol)) return null;
+  // A mail link opens the mail client with only its addresses, subject, body, cc and bcc (never
+  // `attach=`, which some clients act on).
+  return url.protocol === 'mailto:' ? safeMailto(url.toString()) : url.toString();
 }
 
 export type LinkGuardedContents = {

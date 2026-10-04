@@ -1,10 +1,4 @@
-import {
-  addressName,
-  type EmailAddress,
-  type EmailDetail,
-  type EmailThread,
-  type EmailThreadSummary,
-} from '@commander/domain';
+import type { EmailThreadSummary } from '@commander/domain';
 import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { cn, Kbd, Led, toast } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -17,7 +11,9 @@ import { ItemBadge, SectionProjectFilter, useAccentBar } from '../../projects/ba
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
-import { type EmailAccountsClient, type EmailClient, emailSyncLine, sentTime, threadTime } from './email';
+import { type EmailAccountsClient, type EmailClient, emailSyncLine, threadTime } from './email';
+import { type EmailReaderClient, textOnlyReader } from './reader';
+import { ThreadReader } from './ThreadReader';
 import { threadId, useEmail } from './use-email';
 
 // Enter opens the selected thread, except on a control that Enter presses (a button, a link).
@@ -267,105 +263,6 @@ function ThreadRow({
   );
 }
 
-const fullAddress = (address: EmailAddress) =>
-  address.name?.trim() ? `${address.name.trim()} <${address.address}>` : address.address;
-const addresses = (list: EmailAddress[]) => list.map(fullAddress).join(', ');
-
-function HeaderRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid grid-cols-[72px_minmax(0,1fr)] gap-2.5 border-b border-line2 py-1.5 font-mono text-label leading-[1.4] tracking-label">
-      <dt className="uppercase text-muted">{label}</dt>
-      <dd className="m-0 font-semibold break-words text-ink">{children}</dd>
-    </div>
-  );
-}
-
-/**
- * The open thread (the prototype's reader): its subject, then each message with its headers and its
- * plain-text body. Bodies are only ever shown as text, never as HTML (ADR 0004): an HTML-only message
- * shows its text conversion until the sandboxed reader (#134) arrives.
- */
-function ThreadReader({
-  thread,
-  summary,
-  accountName,
-  onClose,
-}: {
-  thread: EmailThread | null;
-  summary: EmailThreadSummary | null;
-  accountName: (accountId: string) => string;
-  onClose: () => void;
-}) {
-  const subject = summary?.subject || thread?.messages.at(-1)?.item.title || '';
-  return (
-    <section aria-label="Thread" className="min-w-0 border-l border-line">
-      <div className="sticky top-0 z-[2] flex h-11 items-stretch border-b border-line bg-sheet">
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex cursor-pointer items-center gap-2 border-0 border-r border-line2 bg-transparent px-3.5 font-mono text-label leading-none font-semibold uppercase tracking-caps text-ink hover:bg-raise"
-        >
-          <Kbd>Esc</Kbd> Close
-        </button>
-        {summary && (
-          <span className="ml-auto flex items-center px-4 font-mono text-label leading-none uppercase tracking-caps text-faint">
-            {summary.messageCount} {summary.messageCount === 1 ? 'message' : 'messages'} ·{' '}
-            {accountName(summary.account)}
-          </span>
-        )}
-      </div>
-      <div className="max-w-[820px] px-10 pt-5 pb-30">
-        <h2 className="m-0 font-sans text-[26px] leading-[1.15] font-bold tracking-[-.015em] text-ink font-stretch-(--stretch-wide)">
-          {subject || '(no subject)'}
-        </h2>
-        {!thread ? (
-          <p className="mt-4 text-note text-faint">Reading the thread…</p>
-        ) : (
-          thread.messages.map(({ item, body }) => {
-            const detail = item.detail as EmailDetail;
-            return (
-              <article key={item.id} data-testid="email-message" className="mt-6 border-t border-line pt-1">
-                <ItemWarning item={item} variant="pane" className="mt-2" />
-                <dl className="m-0">
-                  <HeaderRow label="From">
-                    {detail.from ? fullAddress(detail.from) : '(unknown sender)'}
-                  </HeaderRow>
-                  {detail.to.length > 0 && <HeaderRow label="To">{addresses(detail.to)}</HeaderRow>}
-                  {detail.cc.length > 0 && <HeaderRow label="Cc">{addresses(detail.cc)}</HeaderRow>}
-                  <HeaderRow label="Date">{sentTime(detail.sentAt)}</HeaderRow>
-                  {detail.attachments.some((each) => !each.inline) && (
-                    <HeaderRow label="Files">
-                      {detail.attachments
-                        .filter((each) => !each.inline)
-                        .map((each) => each.name)
-                        .join(', ')}
-                    </HeaderRow>
-                  )}
-                </dl>
-                <div
-                  data-testid="email-body"
-                  className="mt-4 text-[15px] leading-[1.6] break-words whitespace-pre-wrap text-text"
-                >
-                  {body ? body.text : ''}
-                </div>
-                {!body && <p className="mt-2 text-note text-faint">No text was kept for this message.</p>}
-                {body?.truncated && (
-                  <p className="mt-2 text-note text-faint">This message is long: the rest is in Gmail.</p>
-                )}
-                {body?.textFromHtml && (
-                  <p className="mt-2 font-mono text-label uppercase tracking-label text-faint">
-                    Shown as text · {addressName(detail.from)} sent HTML
-                  </p>
-                )}
-              </article>
-            );
-          })
-        )}
-      </div>
-    </section>
-  );
-}
-
 /**
  * The Email Section's sheet, after the prototype's Email Section: the sheet header, the Account
  * switcher with the sync status line, the Project filter, then the inbox as threads and, once one
@@ -375,10 +272,13 @@ export function EmailSheet({
   client,
   accounts,
   changes,
+  reader = textOnlyReader,
 }: {
   client: EmailClient;
   accounts: EmailAccountsClient;
   changes: ItemChanges;
+  /** The sandboxed HTML reader (the window's bridge); without it every message shows as text. */
+  reader?: EmailReaderClient;
 }) {
   const { include } = useProjectFilter();
   const { projectOf } = useProjects();
@@ -507,6 +407,7 @@ export function EmailSheet({
               thread={state.thread}
               summary={selected}
               accountName={accountName}
+              reader={reader}
               onClose={() => setOpen(false)}
             />
           )}

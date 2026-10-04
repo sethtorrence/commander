@@ -25,7 +25,7 @@ import { googleError } from './shapes';
 
 // What each call costs in Gmail quota units (Gmail API quota reference; `messages.get` at the 2026
 // figure decision #2 records).
-export const UNITS = { profile: 1, labels: 1, list: 5, get: 20, history: 2 } as const;
+export const UNITS = { profile: 1, labels: 1, list: 5, get: 20, history: 2, attachment: 5 } as const;
 
 // The pace: up to BURST units at once, refilled at RATE units a minute.
 export const BURST_UNITS = 500;
@@ -136,7 +136,7 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
     if (response.status === 404 && call === 'history') {
       throw new CursorExpired('Gmail no longer has the history since Commander’s last sync.');
     }
-    if (response.status === 404 && call === 'get') throw new MessageGone(path);
+    if (response.status === 404 && (call === 'get' || call === 'attachment')) throw new MessageGone(path);
     throw new SourceUnavailable(`Gmail couldn’t answer just now (HTTP ${response.status}).`, cost);
   }
 

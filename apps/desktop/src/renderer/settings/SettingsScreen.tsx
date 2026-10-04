@@ -12,6 +12,7 @@ import { useNow } from '../frame/use-now';
 import { PeopleSettings } from '../people/PeopleSettings';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { RulesSettings } from '../rules/RulesSettings';
+import { EmailSettings } from '../sections/email/EmailSettings';
 import { DailyTemplateSettings } from '../sections/notes/DailyTemplateSettings';
 import { TeamsSettings } from '../sections/teams/TeamsSettings';
 import { AccountsPanel } from './AccountsPanel';
@@ -101,6 +102,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
       <TeamsSettings no="14" shown={open} />
       <CalendarSettings no="15" />
       <PeopleSettings no="16" />
+      <EmailSettings no="17" shown={open} />
     </Sheet>
   );
 }

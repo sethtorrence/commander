@@ -239,6 +239,13 @@
       "when": 1791149989454,
       "tag": "0033_github_oversight",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1791151379540,
+      "tag": "0034_email_reader",
+      "breakpoints": true
     }
   ]
 }

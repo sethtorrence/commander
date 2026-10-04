@@ -882,3 +882,25 @@ export const githubOversightSettings = sqliteTable('github_oversight_settings', 
   bots: text('bots', { mode: 'json' }).$type<string[]>().notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+
+// The email reader's image rules (#134), per Account. Gmail Accounts show remote images unless the
+// User asks to be asked first (`askFirst`); Outlook Accounts hold them back unless the sender is
+// trusted. Settings, not Item changes: never in the activity log.
+export const emailImageSettings = sqliteTable('email_image_settings', {
+  account: text('account').primaryKey(),
+  askFirst: integer('ask_first', { mode: 'boolean' }).notNull().default(false),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// What the User said to show: one message's images (Show images; `value` is its Item id), or every
+// message's from a sender (Always show from this sender; `value` is the address, lower-case).
+export const emailImageTrust = sqliteTable(
+  'email_image_trust',
+  {
+    account: text('account').notNull(),
+    kind: text('kind').$type<'sender' | 'message'>().notNull(),
+    value: text('value').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.account, t.kind, t.value] })],
+);

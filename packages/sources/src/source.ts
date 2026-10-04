@@ -143,6 +143,31 @@ export type WriteResult = {
   cost: SyncCost;
 };
 
+// The email reader (#134): one part of a message (an attachment, or an inline image named by its
+// Content-ID), fetched on demand. Never during sync, and never handed to Ares.
+export type PartRequest = {
+  account: string;
+  // The message's external id.
+  externalId: string;
+  part: { partId: string } | { contentId: string };
+  // Larger parts are refused (PartTooLarge) before their bytes are fetched where the Source says
+  // their size.
+  maxBytes: number;
+  accessToken(): Promise<AccessToken>;
+  signal: AbortSignal;
+};
+
+export type FetchedPart = { partId: string; name: string; type: string; bytes: Uint8Array };
+
+// The message, or the part asked for, isn't there (any more).
+export class PartNotFound extends Error {
+  override name = 'PartNotFound';
+}
+
+export class PartTooLarge extends Error {
+  override name = 'PartTooLarge';
+}
+
 export type SourceAdapter = {
   source: Source;
   cadence: Cadence;
@@ -157,6 +182,9 @@ export type SourceAdapter = {
   // the same changes. Rejects with WriteRejected when the Source refuses the change itself, and
   // otherwise as `sync` does. Sources without it are read-only.
   write?(request: WriteRequest): Promise<WriteResult>;
+  // Email Sources: one part of a message, for the reader. Rejects with PartNotFound, PartTooLarge,
+  // or as `sync` does.
+  fetchPart?(request: PartRequest): Promise<FetchedPart>;
 };
 
 // The Source asked Commander to slow down: a 429, or a quota answer under another status (Gmail

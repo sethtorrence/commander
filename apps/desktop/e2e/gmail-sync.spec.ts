@@ -126,10 +126,12 @@ test('connect Google → first sync → threads listed → open a thread → new
   await switcher.getByRole('tab', { name: ALEX.email }).click();
   await expect(subjects(window)).toHaveText(['Your order has shipped', 'Re: Q4 offsite dates']);
 
-  // A thread opens with each message's headers and plain-text body.
+  // A thread opens with each message's headers and plain-text body; the older, read one is collapsed
+  // to a line until clicked.
   await conversation.click();
   const reader = section.getByRole('region', { name: 'Thread' });
   await expect(reader.getByTestId('email-message')).toHaveCount(2);
+  await reader.getByRole('button', { name: 'Show the message from Dana Whitfield' }).click();
   await expect(reader.getByTestId('email-body')).toHaveText([
     'Which dates work for you for the Q4 offsite?\n\nDana',
     'Booked the venue for 19–21 Nov.',

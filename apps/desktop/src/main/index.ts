@@ -18,6 +18,8 @@ import { attachmentSchemePrivileges, serveAttachment } from './attachments-proto
 import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
+import { setUpEmailReader } from './email-reader';
+import { emailReaderSchemePrivileges } from './email-reader/protocol';
 import { keepLinksInBrowser } from './external-links';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
@@ -40,8 +42,9 @@ import {
 } from './window-frame';
 
 for (const [name, value] of launchSwitches(process.platform)) app.commandLine.appendSwitch(name, value);
-// Pasted images reach the window through attachment://, which must be declared before the app is ready.
-protocol.registerSchemesAsPrivileged([attachmentSchemePrivileges]);
+// Pasted images reach the window through attachment://, and emails' HTML its sandboxed frames through
+// commander-mail:// (email-reader/protocol.ts); both must be declared before the app is ready.
+protocol.registerSchemesAsPrivileged([attachmentSchemePrivileges, emailReaderSchemePrivileges]);
 const primary = claimSingleInstance();
 
 let window: BrowserWindow | null = null;
@@ -100,7 +103,20 @@ function startCore(secrets: Secrets) {
   ]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));
-  const accounts = setUpAccounts({ secrets, sendToCore: (message) => core.postMessage(message), testHooks });
+  // The email reader (#134): emails' HTML in sandboxed frames, their images and attachments.
+  const emailReader = window
+    ? setUpEmailReader({ window, send: (message) => core.postMessage(message), testHooks })
+    : null;
+  const accounts = setUpAccounts({
+    secrets,
+    sendToCore: (message) => {
+      // A removed Account's remote images and prepared emails go with it (the Core removes its
+      // cached attachments and image rules).
+      if (message.type === 'remove-account-items') emailReader?.forgetAccount(message.account);
+      core.postMessage(message);
+    },
+    testHooks,
+  });
   const models = setUpModels(secrets, core);
   const autonomy = createAutonomyChannels((message) => core.postMessage(message));
   ipcMain.handle(ipc.autonomy, (_event, request: unknown) => autonomy.window.request(request));
@@ -150,12 +166,18 @@ function startCore(secrets: Secrets) {
         saveGitHubItems: accounts.saveGitHubItems,
         meetingHeadsUps: headsUp.shown,
         clickMeetingHeadsUp: headsUp.click,
+        // The email reader: what the window's session saw, and email Items to save as a Source would.
+        emailRequests: () => emailReader?.seenRequests() ?? [],
+        prepareUnsanitisedEmail: (html: string) => emailReader?.prepareUnsanitisedForTest(html) ?? null,
+        saveEmailItems: (source: string, account: string, items: unknown[]) =>
+          core.postMessage({ type: 'email-test-items', source, account, items }),
       },
     });
   }
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
     if (markdownCopy.settle(raw) || updates.settle(raw)) return;
+    if (emailReader?.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.
     if (models(raw)) return;
     if (accounts.fromCore(raw)) return;

@@ -156,7 +156,14 @@ describe('readGmailMessage: bodies', () => {
     expect(body.text).toBe('See the floor plan.');
     expect(body.html).toBe('<p>See the <img src="cid:plan"> floor plan.</p>');
     expect(detail.attachments).toEqual([
-      { name: 'plan.png', type: 'image/png', size: 51234, partId: expect.any(String), inline: true },
+      {
+        name: 'plan.png',
+        type: 'image/png',
+        size: 51234,
+        partId: expect.any(String),
+        inline: true,
+        contentId: 'plan',
+      },
       {
         name: 'Agenda.pdf',
         type: 'application/pdf',
