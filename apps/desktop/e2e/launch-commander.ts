@@ -103,12 +103,15 @@ export async function placeWindow(app: ElectronApplication): Promise<void> {
       await dispatch(`hl.dsp.window.float({ action = "set", window = "${window}" })`, 'setfloating', window),
     ).toBe('ok');
   }
-  // A floating window takes the size it is given; elsewhere this is the size it already has.
-  await app.evaluate(({ BrowserWindow }, { width, height }) => {
-    BrowserWindow.getAllWindows()[0]?.setSize(width, height);
-  }, WINDOW_SIZE);
+  // A floating window takes the size it is given; elsewhere this is the size it already has. Under
+  // load Hyprland may apply the float after the first resize, so the size is set again until it holds.
   const page = await app.firstWindow();
-  await expect
-    .poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight })))
-    .toEqual(WINDOW_SIZE);
+  await expect(async () => {
+    await app.evaluate(({ BrowserWindow }, { width, height }) => {
+      BrowserWindow.getAllWindows()[0]?.setSize(width, height);
+    }, WINDOW_SIZE);
+    await expect
+      .poll(() => page.evaluate(() => ({ width: innerWidth, height: innerHeight })), { timeout: 2000 })
+      .toEqual(WINDOW_SIZE);
+  }).toPass({ timeout: 20_000 });
 }
