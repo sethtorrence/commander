@@ -48,6 +48,11 @@ export const accountsRequest = z.union([
     accountId: z.string().min(1),
     minutes: z.number().int().positive(),
   }),
+  z.object({
+    op: z.literal('set-sync-also-after-other-sources'),
+    accountId: z.string().min(1),
+    enabled: z.boolean(),
+  }),
 ]);
 // The zod-free AccountsRequest type in ipc.ts (for the preload) must match the schema.
 type _RequestMatches = [AccountsRequest] extends [z.infer<typeof accountsRequest>]

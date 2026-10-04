@@ -13,6 +13,12 @@
 // failure or when the Source refuses the change outright; and are followed by a refresh. A change
 // that lost to a newer one at the Source is dropped, with the Source's value saved and a note. What a
 // write saved from the Source's answer (a new issue numbered by Linear) is reported with the refresh.
+//
+// Sources with a light sync (Teams, whose cadence has `alsoAfterOtherSources`) run full syncs on
+// their cadence, counted from the last full one, and a light check on refresh and whenever another
+// Source's Account finishes syncing: a moment later, so syncs finishing together cause one check,
+// never within 5 minutes of the Account's last sync, never while it is backing off, and not at all
+// when the User switches it off.
 import type {
   AccountSyncStatus,
   Source,
@@ -29,6 +35,7 @@ import {
   SourceUnavailable,
   type Superseded,
   type SyncCost,
+  type SyncMode,
   type SyncResult,
   WriteRejected,
 } from '@commander/sources';
@@ -45,6 +52,10 @@ const MAX_TIMER_MS = 2 ** 31 - 1;
 // Outgoing changes retry after 10, 20, 40, 80 seconds; the fifth failure in a row is Couldn't sync.
 export const WRITE_BACKOFF_BASE_MS = 10_000;
 export const MAX_WRITE_ATTEMPTS = 5;
+// Checks alongside other Sources: a moment after another Account's sync finishes (so several finishing
+// together cause one), and never within 5 minutes of the Account's last sync.
+export const CHECK_DELAY_MS = 5_000;
+export const CHECK_INTERVAL_MS = 5 * 60_000;
 
 const SOURCE_NAMES: Record<Source, string> = {
   gmail: 'Gmail',
@@ -95,6 +106,9 @@ export type SyncEngine = {
   refresh(account: string): Promise<void>;
   // Minutes between the Account's syncs, from its Source's choices. Kept across restarts.
   setCadence(account: string, minutes: number): void;
+  // Sources with a light sync: whether the Account also checks whenever another Source syncs. Kept
+  // across restarts.
+  setAlsoAfterOtherSources(account: string, enabled: boolean): void;
   // The Account was removed: stop it at once, save nothing more from it, and drop its sync state.
   forget(account: string): void;
   statuses(): AccountSyncStatus[];
@@ -121,6 +135,10 @@ type Entry = {
   writesHeldUntil: number | null;
   // Items saved from the Source's answers to writes since the last sync, reported with the next one.
   written: Set<string>;
+  // A check alongside another Source's sync, waiting to run.
+  checkTimer: ReturnType<typeof setTimeout> | null;
+  // When the Account's last sync of any kind started.
+  lastStartedAt: number | null;
 };
 
 const backoff = (failures: number) =>
@@ -169,9 +187,16 @@ export function createSyncEngine({
         failures: 0,
         retryAt: null,
         problem: null,
+        lastFullSyncAt: null,
+        alsoAfterOtherSources: null,
       }
     );
   }
+
+  // Whether the Account's Source has a light sync (a cheap check) beside its full one.
+  const hasLightSync = (entry: Entry) => entry.adapter.cadence.alsoAfterOtherSources === true;
+  const checksAlongside = (entry: Entry, state: SyncState) =>
+    hasLightSync(entry) && (state.alsoAfterOtherSources ?? true);
 
   const cadenceMs = (entry: Entry, state: SyncState) =>
     (state.cadenceMinutes ?? entry.adapter.cadence.defaultMinutes) * 60_000;
@@ -195,6 +220,7 @@ export function createSyncEngine({
       itemCount: store.syncState.countItems(entry.account.source, entry.account.id),
       problem: state.problem,
       outgoing: store.outgoing.counts(entry.account.id),
+      ...(hasLightSync(entry) ? { alsoAfterOtherSources: checksAlongside(entry, state) } : {}),
     };
   }
 
@@ -214,15 +240,22 @@ export function createSyncEngine({
     entry.dueAt = null;
   }
 
+  function clearCheckTimer(entry: Entry) {
+    if (entry.checkTimer) clearTimeout(entry.checkTimer);
+    entry.checkTimer = null;
+  }
+
   // Works out the Account's next sync and arms its timer.
   function schedule(entry: Entry) {
     clearTimer(entry);
     if (!isCurrent(entry) || entry.running || entry.account.needsReconnect || paused()) return;
     const state = load(entry);
+    // A Source with a light sync counts its cadence from its last full sync, not its last check.
+    const last = hasLightSync(entry) ? state.lastFullSyncAt : state.lastSyncedAt;
     let due: number;
     if (state.retryAt !== null) due = state.retryAt;
-    else if (state.lastSyncedAt === null) due = now();
-    else due = state.lastSyncedAt + cadenceMs(entry, state) + random() * SPREAD_MS;
+    else if (last === null) due = now();
+    else due = last + cadenceMs(entry, state) + random() * SPREAD_MS;
     // Overdue (after a restart, sleep or going offline): catch up once, soon, spread a little.
     if (due < now()) due = now() + random() * SPREAD_MS;
     arm(entry, due);
@@ -249,7 +282,11 @@ export function createSyncEngine({
     if (trigger === 'refresh' && state.problem?.kind === 'rate-limited' && (state.retryAt ?? 0) > now()) {
       return Promise.resolve();
     }
+    // A check alongside another Source never runs while backing off.
+    if (trigger === 'alongside' && (state.retryAt ?? 0) > now()) return Promise.resolve();
     clearTimer(entry);
+    clearCheckTimer(entry);
+    entry.lastStartedAt = now();
     const abort = new AbortController();
     entry.abort = abort;
     entry.running = takeTurn(entry, () => execute(entry, load(entry).cursor, trigger, abort.signal))
@@ -273,13 +310,26 @@ export function createSyncEngine({
     const recheck = store.recheckIds({ source, account });
     let result: SyncResult | null = null;
     let failure: unknown = null;
+    let mode: SyncMode = 'full';
     try {
       let cursor = startCursor;
       for (;;) {
+        // Light only for Sources that have one, with a cursor to check from, off their cadence.
+        mode = hasLightSync(entry) && cursor !== null && trigger !== 'scheduled' ? 'light' : 'full';
         try {
           result = await entry.adapter.sync({
             account,
             cursor,
+            mode,
+            me: entry.account.me ?? null,
+            stored: (externalIds) =>
+              store.fromSource({ source, account }, externalIds).map((item) => ({
+                externalId: item.externalId ?? '',
+                title: item.title,
+                people: item.people,
+                status: item.status,
+                detail: item.detail,
+              })),
             accessToken: () => accessTokens.request(account),
             recheck,
             saveCatalog(catalog) {
@@ -332,6 +382,7 @@ export function createSyncEngine({
         ...latest,
         cursor: result.cursor,
         lastSyncedAt: now(),
+        lastFullSyncAt: mode === 'full' ? now() : latest.lastFullSyncAt,
         failures: 0,
         retryAt: null,
         problem: null,
@@ -386,8 +437,30 @@ export function createSyncEngine({
     for (const listener of syncedListeners) listener({ account, source, outcome, itemIds });
   }
 
+  // After another Account's sync: a check of each Account with a light sync that checks alongside
+  // others, a moment later (joining one already waiting), unless it synced in the last 5 minutes,
+  // is backing off, or can't sync now.
+  function checkAlongside({ source, outcome }: SyncedEvent) {
+    if (outcome !== 'synced' || stopped) return;
+    for (const entry of entries.values()) {
+      if (entry.account.source === source || entry.checkTimer || entry.running) continue;
+      if (entry.account.needsReconnect || paused()) continue;
+      const state = load(entry);
+      if (!checksAlongside(entry, state) || state.lastSyncedAt === null) continue;
+      if ((state.retryAt ?? 0) > now()) continue;
+      const last = Math.max(state.lastSyncedAt, entry.lastStartedAt ?? 0);
+      if (now() - last < CHECK_INTERVAL_MS) continue;
+      entry.checkTimer = setTimeout(() => {
+        entry.checkTimer = null;
+        if (isCurrent(entry)) void run(entry, 'alongside');
+      }, CHECK_DELAY_MS);
+    }
+  }
+  syncedListeners.add(checkAlongside);
+
   function drop(entry: Entry) {
     clearTimer(entry);
+    clearCheckTimer(entry);
     clearWriteTimer(entry);
     entry.abort?.abort();
     entry.writeAbort?.abort();
@@ -588,6 +661,8 @@ export function createSyncEngine({
             writeAbort: null,
             writesHeldUntil: null,
             written: new Set(),
+            checkTimer: null,
+            lastStartedAt: null,
           };
           entries.set(account.id, added);
           schedule(added);
@@ -605,6 +680,7 @@ export function createSyncEngine({
         } else if (account.needsReconnect) {
           clearTimer(entry);
           clearWriteTimer(entry);
+          clearCheckTimer(entry);
         }
       }
       emit();
@@ -617,6 +693,7 @@ export function createSyncEngine({
         for (const entry of entries.values()) {
           clearTimer(entry);
           clearWriteTimer(entry);
+          clearCheckTimer(entry);
         }
       } else if (wasPaused) {
         for (const entry of entries.values()) {
@@ -647,6 +724,18 @@ export function createSyncEngine({
       emit();
     },
 
+    setAlsoAfterOtherSources(account, enabled) {
+      const entry = entries.get(account);
+      if (!entry) return;
+      if (!hasLightSync(entry)) {
+        log(`Ignored checking ${account} alongside other Sources: its Source has no light sync`);
+        return;
+      }
+      store.syncState.save({ ...load(entry), alsoAfterOtherSources: enabled });
+      if (!enabled) clearCheckTimer(entry);
+      emit();
+    },
+
     forget(account) {
       const entry = entries.get(account);
       if (entry) drop(entry);
@@ -672,6 +761,7 @@ export function createSyncEngine({
       for (const entry of entries.values()) {
         clearTimer(entry);
         clearWriteTimer(entry);
+        clearCheckTimer(entry);
         entry.abort?.abort();
         entry.writeAbort?.abort();
       }

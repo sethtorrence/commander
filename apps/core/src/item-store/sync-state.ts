@@ -24,6 +24,10 @@ export type SyncState = {
   failures: number;
   retryAt: number | null;
   problem: SyncProblem | null;
+  // Sources with a light sync (Teams): when the last full sync finished (the cadence counts from it),
+  // and whether the Account also checks whenever another Source syncs (null: the default, on).
+  lastFullSyncAt: number | null;
+  alsoAfterOtherSources: boolean | null;
 };
 
 export type SyncRun = {
@@ -66,7 +70,15 @@ export function openSyncStateStore(db: BetterSQLite3Database<typeof schema>): Sy
   return {
     get(account) {
       const row = db.select().from(syncState).where(eq(syncState.account, account)).get();
-      return row ? { ...row, cursor: row.cursor ?? null, problem: row.problem ?? null } : null;
+      return row
+        ? {
+            ...row,
+            cursor: row.cursor ?? null,
+            problem: row.problem ?? null,
+            lastFullSyncAt: row.lastFullSyncAt ?? null,
+            alsoAfterOtherSources: row.alsoAfterOtherSources ?? null,
+          }
+        : null;
     },
 
     save(state) {

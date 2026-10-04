@@ -15,9 +15,15 @@ export type AccountsSync = {
   status(accountId: string): AccountSyncStatus | null;
   refresh(accountId: string): void;
   setCadence(accountId: string, minutes: number): void;
+  setAlsoAfterOtherSources(accountId: string, enabled: boolean): void;
 };
 
-const noSync: AccountsSync = { status: () => null, refresh: () => {}, setCadence: () => {} };
+const noSync: AccountsSync = {
+  status: () => null,
+  refresh: () => {},
+  setCadence: () => {},
+  setAlsoAfterOtherSources: () => {},
+};
 
 export async function accountsState(accounts: Accounts, sync: AccountsSync = noSync): Promise<AccountsState> {
   const listed = (await accounts.list()).map((account) => ({ ...account, sync: sync.status(account.id) }));
@@ -71,6 +77,9 @@ export async function answerAccountsRequest(
         break;
       case 'set-sync-cadence':
         sync.setCadence(request.accountId, request.minutes);
+        break;
+      case 'set-sync-also-after-other-sources':
+        sync.setAlsoAfterOtherSources(request.accountId, request.enabled);
         break;
     }
   } catch (error) {

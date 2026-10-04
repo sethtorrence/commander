@@ -1,10 +1,14 @@
 import type { AccountSummary, AccountsRequest } from '@commander/domain/ipc';
-import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@commander/ui';
+import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@commander/ui';
 import { useNow } from '../frame/use-now';
 import { describeSync } from './account-sync';
 
 // One Account's sync in Settings → Accounts: last sync, how many Items, the next sync or why it's
-// waiting, any problem in plain words, Sync now, and how often it syncs.
+// waiting, any problem in plain words, Sync now, and how often it syncs. A Source with a light sync
+// (Teams) also has the switch for checking whenever another Source syncs, with Microsoft's caveat.
+
+// "Every 15 min", or for a Source with one choice, a plain line ("Full sync once a day").
+const every = (minutes: number) => (minutes === 1440 ? 'once a day' : `every ${minutes} min`);
 export function AccountSync({
   account,
   request,
@@ -17,6 +21,7 @@ export function AccountSync({
   if (!sync) return null;
   const { synced, next, problem } = describeSync(sync, now);
   const canSync = sync.activity === 'idle' || sync.activity === 'backing-off';
+  const light = sync.alsoAfterOtherSources !== undefined;
   return (
     <div data-testid="account-sync" className="mt-3 max-w-[560px]">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -28,27 +33,52 @@ export function AccountSync({
             {next}
           </div>
         </div>
-        <Select
-          value={String(sync.cadenceMinutes)}
-          onValueChange={(minutes) =>
-            request({ op: 'set-sync-cadence', accountId: account.id, minutes: Number(minutes) })
-          }
-        >
-          <SelectTrigger aria-label={`How often to sync ${account.name}`} className="w-[150px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {sync.cadenceChoices.map((minutes) => (
-              <SelectItem key={minutes} value={String(minutes)}>
-                Every {minutes} min
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {sync.cadenceChoices.length > 1 ? (
+          <Select
+            value={String(sync.cadenceMinutes)}
+            onValueChange={(minutes) =>
+              request({ op: 'set-sync-cadence', accountId: account.id, minutes: Number(minutes) })
+            }
+          >
+            <SelectTrigger aria-label={`How often to sync ${account.name}`} className="w-[150px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {sync.cadenceChoices.map((minutes) => (
+                <SelectItem key={minutes} value={String(minutes)}>
+                  Every {minutes} min
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span data-testid="account-cadence" className="text-note text-muted">
+            {light ? 'Full sync' : 'Syncs'} {every(sync.cadenceMinutes)}
+          </span>
+        )}
         <Button disabled={!canSync} onClick={() => request({ op: 'sync-now', accountId: account.id })}>
           Sync now
         </Button>
       </div>
+      {light && (
+        <div className="mt-3">
+          <div className="flex items-center gap-3 text-note text-ink">
+            <Switch
+              data-testid="account-check-alongside"
+              aria-label="Also check whenever another Source syncs"
+              checked={sync.alsoAfterOtherSources ?? true}
+              onCheckedChange={(enabled) =>
+                request({ op: 'set-sync-also-after-other-sources', accountId: account.id, enabled })
+              }
+            />
+            <span aria-hidden="true">Also check whenever another Source syncs</span>
+          </div>
+          <p className="m-0 mt-2 text-note leading-[19px] text-muted">
+            Microsoft asks apps to check Teams about once a day. Checking more often risks slower or paused
+            Teams access for Commander.
+          </p>
+        </div>
+      )}
       {problem && (
         <p
           data-testid="account-sync-problem"

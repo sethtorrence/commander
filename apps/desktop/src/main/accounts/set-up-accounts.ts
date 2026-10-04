@@ -34,6 +34,7 @@ export function setUpAccounts({
 }): { fromCore: (raw: unknown) => boolean; setOnline: (online: boolean) => void } {
   const build = parseBuildConfig(__COMMANDER_BUILD_CONFIG__);
   const linearSettings = linearConfig(build, process.env);
+  const microsoftSettings = microsoftConfig(build, process.env);
   const core = createCoreAccountChannel({
     send: sendToCore,
     accessToken: (account) => accounts.accessToken(account),
@@ -54,7 +55,7 @@ export function setUpAccounts({
     }),
     createTeamsAccounts({
       ...shared,
-      config: microsoftConfig(build, process.env),
+      config: microsoftSettings,
       removeItems: ({ id, name }) => core.removeItems({ source: 'teams', account: id, name }),
     }),
     createGitHubAccounts({
@@ -67,10 +68,10 @@ export function setUpAccounts({
 
   // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
   // reports a sign-in a Source refused, which may mean the Account needs reconnecting. Sources the
-  // Core can't sync yet (Teams and GitHub, for now) are passed on and left alone there.
+  // Core can't sync yet (GitHub, for now) are passed on and left alone there.
   const sync = createCoreSyncChannel({
     send: sendToCore,
-    endpoints: { linear: linearSettings.apiUrl },
+    endpoints: { linear: linearSettings.apiUrl, graph: microsoftSettings.graphUrl },
     onRefused: (account) => void accounts.reportRefused(account),
   });
   const syncAccounts = async () => sync.setAccounts(await accounts.list());

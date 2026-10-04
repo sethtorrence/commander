@@ -18,6 +18,7 @@ export type TodoDetailRow = typeof schema.todoDetails.$inferSelect;
 export type DailyNoteDetailRow = typeof schema.dailyNoteDetails.$inferSelect;
 export type BlockDetailRow = typeof schema.blockDetails.$inferSelect;
 export type LinearIssueDetailRow = typeof schema.linearIssueDetails.$inferSelect;
+export type ChatDetailRow = typeof schema.chatDetails.$inferSelect;
 export type ActivityRow = typeof schema.activity.$inferSelect;
 
 export function stateOf(item: Item): ItemState {
@@ -61,6 +62,8 @@ export const linearIssueDetailOf = (issue: LinearIssueDetailRow): ItemDetail => 
   kind: 'linear-issue',
   ...issue.data,
 });
+
+export const chatDetailOf = (chat: ChatDetailRow): ItemDetail => ({ kind: 'chat', ...chat.data });
 
 export function toItem(row: ItemRow, detail: ItemDetail | null): Item {
   return {
@@ -137,5 +140,6 @@ export function toEntry(row: ActivityRow): ActivityEntry {
       row.otherItemId === null && row.otherProjectId === null && row.before && row.after
         ? changesBetween(row.before as ItemState, row.after as ItemState)
         : [],
+    ...(row.summary?.length ? { summaries: row.summary } : {}),
   };
 }

@@ -289,6 +289,7 @@ describe('what the pickers offer', () => {
     const result = await source.sync({
       account: 'linear:org-acme',
       cursor: null,
+      mode: 'full',
       accessToken: async () => apiKey,
       save: () => {},
       saveCatalog: (catalog) => catalogs.push(catalog),

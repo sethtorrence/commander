@@ -6,12 +6,32 @@ import type { AddressInfo } from 'node:net';
 // Graph, for tests only (unit and end-to-end). It behaves like Microsoft where Commander depends on
 // it: authorization code with PKCE and no client secret for a public client whose redirect is
 // http://localhost (any port, the path matched exactly), refresh tokens that rotate, an ID token
-// carrying the tenant, `GET /me`, and the AADSTS errors of a tenant that needs admin consent.
+// carrying the tenant, `GET /me`, and the AADSTS errors of a tenant that needs admin consent; and
+// for Teams sync, the User's Chats: `GET /me/chats?$expand=lastMessagePreview`, a Chat's members, and
+// its messages newest-modified first, filtered on `lastModifiedDateTime`, paged with nextLinks.
 // Nothing here talks to the real Microsoft.
 
 export type FakeMicrosoftUser = { id: string; displayName: string; userPrincipalName: string };
 
 type Grant = { user: FakeMicrosoftUser; accessToken: string; refreshToken: string; scope: string };
+
+// A Teams Chat the fake serves, with its messages (HTML bodies, as Teams sends them).
+export type FakeChatMessage = {
+  id: string;
+  from: FakeMicrosoftUser;
+  html: string;
+  createdAt: number;
+  modifiedAt: number;
+};
+export type FakeChat = {
+  id: string;
+  topic: string | null;
+  chatType: 'oneOnOne' | 'group' | 'meeting';
+  members: FakeMicrosoftUser[];
+  // When it was renamed or its members changed.
+  updatedAt: number;
+  messages: FakeChatMessage[];
+};
 
 // Microsoft's answers when a tenant won't let the User consent on their own.
 export type AdminConsentCode = 'AADSTS90094' | 'AADSTS65001';
@@ -36,8 +56,16 @@ export type FakeMicrosoft = {
   authorizeRequests: Record<string, string>[];
   // Every token request, as its form fields.
   tokenRequests: Record<string, string>[];
-  // Every Graph request, as its path.
+  // Every Graph request, as its path and query (decoded).
   graphRequests: string[];
+  // Adds a Chat every signed-in user is in.
+  addChat(
+    chat: Pick<FakeChat, 'id' | 'members'> & Partial<Pick<FakeChat, 'topic' | 'chatType' | 'updatedAt'>>,
+  ): void;
+  // Posts a message to a Chat; returns its id.
+  postMessage(chatId: string, from: FakeMicrosoftUser, html: string, at?: number): string;
+  // The next Graph requests are refused with this status and Retry-After (seconds), until switched back.
+  throttleGraph(answer: { status: 429 | 503; retryAfter: number } | null): void;
   // How many refreshes Microsoft accepted.
   refreshes: number;
   // The user the next browser sign-in approves.
@@ -114,6 +142,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
   const issued: string[] = [];
   let refreshFailing = false;
   let refreshDelay = 0;
+  const chats: FakeChat[] = [];
+  let throttled: { status: 429 | 503; retryAfter: number } | null = null;
 
   const fake: FakeMicrosoft = {
     loginUrl: '',
@@ -143,6 +173,19 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       refreshDelay = ms;
     },
     issuedTokens: () => [...issued],
+    addChat: ({ id, members, topic = null, chatType = 'group', updatedAt = Date.now() }) => {
+      chats.push({ id, members, topic, chatType, updatedAt, messages: [] });
+    },
+    postMessage: (chatId, from, html, at = Date.now()) => {
+      const chat = chats.find((each) => each.id === chatId);
+      if (!chat) throw new Error(`No fake chat ${chatId}`);
+      const id = String(at + chat.messages.length);
+      chat.messages.push({ id, from, html, createdAt: at, modifiedAt: at });
+      return id;
+    },
+    throttleGraph: (answer) => {
+      throttled = answer;
+    },
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 
@@ -264,8 +307,100 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     return json(response, 400, { error: 'unsupported_grant_type' });
   }
 
+  const iso = (time: number) => new Date(time).toISOString();
+  const identity = (user: FakeMicrosoftUser) => ({
+    application: null,
+    device: null,
+    user: { id: user.id, displayName: user.displayName, userIdentityType: 'aadUser', tenantId },
+  });
+  const latest = (chat: FakeChat) =>
+    chat.messages.reduce<FakeChatMessage | null>(
+      (a, b) => (a === null || b.createdAt >= a.createdAt ? b : a),
+      null,
+    );
+
+  function graphChat(chat: FakeChat) {
+    const last = latest(chat);
+    return {
+      id: chat.id,
+      topic: chat.topic,
+      createdDateTime: iso(chat.updatedAt),
+      lastUpdatedDateTime: iso(chat.updatedAt),
+      chatType: chat.chatType,
+      webUrl: `https://teams.microsoft.com/l/chat/${encodeURIComponent(chat.id)}/0?tenantId=${tenantId}`,
+      tenantId,
+      onlineMeetingInfo: null,
+      viewpoint: { isHidden: false, lastMessageReadDateTime: null },
+      lastMessagePreview: last && {
+        id: last.id,
+        createdDateTime: iso(last.createdAt),
+        isDeleted: false,
+        messageType: 'message',
+        body: { contentType: 'text', content: last.html.replace(/<[^>]*>/g, '') },
+        from: identity(last.from),
+      },
+    };
+  }
+
+  // One page of a collection: `$top` at a time, `$skiptoken` saying where the next page starts.
+  function paged(response: ServerResponse, url: URL, all: unknown[]) {
+    const top = Math.min(50, Number(url.searchParams.get('$top') ?? 50) || 50);
+    const start = Number(url.searchParams.get('$skiptoken') ?? 0) || 0;
+    const value = all.slice(start, start + top);
+    const next = new URL(`${fake.graphUrl}${url.pathname.slice('/v1.0'.length)}`);
+    for (const [name, each] of url.searchParams) if (name !== '$skiptoken') next.searchParams.set(name, each);
+    next.searchParams.set('$top', String(top));
+    next.searchParams.set('$skiptoken', String(start + top));
+    return json(response, 200, {
+      value,
+      ...(start + top < all.length ? { '@odata.nextLink': next.toString() } : {}),
+    });
+  }
+
+  function chatResource(url: URL, response: ServerResponse) {
+    const match = /^\/v1\.0\/chats\/([^/]+)\/(members|messages)$/.exec(url.pathname);
+    const chat = match && chats.find((each) => each.id === decodeURIComponent(match[1] ?? ''));
+    if (!match || !chat) {
+      return json(response, 404, { error: { code: 'NotFound', message: 'No such chat.' } });
+    }
+    if (match[2] === 'members') {
+      return paged(
+        response,
+        url,
+        chat.members.map((member) => ({
+          '@odata.type': '#microsoft.graph.aadUserConversationMember',
+          id: `member-${member.id}`,
+          roles: ['owner'],
+          displayName: member.displayName,
+          userId: member.id,
+          email: member.userPrincipalName,
+          tenantId,
+        })),
+      );
+    }
+    const after = /lastModifiedDateTime gt (\S+)/.exec(url.searchParams.get('$filter') ?? '')?.[1];
+    const since = after ? Date.parse(after) : Number.NEGATIVE_INFINITY;
+    const messages = chat.messages
+      .filter((message) => message.modifiedAt > since)
+      .sort((a, b) => b.modifiedAt - a.modifiedAt)
+      .map((message) => ({
+        id: message.id,
+        replyToId: null,
+        messageType: 'message',
+        createdDateTime: iso(message.createdAt),
+        lastModifiedDateTime: iso(message.modifiedAt),
+        deletedDateTime: null,
+        from: identity(message.from),
+        body: { contentType: 'html', content: message.html },
+        attachments: [],
+        mentions: [],
+        reactions: [],
+      }));
+    return paged(response, url, messages);
+  }
+
   function graph(request: IncomingMessage, url: URL, response: ServerResponse) {
-    fake.graphRequests.push(url.pathname + url.search);
+    fake.graphRequests.push(decodeURIComponent(url.pathname + url.search));
     const authorization = request.headers.authorization ?? '';
     const user = authorization.startsWith('Bearer ')
       ? grants.find((g) => g.accessToken === authorization.slice('Bearer '.length))?.user
@@ -275,6 +410,17 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
         error: { code: 'InvalidAuthenticationToken', message: 'Access token is empty or invalid.' },
       });
     }
+    if (throttled) {
+      response
+        .writeHead(throttled.status, {
+          'content-type': 'application/json',
+          'retry-after': String(throttled.retryAfter),
+        })
+        .end(JSON.stringify({ error: { code: 'TooManyRequests', message: 'Too many requests.' } }));
+      return;
+    }
+    if (url.pathname === '/v1.0/me/chats') return paged(response, url, chats.map(graphChat));
+    if (url.pathname.startsWith('/v1.0/chats/')) return chatResource(url, response);
     if (url.pathname === '/v1.0/me') {
       return json(response, 200, {
         '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#users/$entity',

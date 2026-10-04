@@ -85,6 +85,8 @@ const GROUP_OF: Record<string, string> = {
   event: 'Calendar',
   'pull-request': 'GitHub',
   'review-request': 'GitHub',
+  chat: 'Teams',
+  'channel-post': 'Teams',
 };
 
 function hitRow(hit: SearchHit, today: string): PaletteRow {

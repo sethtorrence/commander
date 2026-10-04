@@ -152,6 +152,18 @@ describe('as the User types', () => {
     expect(groups[2]?.rows[0]).toMatchObject({ tag: 'Wed 30 Sep', hint: 'Daily Note' });
   });
 
+  it('groups Teams Chats under Teams', () => {
+    const chat = item('c-1', 'chat', 'Priya Patel', { source: 'teams' });
+    const groups = paletteGroups(context('rollout plan', { hits: [hit(chat)], projects: [] }));
+
+    expect(groups.map((group) => group.title)).toContain('Teams');
+    expect(groups.find((group) => group.title === 'Teams')?.rows[0]).toMatchObject({
+      label: 'Priya Patel',
+      tag: 'TMS',
+      hint: 'Teams',
+    });
+  });
+
   it('lists the Projects the Core matched', () => {
     expect(shape('long', { hits: [], projects: [project] })[0]).toEqual(['Projects', ['Longtail']]);
   });

@@ -212,7 +212,7 @@ describe('Settings → Accounts requests from the window', () => {
     expect(response).toMatchObject({ ok: true, state: { accounts: [] } });
   });
 
-  it('shows each Account’s sync status, and passes Sync now and the cadence to the Core', async () => {
+  it('shows each Account’s sync status, and passes Sync now, the cadence and the Teams switch to the Core', async () => {
     linear.addApiKey('lin_api_secret', ACME);
     await linearAccounts.connectWithApiKey('lin_api_secret');
     const asked: string[] = [];
@@ -232,6 +232,7 @@ describe('Settings → Accounts requests from the window', () => {
       status: (id: string) => (id === 'linear:org-acme' ? status : null),
       refresh: (id: string) => asked.push(`refresh ${id}`),
       setCadence: (id: string, minutes: number) => asked.push(`cadence ${id} ${minutes}`),
+      setAlsoAfterOtherSources: (id: string, enabled: boolean) => asked.push(`alongside ${id} ${enabled}`),
     };
 
     const synced = await answerAccountsRequest(
@@ -245,7 +246,17 @@ describe('Settings → Accounts requests from the window', () => {
       sync,
     );
 
-    expect(asked).toEqual(['refresh linear:org-acme', 'cadence linear:org-acme 30']);
+    await answerAccountsRequest(
+      accounts,
+      { op: 'set-sync-also-after-other-sources', accountId: 'teams:tenant-1:u-sam', enabled: false },
+      sync,
+    );
+
+    expect(asked).toEqual([
+      'refresh linear:org-acme',
+      'cadence linear:org-acme 30',
+      'alongside teams:tenant-1:u-sam false',
+    ]);
     expect(synced).toMatchObject({ ok: true, state: { accounts: [{ name: 'Acme', sync: status }] } });
   });
 

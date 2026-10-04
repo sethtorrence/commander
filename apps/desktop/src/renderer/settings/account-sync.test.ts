@@ -58,4 +58,23 @@ describe('describing an Account’s sync', () => {
       problem: 'Linear asked Commander to slow down.',
     });
   });
+
+  it('words a Teams Account as its last check and its next full sync', () => {
+    const teams: AccountSyncStatus = {
+      ...idle,
+      account: 'teams:tenant-1:u-sam',
+      source: 'teams',
+      cadenceMinutes: 1440,
+      cadenceChoices: [1440],
+      nextSyncAt: at(9, 0, 4),
+      itemCount: 12,
+      alsoAfterOtherSources: true,
+    };
+
+    expect(describeSync(teams, now)).toEqual({
+      synced: 'Checked 14:02 · 12 chats',
+      next: 'Next full sync 4 Oct 09:00',
+      problem: null,
+    });
+  });
 });
