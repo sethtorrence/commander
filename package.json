@@ -10,6 +10,7 @@
     "format": "biome format --write .",
     "typecheck": "pnpm -r --parallel typecheck",
     "test": "vitest run",
+    "test:perf": "vitest run --config vitest.perf.config.ts",
     "test:e2e": "pnpm --filter @commander/desktop test:e2e"
   },
   "devDependencies": {

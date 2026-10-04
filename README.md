@@ -12,6 +12,7 @@ Requirements: Node 24+ and pnpm 12+. On Linux, a Secret Service keyring (e.g. gn
 pnpm install          # also downloads Electron's binary (allowed in pnpm-workspace.yaml)
 pnpm dev              # starts Commander; on Linux it runs natively on Wayland
 pnpm test             # unit tests (Vitest)
+pnpm test:perf        # speed checks (search, email sanitiser), one file at a time; run on a quiet machine
 pnpm test:e2e         # builds the app and runs the end-to-end tests (Playwright)
 pnpm lint             # Biome lint + format check
 pnpm typecheck        # TypeScript across the workspace
