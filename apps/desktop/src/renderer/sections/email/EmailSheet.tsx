@@ -1,4 +1,4 @@
-import type { EmailThreadSummary } from '@commander/domain';
+import type { EmailLabel, EmailThreadSummary, ThreadAction } from '@commander/domain';
 import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { cn, Kbd, Led, toast } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -11,7 +11,17 @@ import { ItemBadge, SectionProjectFilter, useAccentBar } from '../../projects/ba
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
+import {
+  GmailSearchLinks,
+  LabelPicker,
+  SearchBox,
+  SnoozePicker,
+  ThreadActions,
+  ThreadMarks,
+  ViewBar,
+} from './EmailOrganising';
 import { type EmailAccountsClient, type EmailClient, emailSyncLine, threadTime } from './email';
+import { actionToast } from './organising';
 import { type EmailReaderClient, textOnlyReader } from './reader';
 import { ThreadReader } from './ThreadReader';
 import { threadId, useEmail } from './use-email';
@@ -30,6 +40,9 @@ const KEYS: [ReactNode, string][] = [
     'Move',
   ],
   [<Kbd key="enter">↵</Kbd>, 'Open'],
+  [<Kbd key="e">E</Kbd>, 'Archive'],
+  [<Kbd key="z">Z</Kbd>, 'Snooze'],
+  [<Kbd key="slash">/</Kbd>, 'Search'],
   [<Kbd key="b">B</Kbd>, 'Project'],
   [<Kbd key="esc">Esc</Kbd>, 'Close'],
 ];
@@ -257,6 +270,7 @@ function ThreadRow({
           </span>
         )}
         {thread.hasAttachments && <PaperclipMark />}
+        <ThreadMarks thread={thread} now={now.getTime()} />
         <span className="min-w-0 truncate text-note text-muted">{thread.snippet}</span>
       </div>
     </li>
@@ -286,6 +300,14 @@ export function EmailSheet({
   const state = useEmail({ client, accounts, changes, include });
   const { selected, open, setOpen } = state;
   const [picking, setPicking] = useState<{ target: PickerTarget; anchor: HTMLElement | null } | null>(null);
+  // The label or snooze picker open on a thread (#135), and the Account's labels for the first.
+  const [organising, setOrganising] = useState<
+    | { kind: 'labels'; thread: EmailThreadSummary; labels: EmailLabel[] }
+    | { kind: 'snooze'; thread: EmailThreadSummary }
+    | null
+  >(null);
+  const [typed, setTyped] = useState('');
+  const searchBox = useRef<HTMLInputElement>(null);
   const several = state.accounts.length > 1 && state.account === 'all';
   const accountName = useCallback(
     (accountId: string) => state.accounts.find((each) => each.id === accountId)?.email ?? accountId,
@@ -321,6 +343,44 @@ export function EmailSheet({
     });
   };
 
+  // Organising (#135): every action is one change, shown at once, with Undo in its toast and on Ctrl+Z.
+  const act = async (action: ThreadAction, thread = selected) => {
+    if (!thread) return;
+    try {
+      const entries = await state.act(action, thread);
+      if (!entries.length) return;
+      toast(actionToast(action, thread.subject, Date.now()), {
+        action: { label: 'Undo', onClick: () => void state.undo(entries) },
+      });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const openLabels = async (thread = selected) => {
+    if (!thread) return;
+    setOrganising({ kind: 'labels', thread, labels: await client.labels(thread.account) });
+  };
+  const openSnooze = (thread = selected) => {
+    if (thread) setOrganising({ kind: 'snooze', thread });
+  };
+  // The thread the picker is on, as it now is (its labels change while the picker is open).
+  const organised = organising
+    ? (state.threads.find((each) => threadId(each) === threadId(organising.thread)) ?? organising.thread)
+    : null;
+  const archiveOrRestore = () => {
+    if (!selected) return;
+    const back = state.view === 'trash' || state.view === 'archive' || selected.inTrash;
+    void act({ type: back ? 'move-to-inbox' : 'archive' });
+  };
+  const search = (text: string) => {
+    state.setSearch(text);
+    setTyped(text);
+  };
+  const leaveSearch = () => {
+    state.setSearch(null);
+    setTyped('');
+  };
+
   useShortcuts([
     { keys: 'j', label: 'Next thread', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous thread', run: () => state.moveSelection(-1) },
@@ -332,9 +392,41 @@ export function EmailSheet({
     },
     { keys: 'Escape', label: 'Close the thread', when: () => open, run: () => setOpen(false) },
     { keys: 'b', label: 'File the thread under a Project', run: () => file() },
+    {
+      keys: 'e',
+      label: 'Archive (or move back to the inbox)',
+      when: () => !!selected,
+      run: archiveOrRestore,
+    },
+    { keys: '#', label: 'Move to Trash', when: () => !!selected, run: () => void act({ type: 'trash' }) },
+    {
+      keys: 's',
+      label: 'Star or unstar',
+      when: () => !!selected,
+      run: () => void act({ type: selected?.starred ? 'unstar' : 'star' }),
+    },
+    { keys: 'Shift+I', label: 'Mark read', when: () => !!selected, run: () => void act({ type: 'read' }) },
+    {
+      keys: 'Shift+U',
+      label: 'Mark unread',
+      when: () => !!selected,
+      run: () => void act({ type: 'unread' }),
+    },
+    { keys: 'l', label: 'Labels', when: () => !!selected, run: () => void openLabels() },
+    { keys: 'z', label: 'Snooze', when: () => !!selected, run: () => openSnooze() },
+    {
+      keys: '/',
+      label: 'Search mail (from: to: subject: has:attachment is:unread in:)',
+      run: () => searchBox.current?.focus(),
+    },
+    { keys: 'Ctrl+z', label: 'Undo', run: () => void state.undoLast() },
   ]);
 
   const status = emailSyncLine(state.accounts, now);
+  const viewName = state.views.find((each) => each.view === state.view)?.name ?? 'Inbox';
+  // Gmail's own search, in the Account the switcher shows (or each).
+  const searchAccounts =
+    state.account === 'all' ? state.accounts : state.accounts.filter((each) => each.id === state.account);
   const unread = state.unread.get(state.account) ?? 0;
   const noAccounts = state.loaded && state.accounts.length === 0;
 
@@ -359,6 +451,12 @@ export function EmailSheet({
         status={status}
         onRefresh={state.refresh}
       />
+      <ViewBar
+        views={state.views}
+        view={state.view}
+        searching={state.search !== null}
+        onView={state.setView}
+      />
       <SectionProjectFilter items={state.forProjectFilter} />
       {noAccounts ? (
         <EmptySheet>
@@ -367,9 +465,17 @@ export function EmailSheet({
       ) : (
         <div className={cn('flex-1', open && 'grid grid-cols-[minmax(0,3fr)_minmax(0,5fr)]')}>
           <div className="min-w-0 pb-30">
-            <div className="sticky top-0 z-[2] flex h-[30px] items-center justify-between border-b border-line bg-sheet pr-3.5 pl-13 font-mono text-label leading-none font-semibold uppercase tracking-caps text-ink">
-              <span>Inbox · {pad(state.threads.length)}</span>
-              <span className="font-medium text-faint">Newest first · J K</span>
+            <div className="sticky top-0 z-[2] flex h-[30px] items-center justify-between gap-3 border-b border-line bg-sheet pr-3.5 pl-13 font-mono text-label leading-none font-semibold uppercase tracking-caps text-ink">
+              <span className="flex-none">
+                {state.search !== null ? 'Search' : viewName} · {pad(state.threads.length)}
+              </span>
+              <SearchBox
+                ref={searchBox}
+                value={typed}
+                onChange={setTyped}
+                onSearch={search}
+                onLeave={leaveSearch}
+              />
             </div>
             {state.threads.length ? (
               <ul className="m-0 list-none p-0">
@@ -397,10 +503,15 @@ export function EmailSheet({
             ) : (
               state.loaded && (
                 <p className="hatch m-0 border-b border-line2 py-2.5 pr-5 pl-13 text-note text-faint">
-                  {state.total ? 'No threads in this Project.' : 'The inbox is empty.'}
+                  {state.search !== null
+                    ? 'No mail Commander holds matches.'
+                    : state.total
+                      ? 'No threads in this Project.'
+                      : `${viewName === 'Inbox' ? 'The inbox' : viewName} is empty.`}
                 </p>
               )
             )}
+            {state.search !== null && <GmailSearchLinks text={state.search} accounts={searchAccounts} />}
           </div>
           {open && (
             <ThreadReader
@@ -409,9 +520,48 @@ export function EmailSheet({
               accountName={accountName}
               reader={reader}
               onClose={() => setOpen(false)}
+              toolbar={
+                selected && (
+                  <ThreadActions
+                    thread={selected}
+                    view={state.view}
+                    sync={state.sync}
+                    superseded={state.superseded}
+                    onAct={(action) => void act(action)}
+                    onLabels={() => void openLabels()}
+                    onSnooze={() => openSnooze()}
+                    onRetry={() => void state.retry()}
+                  />
+                )
+              }
             />
           )}
         </div>
+      )}
+      {organising?.kind === 'labels' && organised && (
+        <LabelPicker
+          thread={organised}
+          labels={organising.labels}
+          onToggle={(label, on) =>
+            void act(on ? { type: 'label', label } : { type: 'unlabel', labelId: label.id }, organised)
+          }
+          onClose={() => setOrganising(null)}
+        />
+      )}
+      {organising?.kind === 'snooze' && organised && (
+        <SnoozePicker
+          thread={organised}
+          now={Date.now()}
+          onSnooze={(until) => {
+            setOrganising(null);
+            void act({ type: 'snooze', until }, organised);
+          }}
+          onUnsnooze={() => {
+            setOrganising(null);
+            void act({ type: 'unsnooze' }, organised);
+          }}
+          onClose={() => setOrganising(null)}
+        />
       )}
       {picking && (
         <BadgePicker

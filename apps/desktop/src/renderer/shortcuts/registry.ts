@@ -91,13 +91,18 @@ const inDialog = (target: EventTarget | null) =>
 const MODIFIERS = ['Ctrl', 'Alt', 'Shift', 'Meta'] as const;
 type Modifier = (typeof MODIFIERS)[number];
 
-// One spelling per chord: "Ctrl+Shift+k", "?", "Escape". Letters are lowercase. Shift only counts
-// for named keys and alongside Ctrl, Alt or Meta: on its own it has already changed the key
-// (Shift+/ arrives as "?").
+// One spelling per chord: "Ctrl+Shift+k", "Shift+u", "?", "Escape". Letters are lowercase. Shift
+// counts for named keys, letters (Shift+U isn't U: Caps Lock alone still gives the letter) and
+// alongside Ctrl, Alt or Meta; with any other printable key it has already changed the key (Shift+/
+// arrives as "?").
+const isLetter = (key: string) => key.length === 1 && key.toLowerCase() !== key.toUpperCase();
+
 function chord(modifiers: ReadonlySet<Modifier>, key: string): string {
   const printable = key.length === 1;
   const withOthers = modifiers.has('Ctrl') || modifiers.has('Alt') || modifiers.has('Meta');
-  const held = MODIFIERS.filter((m) => modifiers.has(m) && (m !== 'Shift' || !printable || withOthers));
+  const held = MODIFIERS.filter(
+    (m) => modifiers.has(m) && (m !== 'Shift' || !printable || isLetter(key) || withOthers),
+  );
   return [...held, printable ? key.toLowerCase() : key].join('+');
 }
 
@@ -120,8 +125,8 @@ function chordOfEvent(event: KeyboardEvent): string {
   return chord(held, event.key);
 }
 
-// A key typed as text: one character, with no Ctrl, Alt or Meta (Shift is already folded in).
-const isTypedKey = (chord: string) => chord.length === 1;
+// A key typed as text: one character, with no Ctrl, Alt or Meta (Shift folded in, or a capital).
+const isTypedKey = (chord: string) => chord.length === 1 || /^Shift\+.$/.test(chord);
 
 // A shortcut ready to match: `chords` is one chord, or each chord of a sequence in turn.
 type Entry = Shortcut & { chords: string[]; caps: string[] };

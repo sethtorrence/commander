@@ -1,28 +1,49 @@
 import {
   addressName,
+  EMAIL_VIEWS,
   type EmailBody,
   type EmailDetail,
+  type EmailFixedView,
+  type EmailLabel,
+  type EmailListView,
+  type EmailSearchQuery,
+  type EmailSearchResult,
   type EmailThread,
   type EmailThreadList,
   type EmailThreadQuery,
   type EmailThreadSummary,
+  type EmailViewCounts,
+  type EmailViewQuery,
+  emailSearchMatches,
+  emailSearchQuery,
   emailThreadQuery,
+  emailViewQuery,
+  flagsInView,
+  gmailCatalog,
   type Item,
+  isPickableLabel,
+  parseEmailSearch,
   type sourceItem,
+  type ThreadFlags,
   type ThreadingMessage,
+  threadFlagsOf,
   threadingOf,
   threadMessages,
+  threadSnoozedUntil,
 } from '@commander/domain';
-import { and, asc, eq, inArray, isNull, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, type SQL, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { z } from 'zod';
+import type { Search } from '../search';
 import type { ItemRow } from './rows';
 import * as schema from './schema';
 
 // Emails in the Item store: their detail (with what thread lists and threading look up in columns),
 // the Message-IDs each names (for threading mail among what is held), their bodies kept beside the
-// Item (never in its detail or the activity log), and the Email Section's reads (the inbox as
-// threads, and one thread with its bodies). Threading runs as mail is saved: whatever order mail
+// Item (never in its detail or the activity log), and the Email Section's reads (a view's threads,
+// each view's counts, Section search, the labels to pick from, and one thread with its bodies), and
+// the snoozes due (#135). Which view a thread is in is the domain's rule (flagsInView), over flags
+// aggregated here per thread. Threading runs as mail is saved: whatever order mail
 // comes in (the first sync downloads newest first, so replies before their parents), each email is
 // threaded among the Account's live mail it is connected to, and mail already held that a new
 // message joins to another thread moves to it (domain threadMessages).
@@ -46,7 +67,37 @@ const mentionedIds = (detail: EmailDetail) => [
   ...new Set([detail.messageId, detail.inReplyTo, ...detail.references].filter((id): id is string => !!id)),
 ];
 
-export function emailsIn(db: Db, { withDetails }: { withDetails: (rows: ItemRow[]) => Item[] }) {
+const VIEW_NAMES: Record<EmailFixedView, string> = {
+  inbox: 'Inbox',
+  starred: 'Starred',
+  snoozed: 'Snoozed',
+  archive: 'Archive',
+  trash: 'Trash',
+};
+// The most messages Section search reads when no words narrow it (operators only).
+const SEARCH_SCAN_MAX = 5000;
+// The most messages the word index hands Section search.
+const SEARCH_HITS_MAX = 200;
+// Joins the label ids a thread's aggregate lists (the unit separator, never in a Gmail label id).
+const SEPARATOR = '\u001f';
+
+// A thread as the views read it: its flags (see threadFlagsOf), unread messages, and when it sorts.
+type ThreadRow = ThreadFlags & {
+  account: string;
+  threadKey: string;
+  unread: number;
+  // Its latest message, or when it came back from a snooze if later: the inbox sorts by this.
+  sortAt: number;
+};
+
+export function emailsIn(
+  db: Db,
+  {
+    withDetails,
+    now,
+    search,
+  }: { withDetails: (rows: ItemRow[]) => Item[]; now: () => number; search: () => Search },
+) {
   const { emailDetails, emailMessageIds, emailBodies, items } = schema;
 
   function readDetails(itemIds: string[]): Map<string, EmailDetail> {
@@ -74,6 +125,9 @@ export function emailsIn(db: Db, { withDetails }: { withDetails: (rows: ItemRow[
       unread: !detail.read,
       inInbox: detail.inInbox,
       hasAttachments: detail.attachments.some((attachment) => !attachment.inline),
+      inTrash: detail.inTrash ?? false,
+      snoozedUntil: detail.snooze && !detail.snooze.returned ? detail.snooze.until : null,
+      returnedFrom: detail.snooze?.returned ? detail.snooze.until : null,
       data,
     };
     db.insert(emailDetails)
@@ -277,6 +331,12 @@ export function emailsIn(db: Db, { withDetails }: { withDetails: (rows: ItemRow[
       if (!senders.includes(name)) senders.push(name);
     }
     const last = detailOfItem(latest);
+    const details = ordered.map(detailOfItem);
+    const live = details.filter((detail) => !detail.inTrash);
+    const labels = new Map<string, EmailLabel>();
+    for (const detail of live)
+      for (const label of detail.labels) if (isPickableLabel(label.id)) labels.set(label.id, label);
+    const returned = details.flatMap((detail) => (detail.snooze?.returned ? [detail.snooze.until] : []));
     return {
       account,
       threadKey,
@@ -291,17 +351,33 @@ export function emailsIn(db: Db, { withDetails }: { withDetails: (rows: ItemRow[
       ),
       latest,
       itemIds: ordered.map((message) => message.id),
+      starred: live.some((detail) => detail.starred),
+      labels: [...labels.values()].sort((a, b) => a.name.localeCompare(b.name)),
+      inTrash: live.length < details.length,
+      snoozedUntil: threadSnoozedUntil(details, now()),
+      returnedFrom: returned.length ? Math.max(...returned) : null,
     };
   }
 
-  function threads(input: EmailThreadQuery = {}): EmailThreadList {
-    const query = emailThreadQuery.parse(input);
+  // Every thread of the Account (or every Account), as the views read it.
+  function threadRows(account: string | undefined): ThreadRow[] {
+    const at = now();
+    const notTrashed = sql`not ${emailDetails.inTrash}`;
     const rows = db
       .select({
         account: items.account,
         threadKey: emailDetails.threadKey,
         latestAt: sql<number>`max(${emailDetails.sentAt})`,
+        returnedAt: sql<number>`max(coalesce(${emailDetails.returnedFrom}, 0))`,
         unread: sql<number>`sum(${emailDetails.unread})`,
+        inbox: sql<number>`max(${emailDetails.inInbox} and ${notTrashed})`,
+        starred: sql<number>`max(coalesce(json_extract(${emailDetails.data}, '$.starred'), 0) and ${notTrashed})`,
+        trashed: sql<number>`max(${emailDetails.inTrash})`,
+        live: sql<number>`min(${emailDetails.inTrash}) = 0`,
+        snoozed: sql<number>`min(coalesce(${emailDetails.snoozedUntil}, 0))`,
+        labels: sql<
+          string | null
+        >`group_concat(case when ${emailDetails.inTrash} then null else (select group_concat(json_extract(label.value, '$.id'), ${SEPARATOR}) from json_each(${emailDetails.data}, '$.labels') label) end, ${SEPARATOR})`,
       })
       .from(emailDetails)
       .innerJoin(items, eq(items.id, emailDetails.itemId))
@@ -309,30 +385,178 @@ export function emailsIn(db: Db, { withDetails }: { withDetails: (rows: ItemRow[
         and(
           isNull(items.deletedAt),
           eq(items.kind, 'email'),
-          query.account ? eq(items.account, query.account) : undefined,
+          account ? eq(items.account, account) : undefined,
         ),
       )
       .groupBy(items.account, emailDetails.threadKey)
-      .having(sql`max(${emailDetails.inInbox}) = 1`)
-      .orderBy(sql`max(${emailDetails.sentAt}) desc`, asc(emailDetails.threadKey))
       .all();
-    const shown = rows
-      .slice(0, query.limit ?? THREADS_MAX)
-      .flatMap((row) => (row.account ? [{ account: row.account, threadKey: row.threadKey }] : []));
-    const messages = messagesOf(shown);
+    return rows.flatMap((row) =>
+      row.account
+        ? [
+            {
+              account: row.account,
+              threadKey: row.threadKey,
+              unread: Number(row.unread),
+              sortAt: Math.max(Number(row.latestAt), Number(row.returnedAt)),
+              inInbox: !!row.inbox,
+              starred: !!row.starred,
+              trashed: !!row.trashed,
+              live: !!row.live,
+              snoozedUntil: Number(row.snoozed) > at ? Number(row.snoozed) : null,
+              labels: new Set(row.labels ? row.labels.split(SEPARATOR) : []),
+            },
+          ]
+        : [],
+    );
+  }
+
+  const newestFirst = (a: ThreadRow, b: ThreadRow) =>
+    b.sortAt - a.sortAt || a.account.localeCompare(b.account) || a.threadKey.localeCompare(b.threadKey);
+
+  // The summaries of these threads, in the order given.
+  function summaries(shown: { account: string; threadKey: string }[]): EmailThreadSummary[] {
     const grouped = new Map<string, Item[]>();
-    for (const message of messages) {
+    for (const message of messagesOf(shown)) {
       const key = `${message.account}\u0000${detailOfItem(message).threadKey}`;
       grouped.set(key, [...(grouped.get(key) ?? []), message]);
     }
+    return shown.flatMap(
+      ({ account, threadKey }) =>
+        summaryOf(account, threadKey, grouped.get(`${account}\u0000${threadKey}`) ?? []) ?? [],
+    );
+  }
+
+  /** A view's threads (the Inbox unless asked), newest first, with how many have unread mail. */
+  function threads(input: EmailThreadQuery = {}): EmailThreadList {
+    const query = emailThreadQuery.parse(input);
+    const view: EmailListView = query.view ?? 'inbox';
+    const rows = threadRows(query.account)
+      .filter((row) => flagsInView(row, view))
+      .sort(newestFirst);
     return {
-      threads: shown.flatMap(
-        ({ account, threadKey }) =>
-          summaryOf(account, threadKey, grouped.get(`${account}\u0000${threadKey}`) ?? []) ?? [],
-      ),
-      unreadThreads: rows.filter((row) => Number(row.unread) > 0).length,
+      threads: summaries(rows.slice(0, query.limit ?? THREADS_MAX)),
+      unreadThreads: rows.filter((row) => row.unread > 0).length,
       total: rows.length,
     };
+  }
+
+  /** The labels the User can put on mail: from the Account's catalog, and any its mail carries. */
+  function labelsOf(account: string | undefined): EmailLabel[] {
+    const found = new Map<string, EmailLabel>();
+    const { sourceCatalogs } = schema;
+    const catalogs = db
+      .select({ catalog: sourceCatalogs.catalog })
+      .from(sourceCatalogs)
+      .where(account ? eq(sourceCatalogs.account, account) : eq(sourceCatalogs.source, 'gmail'))
+      .all();
+    for (const row of catalogs) {
+      const parsed = gmailCatalog.safeParse(row.catalog);
+      if (!parsed.success) continue;
+      for (const label of parsed.data.labels)
+        if (!label.system && isPickableLabel(label.id))
+          found.set(label.id, { id: label.id, name: label.name });
+    }
+    const carried = db
+      .selectDistinct({
+        id: sql<string | null>`json_extract(label.value, '$.id')`,
+        name: sql<string | null>`json_extract(label.value, '$.name')`,
+      })
+      .from(sql`${emailDetails}, json_each(${emailDetails.data}, '$.labels') label`)
+      .innerJoin(items, eq(items.id, emailDetails.itemId))
+      .where(and(isNull(items.deletedAt), account ? eq(items.account, account) : undefined))
+      .all();
+    for (const label of carried) {
+      if (label.id && label.name !== null && isPickableLabel(label.id) && !found.has(label.id))
+        found.set(label.id, { id: label.id, name: label.name });
+    }
+    return [...found.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  }
+
+  /** Each view's threads and unread ones: the fixed views, then each label by name. */
+  function viewCounts(input: EmailViewQuery = {}): EmailViewCounts {
+    const query = emailViewQuery.parse(input);
+    const rows = threadRows(query.account);
+    const countOf = (view: EmailListView, name: string) => {
+      const inView = rows.filter((row) => flagsInView(row, view));
+      return { view, name, threads: inView.length, unread: inView.filter((row) => row.unread > 0).length };
+    };
+    return {
+      views: [
+        ...EMAIL_VIEWS.map((view) => countOf(view, VIEW_NAMES[view])),
+        ...labelsOf(query.account).map((label) => countOf(`label:${label.id}`, label.name)),
+      ],
+    };
+  }
+
+  /** Section search: threads with a message matching the words and operators, newest first. */
+  function searchThreads(input: EmailSearchQuery): EmailSearchResult {
+    const query = emailSearchQuery.parse(input);
+    const parsed = parseEmailSearch(query.text);
+    let view: EmailListView | null = parsed.view;
+    if (parsed.label) {
+      const label = labelsOf(query.account).find((each) => each.name.toLowerCase() === parsed.label);
+      if (!label) return { threads: [] };
+      view = `label:${label.id}`;
+    }
+    // The messages the words find (the word index), or the newest messages when only operators were typed.
+    let candidates: Item[];
+    if (parsed.words) {
+      candidates = search()
+        .query({
+          text: parsed.words,
+          kinds: ['email'],
+          ...(query.account ? { accounts: [query.account] } : {}),
+          limit: SEARCH_HITS_MAX,
+        })
+        .hits.map((hit) => hit.item);
+    } else {
+      const rows = db
+        .select({ item: items })
+        .from(items)
+        .innerJoin(emailDetails, eq(emailDetails.itemId, items.id))
+        .where(and(isNull(items.deletedAt), query.account ? eq(items.account, query.account) : undefined))
+        .orderBy(desc(emailDetails.sentAt))
+        .limit(SEARCH_SCAN_MAX)
+        .all();
+      candidates = withDetails(rows.map((row) => row.item));
+    }
+    const keys = new Map<string, { account: string; threadKey: string }>();
+    for (const item of candidates) {
+      if (!item.account || item.detail?.kind !== 'email' || !emailSearchMatches(item.detail, parsed))
+        continue;
+      const { threadKey } = item.detail;
+      keys.set(`${item.account}\u0000${threadKey}`, { account: item.account, threadKey });
+    }
+    const at = now();
+    const found = summaries([...keys.values()]).filter((summary) => {
+      const flags = threadFlagsOf([...readDetails(summary.itemIds).values()], at);
+      // Trashed threads only with in:trash: Gmail's search leaves Trash out too.
+      return view ? flagsInView(flags, view) : flags.live;
+    });
+    found.sort((a, b) => b.latestAt - a.latestAt || a.threadKey.localeCompare(b.threadKey));
+    return { threads: found.slice(0, query.limit ?? THREADS_MAX) };
+  }
+
+  /** The threads with a snooze due by `at`. */
+  function dueSnoozes(at: number): { account: string; threadKey: string }[] {
+    return db
+      .selectDistinct({ account: items.account, threadKey: emailDetails.threadKey })
+      .from(emailDetails)
+      .innerJoin(items, eq(items.id, emailDetails.itemId))
+      .where(and(isNull(items.deletedAt), lte(emailDetails.snoozedUntil, at)))
+      .all()
+      .flatMap((row) => (row.account ? [{ account: row.account, threadKey: row.threadKey }] : []));
+  }
+
+  /** When the next snooze is due, or null when nothing is snoozed. */
+  function nextSnoozeAt(): number | null {
+    const row = db
+      .select({ at: sql<number | null>`min(${emailDetails.snoozedUntil})` })
+      .from(emailDetails)
+      .innerJoin(items, eq(items.id, emailDetails.itemId))
+      .where(isNull(items.deletedAt))
+      .get();
+    return row?.at ?? null;
   }
 
   function threadView(account: string, threadKey: string): EmailThread | null {
@@ -371,6 +595,12 @@ export function emailsIn(db: Db, { withDetails }: { withDetails: (rows: ItemRow[
     threads,
     threadView,
     externalIds,
+    messagesOf,
+    viewCounts,
+    searchThreads,
+    labelsOf,
+    dueSnoozes,
+    nextSnoozeAt,
   };
 }
 

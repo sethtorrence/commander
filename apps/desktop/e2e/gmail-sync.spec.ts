@@ -154,7 +154,8 @@ test('connect Google → first sync → threads listed → open a thread → new
     'Your order has shipped',
     'Re: Q4 offsite dates',
   ]);
-  await expect(tab(window, 'Email')).toContainText('02');
+  // Opening Dana's thread marked it read (#135), so only the new mail is unread.
+  await expect(tab(window, 'Email')).toContainText('01');
 
   // Ctrl+K finds it by what it says, and opens its thread in the Email Section.
   await window.keyboard.press('Control+k');

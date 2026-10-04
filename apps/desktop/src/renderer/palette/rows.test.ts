@@ -253,6 +253,33 @@ describe('as the User types', () => {
     expect(plenty.some((group) => group.title === 'Search in Linear')).toBe(false);
   });
 
+  it('offers Search in Gmail, one row per Account, when emails are among the results (#135)', () => {
+    const mail = item('e-1', 'email', 'Q4 offsite dates', { source: 'gmail', account: 'google:alex' });
+    const gmailAccounts = [{ email: 'alex@gmail.test' }, { email: 'sam@work.test' }];
+    const groups = paletteGroups({
+      ...context('offsite', { hits: [hit(mail), hit(issue), hit(todo)], projects: [] }),
+      gmailAccounts,
+    });
+    expect(groups.find((group) => group.title === 'Search in Gmail')).toMatchObject({
+      rows: [
+        {
+          label: 'Search “offsite” in Gmail',
+          hint: 'alex@gmail.test ↗',
+          action: {
+            type: 'browser',
+            url: 'https://mail.google.com/mail/?authuser=alex%40gmail.test#search/offsite',
+          },
+        },
+        { hint: 'sam@work.test ↗' },
+      ],
+    });
+    const noMail = paletteGroups({
+      ...context('login', { hits: [hit(issue)], projects: [] }),
+      gmailAccounts,
+    });
+    expect(noMail.some((group) => group.title === 'Search in Gmail')).toBe(false);
+  });
+
   it('offers no Search in Linear without a Linear Account', () => {
     const groups = paletteGroups({ ...context('okta', { hits: [], projects: [] }), linearAccounts: [] });
     expect(groups).toEqual([]);

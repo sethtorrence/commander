@@ -7,12 +7,14 @@ import { chipLabel, type LinkQuery, linkQueryAt } from '../../links/block-text';
 import {
   type CandidateGroup,
   dayTargets,
+  emailTargets,
   eventTargets,
   type LinkCandidate,
   type LinkTargetProvider,
   projectTargets,
   searchTargets,
 } from '../../links/link-targets';
+import type { EmailLookup } from '../../links/use-emails';
 import type { EventLookup } from '../../links/use-events';
 import { useProjectsIfAny } from '../../projects/context';
 import { openBlockLink } from './block-editor';
@@ -23,10 +25,11 @@ import type { Block, Caret } from './outline';
 
 /*
   `[[` links in the outliner. Typing `[[` opens the picker over the link-target providers (days,
-  Projects and calendar events); choosing one puts a chip in the Block (the Notebook's `link`), which
-  the Item store makes a refers-to Link. A chip is drawn over its token (chips.ts, through markdown.ts),
-  goes whole with Backspace or Delete beside it (the Notebook's `unlink`), and clicking it follows it.
-  An event's chip is its live card (#128), whose Join opens the online meeting in the browser.
+  Projects, calendar events and emails); choosing one puts a chip in the Block (the Notebook's `link`),
+  which the Item store makes a refers-to Link. A chip is drawn over its token (chips.ts, through
+  markdown.ts), goes whole with Backspace or Delete beside it (the Notebook's `unlink`), and clicking
+  it follows it. An event's chip is its live card (#128), whose Join opens the online meeting in the
+  browser; an email's is its live card too (#135), which opens the thread.
 */
 
 /** What the outline needs for `[[` links: where the picker looks, chip labels, and following one. */
@@ -43,17 +46,19 @@ const plainLabel: LabelChip = (target) =>
     ? { text: target.day, title: target.day }
     : target.type === 'event'
       ? { text: 'A meeting', title: 'A calendar event' }
-      : { text: 'Project', title: 'A Project' };
+      : target.type === 'email'
+        ? { text: 'An email', title: 'An email' }
+        : { text: 'Project', title: 'A Project' };
 
 /**
  * `[[` links for the Notes Section or the daily template: days (around `today`), Projects and, given
- * `events`, calendar events (whose chips are live meeting cards), and following a chip with `open`.
- * `days: false` leaves days out (the template has no day of its own).
+ * `events` and `emails`, calendar events and emails (whose chips are live cards), and following a
+ * chip with `open`. `days: false` leaves days out (the template has no day of its own).
  */
 export function useOutlineLinks(
   today: string,
   open?: (target: BlockLinkTarget) => void,
-  { days = true, events }: { days?: boolean; events?: EventLookup } = {},
+  { days = true, events, emails }: { days?: boolean; events?: EventLookup; emails?: EmailLookup } = {},
 ): OutlineLinks {
   const projects = useProjectsIfAny();
   const all = useMemo(() => (projects ? [...projects.projects, ...projects.archived] : []), [projects]);
@@ -63,15 +68,21 @@ export function useOutlineLinks(
       ...(days ? [dayTargets(today)] : []),
       projectTargets(all),
       ...(events ? [eventTargets(events.offered, today)] : []),
+      ...(emails ? [emailTargets(emails.offered, today)] : []),
     ];
     const label: LabelChip = (target, place) =>
       chipLabel(
         target,
-        { today, projectById: (id) => byId.get(id), eventById: (id) => events?.byId.get(id) },
+        {
+          today,
+          projectById: (id) => byId.get(id),
+          eventById: (id) => events?.byId.get(id),
+          emailById: (id) => emails?.byId.get(id),
+        },
         place,
       );
     return { providers, label, open };
-  }, [all, today, open, days, events]);
+  }, [all, today, open, days, events, emails]);
 }
 
 interface PickerState {
@@ -256,10 +267,10 @@ function LinkPicker({
       onMouseDown={(event) => event.preventDefault()}
     >
       <div className="ah">
-        Link to · {state.at.query ? `“${state.at.query}”` : 'a day, a Project or an event'}
+        Link to · {state.at.query ? `“${state.at.query}”` : 'a day, a Project, an event or an email'}
       </div>
       {state.groups.length === 0 && (
-        <div className="none">Nothing matches. Try a date, “today”, a Project or a meeting.</div>
+        <div className="none">Nothing matches. Try a date, “today”, a Project, a meeting or an email.</div>
       )}
       {state.groups.map((group) => (
         // biome-ignore lint/a11y/useSemanticElements: a group of options in a listbox

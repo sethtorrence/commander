@@ -1,8 +1,20 @@
-import type { EmailThread, EmailThreadSummary, Item } from '@commander/domain';
+import {
+  type EmailDetail,
+  type EmailListView,
+  type EmailThread,
+  type EmailThreadSummary,
+  type EmailViewCount,
+  type Item,
+  type OutgoingChange,
+  type ThreadAction,
+  threadActionFields,
+} from '@commander/domain';
 import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ItemChanges } from '../../item-store/changes';
+import { type IssueSync, supersededNote } from '../linear/editing';
 import type { EmailAccountsClient, EmailClient } from './email';
+import { loadMarkRead, markReadDelay, threadSync } from './organising';
 
 export const ACCOUNT_STORAGE_KEY = 'commander.email.account';
 
@@ -44,6 +56,26 @@ export interface EmailState {
   /** Asks every email Account to sync now (the sync engine's refresh of its Gmail). */
   refresh(): void;
   reload(): void;
+  /** The view listed (Inbox, Starred, Snoozed, Archive, Trash or a label), and each view's counts. */
+  view: EmailListView;
+  setView(view: EmailListView): void;
+  views: EmailViewCount[];
+  /** The search shown instead of the view (null when not searching), as typed with its operators. */
+  search: string | null;
+  setSearch(text: string | null): void;
+  /**
+   * Does an action to a thread (the selected one unless given), as one change; resolves with its
+   * entries (none when it changed nothing), and keeps it for `undoLast`.
+   */
+  act(action: ThreadAction, thread?: EmailThreadSummary): Promise<number[]>;
+  /** Undoes the last change made here (an action or a filing). */
+  undoLast(): Promise<void>;
+  /** Whether the selected thread's changes reached Gmail, are on their way, or couldn't sync. */
+  sync: IssueSync;
+  /** Sends the selected thread's changes that couldn't sync again. */
+  retry(): Promise<void>;
+  /** The note when a change made in Gmail won over the User's ("Changed in Gmail at 14:02"), or null. */
+  superseded: string | null;
 }
 
 function loadAccount(storage: Storage): string {
@@ -55,11 +87,14 @@ function loadAccount(storage: Storage): string {
 }
 
 // What changes when mail arrives: each Account's last sync, and how far a first download has got.
+// And changes on their way to Gmail, or that couldn't sync (which change no Item).
 const syncSignature = (accounts: readonly GoogleAccountSummary[]) =>
   accounts
-    .map(
-      (account) => `${account.id}:${account.sync?.lastSyncedAt ?? ''}:${account.sync?.progress?.done ?? ''}`,
-    )
+    .map((account) => {
+      const gmail = account.sources.find((each) => each.source === 'gmail')?.sync ?? account.sync;
+      const outgoing = `${gmail?.outgoing?.pending ?? 0}/${gmail?.outgoing?.failed ?? 0}`;
+      return `${account.id}:${account.sync?.lastSyncedAt ?? ''}:${account.sync?.progress?.done ?? ''}:${outgoing}`;
+    })
     .join('|');
 
 /**
@@ -96,6 +131,13 @@ export function useEmail({
   const [version, setVersion] = useState(0);
   const reload = useCallback(() => setVersion((n) => n + 1), []);
   const refreshWanted = useRef(false);
+  const [view, setViewState] = useState<EmailListView>('inbox');
+  const [views, setViews] = useState<EmailViewCount[]>([]);
+  const [search, setSearchState] = useState<string | null>(null);
+  const [outgoing, setOutgoing] = useState<OutgoingChange[]>([]);
+  const [superseded, setSuperseded] = useState<string | null>(null);
+  // The changes made here, newest last, for Ctrl+Z.
+  const done = useRef<number[][]>([]);
 
   useEffect(() => {
     let live = true;
@@ -119,15 +161,22 @@ export function useEmail({
     if (!knownAccounts) return;
     let live = true;
     const ids = accountIds ? accountIds.split('|') : [];
+    const one = account === 'all' ? undefined : account;
     void (async () => {
-      const [shown, all, ...each] = await Promise.all([
-        client.threads(account === 'all' ? {} : { account }),
+      const [shown, counts, all, ...each] = await Promise.all([
+        search !== null
+          ? client
+              .search(search, one)
+              .then((found) => ({ threads: found.threads, total: found.threads.length }))
+          : client.threads({ ...(one ? { account: one } : {}), view }),
+        client.views(one),
         client.threads({ limit: 1 }),
         ...ids.map((id) => client.threads({ account: id, limit: 1 })),
       ]);
       if (!live) return;
       setList(shown.threads);
       setTotal(shown.total);
+      setViews(counts.views);
       setUnread(
         new Map([
           ['all', all.unreadThreads],
@@ -138,7 +187,7 @@ export function useEmail({
     return () => {
       live = false;
     };
-  }, [client, account, accountIds, signature, version, knownAccounts]);
+  }, [client, account, accountIds, signature, version, knownAccounts, view, search]);
 
   const threads = useMemo(() => (list ?? []).filter((each) => include(each.latest)), [list, include]);
   const forProjectFilter = useMemo(() => (list ?? []).map((each) => each.latest), [list]);
@@ -163,6 +212,78 @@ export function useEmail({
       live = false;
     };
   }, [client, open, selectedKey, list]);
+
+  // Whether the selected thread's changes reached Gmail: read again whenever the threads are.
+  const selectedItemIds = selected?.itemIds.join('|') ?? '';
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `list` changing means the changes may have too
+  useEffect(() => {
+    let live = true;
+    const ids = selectedItemIds ? selectedItemIds.split('|') : [];
+    void client.outgoing(ids).then((found) => {
+      if (live) setOutgoing(found);
+    });
+    // A change made in Gmail that won over the User's, on any of its messages, until they change it again.
+    void Promise.all(ids.map((id) => client.history(id))).then((histories) => {
+      if (live) setSuperseded(histories.map(supersededNote).find((note) => note !== null) ?? null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [client, selectedItemIds, list]);
+
+  // Does an action to a thread; `remember`: keep it for Ctrl+Z (not marking read on opening).
+  const perform = useCallback(
+    async (action: ThreadAction, target: EmailThreadSummary | null, remember: boolean) => {
+      const thread = target ?? selected;
+      if (!thread) return [];
+      const found = await client.thread(thread.account, thread.threadKey);
+      const messages = (found?.messages ?? []).flatMap(({ item }) =>
+        item.detail?.kind === 'email' ? [{ id: item.id, detail: item.detail as EmailDetail }] : [],
+      );
+      const entries = await client.edit(threadActionFields(action, messages));
+      reload();
+      const ids = entries.map((entry) => entry.id);
+      if (ids.length && remember) done.current.push(ids);
+      return ids;
+    },
+    [client, selected, reload],
+  );
+  const act = useCallback(
+    (action: ThreadAction, target?: EmailThreadSummary) => perform(action, target ?? null, true),
+    [perform],
+  );
+
+  const setView = useCallback((next: EmailListView) => {
+    setViewState(next);
+    setSearchState(null);
+    setSelectedId(null);
+    setOpen(false);
+  }, []);
+
+  const setSearch = useCallback((text: string | null) => {
+    setSearchState(text === null || !text.trim() ? null : text.trim());
+    setSelectedId(null);
+  }, []);
+
+  // Opening a thread with unread mail marks it read, at once or after a moment (Settings → Email).
+  const unreadOpen = open && selected && selected.unreadCount > 0 ? threadId(selected) : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `perform` follows the selection, which `unreadOpen` names
+  useEffect(() => {
+    if (!unreadOpen) return;
+    const delay = markReadDelay(loadMarkRead(storage));
+    if (delay === null) return;
+    const timer = setTimeout(() => void perform({ type: 'read' }, null, false), delay);
+    return () => clearTimeout(timer);
+  }, [unreadOpen, storage]);
+
+  const sync = useMemo(() => threadSync(outgoing), [outgoing]);
+  const retry = useCallback(async () => {
+    for (const itemId of new Set(
+      outgoing.filter((change) => change.status === 'failed').map((c) => c.itemId),
+    ))
+      await client.retry(itemId);
+    reload();
+  }, [client, outgoing, reload]);
 
   const setAccount = useCallback(
     (next: string) => {
@@ -247,18 +368,28 @@ export function useEmail({
       if (!selected) return [];
       const entries = await client.file(selected.itemIds, projectId);
       reload();
-      return entries.map((entry) => entry.id);
+      const ids = entries.map((entry) => entry.id);
+      if (ids.length) done.current.push(ids);
+      return ids;
     },
     [client, selected, reload],
   );
 
   const undo = useCallback(
     async (entryIds: number[]) => {
+      done.current = done.current.filter((each) => each !== entryIds && each.join() !== entryIds.join());
       await client.undo(entryIds);
       reload();
     },
     [client, reload],
   );
+
+  const undoLast = useCallback(async () => {
+    const last = done.current.pop();
+    if (!last) return;
+    await client.undo(last);
+    reload();
+  }, [client, reload]);
 
   return {
     accounts,
@@ -281,5 +412,15 @@ export function useEmail({
     undo,
     refresh,
     reload,
+    view,
+    setView,
+    views,
+    search,
+    setSearch,
+    act,
+    undoLast,
+    sync,
+    retry,
+    superseded,
   };
 }

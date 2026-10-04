@@ -1,0 +1,601 @@
+{
+  "archive": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD", "CATEGORY_PERSONAL", "INBOX"],
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/modify",
+        "body": {
+          "addLabelIds": [],
+          "removeLabelIds": ["INBOX"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD", "CATEGORY_PERSONAL"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD", "CATEGORY_PERSONAL"],
+          "historyId": "5012"
+        }
+      }
+    }
+  ],
+  "several": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD", "INBOX", "Label_1"],
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/modify",
+        "body": {
+          "addLabelIds": ["STARRED", "Label_2"],
+          "removeLabelIds": ["UNREAD", "Label_1"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["INBOX", "STARRED", "Label_2"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["INBOX", "STARRED", "Label_2"],
+          "historyId": "5013"
+        }
+      }
+    }
+  ],
+  "trash": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["CATEGORY_PERSONAL", "INBOX"],
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/trash"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["TRASH", "CATEGORY_PERSONAL", "INBOX"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["TRASH", "CATEGORY_PERSONAL", "INBOX"],
+          "historyId": "5014"
+        }
+      }
+    }
+  ],
+  "moveToInbox": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["TRASH", "CATEGORY_PERSONAL"],
+          "historyId": "5014"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/untrash"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["CATEGORY_PERSONAL"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/modify",
+        "body": {
+          "addLabelIds": ["INBOX"],
+          "removeLabelIds": []
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["CATEGORY_PERSONAL", "INBOX"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["CATEGORY_PERSONAL", "INBOX"],
+          "historyId": "5016"
+        }
+      }
+    }
+  ],
+  "thread": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a1f0c2d3e4f501?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a1f0c2d3e4f501",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["IMPORTANT", "INBOX"],
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a1f0c2d3e4f501/modify",
+        "body": {
+          "addLabelIds": [],
+          "removeLabelIds": ["INBOX"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a1f0c2d3e4f501",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["IMPORTANT"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a1f0c2d3e4f501?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a1f0c2d3e4f501",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["IMPORTANT"],
+          "historyId": "5017"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD", "INBOX"],
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/modify",
+        "body": {
+          "addLabelIds": [],
+          "removeLabelIds": ["INBOX"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD"],
+          "historyId": "5018"
+        }
+      }
+    }
+  ],
+  "newerInGmail": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["UNREAD", "INBOX"],
+          "historyId": "5020"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/history?startHistoryId=5009&maxResults=500&historyTypes=labelAdded&historyTypes=labelRemoved"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "history": [
+            {
+              "id": "5011",
+              "messages": [
+                {
+                  "id": "19a4c3d4e5f6a704",
+                  "threadId": "19a1f0c2d3e4f501",
+                  "labelIds": ["UNREAD"]
+                }
+              ],
+              "labelsRemoved": [
+                {
+                  "message": {
+                    "id": "19a4c3d4e5f6a704",
+                    "threadId": "19a1f0c2d3e4f501",
+                    "labelIds": ["UNREAD"]
+                  },
+                  "labelIds": ["INBOX"]
+                }
+              ]
+            },
+            {
+              "id": "5015",
+              "messages": [
+                {
+                  "id": "19a9ffffffffffff",
+                  "threadId": "19a1f0c2d3e4f501",
+                  "labelIds": ["STARRED"]
+                }
+              ],
+              "labelsAdded": [
+                {
+                  "message": {
+                    "id": "19a9ffffffffffff",
+                    "threadId": "19a1f0c2d3e4f501",
+                    "labelIds": ["STARRED"]
+                  },
+                  "labelIds": ["STARRED"]
+                }
+              ]
+            },
+            {
+              "id": "5020",
+              "messages": [
+                {
+                  "id": "19a4c3d4e5f6a704",
+                  "threadId": "19a1f0c2d3e4f501",
+                  "labelIds": ["UNREAD", "INBOX"]
+                }
+              ],
+              "labelsAdded": [
+                {
+                  "message": {
+                    "id": "19a4c3d4e5f6a704",
+                    "threadId": "19a1f0c2d3e4f501",
+                    "labelIds": ["UNREAD", "INBOX"]
+                  },
+                  "labelIds": ["INBOX"]
+                }
+              ]
+            }
+          ],
+          "historyId": "5021"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/modify",
+        "body": {
+          "addLabelIds": [],
+          "removeLabelIds": ["UNREAD"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["INBOX"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["INBOX"],
+          "historyId": "5022"
+        }
+      }
+    }
+  ],
+  "already": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["CATEGORY_PERSONAL"],
+          "historyId": "5012"
+        }
+      }
+    }
+  ],
+  "gone": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "error": {
+            "code": 404,
+            "message": "Requested entity was not found.",
+            "errors": [
+              {
+                "message": "Requested entity was not found.",
+                "domain": "global",
+                "reason": "notFound"
+              }
+            ],
+            "status": "NOT_FOUND"
+          }
+        }
+      }
+    }
+  ],
+  "refused": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=minimal"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a4c3d4e5f6a704",
+          "threadId": "19a1f0c2d3e4f501",
+          "labelIds": ["INBOX"],
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704/modify",
+        "body": {
+          "addLabelIds": ["Label_9"],
+          "removeLabelIds": []
+        }
+      },
+      "response": {
+        "status": 400,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "error": {
+            "code": 400,
+            "message": "Invalid label: Label_9",
+            "errors": [
+              {
+                "message": "Invalid label: Label_9",
+                "domain": "global",
+                "reason": "invalidArgument"
+              }
+            ],
+            "status": "INVALID_ARGUMENT"
+          }
+        }
+      }
+    }
+  ]
+}

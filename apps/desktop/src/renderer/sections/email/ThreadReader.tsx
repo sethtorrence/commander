@@ -234,12 +234,15 @@ export function ThreadReader({
   accountName,
   reader,
   onClose,
+  toolbar,
 }: {
   thread: EmailThread | null;
   summary: EmailThreadSummary | null;
   accountName: (accountId: string) => string;
   reader: EmailReaderClient;
   onClose: () => void;
+  /** The thread's actions (#135), in its header beside Close. */
+  toolbar?: ReactNode;
 }) {
   const subject = summary?.subject || thread?.messages.at(-1)?.item.title || '';
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -259,8 +262,9 @@ export function ThreadReader({
         >
           <Kbd>Esc</Kbd> Close
         </button>
+        {toolbar}
         {summary && (
-          <span className="ml-auto flex items-center px-4 font-mono text-label leading-none uppercase tracking-caps text-faint">
+          <span className="ml-auto flex min-w-0 shrink-[20] items-center truncate px-4 font-mono text-label leading-none uppercase tracking-caps whitespace-nowrap text-faint">
             {summary.messageCount} {summary.messageCount === 1 ? 'message' : 'messages'} ·{' '}
             {accountName(summary.account)}
           </span>

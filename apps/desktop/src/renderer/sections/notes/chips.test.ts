@@ -97,6 +97,47 @@ describe('a Block’s text with chips', () => {
   });
 });
 
+describe('an email chip', () => {
+  const longtail = {
+    id: 'p',
+    name: 'Longtail',
+    code: 'LT',
+    accent: 'blue' as const,
+    order: 0,
+    archived: false,
+    createdAt: 0,
+  };
+  const card = (gone: boolean) => () => ({
+    text: 'Q4 <budget>',
+    title: 'Q4 budget, from Dana Whitfield on 1 Oct: open its thread in the Email Section',
+    project: longtail,
+    email: { sender: 'Dana Whitfield', date: '1 Oct', gone },
+  });
+
+  it('is drawn as a card (Badge, sender, subject, date), its token kept as the text', () => {
+    const element = editor();
+    renderBlockText(element, 'Answer [[email:m-1]]', card(false));
+    expect(element.textContent).toBe('Answer [[email:m-1]]');
+    const chip = element.querySelector<HTMLElement>('.n-chip') as HTMLElement;
+    expect(chip.dataset.chip).toBe('email');
+    expect(chip.classList.contains('n-mail')).toBe(true);
+    expect(chip.dataset.state).toBe('on');
+    expect(chip.getAttribute('aria-label')).toBe('Email from Dana Whitfield: Q4 <budget>, 1 Oct');
+    expect(chip.querySelector<HTMLElement>('.n-meet-badge')?.dataset.code).toBe('LT');
+    expect(chip.querySelector<HTMLElement>('.n-mail-from')?.dataset.label).toBe('Dana Whitfield');
+    expect(chip.querySelector<HTMLElement>('.n-meet-label')?.dataset.label).toBe('Q4 <budget>');
+    expect(chip.querySelector<HTMLElement>('.n-meet-note')?.dataset.note).toBe('1 Oct');
+  });
+
+  it('is struck through when Commander no longer has it', () => {
+    const element = editor();
+    renderBlockText(element, '[[email:m-1]]', card(true));
+    const chip = element.querySelector<HTMLElement>('.n-chip') as HTMLElement;
+    expect(chip.dataset.state).toBe('struck');
+    expect(chip.querySelector<HTMLElement>('.n-meet-note')?.dataset.note).toBe('Gone');
+  });
+});
+
 describe('a meeting chip', () => {
   const meeting = (target: BlockLinkTarget) => ({
     text: '10:00–10:30 Weekly sync <with> Priya',

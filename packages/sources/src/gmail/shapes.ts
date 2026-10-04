@@ -46,6 +46,16 @@ export const gmailMessage = z.object({
 });
 export type GmailMessage = z.infer<typeof gmailMessage>;
 
+// users.messages.get?format=minimal, and what messages.modify, trash and untrash answer: the message's
+// labels (and, from get, the history it was last changed at).
+export const gmailMessageLabels = z.object({
+  id: z.string().min(1),
+  threadId: z.string().optional(),
+  labelIds: z.array(z.string()).optional(),
+  historyId: z.string().optional(),
+});
+export type GmailMessageLabels = z.infer<typeof gmailMessageLabels>;
+
 // users.getProfile
 export const gmailProfile = z.object({ emailAddress: z.string(), historyId: z.string().min(1) });
 

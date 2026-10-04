@@ -1,21 +1,27 @@
-import { type EmailDetail, emailStatus, type SourceItem } from '@commander/domain';
+import { type EmailDetail, type EmailLabel, emailStatus, type SourceItem } from '@commander/domain';
 import { z } from 'zod';
 import {
   type Cadence,
   CursorExpired,
+  type FieldChange,
   type PartRequest,
   type SourceAdapter,
   type StoredItem,
+  type Superseded,
   type SyncRequest,
+  WriteRejected,
+  type WriteRequest,
 } from '../source';
 import { connectGmail, createPacer, type GmailClient, MessageGone, type Pacer } from './client';
 import { labelName, readGmailMessage } from './message';
 import { fetchGmailPart } from './parts';
 import {
   type GmailHistory,
+  type GmailMessageLabels,
   gmailHistory,
   gmailLabels,
   gmailMessage,
+  gmailMessageLabels,
   gmailMessageList,
   gmailProfile,
 } from './shapes';
@@ -37,6 +43,17 @@ import {
 //   messages Commander doesn't hold, refreshing the labels of the rest from cheap label listings
 //   (`messages.list?labelIds=…`, one per label, instead of a fetch per message), and tombstoning
 //   what Gmail no longer has.
+// - Trash (#135): a message moved to Trash stays, marked as in Trash (the Email Section's Trash view),
+//   until Gmail deletes it; Spam and deleted messages become tombstones.
+// - Writes (#135, ADR 0003): an email's synced fields (`inbox`, `read`, `starred`, `trash`, one
+//   `label:<id>` per label) become Gmail labels: `messages.trash` / `untrash` for Trash, then one
+//   `messages.modify` adding and removing the rest. A thread's change is each of its messages' (the
+//   outgoing queue writes Item by Item, so `batchModify` isn't used: it answers with nothing to save).
+//   Before writing, the adapter reads the message's labels: what Gmail already has isn't sent, and a
+//   field Gmail changed since Commander last saw the message (its history since the historyId the
+//   Item carries) is left as Gmail has it, reported as superseded. Gmail's history carries no times,
+//   so "newer" means "made in Gmail after Commander last saw the message": the User changed what they
+//   saw, and Gmail's change came on top of it or unseen.
 
 export const GMAIL_CADENCE: Cadence = { defaultMinutes: 15, choices: [5, 10, 15, 30, 60] };
 
@@ -53,10 +70,13 @@ const WINDOW_DAYS = 30;
 // Messages saved together while downloading.
 const SAVE_EVERY = 10;
 const PAGE_SIZE = 500;
-// Never downloaded; a message that gains Spam or Trash is gone as far as Commander is concerned.
+// Never downloaded. A message that gains Spam is gone as far as Commander is concerned; one that
+// gains Trash stays, in Trash (#135).
 const SKIPPED = new Set(['DRAFT', 'SPAM', 'TRASH', 'CHAT']);
-const GONE = new Set(['SPAM', 'TRASH']);
+const HIDDEN = new Set(['SPAM', 'TRASH']);
+const GONE = new Set(['SPAM']);
 const HISTORY_TYPES = ['messageAdded', 'messageDeleted', 'labelAdded', 'labelRemoved'];
+const LABEL_HISTORY = ['labelAdded', 'labelRemoved'];
 
 // Where the next sync starts: the 30-day window's start (kept for re-syncs), the historyId to read
 // history from, and, while a download is under way, `backfill` (with whether the labels of messages
@@ -95,16 +115,17 @@ const query = (params: Record<string, string | string[] | undefined>) => {
 const emailOf = (item: StoredItem): EmailDetail | null =>
   item.detail?.kind === 'email' ? item.detail : null;
 
-/** The detail with these Gmail labels: read, starred, inbox and sent follow them. */
+/** The detail with these Gmail labels: read, starred, inbox, Trash and sent follow them. */
 function relabelled(
   detail: EmailDetail,
   labelIds: readonly string[],
   names: ReadonlyMap<string, string>,
+  version?: string | null,
 ): EmailDetail {
   // Labels it had keep their place, so an unchanged set compares equal.
   const had = detail.labels.map((label) => label.id).filter((id) => labelIds.includes(id));
   const ordered = [...had, ...labelIds.filter((id) => !had.includes(id))];
-  return {
+  const next: EmailDetail = {
     ...detail,
     labels: ordered.map(
       (id) => detail.labels.find((label) => label.id === id) ?? { id, name: labelName(id, names) },
@@ -114,6 +135,10 @@ function relabelled(
     inInbox: ordered.includes('INBOX'),
     sentByMe: ordered.includes('SENT'),
   };
+  delete next.inTrash;
+  if (ordered.includes('TRASH')) next.inTrash = true;
+  if (version) next.sourceVersion = version;
+  return next;
 }
 
 function relabelledItem(item: StoredItem, detail: EmailDetail): SourceItem {
@@ -135,7 +160,7 @@ export function createGmailSource({
   now = Date.now,
   sleep = sleepFor,
 }: GmailSourceOptions): SourceAdapter {
-  // Each Account's quota is paced across its syncs (and the reader's part fetches).
+  // Each Account's quota is paced across its syncs, writes and the reader's part fetches.
   const pacers = new Map<string, Pacer>();
   const pacerOf = (account: string) => {
     let pacer = pacers.get(account);
@@ -149,6 +174,18 @@ export function createGmailSource({
   return {
     source: 'gmail',
     cadence: GMAIL_CADENCE,
+
+    async write(request: WriteRequest) {
+      const gmail = connectGmail({
+        gmailUrl: gmailUrl(),
+        fetch,
+        now,
+        pacer: pacerOf(request.account),
+        accessToken: request.accessToken,
+        signal: request.signal,
+      });
+      return { ...(await writeMessage(gmail, request, now)), cost: gmail.cost };
+    },
 
     async sync(request: SyncRequest) {
       const gmail = connectGmail({
@@ -207,6 +244,16 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
     if (!labels) {
       const found = await gmail.get('labels', '/labels', gmailLabels);
       labels = new Map((found.labels ?? []).map((label) => [label.id, label.name]));
+      // Kept for the label picker and the view list (#135).
+      const names = labels;
+      request.saveCatalog?.({
+        kind: 'gmail',
+        labels: (found.labels ?? []).map((label) => ({
+          id: label.id,
+          name: labelName(label.id, names),
+          system: label.type === 'system',
+        })),
+      });
     }
     return labels;
   }
@@ -307,14 +354,24 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
       for (const item of held.values()) {
         const detail = emailOf(item);
         if (!detail) continue;
-        const next = relabelled(detail, [...(withLabel.get(item.externalId) ?? [])], names);
-        if (!sameJson(next, detail)) changed.push(relabelledItem(item, next));
+        const next = relabelled(detail, [...(withLabel.get(item.externalId) ?? [])], names, historyId);
+        if (!sameJson({ ...next, sourceVersion: null }, { ...detail, sourceVersion: null }))
+          changed.push(relabelledItem(item, next));
       }
-      // Held messages from the window that Gmail no longer lists were deleted, or moved to Trash or Spam.
+      // Held messages from the window that Gmail no longer lists were deleted, or moved to Spam, or
+      // to Trash, where they stay (with the labels they had).
       const listedIds = new Set(listed);
-      const gone = [...storedById(heldIds().filter((id) => !listedIds.has(id))).values()]
-        .filter((item) => (emailOf(item)?.sentAt ?? 0) >= windowStart)
-        .map((item) => item.externalId);
+      const trashed = new Set(await listIds({ labelIds: 'TRASH', q: after, includeSpamTrash: 'true' }));
+      const unlisted = [...storedById(heldIds().filter((id) => !listedIds.has(id))).values()].filter(
+        (item) => (emailOf(item)?.sentAt ?? 0) >= windowStart,
+      );
+      for (const item of unlisted) {
+        const detail = emailOf(item);
+        if (!detail || !trashed.has(item.externalId) || detail.inTrash) continue;
+        const kept = detail.labels.map((label) => label.id);
+        changed.push(relabelledItem(item, relabelled(detail, [...kept, 'TRASH'], names, historyId)));
+      }
+      const gone = unlisted.filter((item) => !trashed.has(item.externalId)).map((item) => item.externalId);
       if (changed.length || gone.length) request.save({ items: changed, deleted: gone });
     }
 
@@ -344,7 +401,15 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
     const added = new Map<string, string[]>();
     const deleted = new Set<string>();
     const changes: { id: string; add: string[]; remove: string[] }[] = [];
+    // The history each message was last changed at, for the next write's check (#135).
+    const versions = new Map<string, string>();
     for (const record of records) {
+      for (const each of [
+        ...(record.messagesAdded ?? []),
+        ...(record.labelsAdded ?? []),
+        ...(record.labelsRemoved ?? []),
+      ])
+        versions.set(each.message.id, record.id);
       for (const { message } of record.messagesAdded ?? []) {
         added.set(message.id, message.labelIds ?? []);
         deleted.delete(message.id);
@@ -380,7 +445,7 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
           ...labelIds.filter((label) => !change.remove.includes(label)),
           ...change.add.filter((label) => !labelIds.includes(label)),
         ];
-        if (change.remove.some((label) => GONE.has(label))) untrashed = true;
+        if (change.remove.some((label) => HIDDEN.has(label))) untrashed = true;
       }
       if (labelIds.some((label) => GONE.has(label))) {
         if (item) gone.push(id);
@@ -388,7 +453,7 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
       }
       if (item && detail) {
         const names = await labelNames();
-        const next = relabelled(detail, labelIds, names);
+        const next = relabelled(detail, labelIds, names, versions.get(id));
         if (!sameJson(next, detail)) relabel.push(relabelledItem(item, next));
       } else if (!item && added.has(id) && !labelIds.some((label) => SKIPPED.has(label))) {
         fetch.push(id);
@@ -408,4 +473,119 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
   }
 
   return { download, history, heldIds };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Writes (#135)
+
+// The Gmail label behind each flag field, and whether the field is true when the label is on.
+const FLAG_FIELDS: Record<string, { label: string; on: boolean }> = {
+  inbox: { label: 'INBOX', on: true },
+  read: { label: 'UNREAD', on: false },
+  starred: { label: 'STARRED', on: true },
+  trash: { label: 'TRASH', on: true },
+};
+const LABEL_PREFIX = 'label:';
+
+// What a change asks of Gmail: the label it is about, and whether that label should be on.
+function wantOf(change: FieldChange): { label: string; on: boolean } {
+  const flag = FLAG_FIELDS[change.field];
+  if (flag) {
+    if (typeof change.value !== 'boolean') throw new WriteRejected('That isn’t a change Gmail takes.');
+    return { label: flag.label, on: change.value === flag.on };
+  }
+  if (change.field.startsWith(LABEL_PREFIX) && change.field.length > LABEL_PREFIX.length) {
+    const label = change.field.slice(LABEL_PREFIX.length);
+    const value = change.value as EmailLabel | null;
+    if (value !== null && value?.id !== label) throw new WriteRejected('That isn’t a label Gmail knows.');
+    return { label, on: value !== null };
+  }
+  throw new WriteRejected('Commander can’t change that in Gmail.');
+}
+
+// The labels Gmail changed on the message since `since` (a historyId), read from its history up to
+// the message's own latest change. Empty when Gmail's history no longer reaches back that far.
+async function labelsChangedSince(
+  gmail: GmailClient,
+  messageId: string,
+  since: string,
+  upTo: string,
+): Promise<Set<string>> {
+  const changed = new Set<string>();
+  let pageToken: string | undefined;
+  try {
+    do {
+      const page = await gmail.get(
+        'history',
+        `/history${query({ startHistoryId: since, maxResults: String(PAGE_SIZE), historyTypes: LABEL_HISTORY, pageToken })}`,
+        gmailHistory,
+      );
+      for (const record of page.history ?? []) {
+        for (const each of [...(record.labelsAdded ?? []), ...(record.labelsRemoved ?? [])])
+          if (each.message.id === messageId) for (const label of each.labelIds ?? []) changed.add(label);
+      }
+      const last = page.history?.at(-1)?.id;
+      // Past the message's own latest change, nothing more about it can come.
+      if (last && BigInt(last) >= BigInt(upTo)) break;
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+  } catch (error) {
+    if (error instanceof CursorExpired) return new Set();
+    throw error;
+  }
+  return changed;
+}
+
+async function writeMessage(gmail: GmailClient, request: WriteRequest, now: () => number) {
+  const id = request.externalId;
+  const path = `/messages/${encodeURIComponent(id)}`;
+  const wants = request.changes.map((change) => ({ change, ...wantOf(change) }));
+  const [stored] = request.stored?.([id]) ?? [];
+  const held = stored ? emailOf(stored) : null;
+
+  const peek = () => gmail.get('peek', `${path}?format=minimal`, gmailMessageLabels);
+  const current = await peek();
+  const labels = new Set(current.labelIds ?? []);
+  // What Gmail changed since Commander last saw the message, when it has changed since.
+  const since = held?.sourceVersion;
+  const changedInGmail =
+    since && current.historyId && current.historyId !== since
+      ? await labelsChangedSince(gmail, id, since, current.historyId)
+      : new Set<string>();
+
+  const superseded: Superseded[] = [];
+  let trash: boolean | null = null;
+  const add: string[] = [];
+  const remove: string[] = [];
+  for (const { change, label, on } of wants) {
+    if (labels.has(label) === on) continue;
+    if (changedInGmail.has(label)) {
+      superseded.push({ field: change.field, by: null, at: now() });
+      continue;
+    }
+    if (label === 'TRASH') trash = on;
+    else (on ? add : remove).push(label);
+  }
+
+  let answer: GmailMessageLabels = current;
+  if (trash !== null) {
+    const call = trash ? 'trash' : 'untrash';
+    answer = await gmail.get(call, `${path}/${call}`, gmailMessageLabels, {});
+  }
+  if (add.length || remove.length) {
+    answer = await gmail.get('modify', `${path}/modify`, gmailMessageLabels, {
+      body: { addLabelIds: add, removeLabelIds: remove },
+    });
+  }
+  // The history the write left the message at, so the next write measures Gmail's changes from there.
+  if (answer !== current && !answer.historyId) answer = await peek();
+
+  if (!stored || !held) return { item: null, superseded };
+  const names = new Map<string, string>(held.labels.map((label) => [label.id, label.name]));
+  for (const { change, label } of wants) {
+    const value = change.value as EmailLabel | null;
+    if (change.field.startsWith(LABEL_PREFIX) && value?.name) names.set(label, value.name);
+  }
+  const detail = relabelled(held, answer.labelIds ?? [], names, answer.historyId ?? null);
+  return { item: relabelledItem(stored, detail), superseded };
 }

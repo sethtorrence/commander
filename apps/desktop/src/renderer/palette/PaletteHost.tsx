@@ -8,6 +8,7 @@ import { PEOPLE_SETTINGS } from '../people/PeopleSettings';
 import { useProjects } from '../projects/context';
 import { inFilter } from '../projects/filter';
 import { SECTIONS } from '../sections';
+import { emailAccountsIn } from '../sections/email/email';
 import { linearAccountsIn } from '../sections/linear/linear-issues';
 import { dayKey } from '../sections/notes/days';
 import { sectionFor } from '../sections/todos/links';
@@ -50,6 +51,22 @@ function useAccounts(): AccountSummary[] {
   return accounts;
 }
 
+// The email Accounts (Gmail on), for Search in Gmail.
+function useGmailAccounts(): { email: string }[] {
+  const client = useMemo(() => emailAccountsIn(window.commander), []);
+  const [accounts, setAccounts] = useState<{ email: string }[]>([]);
+  useEffect(() => {
+    let current = true;
+    client.list().then((next) => current && setAccounts(next), report);
+    const stop = client.onChange((next) => current && setAccounts(next));
+    return () => {
+      current = false;
+      stop();
+    };
+  }, [client]);
+  return accounts;
+}
+
 export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleShortcuts }: PaletteHostProps) {
   const [shown, setShown] = useState<{ open: boolean; initial: string; mode: 'jump' | 'find' }>({
     open: false,
@@ -60,6 +77,7 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
   const { toggleTheme } = useAppearance();
   const commands = useCommandRegistry();
   const accounts = useAccounts();
+  const gmailAccounts = useGmailAccounts();
   const now = useNow(60_000);
   const today = dayKey(now);
   const connected = accounts.filter((account) => account.status === 'connected');
@@ -142,6 +160,7 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
       projects={projects}
       commands={commands.available}
       accounts={accounts}
+      gmailAccounts={gmailAccounts}
       now={now}
       today={today}
       onAction={onAction}

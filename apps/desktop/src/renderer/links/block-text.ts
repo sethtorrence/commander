@@ -1,4 +1,5 @@
 import {
+  addressName,
   type BlockLinkTarget,
   blockLinksIn,
   blockLinkToken,
@@ -10,7 +11,7 @@ import {
   type Project,
 } from '@commander/domain';
 import { longDate, weekday } from '../sections/notes/days';
-import { shortDay } from './link-targets';
+import { emailDate, emailSubject, isEmailItem, shortDay } from './link-targets';
 
 /*
   `[[` links in a Block's text, as the editor sees them: the `[[` being typed, putting a chosen
@@ -79,6 +80,18 @@ export interface ChipLabelContext {
   projectById(projectId: string): Project | undefined;
   /** Calendar events, as Commander holds them (tombstones too), for meeting chips' live cards. */
   eventById?(eventId: string): Item | undefined;
+  /** Emails, as Commander holds them (tombstones too), for email chips' live cards. */
+  emailById?(emailId: string): Item | undefined;
+}
+
+/** An email chip's live card: who sent it, when, and whether Commander still has it. */
+export interface EmailCard {
+  /** The sender's name, or address. */
+  sender: string;
+  /** When it came, briefly: "09:15" today, "1 Oct". */
+  date: string;
+  /** Deleted, or not in Commander: drawn faint and struck through. */
+  gone: boolean;
 }
 
 /** A meeting chip's live card: its calendar colour, join link and how the meeting stands. */
@@ -100,6 +113,8 @@ export interface ChipLabel {
   project?: Project;
   /** For a meeting chip: the rest of its card. */
   meeting?: MeetingCard;
+  /** For an email chip: the rest of its card (its text is the subject). */
+  email?: EmailCard;
 }
 
 /** Where a chip is shown: the day of the Daily Note it is in, which a meeting is read from. */
@@ -113,13 +128,38 @@ export type LabelChip = (target: BlockLinkTarget, place?: ChipPlace) => ChipLabe
 /**
  * What a chip shows: "Thu 1 Oct", the Project's name with its Badge, or a meeting's card ("10:00–10:30
  * Weekly sync with Priya", calendar colour, join link, Badge, and whether it was cancelled or moved,
- * read from the day of the note it is in).
+ * read from the day of the note it is in), or an email's card (sender, subject, date and Badge, and
+ * whether Commander still has it).
  */
 export function chipLabel(
   target: BlockLinkTarget,
-  { today, projectById, eventById }: ChipLabelContext,
+  { today, projectById, eventById, emailById }: ChipLabelContext,
   place?: ChipPlace,
 ): ChipLabel {
+  if (target.type === 'email') {
+    const email = emailById?.(target.emailId);
+    if (!isEmailItem(email)) {
+      return {
+        text: 'An email',
+        title: 'An email Commander doesn’t have',
+        email: { sender: '', date: '', gone: true },
+      };
+    }
+    const subject = emailSubject(email.detail);
+    const sender = addressName(email.detail.from);
+    const date = emailDate(email.detail.sentAt, today);
+    const gone = email.deletedAt !== null;
+    const project = email.filing ? projectById(email.filing.projectId) : undefined;
+    const from = sender ? `, from ${sender}` : '';
+    return {
+      text: subject,
+      title: gone
+        ? `${subject}${from}: no longer in Commander`
+        : `${subject}${from} on ${date}: open its thread in the Email Section`,
+      ...(project && { project }),
+      email: { sender, date, gone },
+    };
+  }
   if (target.type === 'event') {
     const event = eventById?.(target.eventId);
     if (!isEvent(event)) {

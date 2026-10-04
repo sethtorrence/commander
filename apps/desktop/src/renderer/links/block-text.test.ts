@@ -166,3 +166,75 @@ describe('a meeting chip’s label: the event’s live card', () => {
     expect(chipLabel(target, context)).toMatchObject({ text: 'A meeting', meeting: { struck: false } });
   });
 });
+
+describe('an email chip’s label: the email’s live card', () => {
+  const budget: Item = {
+    id: 'm-budget',
+    kind: 'email',
+    source: 'gmail',
+    account: 'google:alex',
+    externalId: 'budget',
+    title: 'Q4 budget',
+    people: [],
+    filing: { projectId: P, filedBy: 'user' },
+    status: 'open',
+    createdAt: 0,
+    updatedAt: 0,
+    deletedAt: null,
+    detail: {
+      kind: 'email',
+      messageId: null,
+      inReplyTo: null,
+      references: [],
+      threadKey: 't-budget',
+      sourceThreadId: null,
+      from: { name: 'Dana Whitfield', address: 'dana@northwind.test' },
+      to: [],
+      cc: [],
+      bcc: [],
+      replyTo: [],
+      subject: 'Q4 budget',
+      sentAt: new Date(2026, 9, 1, 9, 5).getTime(),
+      snippet: '',
+      read: true,
+      starred: false,
+      inInbox: true,
+      sentByMe: false,
+      labels: [],
+      attachments: [],
+      hasInvitation: false,
+      listUnsubscribe: null,
+      listId: null,
+    },
+  };
+  const emails = new Map([[budget.id, budget]]);
+  const context = {
+    today: '2026-10-03',
+    projectById: (id: string) => (id === P ? longtail : undefined),
+    emailById: (id: string) => emails.get(id),
+  };
+  const target = { type: 'email' as const, emailId: budget.id };
+
+  it('shows its sender, subject, date and Badge', () => {
+    expect(chipLabel(target, context)).toEqual({
+      text: 'Q4 budget',
+      title: 'Q4 budget, from Dana Whitfield on 1 Oct: open its thread in the Email Section',
+      project: longtail,
+      email: { sender: 'Dana Whitfield', date: '1 Oct', gone: false },
+    });
+  });
+
+  it('says it is gone when Commander no longer has it', () => {
+    emails.set(budget.id, { ...budget, deletedAt: 1 });
+    expect(chipLabel(target, context)).toMatchObject({
+      text: 'Q4 budget',
+      email: { sender: 'Dana Whitfield', gone: true },
+    });
+    emails.delete(budget.id);
+    expect(chipLabel(target, context)).toEqual({
+      text: 'An email',
+      title: 'An email Commander doesn’t have',
+      email: { sender: '', date: '', gone: true },
+    });
+  });
+});

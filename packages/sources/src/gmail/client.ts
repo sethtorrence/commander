@@ -7,6 +7,7 @@ import {
   SignInRefused,
   SourceUnavailable,
   type SyncCost,
+  WriteRejected,
 } from '../source';
 import { googleError } from './shapes';
 
@@ -25,7 +26,22 @@ import { googleError } from './shapes';
 
 // What each call costs in Gmail quota units (Gmail API quota reference; `messages.get` at the 2026
 // figure decision #2 records).
-export const UNITS = { profile: 1, labels: 1, list: 5, get: 20, history: 2, attachment: 5 } as const;
+// Writes (#135): a message's labels read back (`messages.get?format=minimal`), `messages.modify`,
+// `messages.trash` and `messages.untrash`, 5 units each.
+export const UNITS = {
+  profile: 1,
+  labels: 1,
+  list: 5,
+  get: 20,
+  history: 2,
+  attachment: 5,
+  peek: 5,
+  modify: 5,
+  trash: 5,
+  untrash: 5,
+} as const;
+// The calls that write, or read for a write: Gmail refusing one refuses the change itself.
+const WRITE_CALLS = new Set<GmailCall>(['peek', 'modify', 'trash', 'untrash']);
 
 // The pace: up to BURST units at once, refilled at RATE units a minute.
 export const BURST_UNITS = 500;
@@ -99,14 +115,28 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
     return { reasons: status ? [...reasons, status] : reasons, message: message ?? null };
   }
 
-  /** GETs a path under the User's mailbox (`/messages?…`), parsed with `shape`, as one `call`. */
-  async function get<T>(call: GmailCall, path: string, shape: z.ZodType<T>): Promise<T> {
+  /**
+   * Asks for a path under the User's mailbox (`/messages?…`), parsed with `shape`, as one `call`: a
+   * GET, or a POST with a JSON body (`messages.modify`) or none (`messages.trash`).
+   */
+  async function get<T>(
+    call: GmailCall,
+    path: string,
+    shape: z.ZodType<T>,
+    post?: { body?: unknown },
+  ): Promise<T> {
     await pacer.take(UNITS[call], signal);
     const token = await accessToken();
     let response: Response;
     try {
       response = await fetch(`${base}${path}`, {
-        headers: { authorization: `Bearer ${token.token}`, accept: 'application/json' },
+        ...(post ? { method: 'POST' } : {}),
+        headers: {
+          authorization: `Bearer ${token.token}`,
+          accept: 'application/json',
+          ...(post?.body !== undefined ? { 'content-type': 'application/json' } : {}),
+        },
+        ...(post?.body !== undefined ? { body: JSON.stringify(post.body) } : {}),
         signal,
       });
     } catch (error) {
@@ -122,7 +152,7 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
       return parsed.data;
     }
     const retryAfter = retryAfterMs(response.headers.get('retry-after'), now());
-    const { reasons } = await reasonOf(response);
+    const { reasons, message } = await reasonOf(response);
     if (
       response.status === 429 ||
       (response.status === 403 && reasons.some((reason) => RATE_REASONS.has(reason)))
@@ -137,6 +167,10 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
       throw new CursorExpired('Gmail no longer has the history since Commander’s last sync.');
     }
     if (response.status === 404 && (call === 'get' || call === 'attachment')) throw new MessageGone(path);
+    if (WRITE_CALLS.has(call) && response.status === 404)
+      throw new WriteRejected('Gmail no longer has this message.');
+    if (WRITE_CALLS.has(call) && response.status === 400)
+      throw new WriteRejected(`Gmail refused this change${message ? `: ${message}` : '.'}`);
     throw new SourceUnavailable(`Gmail couldn’t answer just now (HTTP ${response.status}).`, cost);
   }
 

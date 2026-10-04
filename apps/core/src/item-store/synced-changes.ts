@@ -9,9 +9,11 @@ import {
   type Item,
   type ItemDetail,
   type ItemState,
+  isLocalField,
   isSyncedField,
   isUnrecallableField,
   itemDetail,
+  localFieldsOf,
   statusFromDetail,
   syncedFieldsOf,
   withSyncedFields,
@@ -76,7 +78,8 @@ export function queueChanges(
   for (const field of new Set([...Object.keys(was), ...Object.keys(now)])) {
     const value = now[field] ?? null;
     const synced = was[field] ?? null;
-    if (isDeepStrictEqual(value, synced)) continue;
+    // Commander's own fields (an email's snooze) never go to the Source.
+    if (isDeepStrictEqual(value, synced) || isLocalField(item.kind, field)) continue;
     queue.queue({
       account: item.account,
       source: item.source,
@@ -93,19 +96,28 @@ export function queueChanges(
 
 /**
  * The detail and status to save from a sync: the Source's, with the changes still queued for it on
- * top (so a sync never undoes an edit that hasn't reached the Source yet). Records the Source's values
- * as the queued changes' last-synced values, and drops queued changes the Source already has.
+ * top (so a sync never undoes an edit that hasn't reached the Source yet), and Commander's own fields
+ * (an email's snooze) as they were. Records the Source's values as the queued changes' last-synced
+ * values, and drops queued changes the Source already has.
  */
 export function withQueuedOnTop(
   queue: OutgoingQueue,
   itemId: string,
   incoming: Pick<ItemState, 'detail' | 'status'>,
+  before: ItemDetail | null = null,
 ): Pick<ItemState, 'detail' | 'status'> {
   const fields = syncedFieldsOf(incoming.detail);
   if (!incoming.detail || !fields) return incoming;
-  const queued = queue.synced(itemId, fields);
-  if (!queued.length) return incoming;
-  const shown = { ...fields };
+  const kind = incoming.detail.kind;
+  const fromSource = Object.fromEntries(
+    Object.entries(fields).filter(([field]) => !isLocalField(kind, field)),
+  );
+  const queued = queue.synced(itemId, fromSource);
+  const own = Object.fromEntries(
+    Object.entries(before?.kind === kind ? localFieldsOf(before) : {}).filter(([, value]) => value !== null),
+  );
+  if (!queued.length && !Object.keys(own).length) return incoming;
+  const shown = { ...fields, ...own };
   for (const change of queued) shown[change.field] = change.value;
   const detail = withSyncedFields(incoming.detail, shown);
   return { detail, status: statusFromDetail(detail, incoming.status) };

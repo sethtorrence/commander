@@ -1,4 +1,4 @@
-import type { EmailBody, EmailDetail, SourceItem } from '@commander/domain';
+import type { EmailBody, EmailDetail, GmailCatalog, SourceItem } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   type AccessToken,
@@ -77,6 +77,7 @@ type Run = {
   pages: SyncPage[];
   checkpoints: unknown[];
   progress: ({ done: number; total: number } | null)[];
+  catalogs: GmailCatalog[];
 };
 
 function gmailSource(fetch: typeof globalThis.fetch) {
@@ -97,7 +98,7 @@ async function sync(
     source = gmailSource(fetch),
   }: { cursor?: unknown; source?: ReturnType<typeof gmailSource> } = {},
 ) {
-  const run: Run = { pages: [], checkpoints: [], progress: [] };
+  const run: Run = { pages: [], checkpoints: [], progress: [], catalogs: [] };
   const result = await source.sync({
     account: ACCOUNT,
     cursor,
@@ -126,6 +127,7 @@ async function sync(
       for (const id of page.deleted) held.delete(id);
     },
     checkpoint: (next) => run.checkpoints.push(next),
+    saveCatalog: (catalog) => run.catalogs.push(catalog as GmailCatalog),
     progress: (next) => run.progress.push(next),
     signal: new AbortController().signal,
   });
@@ -181,6 +183,15 @@ describe('first sync', () => {
       people: ['dana@northwind.test', 'alex@gmail.test'],
     });
     expect(detailOf(M4)).toMatchObject({ read: false, inInbox: true, subject: 'Re: Q4 offsite dates' });
+    expect(detailOf(M4).sourceVersion).toBeTruthy();
+  });
+
+  it('keeps the Account’s labels, for the label picker', async () => {
+    const { catalogs } = await sync(replay(firstSync as Exchange[]).fetch);
+
+    expect(catalogs.at(-1)).toMatchObject({ kind: 'gmail' });
+    expect(catalogs.at(-1)?.labels).toContainEqual({ id: 'Label_7', name: 'Receipts', system: false });
+    expect(catalogs.at(-1)?.labels).toContainEqual({ id: 'INBOX', name: 'Inbox', system: true });
   });
 
   it('reports its progress, and saves the newest mail first so it can be read while the rest downloads', async () => {
@@ -281,8 +292,12 @@ describe('after the first sync', () => {
     expect(detailOf(M4).read).toBe(true);
     expect(detailOf(M1)).toMatchObject({ starred: true, inInbox: false });
     expect(held.get(M1)?.status).toBe('archived');
-    // A deleted message, and one moved to Trash, become tombstones.
-    expect(pages.flatMap((page) => page.deleted).sort()).toEqual([M2, M3].sort());
+    // A deleted message becomes a tombstone; one moved to Trash stays, in Trash (#135).
+    expect(pages.flatMap((page) => page.deleted)).toEqual([M3]);
+    expect(detailOf(M2)).toMatchObject({ inTrash: true, inInbox: false });
+    expect(held.get(M2)?.status).toBe('archived');
+    // Each changed message carries the history Commander last saw it at.
+    expect(detailOf(M4).sourceVersion).toBe('5002');
     // Label changes don't touch the bodies kept beside the Item.
     expect(pages.flatMap((page) => page.items).find((item) => item.externalId === M4)?.body).toBeUndefined();
     expect(result.cursor).toEqual({ ...cursor, historyId: '5009' });

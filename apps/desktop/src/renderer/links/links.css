@@ -1,7 +1,7 @@
 /*
   `[[` links: chips in a Block's text, the picker, and "Mentioned in". Ported from the locked prototype
   (prototype/daily-note-look, round-3/industrial.html: .wl for a link in the text, .acpop for the
-  picker), with a Project's Badge before a Project chip.
+  picker), with a Project's Badge before a Project chip, and live cards for meetings and emails.
 */
 @layer components {
   /* A chip: its token is kept in the text (hidden), and its label drawn after it. */
@@ -124,6 +124,29 @@
   }
   .n-chip.n-meet[data-state="struck"] .n-meet-cal {
     opacity: 0.4;
+  }
+
+  /*
+    An email chip (#135): the message's compact live card, built on the meeting card's parts (Badge,
+    label, note) with its sender before the subject, and no calendar colour.
+  */
+  .n-chip.n-mail {
+    padding-left: 8px;
+  }
+  .n-mail-from {
+    flex: none;
+    max-width: 14em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .n-mail-from::before {
+    content: attr(data-label);
+  }
+  .n-chip.n-mail[data-state="struck"] .n-mail-from {
+    color: var(--faint);
   }
 
   /* The picker (.acpop). */

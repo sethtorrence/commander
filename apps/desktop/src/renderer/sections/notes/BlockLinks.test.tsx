@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
-import type { BlockLinkTarget, Project } from '@commander/domain';
+import type { BlockLinkTarget, EmailDetail, Item, Project, SourceItem } from '@commander/domain';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { chipLabel } from '../../links/block-text';
-import { dayTargets, projectTargets } from '../../links/link-targets';
+import { dayTargets, emailTargets, projectTargets } from '../../links/link-targets';
 import { placeCaret } from './caret';
 import { dailyNotesIn } from './daily-notes';
 import { createNotebook, type Notebook } from './notebook';
@@ -40,7 +40,7 @@ afterEach(async () => {
   close();
 });
 
-function Outline({ open }: { open: (target: BlockLinkTarget) => void }) {
+function Outline({ open, emails = [] }: { open: (target: BlockLinkTarget) => void; emails?: Item[] }) {
   const day = notebook.snapshot().days[0];
   const controls: OutlineControls = {
     notebook,
@@ -49,8 +49,13 @@ function Outline({ open }: { open: (target: BlockLinkTarget) => void }) {
       if (element && caret) placeCaret(element, caret.offset);
     },
     links: {
-      providers: [dayTargets(today), projectTargets([longtail])],
-      label: (target) => chipLabel(target, { today, projectById: () => longtail }),
+      providers: [dayTargets(today), projectTargets([longtail]), emailTargets(emails, today)],
+      label: (target) =>
+        chipLabel(target, {
+          today,
+          projectById: () => longtail,
+          emailById: (id) => emails.find((email) => email.id === id),
+        }),
       open,
     },
   };
@@ -64,10 +69,10 @@ function Outline({ open }: { open: (target: BlockLinkTarget) => void }) {
 }
 
 // Shows the outline with one Block holding `text`, and returns its editable element.
-function showBlock(text: string, open = vi.fn()) {
+function showBlock(text: string, open = vi.fn(), emails: Item[] = []) {
   const { id } = notebook.begin(today, text);
-  const view = render(<Outline open={open} />);
-  const rerender = () => view.rerender(<Outline open={open} />);
+  const view = render(<Outline open={open} emails={emails} />);
+  const rerender = () => view.rerender(<Outline open={open} emails={emails} />);
   notebook.subscribe(() => act(rerender));
   const element = document.querySelector<HTMLElement>(`[data-block-id="${id}"]`);
   if (!element) throw new Error('No Block shown');
@@ -130,6 +135,61 @@ describe('the [[ picker', () => {
     await waitFor(() => expect(within(element).getByRole('link', { name: 'Longtail' })).toBeTruthy());
     await notebook.flush();
     expect(store.get(id)?.links).toMatchObject([{ to: { kind: 'project', id: longtail.id } }]);
+  });
+});
+
+// An email from Gmail, saved as a sync saves it. Returns its Item.
+function saveEmail(externalId: string, subject: string): Item {
+  const detail: EmailDetail = {
+    kind: 'email',
+    messageId: `<${externalId}@mail.test>`,
+    inReplyTo: null,
+    references: [],
+    threadKey: `mid:<${externalId}@mail.test>`,
+    sourceThreadId: null,
+    from: { name: 'Dana Whitfield', address: 'dana@northwind.test' },
+    to: [],
+    cc: [],
+    bcc: [],
+    replyTo: [],
+    subject,
+    sentAt: new Date(2026, 9, 1, 9, 5).getTime(),
+    snippet: '',
+    read: true,
+    starred: false,
+    inInbox: true,
+    sentByMe: false,
+    labels: [{ id: 'INBOX', name: 'Inbox' }],
+    attachments: [],
+    hasInvitation: false,
+    listUnsubscribe: null,
+    listId: null,
+  };
+  const item: SourceItem = { externalId, kind: 'email', title: subject, people: [], status: 'open', detail };
+  store.saveFromSource({ source: 'gmail', account: 'google:alex', items: [item], deleted: [] });
+  const saved = store.query({ kinds: ['email'], titleContains: subject })[0];
+  if (!saved) throw new Error('No email');
+  return saved;
+}
+
+describe('an email link', () => {
+  it('is found by the [[ picker by subject or sender, and shows as its live card, which opens it', async () => {
+    const budget = saveEmail('m-1', 'Q4 budget');
+    const { id, element, open } = showBlock('', vi.fn(), [budget]);
+
+    typeInto(element, 'Answer [[dana budget');
+    const picker = await screen.findByRole('listbox', { name: 'Link to' });
+    const group = within(picker).getByRole('group', { name: 'Emails' });
+    expect(within(group).getByRole('option').textContent).toBe('[[Q4 budgetDana Whitfield · 1 Oct');
+    fireEvent.keyDown(element, { key: 'Enter' });
+
+    await waitFor(() => expect(element.textContent).toBe(`Answer [[email:${budget.id}]]`));
+    const card = within(element).getByRole('link', { name: 'Email from Dana Whitfield: Q4 budget, 1 Oct' });
+    await notebook.flush();
+    expect(store.get(id)?.links).toMatchObject([{ type: 'refers-to', to: { kind: 'email', id: budget.id } }]);
+
+    fireEvent.click(card);
+    expect(open).toHaveBeenCalledWith({ type: 'email', emailId: budget.id });
   });
 });
 

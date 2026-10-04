@@ -171,6 +171,8 @@ function startCore(secrets: Secrets) {
         prepareUnsanitisedEmail: (html: string) => emailReader?.prepareUnsanitisedForTest(html) ?? null,
         saveEmailItems: (source: string, account: string, items: unknown[]) =>
           core.postMessage({ type: 'email-test-items', source, account, items }),
+        // Moves the Core's snooze clock on (#135), so snoozed mail comes back without waiting.
+        moveSnoozeClock: (offsetMs: number) => core.postMessage({ type: 'snooze-test-clock', offsetMs }),
       },
     });
   }

@@ -25,6 +25,7 @@ import { requestReveal, useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { itemChangesFromCore } from '../../item-store/changes';
 import { useMeetingPreps, usePrepActions } from '../../links/meeting-prep';
+import { useEmails } from '../../links/use-emails';
 import { useEvents } from '../../links/use-events';
 import { useDayMentions } from '../../links/use-mentions';
 import { useCommands } from '../../palette/commands';
@@ -80,6 +81,15 @@ function linkedEventIds(days: readonly DayState[]): string[] {
   for (const day of days)
     for (const block of day.outline.values())
       for (const { target } of blockLinksIn(block.text)) if (target.type === 'event') ids.add(target.eventId);
+  return [...ids];
+}
+
+// The emails the days on screen link to (`[[email:]]` links).
+function linkedEmailIds(days: readonly DayState[]): string[] {
+  const ids = new Set<string>();
+  for (const day of days)
+    for (const block of day.outline.values())
+      for (const { target } of blockLinksIn(block.text)) if (target.type === 'email') ids.add(target.emailId);
   return [...ids];
 }
 
@@ -446,7 +456,8 @@ function NotesSection() {
   useEffect(() => window.commander.onSaveBeforeQuit?.(() => notebook.flush()), [notebook]);
 
   // Following a `[[` chip: a day comes on screen (a day ahead too, blank) and is scrolled to; a
-  // Project opens its page; a meeting opens its event in the Calendar Section.
+  // Project opens its page; a meeting opens its event in the Calendar Section; an email opens its
+  // thread in the Email Section.
   const { openPage } = useProjects();
   const openSection = useOpenSection();
   const follow = useCallback(
@@ -455,6 +466,11 @@ function NotesSection() {
       if (target.type === 'event') {
         requestReveal('calendar', target.eventId);
         openSection('calendar');
+        return;
+      }
+      if (target.type === 'email') {
+        requestReveal('email', target.emailId);
+        openSection('email');
         return;
       }
       await notebook.showDay(target.day);
@@ -490,10 +506,16 @@ function NotesSection() {
     }),
     [preps, prepActions, events.byId, openSection],
   );
+  // The emails behind email links, read live, and those the `[[` picker offers.
+  const linkedEmails = useMemo(() => linkedEmailIds(state.days), [state.days]);
+  const emails = useEmails(window.commander.itemStore, linkedEmails, {
+    changes: itemChangesFromCore,
+    active,
+  });
   const links = useOutlineLinks(
     today,
     useCallback((target: BlockLinkTarget) => void follow(target), [follow]),
-    { events },
+    { events, emails },
   );
 
   // The caret goes where the Notebook says, once the Block is on screen.

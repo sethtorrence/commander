@@ -1,4 +1,11 @@
-import type { Filing, Person, Project, SearchHit, SearchResult } from '@commander/domain';
+import {
+  type Filing,
+  gmailSearchUrl,
+  type Person,
+  type Project,
+  type SearchHit,
+  type SearchResult,
+} from '@commander/domain';
 import { handleSourceName } from '../people/people';
 import { dateOf } from '../sections/notes/days';
 import { kindTag } from '../sections/todos/links';
@@ -14,6 +21,8 @@ import type { PaletteQuery } from './query';
   - search results grouped by kind, the group holding the best hit first
   - Commands
   - Search in Linear, last, when local results are thin and a Linear Account is connected
+  - Search in Gmail (#135), one row per email Account, when emails are among the results: Commander
+    keeps only the 30 days before an Account was connected and what came since
 
   Before anything is typed it offers Jump, Projects and Commands. Once chips narrow the search to
   Items (`/` in a Section), only results show.
@@ -53,6 +62,8 @@ export interface PaletteContext {
   projects: readonly Project[];
   commands: readonly Command[];
   linearAccounts: readonly { name: string; urlKey: string }[];
+  /** The email Accounts with Gmail on, for Gmail's own search. */
+  gmailAccounts?: readonly { email: string }[];
   /** Today, YYYY-MM-DD. */
   today: string;
 }
@@ -220,6 +231,19 @@ export function paletteGroups(context: PaletteContext): PaletteGroup[] {
           type: 'browser',
           url: `https://linear.app/${encodeURIComponent(account.urlKey)}/search?q=${encodeURIComponent(words)}`,
         },
+      })),
+    );
+  }
+  const emailInScope = !sectionChips.length || sectionChips.includes('email');
+  if (words && result?.hits.some((hit) => hit.item.kind === 'email') && emailInScope) {
+    add(
+      'Search in Gmail',
+      (context.gmailAccounts ?? []).map((account) => ({
+        key: `gmail-search:${account.email}`,
+        tag: 'Gmail',
+        label: `Search “${words}” in Gmail`,
+        hint: `${account.email} ↗`,
+        action: { type: 'browser', url: gmailSearchUrl(account.email, words) },
       })),
     );
   }

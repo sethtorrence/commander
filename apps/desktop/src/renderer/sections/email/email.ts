@@ -1,4 +1,16 @@
-import type { ActivityEntry, EmailThread, EmailThreadList, Item, ItemAction } from '@commander/domain';
+import type {
+  ActivityEntry,
+  EmailLabel,
+  EmailListView,
+  EmailSearchResult,
+  EmailThread,
+  EmailThreadList,
+  EmailViewCounts,
+  Item,
+  ItemAction,
+  MessageFields,
+  OutgoingChange,
+} from '@commander/domain';
 import type { AccountSummary, AccountsState, GoogleAccountSummary } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import { clockTime } from '../../settings/account-sync';
@@ -7,12 +19,27 @@ import { clockTime } from '../../settings/account-sync';
   The Email Section's view of the app: everything it reads from the Item store, or asks of the email
   Accounts, goes through here, so components never build requests themselves. Emails are Items, one
   per message; the Section shows them as threads. Filing a thread files each of its messages, as one
-  change the User can undo.
+  change the User can undo, and so does organising it (#135): archive, Trash, star, read, labels and
+  snooze are edits of each message's synced fields (ADR 0003), which the Core queues for Gmail.
 */
 
 export interface EmailClient {
-  /** The inbox as threads, newest first: every Account's, or one Account's. */
-  threads(query: { account?: string; limit?: number }): Promise<EmailThreadList>;
+  /** A view's threads (the inbox unless asked), newest first: every Account's, or one Account's. */
+  threads(query: { account?: string; view?: EmailListView; limit?: number }): Promise<EmailThreadList>;
+  /** Each view's threads and unread ones, with a view per label. */
+  views(account?: string): Promise<EmailViewCounts>;
+  /** The Section's search (`/`), with its operators, newest first. */
+  search(text: string, account?: string): Promise<EmailSearchResult>;
+  /** The labels the User can put on mail in an Account (or any). */
+  labels(account?: string): Promise<EmailLabel[]>;
+  /** Edits messages' synced fields, as one change. Returns its entries. */
+  edit(changes: readonly MessageFields[]): Promise<ActivityEntry[]>;
+  /** The changes still on their way to Gmail (or that couldn't sync) for these messages. */
+  outgoing(itemIds: readonly string[]): Promise<OutgoingChange[]>;
+  /** Sends a message's changes that couldn't sync again. */
+  retry(itemId: string): Promise<void>;
+  /** A message's activity log, newest first (for the note when a change made in Gmail won). */
+  history(itemId: string): Promise<ActivityEntry[]>;
   /** One thread's messages, oldest first, with their plain-text bodies. */
   thread(account: string, threadKey: string): Promise<EmailThread | null>;
   /** One email Item (to open the thread it is in). */
@@ -26,6 +53,22 @@ export interface EmailClient {
 export function emailIn(itemStore: ItemStoreClient): EmailClient {
   return {
     threads: (query) => itemStore({ op: 'email-threads', query }),
+    views: (account) => itemStore({ op: 'email-views', query: account ? { account } : {} }),
+    search: (text, account) =>
+      itemStore({ op: 'email-search', query: { text, ...(account ? { account } : {}) } }),
+    labels: (account) => itemStore({ op: 'email-labels', ...(account ? { account } : {}) }),
+    edit(changes) {
+      const actions = changes.map(
+        ({ itemId, fields }): ItemAction => ({ type: 'edit-fields', itemId, fields }),
+      );
+      return actions.length ? itemStore({ op: 'record-all', actions }) : Promise.resolve([]);
+    },
+    outgoing: (itemIds) =>
+      itemIds.length ? itemStore({ op: 'outgoing', query: { itemIds: [...itemIds] } }) : Promise.resolve([]),
+    async retry(itemId) {
+      await itemStore({ op: 'retry-outgoing', itemId });
+    },
+    history: (itemId) => itemStore({ op: 'activity', query: { itemId, limit: 20 } }),
     thread: (account, threadKey) => itemStore({ op: 'email-thread', account, threadKey }),
     async item(itemId) {
       return (await itemStore({ op: 'get', itemId }))?.item ?? null;

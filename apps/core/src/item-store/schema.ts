@@ -314,6 +314,12 @@ export const emailDetails = sqliteTable(
     unread: integer('unread', { mode: 'boolean' }).notNull(),
     inInbox: integer('in_inbox', { mode: 'boolean' }).notNull(),
     hasAttachments: integer('has_attachments', { mode: 'boolean' }).notNull(),
+    // In the Source's Trash (#135).
+    inTrash: integer('in_trash', { mode: 'boolean' }).notNull().default(false),
+    // Snoozed in Commander and waiting until then (#135); null when not snoozed or already back.
+    snoozedUntil: integer('snoozed_until'),
+    // Back from a snooze set for then: the thread sorts to the top of the inbox from that time.
+    returnedFrom: integer('returned_from'),
     // The rest of the detail, without `kind`.
     data: text('data', { mode: 'json' }).$type<Omit<EmailDetail, 'kind'>>().notNull(),
   },
@@ -321,6 +327,7 @@ export const emailDetails = sqliteTable(
     index('email_details_thread').on(t.threadKey),
     index('email_details_source_thread').on(t.sourceThreadId),
     index('email_details_sent_at').on(t.sentAt),
+    index('email_details_snoozed_until').on(t.snoozedUntil),
   ],
 );
 

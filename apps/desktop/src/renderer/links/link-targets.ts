@@ -1,10 +1,19 @@
-import { type BlockLinkTarget, clockOf, type Item, isEvent, localDay, type Project } from '@commander/domain';
+import {
+  addressName,
+  type BlockLinkTarget,
+  clockOf,
+  type EmailDetail,
+  type Item,
+  isEvent,
+  localDay,
+  type Project,
+} from '@commander/domain';
 import { addDays, dateOf, dayKey } from '../sections/notes/days';
 
 /*
   What the `[[` picker offers: the things a Block can link to, each from a provider: Daily Notes (days),
-  Projects and calendar events (#128); Linear issues, emails and PRs join as providers when their
-  Sources arrive, each turning what the User typed into candidates.
+  Projects, calendar events (#128) and emails (#135); Linear issues and PRs join as providers when
+  their Sources arrive, each turning what the User typed into candidates.
 */
 
 /** One thing the picker offers. */
@@ -205,6 +214,68 @@ export function eventTargets(events: readonly Item[], today: string): LinkTarget
         label: event.title,
         hint: `${dayName(event.detail.start.at)} ${event.detail.allDay ? '· All day' : clockOf(event.detail.start.at)}`,
       }));
+    },
+  };
+}
+
+// ---- emails ----
+
+/** An email Item (one message), narrowed to its detail. */
+export type EmailItem = Item & { detail: EmailDetail };
+export const isEmailItem = (item: Item | null | undefined): item is EmailItem =>
+  item?.kind === 'email' && item.detail?.kind === 'email';
+
+/** When an email came, briefly: "09:15" today, "3 Oct" this year, "12 Dec 2025" before. */
+export function emailDate(at: number, today: string): string {
+  const day = localDay(at);
+  if (day === today) return clockOf(at);
+  const date = dateOf(day);
+  const name = `${date.getDate()} ${cap(MONTHS[date.getMonth()] as string).slice(0, 3)}`;
+  return date.getFullYear() === dateOf(today).getFullYear() ? name : `${name} ${date.getFullYear()}`;
+}
+
+/** An email's subject as it reads in a list. */
+export const emailSubject = (detail: EmailDetail) => detail.subject.trim() || '(no subject)';
+
+/**
+ * Emails by subject and sender (name and address), every word typed matching one of them, newest
+ * first and one per thread (its newest matching message). Before anything is typed, the newest
+ * threads. Mail in Trash or gone from Commander isn't offered.
+ */
+export function emailTargets(emails: readonly Item[], today: string): LinkTargetProvider {
+  const live = emails
+    .filter(isEmailItem)
+    .filter((email) => email.deletedAt === null && !email.detail.inTrash)
+    .sort((a, b) => b.detail.sentAt - a.detail.sentAt);
+  const haystack = new Map(
+    live.map((email) => {
+      const { subject, from } = email.detail;
+      return [email.id, [subject, from?.name ?? '', from?.address ?? ''].join('\n').toLowerCase()];
+    }),
+  );
+  return {
+    id: 'emails',
+    label: 'Emails',
+    search(query) {
+      const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const threads = new Set<string>();
+      const found: LinkCandidate[] = [];
+      for (const email of live) {
+        const text = haystack.get(email.id) ?? '';
+        if (!words.every((word) => text.includes(word))) continue;
+        const thread = `${email.account}\n${email.detail.threadKey}`;
+        if (threads.has(thread)) continue;
+        threads.add(thread);
+        const sender = addressName(email.detail.from);
+        const date = emailDate(email.detail.sentAt, today);
+        found.push({
+          key: `email:${email.id}`,
+          target: { type: 'email', emailId: email.id },
+          label: emailSubject(email.detail),
+          hint: sender ? `${sender} · ${date}` : date,
+        });
+      }
+      return found;
     },
   };
 }

@@ -215,7 +215,9 @@ const plainLabel: LabelChip = (target) =>
     ? { text: target.day, title: target.day }
     : target.type === 'event'
       ? { text: 'A meeting', title: 'A calendar event' }
-      : { text: 'Project', title: 'A Project' };
+      : target.type === 'email'
+        ? { text: 'An email', title: 'An email' }
+        : { text: 'Project', title: 'A Project' };
 
 function spansHtml(spans: Span[], label: LabelChip): string {
   return spans
