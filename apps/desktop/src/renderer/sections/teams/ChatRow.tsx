@@ -52,7 +52,11 @@ export function Mark({ children, title, strong }: { children: string; title: str
   );
 }
 
-/** The Chat's Badge, with its Project's accent as the row's thin left bar. Clicking it opens the Badge picker, as `b` does. */
+/**
+ * The Chat's Badge, with its Project's accent as the row's thin left bar, or Ares's dashed Badge
+ * while his suggestion waits. Clicking it opens the Badge picker, as `b` does (with Confirm on top
+ * for his suggestion).
+ */
 function ChatBadge({ chat }: { chat: Chat }) {
   const pick = usePickBadge();
   const bar = useAccentBar(chat.filing);
@@ -73,14 +77,22 @@ function ChatBadge({ chat }: { chat: Chat }) {
           aria-label={`Project of ${chat.title}`}
           onClick={(event) => {
             event.stopPropagation();
-            pick({ id: chat.id, title: chat.title, filing: chat.filing }, event.currentTarget);
+            pick(
+              {
+                id: chat.id,
+                title: chat.title,
+                filing: chat.filing,
+                filingSuggestion: chat.filingSuggestion,
+              },
+              event.currentTarget,
+            );
           }}
           className="flex cursor-pointer border-0 bg-transparent p-0 hover:outline hover:outline-offset-1 hover:outline-ink focus-visible:outline focus-visible:outline-offset-1 focus-visible:outline-ink"
         >
-          <ItemBadge filing={chat.filing} />
+          <ItemBadge filing={chat.filing} suggestion={chat.filingSuggestion} />
         </button>
       ) : (
-        <ItemBadge filing={chat.filing} />
+        <ItemBadge filing={chat.filing} suggestion={chat.filingSuggestion} />
       )}
     </>
   );

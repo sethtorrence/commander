@@ -15,7 +15,7 @@ import {
 } from '@commander/domain';
 import type { AccountSummary, AccountsState, TeamsAccountSummary } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
-import { describeFiling } from '../../projects/projects';
+import { describeFiling, describeFilingAnswer } from '../../projects/projects';
 import { clockTime } from '../../settings/account-sync';
 import { SOURCE_NAMES, type TodoLink } from '../todos/todos';
 
@@ -244,6 +244,9 @@ export function describeChatEntry(
 ): string {
   const who = entry.by.kind === 'rule' && entry.why ? `by ${entry.why}` : byWhom(entry.by);
   if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
+  // The User's answer to Ares's filing (#108).
+  if (entry.action === 'correction' || entry.action === 'confirmation')
+    return describeFilingAnswer(entry, projects);
   if (entry.action === 'create' && entry.by.kind === 'source')
     return `Added from ${SOURCE_NAMES[entry.by.source]}`;
   if (entry.action === 'update' && entry.by.kind === 'source') {

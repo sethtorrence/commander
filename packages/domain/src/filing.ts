@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { source } from './items';
 import { RULE_FIELDS, type RuleDraft } from './rules';
 import type { QueuedAbout } from './updates';
 
@@ -15,8 +16,20 @@ export const FILE_INTO_PROJECTS = 'file-into-projects';
 export const RULE_SUGGESTION_AT = 5;
 
 // The Source fields a Rule suggestion can be about: groupings an Item belongs to, most specific
-// first. When two point at the same Items, the more specific one is offered.
-export const RULE_SUGGESTION_FIELDS = ['linear.team', 'linear.project', 'linear.label', 'linear.workspace'];
+// first. When two point at the same Items, the more specific one is offered. For Chats, the people
+// in them (#108): a Chat is one Item, so "this Chat" never counts five, and a whole Teams Account is
+// rarely one Project.
+export const RULE_SUGGESTION_FIELDS = [
+  'linear.team',
+  'linear.project',
+  'linear.label',
+  'linear.workspace',
+  'teams.person',
+];
+
+/** The Section a Rule suggestion about this field belongs to, for the Update. */
+export const ruleSuggestionSection = (field: string): 'linear' | 'teams' =>
+  field.startsWith('teams.') ? 'teams' : 'linear';
 
 // One of the User's answers to Ares's filing: the Item, his suggestion, and the User's choice (null:
 // Unfiled).
@@ -31,17 +44,24 @@ export const filingFeedback = z.object({
 export type FilingFeedback = z.infer<typeof filingFeedback>;
 
 // Ares's filing record, for his activity page: how many Items he filed on his own, how many he
-// suggested (the dashed Badge), and how many of them the User confirmed or corrected.
-export const filingRecord = z.object({
+// suggested (the dashed Badge), and how many of them the User confirmed or corrected; in all, and
+// by the Items' Source (#108: his filing on Teams, read on its own), in the Sources' order. Items
+// made in Commander have no Source (null).
+const counts = z.object({
   filed: z.number().int().nonnegative(),
   suggested: z.number().int().nonnegative(),
   confirmed: z.number().int().nonnegative(),
   corrected: z.number().int().nonnegative(),
 });
+export type FilingCounts = z.infer<typeof counts>;
+
+export const filingRecord = counts.extend({
+  bySource: z.array(counts.extend({ source: source.nullable() })),
+});
 export type FilingRecord = z.infer<typeof filingRecord>;
 
 /** Of the filings the User answered, the share they kept: null before any answer. */
-export function filingAccuracy({ confirmed, corrected }: FilingRecord): number | null {
+export function filingAccuracy({ confirmed, corrected }: FilingCounts): number | null {
   const answered = confirmed + corrected;
   return answered ? confirmed / answered : null;
 }
@@ -60,6 +80,7 @@ export function ruleSuggestionDraft(
 
 /** The question in the Update: "Always file Linear team OPS under TX?". */
 export function ruleSuggestionQuestion(about: Pick<RuleSuggestion, 'field' | 'label' | 'code'>): string {
+  if (about.field === 'teams.person') return `Always file Chats with ${about.label} under ${about.code}?`;
   const name = RULE_FIELDS.get(about.field)?.name ?? about.field;
   const source = about.field.split('.')[0] === 'linear' && !name.startsWith('Linear') ? 'Linear ' : '';
   return `Always file ${source}${name} ${about.label} under ${about.code}?`;
@@ -71,6 +92,7 @@ const COUNTED: Record<string, (label: string) => string> = {
   'linear.project': (label) => `in Linear project ${label}`,
   'linear.label': (label) => `labelled ${label}`,
   'linear.workspace': (label) => `from workspace ${label}`,
+  'teams.person': (label) => `with ${label}`,
 };
 
 /** The Update's plain sentence: "You filed 5 Linear issues from team OPS under TX. Always file …?" */
@@ -78,6 +100,10 @@ export function ruleSuggestionText(
   about: Pick<RuleSuggestion, 'field' | 'label' | 'code' | 'count'>,
 ): string {
   const counted = COUNTED[about.field]?.(about.label) ?? `with ${about.label}`;
-  const items = about.field.startsWith('linear.') ? 'Linear issues' : 'items';
+  const items = about.field.startsWith('linear.')
+    ? 'Linear issues'
+    : about.field.startsWith('teams.')
+      ? 'Chats'
+      : 'items';
   return `You filed ${about.count} ${items} ${counted} under ${about.code}. ${ruleSuggestionQuestion(about)}`;
 }

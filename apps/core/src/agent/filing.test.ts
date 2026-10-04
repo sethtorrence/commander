@@ -63,6 +63,37 @@ function issue(title: string): string {
   }).created[0] as string;
 }
 
+// A Teams Chat, as Teams sync saves it.
+function chat(title: string): string {
+  const id = `19:chat-${next++}`;
+  return store.saveFromSource({
+    source: 'teams',
+    account: 'teams:tenant-1:u-sam',
+    items: [
+      {
+        externalId: id,
+        kind: 'chat',
+        title,
+        detail: {
+          kind: 'chat',
+          chatType: 'group',
+          topic: title,
+          webUrl: null,
+          members: [],
+          lastReadAt: null,
+          hidden: false,
+          joinUrl: null,
+          messages: [],
+          unreadCount: 0,
+          mentionsMe: false,
+          latestFromMe: false,
+          lastMessageAt: null,
+        },
+      },
+    ],
+  }).created[0] as string;
+}
+
 // Ares's filing of an Item into a Project: confident (done at Auto when sure) or not (a suggestion).
 function aresFiles(itemId: string, project: Project, confidence: number) {
   return gate.propose({
@@ -254,6 +285,30 @@ describe('answering Ares’s filing', () => {
       user,
     );
 
-    expect(filing.record()).toEqual({ filed: 2, suggested: 2, confirmed: 1, corrected: 2 });
+    expect(filing.record()).toMatchObject({ filed: 2, suggested: 2, confirmed: 1, corrected: 2 });
+  });
+
+  it('breaks his record down by Source, so his filing on Teams can be read on its own', () => {
+    const a = issue('A');
+    const b = issue('B');
+    aresFiles(a, tl, 0.95);
+    filing.settle(suggestionOn(b), tx.id);
+    const relay = chat('Relay rollout');
+    const lunch = chat('Lunch');
+    const pager = chat('Pager');
+    aresFiles(relay, tl, 0.95);
+    filing.settle(suggestionOn(lunch), null);
+    filing.settle(suggestionOn(pager), tl.id);
+
+    expect(filing.record()).toEqual({
+      filed: 2,
+      suggested: 3,
+      confirmed: 1,
+      corrected: 2,
+      bySource: [
+        { source: 'teams', filed: 1, suggested: 2, confirmed: 0, corrected: 2 },
+        { source: 'linear', filed: 1, suggested: 1, confirmed: 1, corrected: 0 },
+      ],
+    });
   });
 });

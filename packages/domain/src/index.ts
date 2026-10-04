@@ -37,5 +37,6 @@ export * from './source-catalog';
 export * from './sync-messages';
 export * from './synced-fields';
 export * from './teams';
+export * from './teams-rules';
 export * from './updates';
 export * from './updates-messages';

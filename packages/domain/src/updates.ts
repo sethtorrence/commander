@@ -21,7 +21,7 @@ export const UPDATE_GROUP_NAMES: Record<UpdateGroup, string> = {
 };
 
 // Where a queued line's Items live, for folding the smaller things by Section after time away.
-export const updateSections = [...autonomySections, 'teams', 'ares'] as const;
+export const updateSections = [...autonomySections, 'ares'] as const;
 export const updateSection = z.enum(updateSections);
 export type UpdateSection = z.infer<typeof updateSection>;
 

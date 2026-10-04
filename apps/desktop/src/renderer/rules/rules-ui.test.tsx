@@ -9,6 +9,7 @@ import { openTestItemStore } from '../item-store/test-item-store';
 import { ProjectsProvider } from '../projects/context';
 import { projectsIn } from '../projects/projects';
 import { ACME, issue, OPS } from '../sections/linear/test-issues';
+import { chat, TEAMS } from '../sections/teams/test-chats';
 import { ShortcutProvider } from '../shortcuts/react';
 import { RulesSettings } from './RulesSettings';
 
@@ -125,6 +126,49 @@ describe('Settings → Rules', () => {
     const toast = (await screen.findByText('Re-filed 1 item')).closest('li') as HTMLElement;
     fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(filingOf('Fix the login loop')).toBeNull());
+  });
+
+  it('offers Teams fields with values from synced Chats, and re-files the Chats a new Rule matches', async () => {
+    const SAM = { userId: 'u-sam', name: 'Sam Rivera', email: 'sam@contoso.test' };
+    const OMAR = { userId: 'u-omar', name: 'Omar Haddad', email: 'omar@titanlink.io' };
+    const PRIYA = { userId: 'u-priya', name: 'Priya Patel', email: 'priya@contoso.test' };
+    store.saveFromSource({
+      source: 'teams',
+      account: TEAMS,
+      items: [
+        chat({ id: '19:tl-eng', title: 'TL eng', chatType: 'group', members: [SAM, OMAR, PRIYA] }),
+        chat({ id: '19:priya', title: 'Priya Patel', members: [SAM, PRIYA] }),
+      ],
+    });
+    renderSettings();
+    const dialog = await openEditor();
+
+    await choose(dialog, 'Files into', 'TL · Titanlink');
+    const field = within(dialog).getByRole('combobox', { name: 'Field 1' });
+    expect(within(field).getByRole('group', { name: 'Teams' })).toBeTruthy();
+    fireEvent.change(field, { target: { value: 'teams.person' } });
+    // The people in synced Chats, never the User themself.
+    const value = within(dialog).getByRole('combobox', { name: 'Value 1' });
+    await within(value).findByRole('option', { name: 'Omar Haddad' });
+    expect(
+      within(value)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Choose…', 'Omar Haddad', 'Priya Patel']);
+    await choose(dialog, 'Value 1', 'Omar Haddad');
+    const matching = within(dialog).getByRole('region', { name: 'Matching Items' });
+    expect(await within(matching).findByText('Matches 1 Item')).toBeTruthy();
+    expect(within(matching).getByText('TL eng')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save Rule' }));
+
+    const offer = await screen.findByRole('dialog', { name: 'Re-file existing items' });
+    expect(
+      within(within(offer).getByRole('list', { name: 'Re-file preview' })).getByText('TL eng'),
+    ).toBeTruthy();
+    expect(ruleRows()).toEqual([expect.stringContaining('person in Chat is Omar Haddad')]);
+    fireEvent.click(within(offer).getByRole('button', { name: 'Re-file 1 item' }));
+    await waitFor(() => expect(filingOf('TL eng')).toEqual({ projectId: tl.id, filedBy: 'rule' }));
+    expect(store.query({ kinds: ['chat'], titleContains: 'Priya' })[0]?.filing).toBeNull();
   });
 
   it('builds AND, OR and a group of conditions', async () => {
