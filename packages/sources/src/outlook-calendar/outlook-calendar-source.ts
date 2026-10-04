@@ -54,6 +54,7 @@ import {
   toEventItem,
   toListedCalendar,
 } from './shapes';
+import { zonedInstant } from './time-zones';
 
 // Outlook Calendar as a Source: the events on each calendar of an Outlook Account the User has on,
 // through Microsoft Graph v1.0 over fetch (decisions #3, #17, #20, #30). Change notifications need a
@@ -489,14 +490,23 @@ async function createEvent(
   memory: { get(): KnownCalendars | undefined; set(known: KnownCalendars | null): void },
 ): Promise<{ event: GraphEvent; calendar: EventCalendar; me: string | null }> {
   const tag = commanderEventTag(draft.kind, draft.commanderId);
+  // A meeting (#132) is an ordinary event with its guests (Outlook sends their invitations) and the
+  // User's own reminder; focus blocks and busy copies are private and quiet.
+  const meeting = draft.kind === 'meeting';
   const body = {
     subject: draft.title,
     start: graphTime(draft.start, draft.allDay),
     end: graphTime(draft.end, draft.allDay),
     isAllDay: draft.allDay,
     showAs: 'busy',
-    sensitivity: 'private',
-    isReminderOn: false,
+    ...(meeting
+      ? {
+          attendees: (draft.attendees ?? []).map((guest) => ({
+            emailAddress: { address: guest.email, ...(guest.name ? { name: guest.name } : {}) },
+            type: 'required',
+          })),
+        }
+      : { sensitivity: 'private', isReminderOn: false }),
     transactionId: tag,
     singleValueExtendedProperties: [{ id: COMMANDER_EVENT_PROPERTY, value: tag }],
   };
@@ -521,12 +531,30 @@ async function createEvent(
     if (fresh) {
       throw new WriteRejected(
         draft.calendarId
-          ? 'Outlook no longer has the calendar this busy copy goes on.'
+          ? `Outlook no longer has the calendar this ${meeting ? 'event' : 'busy copy'} goes on.`
           : 'Outlook wouldn’t let Commander use its Commander calendar.',
       );
     }
   }
 }
+
+// What getSchedule answers: each guest's busy times, or why Graph couldn't say. Busy, tentative and
+// away (out of office) hold their time; free and working elsewhere don't.
+const graphWhen = z.object({ dateTime: z.string(), timeZone: z.string().nullish() });
+const scheduleAnswer = z.object({
+  value: z
+    .array(
+      z.object({
+        scheduleId: z.string(),
+        scheduleItems: z
+          .array(z.object({ status: z.string().nullish(), start: graphWhen, end: graphWhen }))
+          .nullish(),
+        error: z.object({ message: z.string().nullish(), responseCode: z.string().nullish() }).nullish(),
+      }),
+    )
+    .default([]),
+});
+const BUSY_STATUSES = new Set(['busy', 'tentative', 'oof']);
 
 export function createOutlookCalendarSource({
   graphUrl,
@@ -551,6 +579,53 @@ export function createOutlookCalendarSource({
   return {
     source: 'outlook-calendar',
     cadence: OUTLOOK_CALENDAR_CADENCE,
+
+    // Guests' free/busy (#132): Graph's getSchedule, which only work and school accounts have, for
+    // people in the User's organisation. A refusal, or a guest Graph can't find, is said per guest.
+    async freeBusy(request) {
+      const api = connect(graphUrl(), fetch, now, gateOf(request.account), request, request.signal);
+      const utc = (at: number) => ({ dateTime: new Date(at).toISOString().slice(0, 19), timeZone: 'UTC' });
+      let answer: z.infer<typeof scheduleAnswer>;
+      try {
+        answer = await api.send(
+          'POST',
+          '/me/calendar/getSchedule',
+          {
+            schedules: request.emails,
+            startTime: utc(request.from),
+            endTime: utc(request.to),
+            availabilityViewInterval: 30,
+          },
+          scheduleAnswer,
+        );
+      } catch (error) {
+        if (request.signal.aborted) throw error;
+        const problem = 'Microsoft wouldn’t share free/busy.';
+        return { calendars: request.emails.map((email) => ({ email, busy: null, problem })), cost: api.cost };
+      }
+      const byEmail = new Map(answer.value.map((each) => [each.scheduleId.toLowerCase(), each]));
+      return {
+        calendars: request.emails.map((email) => {
+          const schedule = byEmail.get(email.toLowerCase());
+          if (!schedule || schedule.error) {
+            const problem = schedule?.error?.message?.trim() || 'Microsoft couldn’t say.';
+            return { email, busy: null, problem };
+          }
+          const busy = (schedule.scheduleItems ?? [])
+            .filter((item) => BUSY_STATUSES.has(item.status ?? 'busy'))
+            .map((item) => ({
+              start: zonedInstant(item.start.dateTime, item.start.timeZone),
+              end: zonedInstant(item.end.dateTime, item.end.timeZone),
+            }))
+            .filter(
+              (each) => Number.isFinite(each.start) && Number.isFinite(each.end) && each.end > each.start,
+            )
+            .sort((a, b) => a.start - b.start);
+          return { email, busy, problem: null };
+        }),
+        cost: api.cost,
+      };
+    },
 
     async write(request) {
       const { account } = request;

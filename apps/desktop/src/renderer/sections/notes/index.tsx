@@ -34,6 +34,8 @@ import { SectionProjectFilter } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import type { ProjectFilter } from '../../projects/filter';
 import { useShortcuts } from '../../shortcuts/react';
+import { useMeetingProposals } from '../calendar/meetings';
+import { useScheduling } from '../calendar/use-scheduling';
 import { useSendToLinear } from '../linear/SendToLinear';
 import { type SectionDefinition, useHeaderSlot, useOpenSection, useSection } from '../section';
 import { sectionFor } from '../todos/links';
@@ -43,6 +45,7 @@ import { effectiveFilings, filterView, noteCounts } from './block-projects';
 import { type DayMargin, type DayProjects, DaySheet } from './DaySheet';
 import { dailyNotesIn } from './daily-notes';
 import { dateOf, dayKey, longDate, notePartNumber, weekday, weekOf } from './days';
+import { MeetingMarginCard } from './MeetingMarginCard';
 import { type ChipPrep, ChipPrepContext } from './MeetingPrep';
 import { useMarginSuggestions } from './margin-suggestions';
 import { createNotebook, type DayState, type Notebook, type NotebookSnapshot } from './notebook';
@@ -442,15 +445,37 @@ function NotesSection() {
       }),
     [notebook],
   );
+  // And the meetings he proposes for them (#132), with what their cards need of the User's calendars.
+  const meetings = useMeetingProposals(window.commander.autonomy, onAresActivity, active);
+  const scheduling = useScheduling(window.commander.itemStore, active);
   const marginOf = useCallback(
-    (outline: Outline): DayMargin | undefined => {
-      const ordered = [...visibleBlocks(outline).map(({ block }) => block.id), ...outline.keys()];
-      const suggestions = [...new Set(ordered)].flatMap((id) => margin.byBlock.get(id) ?? []);
-      return suggestions.length
-        ? { suggestions, onAdd: (id) => void margin.add(id), onDismiss: (id) => void margin.dismiss(id) }
+    (outline: Outline, day: string): DayMargin | undefined => {
+      const ordered = [
+        ...new Set([...visibleBlocks(outline).map(({ block }) => block.id), ...outline.keys()]),
+      ];
+      const suggestions = ordered.flatMap((id) => margin.byBlock.get(id) ?? []);
+      const proposed = ordered.flatMap((id) => meetings.byBlock.get(id) ?? []);
+      return suggestions.length || proposed.length
+        ? {
+            suggestions,
+            onAdd: (id) => void margin.add(id),
+            onDismiss: (id) => void margin.dismiss(id),
+            meetings: proposed,
+            renderMeeting: (proposal) => (
+              <MeetingMarginCard
+                key={`meeting-${proposal.id}`}
+                day={day}
+                proposal={proposal}
+                scheduling={scheduling}
+                itemStore={window.commander.itemStore}
+                onCreate={(chosen, draft) => void meetings.create(chosen, draft)}
+                onDismiss={(id) => void meetings.dismiss(id)}
+              />
+            ),
+          }
         : undefined;
     },
-    [margin],
+    [margin, meetings, scheduling],
   );
   // Typing held back for a pause is saved before Commander quits.
   useEffect(() => window.commander.onSaveBeforeQuit?.(() => notebook.flush()), [notebook]);
@@ -663,7 +688,7 @@ function NotesSection() {
                   label={links.label}
                   meetings={meetingsIn(day, events.byId)}
                   onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
-                  margin={marginOf(day.outline)}
+                  margin={marginOf(day.outline, day.day)}
                 />
               ))}
               <StreamEnd notebook={notebook} state={state} />

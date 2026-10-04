@@ -59,7 +59,7 @@ function answerWindow(gate: Gate, raw: unknown, jobs?: JobsForWindow, filing?: F
       case 'activity':
         return gate.activity(request.query);
       case 'accept':
-        return gate.accept(request.proposalId);
+        return gate.accept(request.proposalId, request.changes);
       case 'dismiss':
         return gate.dismiss(request.proposalId);
       case 'accept-all':

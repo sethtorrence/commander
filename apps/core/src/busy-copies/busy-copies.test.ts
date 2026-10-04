@@ -196,6 +196,12 @@ describe('with a pair switched on', () => {
     expect(liveCopies().map((copy) => copy.eventId)).toEqual([idOf(`${ALEX}/soon`)]);
   });
 
+  it('copies a meeting the User set up through Commander (#132), as it holds their time', () => {
+    personal([event('call', 'Call with Leo', NOW + DAY, { createdByCommander: 'meeting' })]);
+    switchOn();
+    expect(liveCopies().map((copy) => copy.eventId)).toEqual([idOf(`${ALEX}/call`)]);
+  });
+
   it('never copies a copy back, nor Commander’s own focus blocks', () => {
     personal([
       event('dentist', 'Dentist', NOW + DAY),

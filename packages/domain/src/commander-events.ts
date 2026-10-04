@@ -8,6 +8,11 @@ import { filing } from './items';
   events on an Account's main calendar. Both are busy and private, with no description, guests or
   reminders; a busy copy is titled "Busy" and carries nothing of the event it copies.
 
+  Meetings (#132) are the third: an event with guests (or time the User holds for themself) made from
+  Ares's proposal or Find time, on the calendar chosen (Settings → Calendar → New events go in, or the
+  card). They are ordinary events: busy, not private, with the calendar's own reminders, and the
+  Source sends the guests their invitations (Google with `sendUpdates=all`; Microsoft by itself).
+
   They take ADR 0003's path: the Item store makes the event's Item at once and queues its creation as the
   outgoing change `create` in the same transaction, so undo, offline and Couldn't sync behave as for any
   other write. The Item's id is Commander's id for the event, from which the Google event id and the
@@ -20,6 +25,17 @@ import { filing } from './items';
 */
 
 const id = z.string().min(1);
+
+// A guest of a meeting Commander makes: their address, and the name to show while it waits to sync.
+export const meetingGuest = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[^\s@]+@[^\s@]+$/, 'A guest needs an email address'),
+  name: z.string().trim().max(200).nullable().default(null),
+});
+export type MeetingGuest = z.infer<typeof meetingGuest>;
 
 // The calendar Commander makes for focus blocks, found again by this name after a re-sync.
 export const COMMANDER_CALENDAR_NAME = 'Commander';
@@ -49,8 +65,10 @@ export const commanderEventCreate = z.object({
   start: eventTime,
   end: eventTime,
   allDay: z.boolean(),
+  // A meeting's guests, invited by the Source when it makes the event.
+  attendees: z.array(meetingGuest).max(100).default([]),
 });
-export type CommanderEventCreate = z.infer<typeof commanderEventCreate>;
+export type CommanderEventCreate = z.input<typeof commanderEventCreate>;
 
 // The `time` change's value.
 export const commanderEventMove = z.object({ start: eventTime, end: eventTime, allDay: z.boolean() });
@@ -69,5 +87,11 @@ export const commanderEventDraft = z.object({
   filing: filing.optional(),
   // A busy copy: the event it copies.
   copyOf: id.optional(),
+  // A meeting: the calendar it goes on (the Account's main calendar when left out), and its guests.
+  calendarId: id.optional(),
+  attendees: z.array(meetingGuest).max(100).default([]),
+  // A meeting Ares proposed: the names he couldn't find an address for, shown on the card as blank
+  // guests for the User to fill in. Never sent anywhere.
+  guestsToFill: z.array(z.string().trim().min(1).max(200)).max(20).default([]),
 });
 export type CommanderEventDraft = z.input<typeof commanderEventDraft>;

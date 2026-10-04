@@ -17,6 +17,7 @@ import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
 import { ProjectPageTab } from '../projects/page/ProjectPageTab';
 import { type ProjectsClient, projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
+import { FindTimeHost } from '../sections/calendar/FindTime';
 import { DashboardProvider, useDashboard } from '../sections/dashboard/context';
 import { type DashboardClient, dashboardAccountsIn, dashboardIn } from '../sections/dashboard/dashboard';
 import { FrameControlsProvider, HeaderSlotProvider, SectionProvider } from '../sections/section';
@@ -317,6 +318,7 @@ export function Frame() {
         </section>
       </main>
       <CheatSheet open={cheatSheet} onOpenChange={setCheatSheet} />
+      <FindTimeHost />
       <PaletteHost
         current={open}
         onOpenSection={openSection}

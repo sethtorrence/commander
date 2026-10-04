@@ -33,6 +33,7 @@ import {
 import { type CalendarSettingsClient, useSecondTimeZone } from './calendar-settings';
 import { EventDetail } from './EventDetail';
 import { CalendarSwatch, EventRow } from './EventRow';
+import { requestFindTime } from './FindTime';
 import { FocusSuggestionBlocks, FocusSuggestionRows, FocusTimePanel } from './FocusTime';
 import { useFocusTime, withSuggestionDays } from './focus-time';
 import { ANSWER_KEYS, InvitationPanel, RowAnswer, SuggestedReplyCard } from './InvitationAnswer';
@@ -315,6 +316,11 @@ export function CalendarSheet({
         aside={
           <div className="flex max-w-[680px] flex-wrap items-end justify-end gap-x-5 gap-y-3">
             <ViewSwitch view={view} onView={state.setView} />
+            {state.accounts.length > 0 && (
+              <Button onClick={requestFindTime} title="Find a time free for you and your guests">
+                Find time
+              </Button>
+            )}
             {state.accounts.length > 0 && (
               <ButtonGroup>
                 {state.accounts.map((account) => {

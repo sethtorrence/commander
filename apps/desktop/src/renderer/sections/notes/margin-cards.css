@@ -109,6 +109,17 @@
     background: var(--raise);
     color: var(--ink);
   }
+  /* A proposed meeting's card (#132): four actions, two to a row. */
+  .n-ac-meeting .n-ac-dismiss:nth-child(odd) {
+    border-left: 0;
+  }
+  .n-ac-meeting button:nth-child(n + 3) {
+    border-top: 1px solid var(--line2);
+  }
+  .n-ac-meeting button:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
   /* The Block a card is for, while the card is pointed at. */
   [data-ares-mark] {
     background: var(--signal-focus);

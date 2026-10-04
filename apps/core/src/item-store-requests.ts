@@ -130,6 +130,15 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.focusSettings.read() };
       case 'save-focus-settings':
         return { ok: true, result: store.focusSettings.save(request.settings) };
+      case 'scheduling-settings':
+        return { ok: true, result: store.schedulingSettings.read() };
+      case 'save-scheduling-settings':
+        return { ok: true, result: store.schedulingSettings.save(request.settings) };
+      case 'create-meeting':
+        return { ok: true, result: store.createEvent(request.draft, { by: { kind: 'user' } }) };
+      case 'find-time':
+        // Answered by the scheduler (../scheduling), which asks the providers first.
+        return { ok: false, error: 'Find time isn’t running' };
       case 'set-calendar-enabled':
         return {
           ok: true,
@@ -182,6 +191,7 @@ const CHANGES = new Set([
   'record',
   'record-all',
   'send-to-linear',
+  'create-meeting',
   'change-chat-setting',
   'clear-chat-waiting',
   'refile',

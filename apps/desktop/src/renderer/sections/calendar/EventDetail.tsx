@@ -27,7 +27,11 @@ const none = <span className="font-medium text-faint">—</span>;
 
 const personName = (person: EventPerson) => person.name ?? person.email;
 
-const COMMANDER_KINDS = { 'focus-block': 'Focus block', 'busy-block': 'Busy block' } as const;
+const COMMANDER_KINDS = {
+  'focus-block': 'Focus block',
+  'busy-block': 'Busy block',
+  meeting: 'Meeting',
+} as const;
 
 /** A link out of Commander, opened in the system browser through the window's new-window handler. */
 function OutLink({ href, className, children }: { href: string; className?: string; children: ReactNode }) {

@@ -27,6 +27,8 @@ function row(start: number, extra: Partial<AresActivity> = {}): AresActivity {
           start: { at: start, timeZone: 'Europe/London', date: null },
           end: { at: start + 2 * HOUR, timeZone: 'Europe/London', date: null },
           allDay: false,
+          attendees: [],
+          guestsToFill: [],
         },
       },
       { type: 'link', from: { step: 0 }, linkType: 'made-from', to: `todo-${next}` },

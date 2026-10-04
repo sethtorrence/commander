@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { dayOfYear, isoWeek } from '../../frame/calendar';
 import type { LabelChip } from '../../links/block-text';
 import { MentionedIn } from '../../links/MentionedIn';
+import type { MeetingProposal } from '../calendar/meetings';
 import { dateOf, dayLabel, longDate, notePartNumber, weekday } from './days';
 import { MarginCards } from './MarginCards';
 import type { MarginSuggestion } from './margin-suggestions';
@@ -159,6 +160,9 @@ export interface DayMargin {
   suggestions: readonly MarginSuggestion[];
   onAdd(id: number): void;
   onDismiss(id: number): void;
+  /** Ares's proposed meetings for its Blocks (#132), and how their cards are drawn. */
+  meetings?: readonly MeetingProposal[];
+  renderMeeting?(proposal: MeetingProposal): ReactNode;
 }
 
 export interface DayProjects {
@@ -272,6 +276,8 @@ export function DaySheet({
             suggestions={margin.suggestions}
             onAdd={margin.onAdd}
             onDismiss={margin.onDismiss}
+            meetings={margin.meetings}
+            renderMeeting={margin.renderMeeting}
           />
         )}
       </div>

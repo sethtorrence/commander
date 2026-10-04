@@ -136,6 +136,10 @@ export type AgentJob<Input extends JobInput = JobInput, Output = unknown> = {
     hint?: string;
     name?: string;
   };
+  // Further actions its proposals may name (`as`), registered with the gate alongside its own: Propose
+  // events proposes time held for the User alone as Tidy your Sources beside its Act for you meetings.
+  // The job runs while any of its actions is above Off.
+  alsoActions?: AgentJob['action'][];
   triggers: JobTriggers;
   // What this run should look at, or null (or no items) when there is nothing to do: no call then.
   gather(context: GatherContext): Input | null;
@@ -286,8 +290,9 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
 
   // Every start: the gate knows each action, so the Settings grid can list it.
   for (const job of jobs.values()) {
-    const { action, actionKind, hint, name } = job.action;
-    gate.registerAction({ action, actionKind, name: name ?? job.name, ...(hint && { hint }) });
+    for (const { action, actionKind, hint, name } of [job.action, ...(job.alsoActions ?? [])]) {
+      gate.registerAction({ action, actionKind, name: name ?? job.name, ...(hint && { hint }) });
+    }
   }
 
   // Jobs waiting to run, each with every trigger since it was queued, in the order they were queued.
@@ -359,10 +364,12 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
     }
   }
 
-  // Whether the User's Autonomy settings have the job's action Off.
+  // Whether the User's Autonomy settings have the job's action Off (every one of them, for a job with more).
   function isOff(job: AgentJob): boolean {
-    const { action, actionKind, section } = job.action;
-    return decide({ action, actionKind, section, confidence: 1, chained: false }, gate.settings()) === 'off';
+    return [job.action, ...(job.alsoActions ?? [])].every(
+      ({ action, actionKind, section }) =>
+        decide({ action, actionKind, section, confidence: 1, chained: false }, gate.settings()) === 'off',
+    );
   }
 
   // `counts`: whether the failure adds to the wait. No key (nothing was sent) and the cap (expected

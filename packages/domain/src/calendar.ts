@@ -47,10 +47,15 @@ export const eventAttendee = eventPerson.extend({
 });
 export type EventAttendee = z.infer<typeof eventAttendee>;
 
-// Events Commander itself put in a calendar (later tickets): focus blocks and mirrored busy blocks.
-export const commanderEventKinds = ['focus-block', 'busy-block'] as const;
+// Events Commander itself put in a calendar: focus blocks and busy copies (#131), and meetings with
+// guests the User made from Ares's proposal or Find time (#132), which are ordinary meetings once made.
+export const commanderEventKinds = ['focus-block', 'busy-block', 'meeting'] as const;
 export const commanderEventKind = z.enum(commanderEventKinds);
 export type CommanderEventKind = z.infer<typeof commanderEventKind>;
+
+/** Whether an event is one of Commander's own holds (a focus block or a busy copy), not a meeting. */
+export const isCommanderHold = (detail: { createdByCommander: CommanderEventKind | null }) =>
+  detail.createdByCommander === 'focus-block' || detail.createdByCommander === 'busy-block';
 
 // The calendar an event is on, as its Account lists it.
 export const eventCalendar = z.object({

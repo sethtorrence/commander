@@ -8,6 +8,7 @@ import {
   calendarSummary,
   eventQuery,
 } from './calendar';
+import { commanderEventDraft } from './commander-events';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import type { EmailLabel } from './email';
 import {
@@ -80,6 +81,13 @@ import {
   rulePreview,
   rulePreviewRequest,
 } from './rules';
+import {
+  type FindTimeResult,
+  findTimeRequest,
+  findTimeResult,
+  type SchedulingSettings,
+  schedulingSettings,
+} from './scheduling';
 import { type SearchResult, searchQuery, searchResult } from './search';
 import { type ChatSetting, chatSetting, chatSettingAction } from './teams';
 
@@ -202,6 +210,17 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // pairs of Block time across Accounts.
   z.object({ op: z.literal('focus-settings') }),
   z.object({ op: z.literal('save-focus-settings'), settings: focusSettings }),
+  // Ares's scheduler (#132): Settings → Calendar's new events calendar and booking link; Find time (the
+  // User's free time across every Account, narrowed by guests' free/busy where a provider allows, up to
+  // 5 slots, answered once the providers have); and making a meeting the User set up there (as the User,
+  // through the outgoing queue like every event Commander makes).
+  z.object({ op: z.literal('scheduling-settings') }),
+  z.object({ op: z.literal('save-scheduling-settings'), settings: schedulingSettings }),
+  z.object({ op: z.literal('find-time'), request: findTimeRequest }),
+  z.object({
+    op: z.literal('create-meeting'),
+    draft: commanderEventDraft.refine((draft) => draft.kind === 'meeting', 'Only a meeting is made this way'),
+  }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -269,6 +288,10 @@ export type ItemStoreResults = {
   invitations: Item[];
   'focus-settings': FocusSettings;
   'save-focus-settings': FocusSettings;
+  'scheduling-settings': SchedulingSettings;
+  'save-scheduling-settings': SchedulingSettings;
+  'find-time': FindTimeResult;
+  'create-meeting': ActivityEntry;
 };
 
 export const itemStoreResult = {
@@ -325,6 +348,10 @@ export const itemStoreResult = {
   invitations: z.array(item),
   'focus-settings': focusSettings,
   'save-focus-settings': focusSettings,
+  'scheduling-settings': schedulingSettings,
+  'save-scheduling-settings': schedulingSettings,
+  'find-time': findTimeResult,
+  'create-meeting': activityEntry,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

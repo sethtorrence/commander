@@ -417,15 +417,15 @@ describe('deleting one', () => {
     expect(result.item).toBeNull();
   });
 
-  it('looks a placeholder up by Commander’s marker, of either kind, and deletes nothing when Outlook never got it', async () => {
+  it('looks a placeholder up by Commander’s marker, of any kind, and deletes nothing when Outlook never got it', async () => {
     const replay = script('delete-placeholder-not-found');
     const result = await write(adapter(replay.fetch), pendingEventExternalId(FOCUS_ID), [
       change(DELETE_FIELD, true),
     ]);
 
     expect(replay.remaining()).toBe(0);
-    expect(sent.map((each) => each.method)).toEqual(['GET', 'GET']);
-    expect(result).toEqual({ item: null, superseded: [], cost: { requests: 2, complexity: null } });
+    expect(sent.map((each) => each.method)).toEqual(['GET', 'GET', 'GET']);
+    expect(result).toEqual({ item: null, superseded: [], cost: { requests: 3, complexity: null } });
   });
 
   it('ignores a delete taken back', async () => {

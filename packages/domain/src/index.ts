@@ -47,6 +47,7 @@ export * from './people';
 export * from './projects';
 export * from './ranking';
 export * from './rules';
+export * from './scheduling';
 export * from './search';
 export * from './skills';
 export * from './source-catalog';

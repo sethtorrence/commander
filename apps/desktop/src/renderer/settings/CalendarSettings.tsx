@@ -6,6 +6,7 @@ import { calendarSettingsIn } from '../sections/calendar/calendar-settings';
 import { SecondTimeZoneSetting } from '../sections/calendar/SecondTimeZoneSetting';
 import { FocusTimeSettings } from './FocusTimeSettings';
 import { SettingRow, SettingsGroup } from './parts';
+import { SchedulingSettings } from './SchedulingSettings';
 
 /**
  * Settings → Calendar (#128): the heads-up, a system notification 2 minutes before each meeting with
@@ -30,7 +31,7 @@ export function CalendarSettings({
     );
   const on = settings?.headsUp ?? false;
   return (
-    <SettingsGroup no={no} title="Calendar" note="Meetings · Focus time">
+    <SettingsGroup no={no} title="Calendar" note="Meetings · Focus time · Scheduling">
       <SettingRow
         label="Notify me 2 minutes before a meeting"
         description="A system notification with the meeting’s title and time, 2 minutes before each meeting that gets a chip in your Daily Note. Clicking it opens the event. It’s the only time Commander interrupts you, so it’s off until you turn it on, and it waits while your screen is locked."
@@ -48,6 +49,7 @@ export function CalendarSettings({
       </SettingRow>
       <SecondTimeZoneSetting settings={calendar} />
       <FocusTimeSettings itemStore={itemStore} />
+      <SchedulingSettings itemStore={itemStore} />
     </SettingsGroup>
   );
 }

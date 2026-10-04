@@ -13,6 +13,7 @@ import { blockTimeForTodosJob } from './block-time-for-todos';
 import { fileIntoProjectsJob } from './file-into-projects';
 import { createFiling, type Filing } from './filing';
 import { prepareMeetingsJob } from './prepare-meetings';
+import { proposeEventsJob } from './propose-events';
 import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
 import { createSeriesFiling } from './series-filing';
@@ -86,6 +87,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       }),
       suggestInvitationRepliesJob(itemStore, { now }),
       blockTimeForTodosJob(itemStore, { now }),
+      proposeEventsJob(itemStore, { now }),
     ],
     client: options.client,
     gate: options.gate,

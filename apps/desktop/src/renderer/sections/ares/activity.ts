@@ -48,10 +48,19 @@ export function describeItemActions(
         return [`Add the ${KIND_NAMES[action.item.kind] ?? action.item.kind} “${action.item.title}”`];
       case 'delete':
         return ['Delete it'];
-      case 'create-event':
-        return action.event.kind === 'focus-block'
-          ? [`Put “${action.event.title}” in your Commander calendar, busy and private`]
+      case 'create-event': {
+        const { kind, title, attendees = [] } = action.event;
+        if (kind === 'meeting') {
+          return attendees.length
+            ? [
+                `Put “${title}” in your calendar and invite ${attendees.map((guest) => guest.email).join(', ')}`,
+              ]
+            : [`Put “${title}” in your calendar`];
+        }
+        return kind === 'focus-block'
+          ? [`Put “${title}” in your Commander calendar, busy and private`]
           : ['Put a private Busy copy on your other calendar'];
+      }
       case 'update': {
         const { status, title, filing, people } = action.changes;
         return [

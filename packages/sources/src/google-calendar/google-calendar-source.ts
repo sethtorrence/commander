@@ -539,8 +539,18 @@ export function createGoogleCalendarSource({
         // Not knowing which kind it was (its create couldn't sync), a busy copy is on the main calendar.
         if (placeholder && !create)
           places.push({ calendarId: 'primary', eventId: googleEventId(itemId ?? '') });
+        // A meeting's guests hear it is off (#132).
+        const [stored] = request.stored?.([externalId]) ?? [];
+        const storedKind = stored?.detail?.kind === 'event' ? stored.detail.createdByCommander : null;
+        const tell = create?.kind === 'meeting' || storedKind === 'meeting' ? '?sendUpdates=all' : '';
         for (const each of places) {
-          await api.send('DELETE', eventPath(each.calendarId, each.eventId), undefined, z.unknown(), GONE);
+          await api.send(
+            'DELETE',
+            `${eventPath(each.calendarId, each.eventId)}${tell}`,
+            undefined,
+            z.unknown(),
+            GONE,
+          );
         }
         return done(null);
       }
@@ -593,18 +603,29 @@ export function createGoogleCalendarSource({
       async function insert(draft: CommanderEventCreate, movedTo: CommanderEventMove | null) {
         const eventId = googleEventId(draft.commanderId);
         const times = movedTo ?? draft;
+        // A meeting (#132) is an ordinary event with its guests, the calendar's own reminders, and
+        // Google sending the invitations; focus blocks and busy copies are private and quiet.
+        const meeting = draft.kind === 'meeting';
         const body = {
           id: eventId,
           summary: draft.title,
           start: googleTime(times.start, times.allDay, false),
           end: googleTime(times.end, times.allDay, false),
           transparency: 'opaque',
-          visibility: 'private',
-          reminders: { useDefault: false, overrides: [] },
+          ...(meeting
+            ? {
+                attendees: (draft.attendees ?? []).map((guest) => ({
+                  email: guest.email,
+                  ...(guest.name ? { displayName: guest.name } : {}),
+                })),
+              }
+            : { visibility: 'private', reminders: { useDefault: false, overrides: [] } }),
           extendedProperties: {
             private: { [COMMANDER_KIND_PROPERTY]: draft.kind, [COMMANDER_ID_PROPERTY]: draft.commanderId },
           },
         };
+        const insertPath = (calendarId: string) =>
+          `${eventsPath(calendarId)}${meeting ? '?sendUpdates=all' : ''}`;
         const target = async () => {
           if (draft.calendarId) return { id: draft.calendarId, remembered: false };
           const found = await commanderCalendar(api, account, true);
@@ -612,13 +633,13 @@ export function createGoogleCalendarSource({
           return { id: found.calendar.id, remembered: found.remembered };
         };
         let calendar = await target();
-        let answer = await api.send('POST', eventsPath(calendar.id), body, googleEvent, [404, 409]);
+        let answer = await api.send('POST', insertPath(calendar.id), body, googleEvent, [404, 409]);
         if (!answer.ok && answer.status === 404 && calendar.remembered) {
           // The Commander calendar Commander remembered has gone (the User deleted it): find or make
           // it again, once.
           if (commanderCalendars.get(account)?.id === calendar.id) commanderCalendars.delete(account);
           calendar = await target();
-          answer = await api.send('POST', eventsPath(calendar.id), body, googleEvent, [404, 409]);
+          answer = await api.send('POST', insertPath(calendar.id), body, googleEvent, [404, 409]);
         }
         if (answer.ok) return { calendarId: calendar.id, event: answer.data };
         if (answer.status === 404) {
@@ -660,8 +681,62 @@ export function createGoogleCalendarSource({
         return answer.data;
       }
     },
+
+    // Guests' free/busy (#132): one freeBusy.query for them all. A refusal, or a calendar Google won't
+    // share, is said per guest rather than failing Find time.
+    async freeBusy(request) {
+      const api = connect(apiUrl(), fetch, now, request);
+      const answer = await api.send(
+        'POST',
+        '/freeBusy',
+        { timeMin: iso(request.from), timeMax: iso(request.to), items: request.emails.map((id) => ({ id })) },
+        freeBusyAnswer,
+        [400, 403, 404],
+      );
+      if (!answer.ok) {
+        const problem = `Google wouldn’t share free/busy (HTTP ${answer.status}).`;
+        return { calendars: request.emails.map((email) => ({ email, busy: null, problem })), cost: api.cost };
+      }
+      const found = new Map(
+        Object.entries(answer.data.calendars ?? {}).map(([key, value]) => [key.toLowerCase(), value]),
+      );
+      return {
+        calendars: request.emails.map((email) => {
+          const calendar = found.get(email.toLowerCase());
+          const reason = calendar?.errors?.[0]?.reason;
+          if (!calendar || reason) {
+            const problem =
+              reason === 'notFound' || !calendar
+                ? 'Google doesn’t share this calendar with you.'
+                : `Google couldn’t say (${reason}).`;
+            return { email, busy: null, problem };
+          }
+          const busy = (calendar.busy ?? [])
+            .map((each) => ({ start: Date.parse(each.start), end: Date.parse(each.end) }))
+            .filter(
+              (each) => Number.isFinite(each.start) && Number.isFinite(each.end) && each.end > each.start,
+            )
+            .sort((a, b) => a.start - b.start);
+          return { email, busy, problem: null };
+        }),
+        cost: api.cost,
+      };
+    },
   };
 }
+
+// What freeBusy.query answers: each calendar asked about, with its busy times or why not.
+const freeBusyAnswer = z.object({
+  calendars: z
+    .record(
+      z.string(),
+      z.object({
+        busy: z.array(z.object({ start: z.string(), end: z.string() })).nullish(),
+        errors: z.array(z.object({ reason: z.string().nullish() })).nullish(),
+      }),
+    )
+    .nullish(),
+});
 
 const GOOGLE_RESPONSES: Record<string, string> = {
   accepted: 'accepted',

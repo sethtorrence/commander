@@ -1,4 +1,4 @@
-import type { EventDetail } from './calendar';
+import { type EventDetail, isCommanderHold } from './calendar';
 import type { Item } from './items';
 import { daysBetween, localDay } from './ranking';
 
@@ -9,8 +9,8 @@ import { daysBetween, localDay } from './ranking';
   own time zone, like the rest of the Dashboard's days.
 
   - A meeting gets a chip when it is chip-worthy: a timed event (not all-day) the User is busy for,
-    hasn't declined, that isn't cancelled and that Commander didn't put in the calendar itself (a focus
-    block). Read from the event detail, so Google Calendar and Outlook Calendar alike.
+    hasn't declined, that isn't cancelled and that isn't one of Commander's own holds (a focus block, a
+    busy copy); a meeting the User set up through Commander (#132) is a meeting like any other. Read from the event detail, so Google Calendar and Outlook Calendar alike.
   - It reads as its times and title, "10:00–10:30 Weekly sync with Priya", and, seen from the day of
     the note it is in, as cancelled, declined or moved to another day.
 */
@@ -43,11 +43,11 @@ export function clockOf(at: number): string {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-/** Whether an event gets a meeting chip: timed, busy, not declined, not cancelled, not Commander's own. */
+/** Whether an event gets a meeting chip: timed, busy, not declined, not cancelled, not Commander's hold. */
 export function isChipWorthy(item: Item | null | undefined): item is Event {
   if (!isEvent(item) || item.deletedAt !== null) return false;
   const { detail } = item;
-  return !detail.allDay && detail.busy && detail.myResponse !== 'declined' && !detail.createdByCommander;
+  return !detail.allDay && detail.busy && detail.myResponse !== 'declined' && !isCommanderHold(detail);
 }
 
 /** The local day a timed event starts on. */

@@ -13,7 +13,13 @@
 //   one, isn't put back.
 // - Only what is still to come, over the next 8 weeks: copying a year of recurring instances would
 //   crowd the other calendar for little use, and later weeks are copied as they come into range.
-import { type FocusSettings, holdsTime, type Item, type RegisteredAction } from '@commander/domain';
+import {
+  type FocusSettings,
+  holdsTime,
+  type Item,
+  isCommanderHold,
+  type RegisteredAction,
+} from '@commander/domain';
 import type { Gate } from '../autonomy/gate';
 import type { BusyCopy, ItemStore } from '../item-store';
 
@@ -55,11 +61,11 @@ export function setUpBusyCopies({
   gate.registerAction(BLOCK_TIME_ACROSS_ACCOUNTS_ACTION);
 
   // Whether an event should have a copy: it holds the User's time, is still to come, and isn't one of
-  // Commander's own.
+  // Commander's own holds (a meeting set up through Commander, #132, is copied like any other).
   function wanted(event: Item, copies: ReadonlySet<string>, at: number): boolean {
     const detail = event.detail;
     if (event.deletedAt !== null || detail?.kind !== 'event') return false;
-    if (detail.createdByCommander !== null || copies.has(event.id)) return false;
+    if (isCommanderHold(detail) || copies.has(event.id)) return false;
     return holdsTime(detail) && detail.end.at > at;
   }
 
