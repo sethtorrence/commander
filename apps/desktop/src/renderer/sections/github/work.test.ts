@@ -1,11 +1,12 @@
-import type { Item, Person, SourceItem } from '@commander/domain';
+import type { Item, Person, ReviewRequestDetail, SourceItem } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { lookupOf } from '../../people/people';
-import { DOTFILES, GITHUB, issue, NOW, pull, WEB } from './test-work';
+import { DOTFILES, GITHUB, issue, NOW, pull, reviewRequest, WEB } from './test-work';
 import {
   ageOf,
   filterOptions,
   groupWork,
+  groupYourWork,
   identifierOf,
   inFilters,
   inView,
@@ -17,6 +18,7 @@ import {
   toWork,
   type Work,
   type WorkFilters,
+  yourWorkOf,
 } from './work';
 
 // The GitHub Section's list, worked out from the Items: which work each view shows, its state, how it
@@ -219,5 +221,50 @@ describe('the GitHub filters', () => {
   it('offers only the states issues have in the Issues view', () => {
     const issues = work(issue({ number: 1 }), issue({ number: 2, state: 'closed' }));
     expect(filterOptions(issues, NO_FILTERS).state.map((option) => option.value)).toEqual(['open', 'closed']);
+  });
+});
+
+describe('Your work (#116)', () => {
+  // The User is octocat in the Account; review requests point at their pull requests by Item id.
+  function setUp() {
+    const all = work(
+      pull({ number: 1, title: 'Mine, failing', author: 'octocat', checks: 'failure' }),
+      pull({ number: 2, title: 'Mine, draft', author: 'OctoCat', draft: true, updatedAt: NOW - 5 * HOUR }),
+      pull({ number: 3, title: 'Mine, merged', author: 'octocat', state: 'merged' }),
+      pull({ number: 4, title: 'Team review', author: 'dana' }),
+      pull({ number: 5, title: 'Direct review', author: 'priya', updatedAt: NOW - 9 * HOUR }),
+      pull({ number: 6, title: 'Someone else’s', author: 'lee' }),
+      issue({ number: 30, title: 'Assigned to me', assignees: ['octocat'] }),
+      issue({ number: 31, title: 'Assigned to Priya', assignees: ['priya'] }),
+      issue({ number: 32, title: 'Closed, mine', assignees: ['octocat'], state: 'closed' }),
+    );
+    const id = (title: string) => all.find((each) => each.title === title)?.id ?? '';
+    const asked = (number: number, title: string, teams: string[] = []) => {
+      const source = reviewRequest(number);
+      const detail = source.detail as ReviewRequestDetail;
+      return item({
+        ...source,
+        detail: { ...detail, pullRequestId: id(title), direct: !teams.length, teams },
+      });
+    };
+    const requests = [asked(4, 'Team review', ['acme/backend']), asked(5, 'Direct review')];
+    return { all, context: { logins: { [GITHUB]: 'octocat' }, requests } };
+  }
+
+  it('lists the User’s open pull requests, the reviews asked of them (direct first) and their open assigned issues', () => {
+    const { all, context } = setUp();
+    const mine = all.filter((each) => inView(each, 'mine', context));
+    expect(mine).toHaveLength(5);
+    expect(groupYourWork(mine, context).map((group) => [group.title, titles(group.work)])).toEqual([
+      ['Your pull requests', ['Mine, failing', 'Mine, draft']],
+      ['Review requests', ['Direct review', 'Team review']],
+      ['Assigned issues', ['Assigned to me']],
+    ]);
+    const team = all.find((each) => each.title === 'Team review');
+    expect(team && yourWorkOf(team, context)).toEqual({
+      group: 'reviews',
+      direct: false,
+      teams: ['acme/backend'],
+    });
   });
 });

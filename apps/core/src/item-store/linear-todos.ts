@@ -276,6 +276,7 @@ export function linearTodosIn(deps: LinearTodosDeps) {
           and(
             eq(activity.action, 'delete'),
             eq(activity.actor, 'source'),
+            eq(todoDetails.origin, 'linear'),
             isNull(activity.otherItemId),
             eq(todoDetails.backedBy, activity.causedByItemId),
             after === null ? undefined : gt(activity.id, after),

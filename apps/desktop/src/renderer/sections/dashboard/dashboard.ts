@@ -105,16 +105,28 @@ export function dashboardIn(
       const today = dayKey(clock(), timeZone);
       const from = dayStart(today, timeZone);
       const to = dayStart(addDays(today, 2), timeZone);
-      const [todos, issues, events, chats, invitations] = await Promise.all([
+      const [todos, issues, events, chats, invitations, work] = await Promise.all([
         itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'events', query: { from, to, limit: MOST } }),
         itemStore({ op: 'query', query: { kinds: ['chat'], statuses: ['open'], limit: MOST } }),
         // Invitations waiting for an answer, whenever they are (#129): the band rules put them in Today.
         itemStore({ op: 'invitations' }),
+        // GitHub's open work (#116): reviews asked of the User, and pull requests (theirs are ranked).
+        itemStore({
+          op: 'query',
+          query: { kinds: ['review-request', 'pull-request'], statuses: ['open'], limit: MOST },
+        }),
       ]);
       const shown = new Set(events.map((event) => event.id));
-      return [...todos, ...issues, ...events, ...chats, ...invitations.filter((item) => !shown.has(item.id))];
+      return [
+        ...todos,
+        ...issues,
+        ...events,
+        ...chats,
+        ...invitations.filter((item) => !shown.has(item.id)),
+        ...work,
+      ];
     },
 
     chatSettings: () => itemStore({ op: 'chat-settings' }),
@@ -158,9 +170,14 @@ export function dashboardIn(
 type AccountsBridge = Pick<Window['commander'], 'accounts' | 'onAccountsChanged'>;
 
 const ranksBy = (state: AccountsState): AccountSummary[] =>
-  state.accounts.filter((account) => account.source === 'linear' || account.source === 'teams');
+  state.accounts.filter(
+    (account) => account.source === 'linear' || account.source === 'teams' || account.source === 'github',
+  );
 
-/** The Accounts the Dashboard ranks by: the Linear ones ("assigned to me") and the Teams ones ("mentions me"). */
+/**
+ * The Accounts the Dashboard ranks by: the Linear ones ("assigned to me"), the Teams ones ("mentions
+ * me") and the GitHub ones ("your pull request").
+ */
 export function dashboardAccountsIn(bridge: AccountsBridge): LinearAccountsClient {
   return {
     async list() {
@@ -175,10 +192,16 @@ export function dashboardAccountsIn(bridge: AccountsBridge): LinearAccountsClien
   };
 }
 
-/** Who the User is in each Linear and Teams Account, by Account id: "assigned to me", "mentions me". */
+/**
+ * Who the User is in each Linear and Teams Account, by Account id: "assigned to me", "mentions me";
+ * in a GitHub Account, their login (GitHub's Items name people by login).
+ */
 export function usersOf(accounts: readonly AccountSummary[]): Record<string, string> {
   return Object.fromEntries(
-    accounts.flatMap((account) => (account.user ? [[account.id, account.user.id] as const] : [])),
+    accounts.flatMap((account) => {
+      if (account.source === 'github') return [[account.id, account.login] as const];
+      return account.user ? [[account.id, account.user.id] as const] : [];
+    }),
   );
 }
 

@@ -21,6 +21,7 @@ export function TodoDetail({
   todo,
   madeFrom,
   linear,
+  backing,
   links,
   history,
   onRename,
@@ -42,6 +43,8 @@ export function TodoDetail({
     onSetState: (state: LinearState) => void;
     onOpenIssue: () => void;
   };
+  /** For any backed Todo: the Item behind it (a GitHub Todo's review request or issue). */
+  backing?: Item;
   links: TodoLink[];
   history: ActivityEntry[];
   onRename: (title: string) => void;
@@ -53,6 +56,11 @@ export function TodoDetail({
   onOpenLink: (link: TodoLink) => void;
 }) {
   const done = todo?.status === 'done';
+  // A GitHub Todo: GitHub is read-only in v1, so the pane only offers the pull request or issue there.
+  const onGitHub =
+    backing?.detail?.kind === 'review-request' || backing?.detail?.kind === 'github-issue'
+      ? backing.detail.url
+      : null;
   return (
     <section aria-label="Todo detail" className="min-w-0 border-l border-line">
       <div className="sticky top-(--body) max-h-[calc(100vh-var(--body))] overflow-auto [scrollbar-width:thin]">
@@ -72,6 +80,16 @@ export function TodoDetail({
               )}
             </>
           )}
+          {todo && onGitHub && (
+            <a
+              href={onGitHub}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center gap-[9px] border-r border-line2 px-3.5 font-mono text-label-lg leading-none font-semibold uppercase tracking-label whitespace-nowrap text-ink no-underline hover:bg-raise"
+            >
+              Open in GitHub <span aria-hidden="true">↗</span>
+            </a>
+          )}
           <span className="flex-1" />
           <Action keys="Esc" onClick={onClose} className="border-r-0 border-l">
             Close
@@ -87,7 +105,7 @@ export function TodoDetail({
             <ItemWarning item={todo} variant="pane" className="mt-3" />
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact label="Status">{done ? 'Done' : 'Open'}</Fact>
-              <Fact label="Origin">{originLabel(todo, madeFrom, linear?.issue)}</Fact>
+              <Fact label="Origin">{originLabel(todo, madeFrom, linear?.issue ?? backing)}</Fact>
               {linear && <LinearFacts {...linear} Fact={Fact} />}
               <Fact label="Project">
                 <TodoProject todo={todo} />

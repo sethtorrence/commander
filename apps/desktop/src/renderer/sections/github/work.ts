@@ -3,6 +3,8 @@ import {
   type GitHubReview,
   githubIdentifier,
   type Item,
+  isReviewRequestItem,
+  isTheirs,
   type PullRequestDetail,
 } from '@commander/domain';
 import { NO_PEOPLE, type PeopleLookup } from '../../people/people';
@@ -21,7 +23,8 @@ export type GitHubIssue = Item & { kind: 'github-issue'; detail: GitHubIssueDeta
 /** A pull request or an issue, with the detail GitHub sync keeps. */
 export type Work = PullRequest | GitHubIssue;
 
-export type WorkView = 'pulls' | 'issues';
+/** Your work (#116, the default), Pull requests or Issues. */
+export type WorkView = 'mine' | 'pulls' | 'issues';
 export type WorkState = 'draft' | 'open' | 'merged' | 'closed';
 
 export function toWork(items: readonly Item[]): Work[] {
@@ -34,8 +37,80 @@ export function toWork(items: readonly Item[]): Work[] {
 
 export const isPullRequest = (work: Work): work is PullRequest => work.kind === 'pull-request';
 
-export function inView(work: Work, view: WorkView): boolean {
+export function inView(work: Work, view: WorkView, mine: YourWorkContext = NO_WORK_OF_YOURS): boolean {
+  if (view === 'mine') return yourWorkOf(work, mine) !== null;
   return view === 'pulls' ? isPullRequest(work) : !isPullRequest(work);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Your work (#116)
+
+/** What tells the User's work apart: their login in each GitHub Account, and the reviews asked of them. */
+export interface YourWorkContext {
+  logins: Readonly<Record<string, string>>;
+  /** The live `review-request` Items. */
+  requests: readonly Item[];
+}
+const NO_WORK_OF_YOURS: YourWorkContext = { logins: {}, requests: [] };
+
+export type YourWork =
+  | { group: 'your-pulls' }
+  | { group: 'reviews'; direct: boolean; teams: string[] }
+  | { group: 'assigned' };
+
+const loginIn = (work: Work, mine: YourWorkContext) =>
+  work.account ? (mine.logins[work.account] ?? null) : null;
+
+/**
+ * Where open work goes in Your work: the User's own pull requests, the reviews asked of them (directly
+ * or through a team, named), or the issues assigned to them. Null for the rest.
+ */
+export function yourWorkOf(work: Work, mine: YourWorkContext): YourWork | null {
+  if (!isOpen(work)) return null;
+  const me = loginIn(work, mine);
+  if (isPullRequest(work)) {
+    if (isTheirs(work.detail, me)) return { group: 'your-pulls' };
+    const request = mine.requests.find(
+      (each) => isReviewRequestItem(each) && each.deletedAt === null && each.detail.pullRequestId === work.id,
+    );
+    if (request && isReviewRequestItem(request))
+      return { group: 'reviews', direct: request.detail.direct, teams: request.detail.teams };
+    return null;
+  }
+  return me && work.detail.assignees.some((login) => same(login, me)) ? { group: 'assigned' } : null;
+}
+
+const byActivity = (a: Work, b: Work) => b.detail.updatedAt - a.detail.updatedAt;
+
+/** Your work's groups: Your pull requests, Review requests (direct first, then team ones), Assigned issues. */
+export function groupYourWork(list: readonly Work[], mine: YourWorkContext): WorkGroup[] {
+  const placed = list.map((work) => ({ work, where: yourWorkOf(work, mine) }));
+  const of = (group: YourWork['group']) => placed.filter((each) => each.where?.group === group);
+  const direct = (each: { where: YourWork | null }) =>
+    each.where?.group === 'reviews' && each.where.direct ? 0 : 1;
+  return [
+    {
+      id: 'your-pulls',
+      title: 'Your pull requests',
+      work: of('your-pulls')
+        .map((each) => each.work)
+        .sort(byActivity),
+    },
+    {
+      id: 'reviews',
+      title: 'Review requests',
+      work: of('reviews')
+        .sort((a, b) => direct(a) - direct(b) || byActivity(a.work, b.work))
+        .map((each) => each.work),
+    },
+    {
+      id: 'assigned',
+      title: 'Assigned issues',
+      work: of('assigned')
+        .map((each) => each.work)
+        .sort(byActivity),
+    },
+  ];
 }
 
 /** Draft (an open pull request marked draft), open, merged (pull requests only) or closed. */
@@ -80,7 +155,7 @@ export function ageOf(at: number, now: number): string {
 // ---------------------------------------------------------------------------------------------
 // Groups
 
-export type GroupId = 'open' | 'closed';
+export type GroupId = 'open' | 'closed' | 'your-pulls' | 'reviews' | 'assigned';
 export interface WorkGroup {
   id: GroupId;
   title: string;

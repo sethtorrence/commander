@@ -5,7 +5,8 @@
 //
 // - Looks at the open Todos (a Todo backed by a Linear issue is that issue), the Linear issues
 //   involving the User (their Linear Todos, and issues they created or have that changed in the last
-//   two days), the Teams Chats that may need them (flagged as waiting on the User, a mention, an
+//   two days), the User's open work on GitHub (reviews asked of them while their Todos are open, and
+//   their own open pull requests; #116), the Teams Chats that may need them (flagged as waiting on the User, a mention, an
 //   unanswered one-to-one Chat, or unread messages from the last two days; never a muted Chat), and
 //   the pending "Suggest Todos" suggestions; at most 200 Items, the most pressing by the rules
 //   first. Cleared rows are left out until their Item changes; how he last ranked them stands.
@@ -28,23 +29,35 @@ import {
   type AresRankingEntry,
   aresBands,
   type ChatDetail,
+  changesRequestedBy,
   chatAttention,
   chatFlags,
   dashboardCandidates,
   type EventDetail,
+  githubIdentifier,
   type Item,
   isChipWorthy,
   isLinearTodo,
   isMeetingPrep,
+  isPullRequestItem,
+  isReviewRequestItem,
+  isTheirs,
   type LinearIssueDetail,
   localDay,
   meetingTimes,
   mutedChatIds,
+  type PullRequestDetail,
+  type PullRequestItem,
   prepLines,
   RANK_DASHBOARD,
+  type ReviewRequestItem,
   rankByBandRules,
   rankingFingerprint,
+  reviewAskedBy,
   suggestionItemId,
+  waitedFor,
+  waitingOn,
+  waitingSince,
 } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from '../item-store';
@@ -153,6 +166,7 @@ Reply with only this JSON object: {"ranking":[{"ref":"I1","band":"now","rank":1,
 - reason: why it is there, in a few plain words of your own (fewer than 12), as you would say it to the User: "Dana's waiting on this before Friday's review", "Overdue since Tuesday", "Priya has it now". No full stop. For band none it may be empty.
 - A Suggested Todo is one you suggested from the User's Daily Note that they haven't added yet: rank it like any other Todo.
 - A Teams chat is a conversation in Microsoft Teams, with its last few messages. Place it when someone is waiting on the User (a question or mention aimed at them, a one-to-one message they haven't answered); chatter that asks nothing of them is none. When it says you judged that someone is waiting on the User, place it (usually today), and let your reason say who is waiting and on what.
+- A GitHub review request is a review asked of the User (directly, or of one of their teams, which matters less); a GitHub pull request is the User's own, with its checks and reviews. Failing checks or changes requested need the User; a pull request waiting on reviewers is waiting.
 - Blocks labelled "Meeting at …" or "Prep for the meeting at …" are not Items to rank: they are the User's meetings in the next few hours and your preparation for them. A Todo a meeting needs done first (something to read, send or decide before it) should rise before the meeting.`;
 
 // A reason as the Dashboard shows it: one line, no closing full stop, a few words.
@@ -188,6 +202,7 @@ export function rankDashboardJob(
       'daily-note': 'Made from a line the User wrote in a Daily Note',
       ares: 'Suggested by Ares and added by the User',
       linear: 'From Linear',
+      github: 'From GitHub: a review asked of the User, or an issue assigned to them',
     }[origin];
     return [
       `Title: ${item.title}`,
@@ -301,6 +316,62 @@ export function rankDashboardJob(
     return users;
   }
 
+  // Who the User is in each GitHub Account: the login Settings → GitHub last read for it.
+  function githubUsers(work: Item[]): Record<string, string> {
+    const users: Record<string, string> = {};
+    for (const account of new Set(work.flatMap((item) => (item.account ? [item.account] : [])))) {
+      const login = itemStore.githubWatch.read(account).access?.login;
+      if (login) users[account] = login;
+    }
+    return users;
+  }
+
+  // A pull request's state as Ares reads it: open or draft, its checks, its reviews and who it waits on.
+  function pullFacts(detail: PullRequestDetail): string[] {
+    const changes = changesRequestedBy(detail);
+    const waiting = waitingOn(detail);
+    return [
+      `State: ${detail.draft ? 'draft' : detail.state}`,
+      `Checks: ${detail.checks ?? 'none'}`,
+      `Review decision: ${detail.reviewDecision ?? 'none'}`,
+      ...(changes.length ? [`Changes requested by: ${changes.join(', ')}`] : []),
+      ...(waiting.length ? [`Waiting on: ${waiting.join(', ')}`] : []),
+    ];
+  }
+
+  // A review asked of the User, with its pull request's state and the start of its body. The body is
+  // someone else's words: the builder marks the block outside.
+  function reviewText(item: ReviewRequestItem, pull: PullRequestItem | null, at: number): string {
+    const { direct, teams, requestedAt } = item.detail;
+    const by = reviewAskedBy(item);
+    const whose = direct
+      ? `Review asked of the User directly${by ? `; ${by} opened the pull request` : ''}`
+      : `Review asked of the User’s team ${teams.map((team) => `@${team}`).join(', ')}`;
+    return [
+      `Title: ${item.title}`,
+      whose,
+      ...(requestedAt !== null ? [`Asked: ${stamp(requestedAt)} (${waitedFor(requestedAt, at)} ago)`] : []),
+      ...(pull ? pullFacts(pull.detail) : []),
+      `Project: ${projectName(item)}`,
+      ...(pull?.detail.body ? [`Body: ${cut(pull.detail.body, MAX_DESCRIPTION)}`] : []),
+    ].join('\n');
+  }
+
+  // The User's own pull request: its state, checks, reviews, who it waits on and how long.
+  function pullText(item: PullRequestItem, at: number): string {
+    const { detail } = item;
+    return [
+      `Title: ${item.title}`,
+      'The User’s own pull request',
+      ...pullFacts(detail),
+      `Opened: ${stamp(detail.createdAt)}`,
+      `Waiting since: ${stamp(waitingSince(detail))} (${waitedFor(waitingSince(detail), at)})`,
+      `Last changed on GitHub: ${stamp(detail.updatedAt)}`,
+      `Project: ${projectName(item)}`,
+      ...(detail.body ? [`Body: ${cut(detail.body, MAX_DESCRIPTION)}`] : []),
+    ].join('\n');
+  }
+
   // The pending suggestions of Suggest Todos, as the Todos they would add.
   function suggestions(): { item: Item; block: Item | undefined }[] {
     return itemStore.autonomy
@@ -388,10 +459,16 @@ export function rankDashboardJob(
       const todos = itemStore.query({ kinds: ['todo'], statuses: ['open'], limit: 1000 });
       const issues = itemStore.query({ kinds: ['linear-issue'], statuses: ['open'], limit: 1000 });
       const chats = itemStore.query({ kinds: ['chat'], statuses: ['open'], limit: 1000 });
+      // GitHub's open work (#116): reviews asked of the User, and pull requests (theirs among them).
+      const work = itemStore.query({
+        kinds: ['review-request', 'pull-request'],
+        statuses: ['open'],
+        limit: 1000,
+      });
       // Muted Chats are never sent; excluded ones are deleted, so not among them.
       const muted = mutedChatIds(chats, itemStore.chatSettings.list());
-      const byId = new Map([...todos, ...issues].map((item) => [item.id, item]));
-      const users = { ...usersFrom(todos, byId), ...usersFromChats(chats) };
+      const byId = new Map([...todos, ...issues, ...work].map((item) => [item.id, item]));
+      const users = { ...usersFrom(todos, byId), ...usersFromChats(chats), ...githubUsers(work) };
       const meIn = (item: Item) => (item.account ? (users[item.account] ?? null) : null);
       const backing = new Set(
         todos.flatMap((todo) =>
@@ -418,13 +495,26 @@ export function rankDashboardJob(
         return linearTodo || (mine && at - updatedAt <= RECENT_MS) ? { me, linearTodo } : null;
       };
 
+      // Open work involving the User: every review asked of them (while its Todo is open), and their
+      // own open pull requests.
+      const theirWork = (item: Item) =>
+        isReviewRequestItem(item) || (isPullRequestItem(item) && isTheirs(item.detail, meIn(item)));
+
       // The Items any ranker may place, the most pressing by the rules first, so each batch is a
       // fair slice and the merge interleaves like with like.
-      const open = dashboardCandidates([...todos, ...issues, ...chats], muted).filter((item) =>
-        item.kind === 'todo' ? true : item.kind === 'chat' ? mayNeedUser(item) : involving(item),
+      const all = [...todos, ...issues, ...chats, ...work];
+      const open = dashboardCandidates(all, muted).filter((item) =>
+        item.kind === 'todo'
+          ? true
+          : item.kind === 'chat'
+            ? mayNeedUser(item)
+            : item.source === 'github'
+              ? theirWork(item)
+              : involving(item),
       );
+      // The rules see every Item, as they pick their own candidates (a review request needs its Todo).
       const ruled = new Map(
-        rankByBandRules(open, { now: at, users, muted }).map((r, index) => [r.itemId, index]),
+        rankByBandRules(all, { now: at, users, muted }).map((r, index) => [r.itemId, index]),
       );
       const ordered = [...open]
         .sort(
@@ -481,6 +571,27 @@ export function rankDashboardJob(
             item.id,
             { itemId: item.id, fingerprint },
             { what: 'Teams chat', from: item, text: chatText(item, meIn(item), at) },
+            fingerprint,
+          );
+          continue;
+        }
+        if (isReviewRequestItem(item) || isPullRequestItem(item)) {
+          const pull = isReviewRequestItem(item) ? byId.get(item.detail.pullRequestId ?? '') : item;
+          const identifier = githubIdentifier(item.detail.repo, item.detail.number);
+          add(
+            item.id,
+            { itemId: item.id, fingerprint },
+            isReviewRequestItem(item)
+              ? {
+                  what: `GitHub review request ${identifier}`,
+                  from: item,
+                  text: reviewText(item, pull && isPullRequestItem(pull) ? pull : null, at),
+                }
+              : {
+                  what: `GitHub pull request ${identifier}`,
+                  from: item,
+                  text: pullText(item as PullRequestItem, at),
+                },
             fingerprint,
           );
           continue;

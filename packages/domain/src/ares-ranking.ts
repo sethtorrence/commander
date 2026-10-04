@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { openWorkFacts } from './github-open-work';
 import type { Item } from './items';
 import {
   type DashboardBand,
@@ -126,6 +127,7 @@ export function rankingFingerprint(item: Item): string {
       item.waiting?.reason ?? null,
     );
   }
+  facts.push(...openWorkFacts(item));
   return hash(JSON.stringify(facts));
 }
 
@@ -151,7 +153,8 @@ export function aresRanker(ranking: DashboardRanking | null, fallback: Ranker = 
     const entries = new Map(ranking.entries.map((entry) => [entry.itemId, entry]));
     const candidates = dashboardCandidates(items, context.muted);
     const byId = new Map(candidates.map((item) => [item.id, item]));
-    const ruled = new Map(fallback(candidates, context).map((found) => [found.itemId, found]));
+    // The rules see every Item, as they pick their own candidates (a review request needs its Todo).
+    const ruled = new Map(fallback(items, context).map((found) => [found.itemId, found]));
     const his: AresRankingEntry[] = [];
     const theirs: Ranking[] = [];
     for (const item of candidates) {

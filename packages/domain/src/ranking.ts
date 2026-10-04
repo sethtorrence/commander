@@ -1,3 +1,4 @@
+import { isReviewRequestItem, placeOpenWork } from './github-open-work';
 import { awaitingAnswer, invitationReason } from './invitations';
 import type { Item } from './items';
 import type { LinearIssueDetail } from './linear';
@@ -36,7 +37,7 @@ export interface RankingContext {
   now: number;
   /**
    * Who the User is in each Account (their user id at the Source: their Linear user, their Teams
-   * user), by Account id.
+   * user; on GitHub, their login), by Account id.
    */
   users: Readonly<Record<string, string>>;
   /** The Chats the User muted, by Item id: never on the Dashboard. */
@@ -295,6 +296,14 @@ function placeInvitation(item: Item, now: number): Placed | null {
 function place(item: Item, context: RankingContext, today: string): Placed | null {
   if (item.kind === 'event') return placeMeeting(item, context.now) ?? placeInvitation(item, context.now);
   if (isChat(item)) return placeChat(item, context);
+  if (item.source === 'github') {
+    const found = placeOpenWork(
+      item,
+      item.account ? (context.users[item.account] ?? null) : null,
+      context.now,
+    );
+    return found && { item, ...found };
+  }
   if (!isIssue(item)) return item.kind === 'todo' ? byDueDate(item, today) : null;
   const me = item.account ? context.users[item.account] : undefined;
   if (!me) return null;
@@ -335,13 +344,21 @@ function inBandOrder(a: Placed, b: Placed): number {
 
 /**
  * The Items any ranker may place: the open ones (not deleted, not a closed issue), less the Todos
- * backed by another of them, which are shown once, by that Item, and the muted Chats.
+ * backed by another of them, which are shown once, by that Item, and the muted Chats. A GitHub review
+ * request counts only while its Todo is open: ticked (or deleted) in Commander, it is done with.
  */
 export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<string>): Item[] {
   const open = items.filter((item) => isOpen(item) && !muted?.has(item.id));
   const present = new Set(open.map((item) => item.id));
+  const backing = new Set(
+    open.flatMap((item) =>
+      item.detail?.kind === 'todo' && item.detail.backedBy ? [item.detail.backedBy] : [],
+    ),
+  );
   return open.filter(
-    (item) => !(item.detail?.kind === 'todo' && item.detail.backedBy && present.has(item.detail.backedBy)),
+    (item) =>
+      !(item.detail?.kind === 'todo' && item.detail.backedBy && present.has(item.detail.backedBy)) &&
+      !(isReviewRequestItem(item) && !backing.has(item.id)),
   );
 }
 
@@ -358,6 +375,9 @@ export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<
  *   message mentioning the User, and one-to-one Chats the User hasn't answered (chatAttention), one
  *   row per Chat. Muted Chats never; busy group Chats only
  *   when they mention the User.
+ * - GitHub's open work (#116, placeOpenWork): reviews asked of the User directly and their pull
+ *   requests failing checks or with changes requested in Today, their pull requests waiting on
+ *   reviewers in Waiting on others, and reviews asked of their teams in FYI.
  *
  * A Linear Todo is an open Linear issue assigned to the User in a Todo state (unstarted or started, or
  * backlog or triage in its team's current cycle), as in linear-todos.ts. The first band that matches wins, in

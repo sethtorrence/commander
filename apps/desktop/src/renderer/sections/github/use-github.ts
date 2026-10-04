@@ -1,4 +1,4 @@
-import type { ActivityEntry, GitHubDiscussion, Item } from '@commander/domain';
+import { type ActivityEntry, type GitHubDiscussion, githubTabCount, type Item } from '@commander/domain';
 import type { GitHubAccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import {
   type FilterOptions,
   filterOptions,
   groupWork,
+  groupYourWork,
   inFilters,
   inView,
   isOpen,
@@ -19,15 +20,19 @@ import {
   type WorkFilters,
   type WorkGroup,
   type WorkView,
+  type YourWork,
+  type YourWorkContext,
+  yourWorkOf,
 } from './work';
 
 export const VIEW_STORAGE_KEY = 'commander.github.view';
 
 function loadView(storage: Storage): WorkView {
   try {
-    return storage.getItem(VIEW_STORAGE_KEY) === 'issues' ? 'issues' : 'pulls';
+    const saved = storage.getItem(VIEW_STORAGE_KEY);
+    return saved === 'issues' || saved === 'pulls' ? saved : 'mine';
   } catch {
-    return 'pulls';
+    return 'mine';
   }
 }
 
@@ -42,7 +47,7 @@ export interface GitHubState {
   accounts: GitHubAccountSummary[];
   /** Whether the work has loaded once. */
   loaded: boolean;
-  /** Pull requests (the default) or Issues. Remembered across restarts. */
+  /** Your work (the default), Pull requests or Issues. Remembered across restarts. */
   view: WorkView;
   setView(view: WorkView): void;
   /** How much open work each view would list under the filters and the Project filter. */
@@ -78,8 +83,15 @@ export interface GitHubState {
   allWork: Work[];
   /** The pull requests (by Item id) where a review is asked of the User. */
   reviewAsked: ReadonlySet<string>;
-  /** How many reviews are asked of the User and still waiting, for the notebook tab. */
+  /** How many reviews are asked of the User and still waiting. */
   reviewsWaiting: number;
+  /**
+   * The notebook tab's count: reviews asked of the User directly, and their open pull requests with
+   * failing checks or changes requested.
+   */
+  tabCount: number;
+  /** Where open work sits in Your work (null: not the User's). */
+  yourWork(work: Work): YourWork | null;
   /** Makes a change through another module (filing), so it reloads and can be undone here. */
   apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
   /** Undoes one change made here: the given entry, or the latest not yet undone. */
@@ -175,13 +187,21 @@ export function useGitHub({
   }, [accountsClient, reload]);
 
   const all = useMemo(() => toWork(items ?? []), [items]);
-  const viewed = useMemo(() => all.filter((work) => inView(work, view)), [all, view]);
+  // Who the User is in each Account (their login), and the reviews asked of them: Your work.
+  const mine = useMemo<YourWorkContext>(
+    () => ({ logins: Object.fromEntries(accounts.map((account) => [account.id, account.login])), requests }),
+    [accounts, requests],
+  );
+  const viewed = useMemo(() => all.filter((work) => inView(work, view, mine)), [all, view, mine]);
   const narrowed = useMemo(() => viewed.filter(include), [viewed, include]);
   const listed = useMemo(
     () => narrowed.filter((work) => inFilters(work, filters, undefined, people)),
     [narrowed, filters, people],
   );
-  const groups = useMemo(() => groupWork(listed), [listed]);
+  const groups = useMemo(
+    () => (view === 'mine' ? groupYourWork(listed, mine) : groupWork(listed)),
+    [view, listed, mine],
+  );
   const options = useMemo(() => filterOptions(narrowed, filters, people), [narrowed, filters, people]);
   const forProjectFilter = useMemo(
     () => viewed.filter((work) => isOpen(work) && inFilters(work, filters, undefined, people)),
@@ -192,10 +212,11 @@ export function useGitHub({
       (work) => isOpen(work) && include(work) && inFilters(work, filters, undefined, people),
     );
     return {
+      mine: counted.filter((work) => inView(work, 'mine', mine)).length,
       pulls: counted.filter((work) => inView(work, 'pulls')).length,
       issues: counted.filter((work) => inView(work, 'issues')).length,
     };
-  }, [all, include, filters, people]);
+  }, [all, include, filters, people, mine]);
 
   // The pull requests a waiting review request points at.
   const reviewAsked = useMemo(
@@ -308,13 +329,13 @@ export function useGitHub({
       const work = all.find((one) => one.id === target);
       // Not read yet (it synced since): read again, and let nothing hide it meanwhile.
       if (!work) reload();
-      if (work && !inView(work, view)) setView(inView(work, 'pulls') ? 'pulls' : 'issues');
+      if (work && !inView(work, view, mine)) setView(inView(work, 'pulls') ? 'pulls' : 'issues');
       if (!work || !inFilters(work, filters, undefined, people)) setFilters(NO_FILTERS);
       if (!work || !isOpen(work)) setClosedShown(true);
       setSelectedId(target);
       setDetailOpen(true);
     },
-    [requests, all, view, filters, reload, setView, people],
+    [requests, all, view, filters, reload, setView, people, mine],
   );
 
   const apply = useCallback(
@@ -386,6 +407,8 @@ export function useGitHub({
     allWork: all,
     reviewAsked,
     reviewsWaiting: requests.length,
+    tabCount: githubTabCount([...requests, ...all], mine.logins),
+    yourWork: (work) => yourWorkOf(work, mine),
     apply,
     undo,
     reload,

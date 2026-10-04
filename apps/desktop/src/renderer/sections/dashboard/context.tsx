@@ -325,6 +325,10 @@ export function DashboardProvider({
           : (tickedTodos.current.get(item.id) ??
             items?.find((each) => each.detail?.kind === 'todo' && each.detail.backedBy === item.id)?.id);
       if (!todoId) {
+        if (item.source === 'github') {
+          toast(`${item.title} has nothing to tick: open it (Enter), or clear it (E)`);
+          return;
+        }
         const name = item.detail?.kind === 'linear-issue' ? item.detail.identifier : item.title;
         toast(`${name} isn’t one of your Linear Todos yet: change its state in the Linear Section`);
         return;
