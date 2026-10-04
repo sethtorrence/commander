@@ -14,9 +14,11 @@ export interface MarginSuggestion {
   /** The suggestion (the gate's proposal) id. */
   id: number;
   blockId: string;
-  /** The Todo's title. */
+  /** The Todo's title, as Ares wrote it. */
   title: string;
   reason: string;
+  /** The Block's text: what Ares's words may link to (AresText). */
+  source: string;
 }
 
 /** A pending suggestion in Notes that would add a Todo for a Block, as its margin card shows it. */
@@ -24,7 +26,13 @@ export function marginSuggestionOf(row: AresActivity): MarginSuggestion | null {
   if (row.status !== 'pending' || row.item?.kind !== 'block') return null;
   const create = row.itemActions.find((action) => action.type === 'create' && action.item.kind === 'todo');
   if (create?.type !== 'create') return null;
-  return { id: row.id, blockId: row.itemId, title: create.item.title, reason: row.reason };
+  return {
+    id: row.id,
+    blockId: row.itemId,
+    title: create.item.title,
+    reason: row.reason,
+    source: row.item.title,
+  };
 }
 
 export interface MarginSuggestions {

@@ -306,6 +306,8 @@ export function describeEntry(
   projects: readonly Project[] = [],
 ): string {
   const who = byWhom(entry.by);
+  // A steering warning says it in its own words (#69).
+  if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
   if (entry.action !== 'undo') return `${whatItDid(entry, projects)[0]} ${who}`;
   const undone = history.find((other) => other.id === entry.undoes);
   if (!undone) return `Undone ${who}`;

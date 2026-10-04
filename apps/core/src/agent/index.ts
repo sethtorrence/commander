@@ -6,6 +6,7 @@ import type { CoreMessage } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
+import type { KnownSecrets } from '../safety/known-secrets';
 import type { SyncedEvent } from '../sync';
 import { createJobRunner, type JobRunner } from './runner';
 import { suggestTodosJob } from './suggest-todos';
@@ -21,6 +22,10 @@ export type AgentOptions = {
   idleAfterMs?: number;
   // Overrides every job's typing pause (the end-to-end tests shorten it).
   typingPauseMs?: number;
+  // The tokens and keys the Core holds: no prompt may carry one.
+  secrets?: KnownSecrets;
+  // Items the Agent changed outside the gate (a steering warning mark), so open views catch up.
+  onItemsChanged?: (itemIds: string[]) => void;
   log?: (message: string) => void;
 };
 
@@ -45,6 +50,9 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     client: options.client,
     gate: options.gate,
     store: itemStore.agent,
+    injectionWarnings: itemStore.injectionWarnings,
+    secrets: options.secrets,
+    onItemsChanged: options.onItemsChanged,
     now,
     typingPauseMs: options.typingPauseMs,
     log: options.log,

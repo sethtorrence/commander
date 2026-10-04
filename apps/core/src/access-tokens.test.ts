@@ -1,9 +1,13 @@
 import type { CoreAccessTokenReply, CoreAccessTokenRequest } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { AccessTokenUnavailable, createAccessTokens } from './access-tokens';
+import { createKnownSecrets } from './safety/known-secrets';
 
 // The main process, as the Core sees it: answers each request it is sent.
-function connect(answer: (request: CoreAccessTokenRequest) => unknown, options?: { timeoutMs?: number }) {
+function connect(
+  answer: (request: CoreAccessTokenRequest) => unknown,
+  options?: Parameters<typeof createAccessTokens>[1],
+) {
   const sent: CoreAccessTokenRequest[] = [];
   const tokens = createAccessTokens((message) => {
     sent.push(message);
@@ -28,6 +32,17 @@ describe('asking the main process for an access token', () => {
       kind: 'oauth',
     });
     expect(sent).toEqual([{ type: 'access-token-request', id: 1, account: 'linear:org-acme' }]);
+  });
+
+  it('remembers every token and key it hands out, so no prompt can carry one (by fingerprint only)', async () => {
+    const secrets = createKnownSecrets();
+    const { tokens } = connect((request) => ok(request, 'lin_oauth_0123456789abcdef0123456789abcdef'), {
+      secrets,
+    });
+
+    await tokens.request('linear:org-acme');
+
+    expect(secrets.foundIn('a note with lin_oauth_0123456789abcdef0123456789abcdef in it')).toBe(true);
   });
 
   it('matches replies to their requests', async () => {

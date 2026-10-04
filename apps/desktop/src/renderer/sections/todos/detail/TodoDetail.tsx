@@ -2,6 +2,7 @@ import type { ActivityEntry, Item } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import type { ReactNode } from 'react';
 import { shortDate } from '../../../frame/calendar';
+import { ItemWarning } from '../../../links/ItemWarning';
 import { originLabel } from '../origin';
 import { TodoProject } from '../project';
 import type { LinearState, MadeFrom, TodoLink } from '../todos';
@@ -83,6 +84,7 @@ export function TodoDetail({
             <p className="m-0 font-sans text-[16px] leading-[1.3] font-light text-muted">
               Added {shortDate(new Date(todo.createdAt))} · {timeOfDay(todo.createdAt)}
             </p>
+            <ItemWarning item={todo} variant="pane" className="mt-3" />
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact label="Status">{done ? 'Done' : 'Open'}</Fact>
               <Fact label="Origin">{originLabel(todo, madeFrom, linear?.issue)}</Fact>

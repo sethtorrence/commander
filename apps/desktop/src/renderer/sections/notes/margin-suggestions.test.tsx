@@ -120,7 +120,13 @@ describe('a margin card', () => {
         <MarginCards
           day="2026-10-03"
           suggestions={[
-            { id: 7, blockId: block, title: 'Send Dana the Q3 numbers', reason: 'You wrote it.' },
+            {
+              id: 7,
+              blockId: block,
+              title: 'Send Dana the Q3 numbers',
+              reason: 'You wrote it.',
+              source: 'need to send Dana the Q3 numbers',
+            },
           ]}
           onAdd={(id) => added.push(id)}
           onDismiss={(id) => dismissed.push(id)}
@@ -134,5 +140,30 @@ describe('a margin card', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Dismiss' }));
     expect(added).toEqual([7]);
     expect(dismissed).toEqual([7]);
+  });
+
+  it('shows Ares’s words as text only: a link only if the Block had it, never an image', () => {
+    const { container } = render(
+      <MarginCards
+        day="2026-10-03"
+        suggestions={[
+          {
+            id: 8,
+            blockId: block,
+            title: 'Read https://acme.test/runbook, not https://evil.test/x ![p](https://evil.test/p.png)',
+            reason: 'You wrote “read https://acme.test/runbook”.',
+            source: 'read https://acme.test/runbook',
+          },
+        ]}
+        onAdd={() => {}}
+        onDismiss={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
+      'https://acme.test/runbook',
+      'https://acme.test/runbook',
+    ]);
+    expect(container.querySelector('img, [src]')).toBeNull();
+    expect(container.textContent).toContain('https://evil.test/x');
   });
 });

@@ -1,5 +1,6 @@
 import { cn } from '@commander/ui';
 import { type ReactNode, useEffect, useRef } from 'react';
+import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { PRIORITY_NAMES, PriorityIcon, StateIcon } from './glyphs';
@@ -145,6 +146,7 @@ export function IssueRow({
         {issue.title}
       </span>
       <span className="mt-[5px] ml-3 flex flex-none items-center gap-1.5">
+        <ItemWarning item={issue} />
         {unsynced && (
           <Tag
             className="border-ink font-semibold text-ink"

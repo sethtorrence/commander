@@ -12,6 +12,7 @@ import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 import { setUpMarkdownCopy } from './markdown-copy';
 import { setUpModels } from './models';
+import { createKnownSecrets } from './safety/known-secrets';
 import { setUpSync } from './sync';
 
 const port = process.parentPort;
@@ -40,9 +41,15 @@ itemStore.takeDailySnapshot();
 setInterval(() => itemStore.takeDailySnapshot(), 60 * 60 * 1000);
 
 // Sources borrow their Accounts' access tokens from the main process through this, in memory only.
-const accessTokens = createAccessTokens((message) => port.postMessage(message));
+// Each one is remembered by fingerprint, so no prompt to a model can carry it (agent/prompt.ts).
+const secrets = createKnownSecrets();
+const accessTokens = createAccessTokens((message) => port.postMessage(message), { secrets });
 // Model calls for Ares; the API key is borrowed the same way, for each call.
-const models = setUpModels(itemStore, { send: (message) => port.postMessage(message), accessTokens });
+const models = setUpModels(itemStore, {
+  send: (message) => port.postMessage(message),
+  accessTokens,
+  secrets,
+});
 // Source sync: every Account on its cadence, writing through the Item store.
 const sync = setUpSync(itemStore, { send: (message) => port.postMessage(message), accessTokens });
 // The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Notes.
@@ -83,6 +90,9 @@ const agent = setUpAgent(itemStore, {
   client: models.client,
   send: (message) => port.postMessage(message),
   typingPauseMs: testHooks && Number.isFinite(typingPauseMs) ? typingPauseMs : undefined,
+  secrets,
+  // A steering warning mark shows at once in open views.
+  onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
 sync.engine.onSynced((event) => agent.synced(event));
 

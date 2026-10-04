@@ -8,10 +8,18 @@ import {
   modelKeyAccount,
   type modelsRequest,
 } from '@commander/domain';
-import { createModelClient, createZaiProvider, type ModelClient, ModelError } from '@commander/models';
+import {
+  createModelClient,
+  createZaiProvider,
+  type ModelClient,
+  ModelError,
+  type ModelProviderAdapter,
+  type ProviderRequest,
+} from '@commander/models';
 import { z } from 'zod';
 import { type AccessTokens, AccessTokenUnavailable } from '../access-tokens';
 import type { ItemStore } from '../item-store';
+import type { KnownSecrets } from '../safety/known-secrets';
 
 // What Test asks for: short, so it costs a fraction of a cent.
 const TEST_PROMPT = 'Reply with one short, friendly sentence to confirm you can hear me.';
@@ -63,16 +71,60 @@ function apiKeyFrom(accessTokens: Pick<AccessTokens, 'request'>, provider: Model
     );
 }
 
+// A provider that borrows the API key before anything is sent, then checks the messages against
+// every token and key the Core now knows (the key just borrowed included), so a prompt built before
+// a key was first borrowed still can't carry it (#69). The provider reuses the key borrowed for the
+// call, so it is borrowed once.
+function refusingSecrets(
+  borrow: () => Promise<string | null>,
+  make: (apiKey: () => Promise<string | null>) => ModelProviderAdapter,
+  secrets: Pick<KnownSecrets, 'foundIn'> | undefined,
+): ModelProviderAdapter {
+  let current: Promise<string | null> | null = null;
+  const provider = make(() => current ?? borrow());
+  async function guarded<T>(request: ProviderRequest, call: () => Promise<T>): Promise<T> {
+    const key = borrow();
+    current = key;
+    try {
+      await key.catch(() => null);
+      if (secrets?.foundIn(request.messages.map((message) => message.content).join('\n'))) {
+        throw new ModelError(
+          'bad-request',
+          'The prompt held one of your sign-in tokens or keys, so nothing was sent.',
+        );
+      }
+      return await call();
+    } finally {
+      if (current === key) current = null;
+    }
+  }
+  return {
+    send: (request) => guarded(request, () => provider.send(request)),
+    stream: (request, onToken) => guarded(request, () => provider.stream(request, onToken)),
+  };
+}
+
 export function setUpModels(
   store: ItemStore,
   {
     send,
     accessTokens,
-  }: { send: (message: CoreModelsReply) => void; accessTokens: Pick<AccessTokens, 'request'> },
+    secrets,
+  }: {
+    send: (message: CoreModelsReply) => void;
+    accessTokens: Pick<AccessTokens, 'request'>;
+    // The tokens and keys the Core holds (fed by accessTokens): no message to a model may carry one.
+    secrets?: Pick<KnownSecrets, 'foundIn'>;
+  },
 ) {
+  const zai = refusingSecrets(
+    apiKeyFrom(accessTokens, 'zai'),
+    (apiKey) => createZaiProvider({ apiKey }),
+    secrets,
+  );
   const client = createModelClient({
     settings: () => store.models.settings(),
-    providers: { zai: createZaiProvider({ apiKey: apiKeyFrom(accessTokens, 'zai') }) },
+    providers: { zai },
     ledger: store.models,
   });
 
