@@ -230,7 +230,7 @@ describe('running a job', () => {
       {
         proposals: (output, input) => ({
           proposals: [
-            ...noteJob().proposals(output, input).proposals,
+            ...(noteJob().proposals?.(output, input).proposals ?? []),
             {
               itemId: dana,
               itemActions: [{ type: 'delete', itemId: dana }],
@@ -238,7 +238,7 @@ describe('running a job', () => {
               reason: 'Tidy up',
             },
           ],
-          dropped: noteJob().proposals(output, input).dropped,
+          dropped: noteJob().proposals?.(output, input).dropped ?? [],
         }),
       },
       () => [dana, flights],
@@ -546,5 +546,120 @@ describe('across runs and restarts', () => {
     runner?.run('note-todos');
     await runner?.settled();
     expect(calls).toHaveLength(2);
+  });
+});
+
+describe('Todos changing', () => {
+  it('runs a job that listens a few seconds after the Todos last changed, once', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const block = writeBlock('renew passport');
+    start([
+      noteJob({
+        triggers: { 'todos-changed': { pauseMs: 5_000 } },
+        gather: ({ triggers }) => ({
+          items: [
+            { itemId: block, fingerprint: triggers.flatMap((t) => ('itemIds' in t ? t.itemIds : [])).join() },
+          ],
+        }),
+      }),
+    ]);
+
+    runner?.trigger({ kind: 'todos-changed', itemIds: ['todo-1'] });
+    vi.advanceTimersByTime(4_000);
+    runner?.trigger({ kind: 'todos-changed', itemIds: ['todo-2'] });
+    vi.advanceTimersByTime(4_000);
+    expect(calls).toHaveLength(0);
+    vi.advanceTimersByTime(1_000);
+    await runner?.settled();
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe('batches', () => {
+  it('sends a big input in several calls, each with its own part, and acts on every part’s reply', async () => {
+    const blocks = ['call the bank', 'renew passport', 'book flights'].map((text) => writeBlock(text));
+    script.push(
+      reply([{ ref: 'B1', title: 'Call the bank', confidence: 0.95 }]),
+      reply([{ ref: 'B1', title: 'Book flights', confidence: 0.95 }]),
+    );
+    const job = noteJob(
+      {
+        batch: (input) => [{ items: input.items.slice(0, 2) }, { items: input.items.slice(2) }],
+      },
+      () => blocks,
+    );
+    start([job]);
+
+    runner?.run('note-todos');
+    await runner?.settled();
+
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.messages.at(-1)?.content).toContain('B2: renew passport');
+    expect(calls[1]?.messages.at(-1)?.content).toContain('B1: book flights');
+    expect(calls[1]?.messages.at(-1)?.content).not.toContain('renew passport');
+    expect(todos().sort()).toEqual(['Book flights', 'Call the bank']);
+    expect(store.models.usageSummary().byJob).toEqual([
+      expect.objectContaining({ job: 'note-todos', calls: 2 }),
+    ]);
+  });
+});
+
+describe('a job whose result is a view (ranking)', () => {
+  const applyJob = (applied: unknown[][], blocks: () => string[]) =>
+    noteJob(
+      {
+        job: 'view',
+        name: 'View',
+        action: { action: 'view', actionKind: 'organise', section: null },
+        batch: (input) => input.items.map((item) => ({ items: [item] })),
+        proposals: undefined,
+        apply(answers) {
+          applied.push(answers.map(({ output, input }) => [output.todos.length, input.items.length]));
+          return { dropped: ['B7 was never given'] };
+        },
+      },
+      blocks,
+    );
+
+  it('applies every part’s reply at once, without the gate, at any level above Off', async () => {
+    const blocks = [writeBlock('call the bank'), writeBlock('renew passport')];
+    script.push(reply([{ ref: 'B1', title: 'x', confidence: 1 }]), reply([]));
+    const applied: unknown[][] = [];
+    start([applyJob(applied, () => blocks)]);
+    gate.setLevel({ scope: 'action', action: 'view' }, 'ask');
+
+    runner?.run('view');
+    await runner?.settled();
+
+    expect(applied).toEqual([
+      [
+        [1, 1],
+        [0, 1],
+      ],
+    ]);
+    expect(gate.activity()).toEqual([]);
+    expect(todos()).toEqual([]);
+    expect(logged).toEqual([expect.stringContaining('B7 was never given')]);
+    expect(runner?.jobs()).toEqual([expect.objectContaining({ lastOutcome: 'ok' })]);
+
+    gate.setLevel({ scope: 'action', action: 'view' }, 'off');
+    runner?.run('view');
+    await runner?.settled();
+    expect(applied).toHaveLength(1);
+  });
+
+  it('applies nothing when one part’s call fails', async () => {
+    const blocks = [writeBlock('call the bank'), writeBlock('renew passport')];
+    script.push(reply([]), new ModelError('unavailable', 'Z.ai is down'));
+    const applied: unknown[][] = [];
+    start([applyJob(applied, () => blocks)]);
+
+    runner?.run('view');
+    await runner?.settled();
+
+    expect(applied).toEqual([]);
+    expect(runner?.jobs()).toEqual([
+      expect.objectContaining({ lastOutcome: 'failed', lastProblem: 'Z.ai is down' }),
+    ]);
   });
 });

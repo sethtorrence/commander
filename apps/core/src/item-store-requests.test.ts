@@ -444,3 +444,19 @@ describe('Rules from the window', () => {
     });
   });
 });
+
+describe('the Dashboard from the window', () => {
+  it('reads the ranking and the cleared rows, saves the cleared rows, and refuses a bad band', () => {
+    expect(ask(1, { op: 'dashboard' })).toMatchObject({
+      response: { ok: true, result: { ranking: { by: 'rules', entries: [] }, clears: {} } },
+    });
+    const clears = { 'item-1': { band: 'today', at: 1_000 } };
+    expect(ask(2, { op: 'save-dashboard-clears', clears })).toMatchObject({
+      response: { ok: true, result: clears },
+    });
+    expect(ask(3, { op: 'dashboard' })).toMatchObject({ response: { ok: true, result: { clears } } });
+    expect(
+      ask(4, { op: 'save-dashboard-clears', clears: { 'item-1': { band: 'later', at: 1 } } }),
+    ).toMatchObject({ response: { ok: false } });
+  });
+});

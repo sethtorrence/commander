@@ -111,8 +111,9 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
   );
   await window.getByRole('option', { name: 'Ask', exact: true }).click();
 
-  // The registered action, with a level of its own.
-  await expect(grid.getByTestId('registered-action')).toHaveText(/Suggest Todos/);
+  // The registered actions, each with a level of its own; ranking the Dashboard says Ask works as Auto.
+  await expect(grid.getByTestId('registered-action')).toHaveText([/Suggest Todos/, /Rank the Dashboard/]);
+  await expect(grid.getByTestId('registered-action').nth(1)).toContainText('Ask works as Auto here');
   await choose(window, 'Suggest Todos', 'Ask');
   await choose(window, 'Delete · Everywhere', 'Ask');
   await choose(window, 'Tidy your Sources · Email', 'Auto');

@@ -78,6 +78,8 @@ const gate = openGate({
     if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
     // And in the Markdown copy: an Ares Todo puts a checkbox on its Block there too.
     markdownCopy.itemsChanged(itemIds);
+    // A suggested (or added) Todo is ranked on the Dashboard.
+    agent.aresChanged();
   },
 });
 

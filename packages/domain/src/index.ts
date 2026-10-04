@@ -1,5 +1,6 @@
 export * from './account-messages';
 export * from './agent';
+export * from './ares-ranking';
 export * from './attachments';
 export * from './autonomy';
 export * from './autonomy-messages';

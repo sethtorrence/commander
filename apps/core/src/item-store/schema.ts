@@ -3,8 +3,10 @@
 import type {
   ActionKind,
   ActivityAction,
+  AresBand,
   AutonomySection,
   ChatDetail,
+  DashboardBand,
   FieldSummary,
   FiledBy,
   ItemKind,
@@ -469,4 +471,30 @@ export const injectionWarnings = sqliteTable('injection_warnings', {
   found: text('found', { mode: 'json' }).$type<string[]>().notNull(),
   // A fingerprint (SHA-256) of the Item's words when it was marked.
   contentHash: text('content_hash').notNull(),
+});
+
+// Ares's latest ranking of the Dashboard (#72): one row per Item he ranked (or pending suggestion,
+// `suggestion:12`, which is not an Item yet, so no reference), with a fingerprint of the Item as he
+// saw it. Each run replaces it whole; `dashboard_ranked` says when.
+export const dashboardRankings = sqliteTable('dashboard_rankings', {
+  itemId: text('item_id').primaryKey(),
+  band: text('band').$type<AresBand>().notNull(),
+  rank: integer('rank').notNull(),
+  reason: text('reason').notNull(),
+  fingerprint: text('fingerprint').notNull(),
+});
+
+// When Ares last ranked the Dashboard: one row.
+export const dashboardRanked = sqliteTable('dashboard_ranked', {
+  id: integer('id').primaryKey(),
+  at: integer('at').notNull(),
+});
+
+// Rows the User cleared from the Dashboard (`e`): the band each was in, when, and a fingerprint of the
+// Item then (null for a suggestion), so Ares leaves it out until it changes. Clearing changes no Item.
+export const dashboardClears = sqliteTable('dashboard_clears', {
+  itemId: text('item_id').primaryKey(),
+  band: text('band').$type<DashboardBand>().notNull(),
+  at: integer('at').notNull(),
+  fingerprint: text('fingerprint'),
 });

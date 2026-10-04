@@ -1,15 +1,16 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ActionContext, AresStatus } from '@commander/domain';
+import type { ActionContext, CoreMessage } from '@commander/domain';
 import { createModelClient, type ModelProviderAdapter, type ProviderRequest } from '@commander/models';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Gate, openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
 import { type Agent, setUpAgent } from '.';
 
-// The Agent in the Core: what it hears of (the User's changes, Source syncs, the machine idle) and
-// when Ares's jobs run because of it. Real Item store and gate; the model is a fake provider.
+// The Agent in the Core: what it hears of (the User's changes, Source syncs, Ares's own suggestions,
+// the machine idle) and when Ares's jobs run because of it. Real Item store and gate; the model is a
+// fake provider, answering each job with nothing to do.
 
 const user: ActionContext = { by: { kind: 'user' } };
 
@@ -19,16 +20,23 @@ let store: ItemStore;
 let gate: Gate;
 let agent: Agent;
 let calls: ProviderRequest[];
-let statuses: AresStatus[];
+let statuses: CoreMessage[];
 let note: string;
 
 const provider: ModelProviderAdapter = {
   async send(request) {
     calls.push(request);
-    return { text: '{"todos":[]}', usage: { inputTokens: 10, cachedTokens: 0, outputTokens: 5 } };
+    const text = ranks(request) ? '{"ranking":[]}' : '{"todos":[]}';
+    return { text, usage: { inputTokens: 10, cachedTokens: 0, outputTokens: 5 } };
   },
   stream: () => Promise.reject(new Error('not used')),
 };
+
+// Which job a call was for, by its instructions.
+const ranks = (request: ProviderRequest) =>
+  !!request.messages[0]?.content.includes("rank the User's Dashboard");
+const suggestCalls = () => calls.filter((call) => !ranks(call));
+const rankCalls = () => calls.filter(ranks);
 
 function open() {
   store = openItemStore({
@@ -103,9 +111,9 @@ describe('the Agent', () => {
     const block = writeBlock('need to send Dana the Q3 numbers');
     agent.userChanged([block]);
     await wait(19_000);
-    expect(calls).toHaveLength(0);
+    expect(suggestCalls()).toHaveLength(0);
     await wait(1_000);
-    expect(calls).toHaveLength(1);
+    expect(suggestCalls()).toHaveLength(1);
     expect(statuses).toEqual([
       { type: 'ares-status', working: true, running: ['Suggest Todos'] },
       { type: 'ares-status', working: false, running: [] },
@@ -126,36 +134,68 @@ describe('the Agent', () => {
     ).itemId;
     agent.userChanged([todo]);
     await wait(30_000);
-    expect(calls).toHaveLength(0);
+    expect(suggestCalls()).toHaveLength(0);
   });
 
   it('catches up when the User has changed nothing for a while, once per quiet spell', async () => {
     // Started with nothing written: its first look (once the start-up pause is up) finds nothing.
     await wait(20_000);
-    expect(calls).toHaveLength(0);
+    expect(suggestCalls()).toHaveLength(0);
     // Written somewhere the Core didn't hear about as typing: the catch-up finds it.
     writeBlock('renew passport');
     await wait(5 * 60_000);
-    expect(calls).toHaveLength(1);
+    expect(suggestCalls()).toHaveLength(1);
     writeBlock('call the bank');
     await wait(10 * 60_000);
-    expect(calls).toHaveLength(1);
+    expect(suggestCalls()).toHaveLength(1);
     // After the User is back and quiet again, another catch-up.
     agent.userChanged([]);
     await wait(5 * 60_000);
-    expect(calls).toHaveLength(2);
+    expect(suggestCalls()).toHaveLength(2);
   });
 
   it('after a restart, looks at what the User wrote since its last run once they pause', async () => {
     agent.runner.run('suggest-todos');
     await agent.runner.settled();
-    expect(calls).toHaveLength(0); // nothing written yet
+    expect(suggestCalls()).toHaveLength(0); // nothing written yet
     writeBlock('need to send Dana the Q3 numbers');
     agent.stop();
     store.close();
 
     open();
     await wait(20_000);
-    expect(calls).toHaveLength(1);
+    expect(suggestCalls()).toHaveLength(1);
+  });
+
+  it('ranks the Dashboard a few seconds after the Todos stop changing, after a sync, and after Ares suggests, and says when it has', async () => {
+    const todo = store.record(
+      {
+        type: 'create',
+        item: {
+          kind: 'todo',
+          title: 'Pay rent',
+          detail: { kind: 'todo', origin: 'manual', dueOn: null, backedBy: null },
+        },
+      },
+      user,
+    ).itemId;
+    agent.userChanged([todo]);
+    await wait(3_000);
+    expect(rankCalls()).toHaveLength(0);
+    await wait(2_000);
+    expect(rankCalls()).toHaveLength(1);
+    expect(statuses).toContainEqual({ type: 'dashboard-ranked', at: clock });
+
+    // Nothing changed since: a sync makes no call, and the Dashboard hears it was ranked again.
+    statuses = [];
+    agent.synced({ source: 'linear', account: 'linear:org-acme', outcome: 'synced', itemIds: [] });
+    await wait(0);
+    expect(rankCalls()).toHaveLength(1);
+    expect(statuses).toContainEqual({ type: 'dashboard-ranked', at: clock });
+
+    store.record({ type: 'update', itemId: todo, changes: { title: 'Pay the rent' } }, user);
+    agent.aresChanged();
+    await wait(5_000);
+    expect(rankCalls()).toHaveLength(2);
   });
 });

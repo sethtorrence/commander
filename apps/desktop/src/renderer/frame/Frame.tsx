@@ -107,7 +107,7 @@ export function Frame() {
   const [cheatSheet, setCheatSheet] = useState(false);
   const projects = useMemo(() => projectsIn(window.commander.itemStore), []);
   const dashboard = useMemo(
-    () => dashboardIn(window.commander.itemStore, linearAccountsIn(window.commander)),
+    () => dashboardIn(window.commander.itemStore, linearAccountsIn(window.commander), window.commander),
     [],
   );
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);

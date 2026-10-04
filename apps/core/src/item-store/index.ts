@@ -80,6 +80,7 @@ import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
+import { type DashboardStore, openDashboardStore } from './dashboard';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
 import { linearSendIn } from './linear-send';
 import { linearTodosIn } from './linear-todos';
@@ -111,6 +112,7 @@ import { editedState, queueChanges, undoneDetail, withQueuedOnTop } from './sync
 export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
+export type { DashboardStore, StoredClear } from './dashboard';
 export type { InjectionWarningStore } from './injection-warnings';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { Snapshot } from './snapshots';
@@ -230,6 +232,8 @@ export type ItemStore = {
   autonomy: AutonomyStore;
   // Where Ares's jobs stand and what they have looked at, in the same database.
   agent: AgentStore;
+  // The Dashboard (dashboard.ts): Ares's latest ranking and the cleared rows, in the same database.
+  dashboard: DashboardStore;
   // Steering warnings (injection-warnings.ts): outside Items checked as they are saved from their
   // Source, and marked when they hold instructions aimed at Ares; a job's steering flag marks one too.
   injectionWarnings: InjectionWarningStore;
@@ -1519,12 +1523,21 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
   );
 
+  const autonomy = openAutonomyStore(db, now);
+  const agent = openAgentStore(db, now);
+
   return {
     models: openModelStore(db, now),
     syncState,
     outgoing,
-    autonomy: openAutonomyStore(db, now),
-    agent: openAgentStore(db, now),
+    autonomy,
+    agent,
+    dashboard: openDashboardStore(db, {
+      agent,
+      autonomy,
+      readItem: (id) =>
+        withDetails(db.select().from(schema.items).where(eq(schema.items.id, id)).all())[0] ?? null,
+    }),
     injectionWarnings: {
       flag: sqlite.transaction((itemId: string) => warnings.flag(itemId)),
       since: (after) => warnings.since(after),

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type DashboardClears, type DashboardState, dashboardClears, dashboardState } from './ares-ranking';
 import { attachmentMaxBytes, attachmentNamePattern } from './attachments';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import {
@@ -114,6 +115,10 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
     projectId: z.string().min(1).nullable().optional(),
   }),
   z.object({ op: z.literal('block-issues'), dailyNoteIds: z.array(z.string().min(1)).max(1000) }),
+  // The Dashboard (ares-ranking.ts): Ares's ranking (or why the rules rank it) and the rows cleared
+  // from it, and replacing those. Clearing changes no Item, so it is not in the activity log.
+  z.object({ op: z.literal('dashboard') }),
+  z.object({ op: z.literal('save-dashboard-clears'), clears: dashboardClears }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -148,6 +153,8 @@ export type ItemStoreResults = {
   'send-to-linear': ActivityEntry[];
   'linear-send-prefill': LinearSendPrefill;
   'block-issues': BlockIssue[];
+  dashboard: DashboardState;
+  'save-dashboard-clears': DashboardClears;
 };
 
 export const itemStoreResult = {
@@ -180,6 +187,8 @@ export const itemStoreResult = {
   'send-to-linear': z.array(activityEntry),
   'linear-send-prefill': linearSendPrefill,
   'block-issues': z.array(blockIssue),
+  dashboard: dashboardState,
+  'save-dashboard-clears': dashboardClears,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =
