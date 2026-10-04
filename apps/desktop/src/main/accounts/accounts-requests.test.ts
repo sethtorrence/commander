@@ -7,6 +7,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeSafeStorage } from '../fake-safe-storage';
 import { type FakeGitHub, OCTOCAT, startFakeGitHub } from '../github/fake-github-server';
 import { createGitHubAccounts, type GitHubAccounts } from '../github/github-accounts';
+import { ALEX, type FakeGoogle, startFakeGoogle } from '../google/fake-google-server';
+import { createGoogleAccounts } from '../google/google-accounts';
 import { ACME, type FakeLinear, startFakeLinear } from '../linear/fake-linear-server';
 import { createLinearAccounts, type LinearAccounts } from '../linear/linear-accounts';
 import { type FakeMicrosoft, SAM, startFakeMicrosoft } from '../microsoft/fake-microsoft-server';
@@ -415,5 +417,83 @@ describe('GitHub Accounts from the window', () => {
     });
 
     expect(response).toMatchObject({ ok: false, error: 'Commander did not understand that request.' });
+  });
+});
+
+describe('Settings → Accounts requests for a Google Account', () => {
+  let google: FakeGoogle;
+
+  beforeEach(async () => {
+    google = await startFakeGoogle();
+    accounts = combineAccounts([
+      linearAccounts,
+      teams(),
+      createGoogleAccounts({
+        config: {
+          clientId: google.clientId,
+          clientSecret: google.clientSecret,
+          authorizeUrl: google.authorizeUrl,
+          tokenUrl: google.tokenUrl,
+          userinfoUrl: google.userinfoUrl,
+        },
+        secrets,
+        store: createAccountStore(join(dir, 'accounts.json')),
+        openBrowser: async (url) => {
+          await fetch(url);
+        },
+        removeItems: async () => {},
+      }),
+    ]);
+  });
+
+  afterEach(async () => {
+    await google.close();
+  });
+
+  it('connects it through the browser, listing Gmail and Google Calendar, and switches a Source off', async () => {
+    const connected = await answerAccountsRequest(accounts, {
+      op: 'connect',
+      source: 'google',
+      method: 'oauth',
+    });
+    expect(connected.state.sources).toContainEqual({ source: 'google', oauth: true, apiKey: false });
+    expect(connected.state.accounts).toMatchObject([
+      {
+        id: `google:${ALEX.sub}`,
+        name: 'Google · alex@gmail.test',
+        sources: [
+          { source: 'gmail', granted: true, enabled: true },
+          { source: 'google-calendar', granted: true, enabled: true },
+        ],
+      },
+    ]);
+
+    const switched = await answerAccountsRequest(accounts, {
+      op: 'set-source-enabled',
+      accountId: `google:${ALEX.sub}`,
+      source: 'gmail',
+      enabled: false,
+    });
+    expect(switched).toMatchObject({
+      ok: true,
+      state: { accounts: [{ sources: [{ source: 'gmail', enabled: false }, { enabled: true }] }] },
+    });
+  });
+
+  it('explains a blocked Workspace under Google', async () => {
+    google.block('admin_policy_enforced');
+
+    const response = await answerAccountsRequest(accounts, {
+      op: 'connect',
+      source: 'google',
+      method: 'oauth',
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      source: 'google',
+      error:
+        'Your Google Workspace admin hasn’t allowed Commander. Ask them to allow it, or connect a personal account.',
+    });
   });
 });

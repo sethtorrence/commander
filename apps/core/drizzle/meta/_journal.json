@@ -127,6 +127,13 @@
       "when": 1791086195886,
       "tag": "0017_dashboard_ranking",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1791086834913,
+      "tag": "0018_sync_state_per_source",
+      "breakpoints": true
     }
   ]
 }

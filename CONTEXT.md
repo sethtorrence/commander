@@ -23,7 +23,7 @@ An outside service Commander syncs with, such as Linear, Gmail, Outlook, Microso
 _Avoid_: Integration, provider, connector
 
 **Account**:
-One signed-in identity on a Source; a Source may have several Accounts (e.g. 3–4 email Accounts).
+One signed-in identity on a Source; a Source may have several Accounts (e.g. 3–4 email Accounts), and one Account may carry several Sources that share its sign-in (a Google Account carries Gmail and Google Calendar).
 _Avoid_: Login, connection, profile
 
 **Item**:

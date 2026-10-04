@@ -10,5 +10,9 @@
   "github": {
     "clientId": null,
     "appSlug": null
+  },
+  "google": {
+    "clientId": null,
+    "clientSecret": null
   }
 }

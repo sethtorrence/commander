@@ -95,7 +95,11 @@ export async function signInWithMicrosoft({
   now?: () => number;
 }): Promise<MicrosoftSignIn> {
   try {
-    const { idToken, ...tokens } = await signInWithBrowser({ client: client(app, scopes), ...options });
+    const {
+      idToken,
+      scope: _scope,
+      ...tokens
+    } = await signInWithBrowser({ client: client(app, scopes), ...options });
     return { ...tokens, tenantId: tenantOf(idToken, app.tenantId) };
   } catch (error) {
     if (error instanceof SignInError && ADMIN_CONSENT_CODES.test(error.sourceError?.description ?? '')) {

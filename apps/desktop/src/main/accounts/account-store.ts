@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { open, readFile, rename, rm } from 'node:fs/promises';
-import { accountSource } from '@commander/domain';
-import type { AccountMethod, AccountSource, AccountStatus } from '@commander/domain/ipc';
+import { accountSource, source } from '@commander/domain';
+import type { AccountMethod, AccountSource, AccountStatus, CarriedSource } from '@commander/domain/ipc';
 import { z } from 'zod';
 
 // The signed-in Accounts of every Source, kept by the main process in a small JSON file next to the
@@ -21,8 +21,12 @@ export type AccountRecord = {
   // Who the User is at the Source (their Linear user; their Teams user). null for Linear Accounts
   // connected before Commander kept it, until it is found out (SourceAccounts.identifyUsers).
   user: { id: string; name: string } | null;
-  // What only the Account's Source needs: Linear { urlKey }; Teams { tenantId, userPrincipalName }.
+  // What only the Account's Source needs: Linear { urlKey }; Teams { tenantId, userPrincipalName };
+  // Google { email }.
   details: Record<string, string>;
+  // For an Account carrying several Sources (a Google Account's Gmail and Google Calendar): which
+  // were granted, and which the User has on. Absent for single-Source Accounts.
+  sources?: CarriedSource[];
 };
 
 export type AccountStore = {
@@ -49,6 +53,7 @@ const accountRecord = z.object({
   connectedAt: z.number(),
   user: user.nullable(),
   details: z.record(z.string(), z.string()),
+  sources: z.array(z.object({ source, granted: z.boolean(), enabled: z.boolean() })).optional(),
 });
 
 const currentFile = z.object({ version: z.literal(VERSION), accounts: z.array(accountRecord) });
