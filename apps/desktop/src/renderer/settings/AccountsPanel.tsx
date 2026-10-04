@@ -1,4 +1,11 @@
-import type { AccountSummary, AccountsRequest, AccountsState } from '@commander/domain/ipc';
+import type {
+  AccountSource,
+  AccountSummary,
+  AccountsRequest,
+  AccountsState,
+  AdminConsentNeeded,
+  SourceSignIn,
+} from '@commander/domain/ipc';
 import {
   Button,
   ButtonGroup,
@@ -13,22 +20,39 @@ import {
   DialogTitle,
   Input,
   Led,
+  toast,
 } from '@commander/ui';
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { AccountSync } from './AccountSync';
 import { SettingRow, SettingsGroup } from './parts';
 
-// Settings → Accounts: the User's signed-in Accounts, by Source. Only Linear so far. Tokens and
-// keys stay in the main process: the window sees Account names and their state, nothing more.
+// Settings → Accounts: the User's signed-in Accounts, grouped by Source, each Source with its own
+// Connect. Tokens and keys stay in the main process: the window sees Account names and their state,
+// nothing more.
 
-type Busy = null | 'oauth' | 'api-key' | 'remove';
-// The API key form, open for a new Account or to reconnect an existing one.
+type Busy = null | { source: AccountSource; kind: 'oauth' | 'api-key' | 'remove' };
+// What went wrong, under the Source it's about.
+type Problem = null | { source: AccountSource | null; message: string; adminConsent?: AdminConsentNeeded };
+// The Linear API key form, open for a new Account or to reconnect an existing one.
 type KeyForm = null | { reconnect?: AccountSummary };
 
-const methodNames = { oauth: 'Signed in with Linear', 'api-key': 'Personal API key' } as const;
+// How each Source is named, and what removing one of its Accounts takes away.
+const SOURCES: Record<AccountSource, { name: string; items: string }> = {
+  linear: { name: 'Linear', items: 'Linear issues' },
+  teams: { name: 'Microsoft Teams', items: 'Teams Chats' },
+};
+
+const linearMethods = { oauth: 'Signed in with Linear', 'api-key': 'Personal API key' } as const;
+
+function describeAccount(account: AccountSummary): string {
+  return account.source === 'linear'
+    ? `Linear workspace · linear.app/${account.urlKey} · ${linearMethods[account.method]}`
+    : `Microsoft work account · ${account.user?.name ?? account.userPrincipalName} · Signed in with Microsoft`;
+}
 
 function RemoveAccount({ account, onRemove }: { account: AccountSummary; onRemove: () => Promise<boolean> }) {
   const [open, setOpen] = useState(false);
+  const source = SOURCES[account.source];
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <Button onClick={() => setOpen(true)}>Remove</Button>
@@ -39,8 +63,8 @@ function RemoveAccount({ account, onRemove }: { account: AccountSummary; onRemov
         <DialogBody>
           <DialogHeading>Remove {account.name}?</DialogHeading>
           <DialogDescription>
-            Commander deletes this Linear Account’s sign-in from the keyring and removes its Linear issues.
-            Your notes and Todos stay; Links to removed issues show them as gone.
+            Commander deletes this {source.name} Account’s sign-in from the keyring and removes its{' '}
+            {source.items}. Your notes and Todos stay; Links to removed {source.items} show them as gone.
           </DialogDescription>
         </DialogBody>
         <DialogFooter>
@@ -50,7 +74,7 @@ function RemoveAccount({ account, onRemove }: { account: AccountSummary; onRemov
           <Button
             variant="primary"
             onClick={async () => {
-              // Closed either way: a failure is explained under the Accounts.
+              // Closed either way: a failure is explained under the Source.
               await onRemove();
               setOpen(false);
             }}
@@ -60,6 +84,47 @@ function RemoveAccount({ account, onRemove }: { account: AccountSummary; onRemov
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function AccountRow({
+  account,
+  busy,
+  onReconnect,
+  onRemove,
+  request,
+}: {
+  account: AccountSummary;
+  busy: boolean;
+  // null: this build can't reconnect it (no app registration for its Source).
+  onReconnect: (() => void) | null;
+  onRemove: () => Promise<boolean>;
+  request: (request: AccountsRequest) => void;
+}) {
+  return (
+    <SettingRow
+      label={<span data-testid="account-name">{account.name}</span>}
+      description={describeAccount(account)}
+    >
+      <div data-testid="account" data-account-id={account.id} className="flex flex-wrap items-center gap-4">
+        <span
+          data-testid="account-status"
+          className="flex min-w-[170px] items-center gap-2 font-mono text-label-lg leading-none font-semibold uppercase tracking-label text-ink"
+        >
+          <Led size="sm" state={account.status === 'connected' ? 'muted' : 'on'} />
+          {account.status === 'connected' ? 'Connected' : 'Needs reconnecting'}
+        </span>
+        <ButtonGroup>
+          {account.status === 'needs-reconnect' && (
+            <Button variant="signal" disabled={busy || !onReconnect} onClick={() => onReconnect?.()}>
+              Reconnect
+            </Button>
+          )}
+          <RemoveAccount account={account} onRemove={onRemove} />
+        </ButtonGroup>
+      </div>
+      <AccountSync account={account} request={request} />
+    </SettingRow>
   );
 }
 
@@ -113,10 +178,77 @@ function ApiKeyForm({
   );
 }
 
+function WaitingForBrowser() {
+  return (
+    <div className="flex items-center gap-4">
+      <span className="text-note text-ink" data-testid="waiting-for-browser">
+        Approve Commander in your browser, then come back here.
+      </span>
+      <Button onClick={() => window.commander.accounts({ op: 'cancel-sign-in' })}>Cancel</Button>
+    </div>
+  );
+}
+
+const Note = ({ children }: { children: ReactNode }) => (
+  <p className="m-0 mt-2 max-w-[560px] text-note leading-[19px] text-muted">{children}</p>
+);
+
+// The organisation needs an administrator to approve Commander: the permissions, and the link.
+function AdminConsent({ needed }: { needed: AdminConsentNeeded }) {
+  const link = useRef<HTMLInputElement>(null);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(needed.url);
+      toast('Admin consent link copied');
+    } catch {
+      // No clipboard here: select it, for the User to copy.
+      link.current?.select();
+    }
+  };
+  return (
+    <div data-testid="admin-consent" className="mt-3 max-w-[560px]">
+      <p className="m-0 text-note leading-[19px] text-ink">Permissions to approve:</p>
+      <ul
+        data-testid="admin-consent-permissions"
+        className="m-0 mt-1 pl-5 font-mono text-note leading-[19px]"
+      >
+        {needed.permissions.map((permission) => (
+          <li key={permission}>{permission}</li>
+        ))}
+      </ul>
+      <div className="mt-2 flex">
+        <Input
+          ref={link}
+          readOnly
+          aria-label="Admin consent link"
+          value={needed.url}
+          onFocus={(event) => event.target.select()}
+        />
+        <ButtonGroup className="[&>*]:border-l-0">
+          <Button onClick={copy}>Copy link</Button>
+        </ButtonGroup>
+      </div>
+    </div>
+  );
+}
+
+function ProblemNote({ problem }: { problem: NonNullable<Problem> }) {
+  return (
+    <div
+      data-testid="accounts-error"
+      role="alert"
+      className="m-0 mt-3 max-w-[560px] border-l-2 border-signal py-0.5 pl-3.5 text-note leading-[19px] text-ink"
+    >
+      {problem.message}
+      {problem.adminConsent && <AdminConsent needed={problem.adminConsent} />}
+    </div>
+  );
+}
+
 export function AccountsPanel({ no }: { no: string }) {
   const [state, setState] = useState<AccountsState | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [problem, setProblem] = useState<Problem>(null);
   const [keyForm, setKeyForm] = useState<KeyForm>(null);
 
   useEffect(() => {
@@ -124,28 +256,37 @@ export function AccountsPanel({ no }: { no: string }) {
     return window.commander.onAccountsChanged(setState);
   }, []);
 
-  async function run(kind: Exclude<Busy, null>, request: AccountsRequest): Promise<boolean> {
-    setBusy(kind);
-    setError(null);
+  async function run(source: AccountSource, kind: NonNullable<Busy>['kind'], request: AccountsRequest) {
+    setBusy({ source, kind });
+    setProblem(null);
     try {
       const response = await window.commander.accounts(request);
       setState(response.state);
-      if (!response.ok) setError(response.error);
+      if (!response.ok) {
+        setProblem({
+          source: response.source ?? source,
+          message: response.error,
+          adminConsent: response.adminConsent,
+        });
+      }
       return response.ok;
     } finally {
       setBusy(null);
     }
   }
 
-  const oauth = state?.linearOAuth ?? false;
-  // Without an OAuth app in this build, the API key form is the way to connect.
-  const form: KeyForm = keyForm ?? (state && !oauth ? {} : null);
+  const signInOf = (source: AccountSource): SourceSignIn | undefined =>
+    state?.sources.find((each) => each.source === source);
+  const linearOAuth = signInOf('linear')?.oauth ?? false;
+  // Without an OAuth app in this build, the API key form is the way to connect Linear.
+  const form: KeyForm = keyForm ?? (state && !linearOAuth ? {} : null);
 
-  const connectWithBrowser = (reconnect?: AccountSummary) =>
-    run('oauth', { op: 'connect-linear', method: 'oauth', reconnect: reconnect?.id });
+  const connectWithBrowser = (source: AccountSource, reconnect?: AccountSummary) =>
+    run(source, 'oauth', { op: 'connect', source, method: 'oauth', reconnect: reconnect?.id });
   const connectWithKey = async (apiKey: string) => {
-    const ok = await run('api-key', {
-      op: 'connect-linear',
+    const ok = await run('linear', 'api-key', {
+      op: 'connect',
+      source: 'linear',
       method: 'api-key',
       apiKey,
       reconnect: form?.reconnect?.id,
@@ -153,68 +294,31 @@ export function AccountsPanel({ no }: { no: string }) {
     if (ok) setKeyForm(null);
   };
 
-  return (
-    <SettingsGroup no={no} title="Accounts" note="Sources" data-testid="accounts-panel">
-      {state?.accounts.map((account) => (
-        <SettingRow
-          key={account.id}
-          label={<span data-testid="account-name">{account.name}</span>}
-          description={`Linear workspace · linear.app/${account.urlKey} · ${methodNames[account.method]}`}
-        >
-          <div
-            data-testid="account"
-            data-account-id={account.id}
-            className="flex flex-wrap items-center gap-4"
-          >
-            <span
-              data-testid="account-status"
-              className="flex min-w-[170px] items-center gap-2 font-mono text-label-lg leading-none font-semibold uppercase tracking-label text-ink"
-            >
-              <Led size="sm" state={account.status === 'connected' ? 'muted' : 'on'} />
-              {account.status === 'connected' ? 'Connected' : 'Needs reconnecting'}
-            </span>
-            <ButtonGroup>
-              {account.status === 'needs-reconnect' && (
-                <Button
-                  variant="signal"
-                  disabled={busy !== null}
-                  onClick={() =>
-                    account.method === 'oauth' && oauth
-                      ? connectWithBrowser(account)
-                      : setKeyForm({ reconnect: account })
-                  }
-                >
-                  Reconnect
-                </Button>
-              )}
-              <RemoveAccount
-                account={account}
-                onRemove={() => run('remove', { op: 'remove', accountId: account.id })}
-              />
-            </ButtonGroup>
-          </div>
-          <AccountSync
-            account={account}
-            request={(request) =>
-              window.commander.accounts(request).then((response) => setState(response.state))
-            }
-          />
-        </SettingRow>
-      ))}
+  const reconnectOf = (account: AccountSummary): (() => void) | null => {
+    const oauth = signInOf(account.source)?.oauth ?? false;
+    if (account.source === 'linear' && !(account.method === 'oauth' && oauth)) {
+      return () => setKeyForm({ reconnect: account });
+    }
+    return oauth ? () => connectWithBrowser(account.source, account) : null;
+  };
+
+  const problemFor = (source: AccountSource) =>
+    problem && (problem.source === source || (problem.source === null && source === 'linear')) ? (
+      <ProblemNote problem={problem} />
+    ) : null;
+  const waiting = (source: AccountSource) => busy?.source === source && busy.kind === 'oauth';
+
+  const connectRows: Record<AccountSource, (signIn: SourceSignIn) => ReactNode> = {
+    linear: () => (
       <SettingRow
         label="Linear"
         description="Connect a Linear workspace. Each workspace is its own Account; connect as many as you use."
       >
-        {busy === 'oauth' ? (
-          <div className="flex items-center gap-4">
-            <span className="text-note text-ink" data-testid="waiting-for-browser">
-              Approve Commander in your browser, then come back here.
-            </span>
-            <Button onClick={() => window.commander.accounts({ op: 'cancel-sign-in' })}>Cancel</Button>
-          </div>
+        {waiting('linear') ? (
+          <WaitingForBrowser />
         ) : form ? (
           <>
-            {!oauth && state && (
+            {!linearOAuth && state && (
               <p className="m-0 mb-3 max-w-[560px] text-note leading-[19px] text-muted">
                 This build has no Linear sign-in set up, so connect with a personal API key.
               </p>
@@ -222,15 +326,19 @@ export function AccountsPanel({ no }: { no: string }) {
             <ApiKeyForm
               key={form.reconnect?.id ?? 'new'}
               form={form}
-              busy={busy === 'api-key'}
-              canCancel={keyForm !== null && (oauth || form.reconnect !== undefined)}
+              busy={busy?.kind === 'api-key'}
+              canCancel={keyForm !== null && (linearOAuth || form.reconnect !== undefined)}
               onSubmit={connectWithKey}
               onCancel={() => setKeyForm(null)}
             />
           </>
         ) : (
           <div className="flex items-center gap-3">
-            <Button variant="primary" disabled={!state || busy !== null} onClick={() => connectWithBrowser()}>
+            <Button
+              variant="primary"
+              disabled={!state || busy !== null}
+              onClick={() => connectWithBrowser('linear')}
+            >
               Connect Linear
             </Button>
             <Button variant="ghost" disabled={busy !== null} onClick={() => setKeyForm({})}>
@@ -238,16 +346,56 @@ export function AccountsPanel({ no }: { no: string }) {
             </Button>
           </div>
         )}
-        {error && (
-          <p
-            data-testid="accounts-error"
-            role="alert"
-            className="m-0 mt-3 max-w-[560px] border-l-2 border-signal py-0.5 pl-3.5 text-note leading-[19px] text-ink"
-          >
-            {error}
-          </p>
-        )}
+        {problemFor('linear')}
       </SettingRow>
+    ),
+    teams: (signIn) => (
+      <SettingRow
+        label="Microsoft Teams"
+        description="Connect your Microsoft work account to bring in your Teams Chats. Each account is its own Account."
+      >
+        {waiting('teams') ? (
+          <WaitingForBrowser />
+        ) : (
+          <>
+            <Button
+              variant="primary"
+              disabled={!signIn.oauth || busy !== null}
+              onClick={() => connectWithBrowser('teams')}
+            >
+              Connect Teams
+            </Button>
+            {!signIn.oauth && (
+              <Note>This build has no Microsoft app set up. See “Connecting Teams” in the README.</Note>
+            )}
+          </>
+        )}
+        {problemFor('teams')}
+      </SettingRow>
+    ),
+  };
+
+  return (
+    <SettingsGroup no={no} title="Accounts" note="Sources" data-testid="accounts-panel">
+      {state?.sources.map((signIn) => (
+        <div key={signIn.source} data-testid={`source-${signIn.source}`} className="contents">
+          {state.accounts
+            .filter((account) => account.source === signIn.source)
+            .map((account) => (
+              <AccountRow
+                key={account.id}
+                account={account}
+                busy={busy !== null}
+                onReconnect={reconnectOf(account)}
+                onRemove={() => run(account.source, 'remove', { op: 'remove', accountId: account.id })}
+                request={(request) =>
+                  window.commander.accounts(request).then((response) => setState(response.state))
+                }
+              />
+            ))}
+          {connectRows[signIn.source](signIn)}
+        </div>
+      ))}
     </SettingsGroup>
   );
 }

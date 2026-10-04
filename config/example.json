@@ -2,5 +2,9 @@
   "linear": {
     "clientId": null,
     "redirectPort": 48613
+  },
+  "microsoft": {
+    "clientId": null,
+    "tenantId": null
   }
 }

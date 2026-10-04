@@ -76,7 +76,7 @@ async function setUp(): Promise<Page> {
   await openSettings(page);
   const panel = page.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
-  await panel.getByRole('button', { name: 'Connect' }).click();
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(panel.getByTestId('account-synced')).toHaveText(/1 issue/);
   const form = page.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill('Longtail');

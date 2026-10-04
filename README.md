@@ -41,15 +41,23 @@ cp config/example.json config/local.json   # then fill in the client IDs
   "linear": {
     "clientId": "your Linear OAuth app's client ID",
     "redirectPort": 48613
+  },
+  "microsoft": {
+    "clientId": "Commander's Entra app: its Application (client) ID",
+    "tenantId": "that app's Directory (tenant) ID"
   }
 }
 ```
 
-Restart `pnpm dev` after changing it.
+The `microsoft` block is optional: without it (or with `null`s), Teams can't be connected. Restart `pnpm dev` after changing the file.
+
+### Accounts
+
+**Settings → Accounts** (`,`) lists the Accounts of every Source, grouped by Source, each with its own **Connect**. Every Account can show **Reconnect** (when its sign-in failed for good) and be **Removed**. However a Source signs in, its tokens and API keys are stored only in the system keyring, through the secrets module; the window never receives one. The Accounts themselves (their names, how they signed in, and whether they need reconnecting) are kept in `accounts.json` in the `userData` folder. Each Source plugs into the same Account code (`apps/desktop/src/main/accounts/source-accounts.ts`) with its own sign-in, refresh and naming.
 
 ### Connecting Linear
 
-**Settings → Accounts** (`,`) lists Linear Accounts by workspace name. Each Linear workspace is its own Account, and you can connect several. Connecting the same workspace again updates its Account rather than adding a second.
+**Settings → Accounts** lists Linear Accounts by workspace name. Each Linear workspace is its own Account, and you can connect several. Connecting the same workspace again updates its Account rather than adding a second.
 
 - **Connect Linear** signs in through your browser: OAuth with PKCE (S256) and no client secret, asking for `read` and `write`. Commander listens on `http://localhost:<redirectPort>/callback` only while a sign-in is open. It is offered only when `config/local.json` has a Linear client ID.
 - **Use an API key instead** takes a Linear personal API key (Linear → Settings → Security & access → Personal API keys). It works without any OAuth app.
@@ -60,6 +68,26 @@ Restart `pnpm dev` after changing it.
 **Registering Commander's Linear OAuth app (once, by the owner):** in Linear, open Settings → API → OAuth applications → New. Name it "Commander", set the callback URL to `http://localhost:48613/callback` (use your `redirectPort` if you changed it; Linear matches it exactly, port included), leave webhooks off, and create it. Copy the **client ID** into `config/local.json`. Commander doesn't need the client secret, so never copy it anywhere. Then run `pnpm dev`, choose **Connect Linear**, and approve. This also confirms that Linear accepts the fixed loopback port.
 
 The end-to-end tests never contact Linear: they point sign-in and sync at a fake Linear on this machine through `COMMANDER_TEST_LINEAR`, which only accepts loopback URLs.
+
+### Connecting Teams
+
+**Connect Teams** in Settings → Accounts signs in to Microsoft Teams with your work account, through Commander's own Entra app. Each Microsoft account is its own Account, shown as "Teams · <your sign-in>"; connecting the same account again updates it. Nothing syncs from Teams yet.
+
+- Sign-in is OAuth 2.0 with PKCE (S256) and no client secret, against your organisation's single-tenant authority (`https://login.microsoftonline.com/<tenantId>/oauth2/v2.0/`). Commander listens on `http://localhost:<a free port>` only while a sign-in is open (Microsoft ignores the port of a registered `http://localhost`).
+- It asks for `openid profile offline_access User.Read Chat.ReadWrite ChatMessage.Send Team.ReadBasic.All Channel.ReadBasic.All`: your Chats, sending messages, and team and channel names. None of these needs an administrator. Reading channel posts does, and is asked for separately, later.
+- **Connect Teams** is offered only when `config/local.json` has both `microsoft.clientId` and `microsoft.tenantId`; otherwise it is shown disabled.
+- If your organisation requires an administrator to approve apps (Microsoft's `AADSTS90094` or `AADSTS65001`), Commander says so, lists the permissions to approve, and offers your organisation's admin consent link to copy and send to your administrator.
+- Access tokens last about an hour. The main process refreshes one when it is within 10 minutes of expiry, saving the new refresh token Microsoft issues before using the new access token. If Microsoft refuses a refresh for good (`invalid_grant`: revoked, expired or the password changed), the Account shows **Reconnect**; reconnecting signs in again as the same user and keeps the same Account.
+- **Remove** deletes the Account's keyring entry and its Items.
+
+**Setting up Commander's Entra app (once, by the owner):** use the app registration kept from the Microsoft sign-in test (rename it "Commander" if you like). In the Microsoft Entra admin center → App registrations → that app:
+
+1. **Authentication:** under the **Mobile and desktop applications** platform (not Web, not Single-page application), make sure the redirect URI `http://localhost` is listed, exactly that, with no port or path. Add the platform and the URI if not. Leave **Allow public client flows** on if it is shown. Don't create a client secret: Commander doesn't use one.
+2. **API permissions:** add **delegated** Microsoft Graph permissions `openid`, `profile`, `offline_access`, `User.Read`, `Chat.ReadWrite`, `ChatMessage.Send`, `Team.ReadBasic.All` and `Channel.ReadBasic.All`. None needs admin consent.
+3. From the app's **Overview**, copy the **Application (client) ID** and **Directory (tenant) ID** into `config/local.json` under `microsoft` (see Build config above). Keep them out of the repo, issues, PRs and logs.
+4. Run `pnpm dev`, choose **Connect Teams**, and approve in your browser.
+
+The end-to-end tests never contact Microsoft: they point sign-in and Graph at a fake Microsoft identity platform and Graph on this machine through `COMMANDER_TEST_MICROSOFT`, which only accepts loopback URLs.
 
 ### Syncing
 

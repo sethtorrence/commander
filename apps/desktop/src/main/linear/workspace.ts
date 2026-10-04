@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { SignInError } from './sign-in-error';
+import { SignInError } from '../oauth/sign-in-error';
 
 // Every Linear credential covers one workspace. After signing in (or when an API key is pasted),
 // Commander asks Linear whose it is: the workspace names the Account and keys it, and the Linear

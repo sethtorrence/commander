@@ -13,7 +13,7 @@ import {
   type Project,
   syncedFieldsOf,
 } from '@commander/domain';
-import type { AccountSummary, AccountsState } from '@commander/domain/ipc';
+import type { AccountSummary, AccountsState, LinearAccountSummary } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import { describeFiling } from '../../projects/projects';
 import { clockTime } from '../../settings/account-sync';
@@ -152,7 +152,8 @@ export interface LinearAccountsClient {
 
 type AccountsBridge = Pick<Window['commander'], 'accounts' | 'onAccountsChanged'>;
 
-const linearOnly = (state: AccountsState) => state.accounts.filter((account) => account.source === 'linear');
+const linearOnly = (state: AccountsState): LinearAccountSummary[] =>
+  state.accounts.filter((account): account is LinearAccountSummary => account.source === 'linear');
 
 export function linearAccountsIn(bridge: AccountsBridge): LinearAccountsClient {
   return {

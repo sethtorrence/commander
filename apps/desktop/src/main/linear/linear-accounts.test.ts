@@ -21,6 +21,15 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+// The Accounts file as it was before Commander kept the signed-in user: a bare list of Linear
+// Accounts (accounts.json version 1), with no `user`.
+async function asBeforeUsersWereKept(file: string): Promise<string> {
+  const { accounts } = JSON.parse(await readFile(file, 'utf8')) as {
+    accounts: { user: unknown; details: { urlKey: string } }[];
+  };
+  return JSON.stringify(accounts.map(({ user: _user, details, ...record }) => ({ ...record, ...details })));
+}
+
 let dir: string;
 let linear: FakeLinear;
 let config: LinearConfig;
@@ -167,8 +176,7 @@ describe('knowing who the User is in each workspace', () => {
     await start().connectWithApiKey('lin_api_acme');
     // As the Accounts file was before Commander kept the signed-in user.
     const file = join(dir, 'accounts.json');
-    const records = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>[];
-    await writeFile(file, JSON.stringify(records.map(({ user: _user, ...record }) => record)));
+    await writeFile(file, await asBeforeUsersWereKept(file));
     const accounts = start();
     const changes = vi.fn();
     accounts.onChange(changes);
@@ -185,8 +193,7 @@ describe('knowing who the User is in each workspace', () => {
     linear.addApiKey('lin_api_acme', ACME);
     await start().connectWithApiKey('lin_api_acme');
     const file = join(dir, 'accounts.json');
-    const records = JSON.parse(await readFile(file, 'utf8')) as Record<string, unknown>[];
-    await writeFile(file, JSON.stringify(records.map(({ user: _user, ...record }) => record)));
+    await writeFile(file, await asBeforeUsersWereKept(file));
     linear.revokeApiKey('lin_api_acme');
     const accounts = start();
 

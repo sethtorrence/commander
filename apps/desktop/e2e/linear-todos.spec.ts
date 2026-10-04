@@ -102,7 +102,7 @@ async function connect(window: Page) {
   await openSettings(window);
   const panel = window.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
-  await panel.getByRole('button', { name: 'Connect' }).click();
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(panel.getByTestId('account-synced')).toHaveText(/4 issues/);
   await window.keyboard.press('Escape');
 }

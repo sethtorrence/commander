@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { challengeFor } from '../oauth/pkce';
 import { ACME, type FakeLinear, startFakeLinear } from './fake-linear-server';
 import { type OAuthClient, RefreshError, refreshTokens, signInWithBrowser } from './oauth';
-import { challengeFor } from './pkce';
 
 async function freePort(): Promise<number> {
   const server = createServer();

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AccessTokenError } from '../linear/linear-accounts';
 import { createCoreAccountChannel } from './core-account-channel';
+import { AccessTokenError } from './source-accounts';
 
 function channel(accessToken: (account: string) => Promise<{ token: string; kind: 'oauth' | 'api-key' }>) {
   const sent: unknown[] = [];
