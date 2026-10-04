@@ -238,19 +238,28 @@ export function DashboardProvider({
     [client, reload, changeClears],
   );
 
+  // The Todo behind each Linear row ticked here, by issue id, for unticking it again.
+  const tickedTodos = useRef(new Map<string, string>());
+
   const tick = useCallback(
     async (row: FeedRow) => {
       const { item } = row;
-      if (item.kind !== 'todo') {
-        toast(
-          'Change its state in the Linear Section for now: ticking Linear Todos here comes with Linear-backed Todos',
-        );
+      // A Linear row is a Linear Todo's issue: ticking ticks that Todo, which moves the issue.
+      const todoId =
+        item.kind === 'todo'
+          ? item.id
+          : (tickedTodos.current.get(item.id) ??
+            items?.find((each) => each.detail?.kind === 'todo' && each.detail.backedBy === item.id)?.id);
+      if (!todoId) {
+        const name = item.detail?.kind === 'linear-issue' ? item.detail.identifier : item.title;
+        toast(`${name} isn’t one of your Linear Todos yet: change its state in the Linear Section`);
         return;
       }
+      if (todoId !== item.id) tickedTodos.current.set(item.id, todoId);
       const done = !row.done;
       let entry: ActivityEntry;
       try {
-        entry = await client.setDone(item.id, done);
+        entry = await client.setDone(todoId, done);
       } catch (error) {
         report(error);
         return;
@@ -267,7 +276,7 @@ export function DashboardProvider({
         action: { label: 'Undo', onClick: () => void undo(entry.id) },
       });
     },
-    [client, reload, undo],
+    [client, items, reload, undo],
   );
 
   const restoreClears = useCallback(

@@ -15,9 +15,13 @@ export function originOf(todo: Item): TodoOrigin {
   return todo.detail?.kind === 'todo' ? todo.detail.origin : 'manual';
 }
 
-/** "Manual", or for a Todo made from a Block, its Daily Note's day: "Daily Note · 3 Oct". */
-export function originLabel(todo: Item, madeFrom?: MadeFrom): string {
+/**
+ * "Manual"; for a Todo made from a Block, its Daily Note's day: "Daily Note · 3 Oct"; for a Linear
+ * Todo, its issue's identifier: "Linear · ENG-418".
+ */
+export function originLabel(todo: Item, madeFrom?: MadeFrom, backing?: Item): string {
   const label = ORIGIN_LABELS[originOf(todo)];
+  if (backing?.detail?.kind === 'linear-issue') return `${label} · ${backing.detail.identifier}`;
   if (!madeFrom) return label;
   const [, month, date] = madeFrom.day.split('-').map(Number) as [number, number, number];
   return `${label} · ${date} ${MONTHS[month - 1]}`;

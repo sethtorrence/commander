@@ -137,10 +137,21 @@ export const sourceBatch = z.object({
   // Why the Source's changes are being saved, when there is more to say than a sync (a change made in
   // the Source that won over the User's: "Changed in Linear by Priya Patel at 14:02").
   why: z.string().optional(),
+  // Who the User is at the Source in this Account (their Linear user id), when known: what "assigned
+  // to me" means for Linear Todos. null: not known yet, so no new Linear Todos are made.
+  me: id.nullable().optional(),
 });
 export type SourceBatch = z.input<typeof sourceBatch>;
 
-export type SaveResult = { created: string[]; updated: string[]; tombstoned: string[]; unchanged: string[] };
+// What a save did: the Source's Items made, changed, tombstoned or left as they were, and the Todos
+// that changed to follow them (Linear Todos).
+export type SaveResult = {
+  created: string[];
+  updated: string[];
+  tombstoned: string[];
+  unchanged: string[];
+  todos: string[];
+};
 
 export const linkTypes = ['made-from', 'refers-to', 'finishes', 'about', 'caused-by'] as const;
 export const linkType = z.enum(linkTypes);
@@ -289,6 +300,8 @@ export const itemQuery = z.object({
   // Case-insensitive match on the title (full-text search comes with global search).
   titleContains: z.string().optional(),
   includeDeleted: z.boolean().optional(),
+  // Only these Items.
+  ids: z.array(id).max(1000).optional(),
   limit: z.number().int().positive().max(1000).optional(),
 });
 export type ItemQuery = z.input<typeof itemQuery>;

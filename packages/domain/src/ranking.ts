@@ -1,5 +1,6 @@
 import type { Item } from './items';
 import type { LinearIssueDetail } from './linear';
+import { isLinearTodo } from './linear-todos';
 
 /*
   Ranking the Dashboard: which open Items need the User, in which band, why, and in what order.
@@ -150,7 +151,9 @@ function place(item: Item, context: RankingContext, today: string): Placed | nul
   const me = item.account ? context.users[item.account] : undefined;
   if (!me) return null;
   const { assignee, creator, updatedAt } = item.detail;
-  if (assignee?.id === me) return placeLinearTodo(item, today, context.now);
+  // The same Linear Todos the Item store keeps Todos for (linear-todos.ts).
+  if (assignee?.id === me)
+    return isLinearTodo(item.detail, me, context.now) ? placeLinearTodo(item, today, context.now) : null;
   // Created by the User, someone else has it, and it changed in the last day.
   if (creator?.id === me && assignee && context.now - updatedAt <= DAY)
     return { item, band: 'fyi', reason: `${assignee.name} has it · changed ${ago(updatedAt, context.now)}` };
@@ -180,7 +183,8 @@ function inBandOrder(a: Placed, b: Placed): number {
  * - **Today:** Todos due today, and Linear Todos in progress or in their team's current cycle.
  * - **FYI:** Linear issues the User created, assigned to someone else, that changed in the last day.
  *
- * A Linear Todo is an open Linear issue assigned to the User. The first band that matches wins, in
+ * A Linear Todo is an open Linear issue assigned to the User in a Todo state (unstarted or started, or
+ * backlog or triage in its team's current cycle), as in linear-todos.ts. The first band that matches wins, in
  * the order above, so an urgent issue in review stays in Now. Open Todos with no due date and no
  * cycle are left off until Ares ranks them. A Todo backed by another Item is shown once, by that Item.
  */

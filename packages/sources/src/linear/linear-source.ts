@@ -14,6 +14,9 @@ import { fetchCatalog, writeIssue } from './write';
 //   the last 30 days.
 // - After that: issues updated since the cursor (archived and deleted ones too, which become
 //   tombstones), plus issues whose comments changed, with cursor pagination throughout.
+// - Each sync also re-reads the issues it is asked to recheck (those behind open Linear Todos) that it
+//   didn't already bring, in batches of 50: an issue reassigned away may not show among the changes.
+//   One Linear no longer has (deleted, or out of the Account's reach) is reported as deleted.
 // - Each sync also fetches what the detail pane's pickers offer (each team's states, members,
 //   labels, cycles and Linear projects); a sync whose issues arrived never fails for want of it.
 // - Linear's rate limits drive back-off: RATELIMITED answers and 429s become RateLimited, and a
@@ -99,6 +102,17 @@ export function createLinearSource({
         return { seen, newest, newestComment };
       }
 
+      // Re-reads the issues asked for that this sync hasn't brought; those not found are deleted.
+      async function recheck(seen: ReadonlySet<string>) {
+        const ids = (request.recheck ?? []).filter((id) => !seen.has(id));
+        for (let i = 0; i < ids.length; i += PAGE_SIZE) {
+          const batch = ids.slice(i, i + PAGE_SIZE);
+          const found = await issues({ id: { in: batch } }, true);
+          const gone = batch.filter((id) => !found.seen.has(id));
+          if (gone.length) request.save({ items: [], deleted: gone });
+        }
+      }
+
       const previous = linearCursor.safeParse(request.cursor);
       if (!previous.success) {
         const since = new Date(now() - FIRST_SYNC_DAYS * 24 * 60 * 60_000).toISOString();
@@ -109,7 +123,8 @@ export function createLinearSource({
             { canceledAt: { gt: since } },
           ],
         };
-        const { newest, newestComment } = await issues(window, false);
+        const { seen, newest, newestComment } = await issues(window, false);
+        await recheck(seen);
         const start = newest ?? new Date(now() - CLOCK_MARGIN_MS).toISOString();
         const cursor: LinearCursor = {
           issuesUpdatedAfter: start,
@@ -143,6 +158,7 @@ export function createLinearSource({
       for (let i = 0; i < ids.length; i += PAGE_SIZE) {
         await issues({ id: { in: ids.slice(i, i + PAGE_SIZE) } }, true);
       }
+      await recheck(new Set([...changed.seen, ...commented]));
 
       const cursor: LinearCursor = {
         issuesUpdatedAfter:

@@ -71,6 +71,7 @@ import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
+import { linearTodosIn } from './linear-todos';
 import { type ModelStore, openModelStore } from './models';
 import { type OutgoingStore, openOutgoingQueue } from './outgoing';
 import { projectsIn } from './projects';
@@ -182,6 +183,9 @@ export type ItemStore = {
   dailyNoteProjects(): DailyNoteProjects[];
   // A Project's written Blocks (own or inherited), newest day first, each day's in outline order.
   projectBlocks(projectId: string): ProjectBlock[];
+  // The external ids of an Account's live Items behind open Todos (the issues of open Linear Todos):
+  // each sync re-reads them, as what a Source reports changed can miss them (a reassignment).
+  recheckIds(account: { source: Source; account: string }): string[];
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
   // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
@@ -270,6 +274,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   migrate(db, { migrationsFolder: options.migrationsFolder });
   const template = dailyTemplateIn(db, now);
   const outgoing = openOutgoingQueue(db);
+  const syncState = openSyncStateStore(db);
   // Project changes come only from the User (the window); a merge's Item moves are recorded as theirs.
   const byUser: Actor = { kind: 'user' };
   const projects = projectsIn(
@@ -747,6 +752,73 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     syncBlockLinks(itemId, state.detail.text, entry, at);
   }
 
+  // Linear-backed Todos (linear-todos.ts): kept in step with their issues by every change below.
+  const linearTodos = linearTodosIn({
+    db,
+    now,
+    readItems: (ids) =>
+      ids.length
+        ? withDetails(db.select().from(schema.items).where(inArray(schema.items.id, ids)).all())
+        : [],
+    change(todo, after, entry) {
+      const at = now();
+      const before = stateOf(todo);
+      const written = writeState(todo, after, at);
+      log({ ...entry, itemId: todo.id, before, after: written }, at);
+    },
+    create(state, issueId, entry) {
+      const at = now();
+      const identity = { kind: 'todo' as const, source: null, account: null, externalId: null };
+      const { id, state: stored } = insertItem(identity, state, at);
+      log({ ...entry, action: 'create', itemId: id, before: null, after: stored }, at);
+      recordLink({ from: id, linkType: 'made-from', to: issueId }, true, entry, at);
+      return id;
+    },
+    editState: (issue, state, entry) => editFields(issue, { state }, entry, now()),
+    catalog: (account) => syncState.catalog(account),
+    invalid: (message) => new ItemStoreError('invalid', message),
+  });
+
+  function update(
+    item: Item,
+    changes: Partial<ItemState>,
+    entry: Pick<NewEntry, 'by' | 'why' | 'causedBy'>,
+    at: number,
+  ): ActivityEntry {
+    const before = stateOf(item);
+    const settled = blockFiling.settled(item.id, item.kind, { ...before, ...changes });
+    const after = writeState(item, settled, at);
+    const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
+    blockFiling.afterUpdate({ ...item, ...after }, before, logged, at);
+    afterWrite(item.id, after, entry, at, before);
+    afterChange(item, before, after, logged);
+    return logged;
+  }
+
+  // Changes some of a Source Item's synced fields, as `edit-fields` does.
+  function editFields(
+    item: Item,
+    fields: Record<string, unknown>,
+    entry: Pick<NewEntry, 'by' | 'why' | 'causedBy'>,
+    at: number,
+  ): ActivityEntry {
+    const before = stateOf(item);
+    const edited = editedState(item, fields, (message) => new ItemStoreError('invalid', message));
+    const after = writeState(item, edited, at);
+    const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
+    afterChange(item, before, after, logged);
+    return logged;
+  }
+
+  // What follows a change made in Commander: a ticked Linear Todo writes through to its issue, and a
+  // changed issue's Todo follows it.
+  function afterChange(item: Item, before: ItemState, after: ItemState, entry: ActivityEntry) {
+    if (item.kind === 'todo') linearTodos.writeThrough(item, before, after, entry);
+    if (item.kind === 'linear-issue') {
+      linearTodos.follow(requireItem(item.id), before, { by: entry.by, causedBy: { entryId: entry.id } });
+    }
+  }
+
   const record = sqlite.transaction((input: ItemAction, rawContext: ActionContext): ActivityEntry => {
     const action = itemAction.parse(input);
     const context = actionContext.parse(rawContext);
@@ -765,24 +837,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       case 'update': {
         const item = requireItem(action.itemId);
         projects.checkFiling(action.changes.filing);
-        const before = stateOf(item);
-        const changed = blockFiling.settled(item.id, item.kind, { ...before, ...action.changes });
-        const after = writeState(item, changed, at);
-        const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
-        blockFiling.afterUpdate({ ...item, ...after }, before, logged, at);
-        afterWrite(item.id, after, entry, at, before);
-        return logged;
+        // Filing a Linear Todo files its issue, which the Todo follows: the two never disagree.
+        const { filing, ...rest } = action.changes;
+        const issue = filing !== undefined ? linearTodos.issueBehind(item) : null;
+        if (!issue) return update(item, action.changes, entry, at);
+        const filed = update(issue, { filing }, entry, at);
+        return Object.keys(rest).length ? update(requireItem(item.id), rest, entry, at) : filed;
       }
-      case 'edit-fields': {
-        const item = requireItem(action.itemId);
-        const edited = editedState(item, action.fields, (message) => new ItemStoreError('invalid', message));
-        const after = writeState(item, edited, at);
-        return logAndQueue(
-          item,
-          { ...entry, action: 'update', itemId: item.id, before: stateOf(item), after },
-          at,
-        );
-      }
+      case 'edit-fields':
+        return editFields(requireItem(action.itemId), action.fields, entry, at);
       case 'delete': {
         const item = requireItem(action.itemId);
         const before = stateOf(item);
@@ -871,6 +934,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const logged = logAndQueue(item, { ...undoEntry, before: current, after: settled }, at);
     blockFiling.afterUpdate({ ...item, ...settled }, current, logged, at);
     afterWrite(item.id, settled, entry, at, current);
+    afterChange(item, current, settled, logged);
     return logged;
   }
 
@@ -1141,13 +1205,18 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const saveFromSource = sqlite.transaction((input: SourceBatch): SaveResult => {
     const batch = sourceBatch.parse(input);
     const by: Actor = { kind: 'source', source: batch.source, account: batch.account };
-    const result: SaveResult = { created: [], updated: [], tombstoned: [], unchanged: [] };
+    const result: SaveResult = { created: [], updated: [], tombstoned: [], unchanged: [], todos: [] };
     const active = rules.list();
+    if (batch.me !== undefined) linearTodos.remember(batch.account, batch.me);
+    linearTodos.takeChanged();
     const applyRules = (itemId: string, at: number) => {
       const item = requireItem(itemId);
       const filed = ruleFiling(item, active);
       if (filed) fileByRule(item, filed, at);
     };
+    // The Item's Todo (a Linear Todo) follows it, once it is filed.
+    const follow = (itemId: string, before: ItemState | null, entryId?: number) =>
+      linearTodos.follow(requireItem(itemId), before, { by, causedBy: entryId ? { entryId } : null });
     for (const incoming of batch.items) {
       const at = now();
       const existing = findBySourceIdentity(batch.source, batch.account, incoming.externalId);
@@ -1163,11 +1232,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         };
         if (isDeepStrictEqual(before, after)) {
           result.unchanged.push(existing.id);
+          // Still judged: who the User is may be newly known, or the issue's cycle may be over.
+          follow(existing.id, before);
           continue;
         }
         writeState(existing, after, at);
-        log({ by, why: batch.why, action: 'update', itemId: existing.id, before, after }, at);
+        const logged = log({ by, why: batch.why, action: 'update', itemId: existing.id, before, after }, at);
         applyRules(existing.id, at);
+        follow(existing.id, before, logged.id);
         result.updated.push(existing.id);
         continue;
       }
@@ -1186,8 +1258,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         externalId: incoming.externalId,
       };
       const { id, state: stored } = insertItem(identity, state, at);
-      log({ by, why: batch.why, action: 'create', itemId: id, before: null, after: stored }, at);
+      const logged = log(
+        { by, why: batch.why, action: 'create', itemId: id, before: null, after: stored },
+        at,
+      );
       applyRules(id, at);
+      follow(id, null, logged.id);
       result.created.push(id);
     }
     for (const externalId of batch.deleted) {
@@ -1197,9 +1273,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const before = stateOf(existing);
       const after: ItemState = { ...before, deletedAt: at };
       writeState(existing, after, at);
-      log({ by, action: 'tombstone', itemId: existing.id, before, after }, at);
+      const logged = log({ by, action: 'tombstone', itemId: existing.id, before, after }, at);
+      linearTodos.follow(requireItem(existing.id), before, { by, causedBy: { entryId: logged.id } }, true);
       result.tombstoned.push(existing.id);
     }
+    result.todos = [...new Set(linearTodos.takeChanged())];
     return result;
   });
 
@@ -1225,7 +1303,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
   return {
     models: openModelStore(db, now),
-    syncState: openSyncStateStore(db),
+    syncState,
     outgoing,
     autonomy: openAutonomyStore(db, now),
     search: { query: (query) => search.query(query) },
@@ -1243,6 +1321,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           and(
             query.includeDeleted ? undefined : isNull(items.deletedAt),
             query.kinds ? inArray(items.kind, query.kinds) : undefined,
+            query.ids ? inArray(items.id, query.ids) : undefined,
             query.projectId === null ? isNull(items.projectId) : undefined,
             query.projectId ? eq(items.projectId, query.projectId) : undefined,
             query.source ? eq(items.source, query.source) : undefined,
@@ -1283,6 +1362,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     blockTodos,
     dailyNoteProjects,
     projectBlocks,
+    recheckIds: (account) => linearTodos.recheckIds(account),
 
     activity(input = {}) {
       const query = activityQuery.parse(input);
@@ -1339,7 +1419,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         const item = readItem(itemId);
         if (!item || item.source === null || item.deletedAt !== null) continue;
         const filed = ruleFiling(item, active);
-        if (filed) entries.push(fileByRule(item, filed, now()));
+        if (!filed) continue;
+        const logged = fileByRule(item, filed, now());
+        entries.push(logged);
+        linearTodos.follow(requireItem(item.id), stateOf(item), {
+          by: logged.by,
+          causedBy: { entryId: logged.id },
+        });
       }
       return entries;
     }),

@@ -15,6 +15,7 @@ export function TodoRow({
   todo,
   number,
   madeFrom,
+  backing,
   selected,
   onSelect,
   onOpen,
@@ -24,6 +25,8 @@ export function TodoRow({
   number: number;
   /** For a Todo made from a Block: where, for its origin ("Daily Note · 3 Oct"). */
   madeFrom?: MadeFrom;
+  /** For a backed Todo: the Item behind it, for its origin ("Linear · ENG-418"). */
+  backing?: Item;
   selected: boolean;
   /** Selects the row (clicking its tick box). */
   onSelect: () => void;
@@ -93,7 +96,7 @@ export function TodoRow({
         <ChipText text={todo.title} label={label} />
       </span>
       <span className="mt-[5px] ml-3 inline-flex h-5 flex-none items-center border border-line bg-sheet px-[7px] font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted">
-        {originLabel(todo, madeFrom)}
+        {originLabel(todo, madeFrom, backing)}
       </span>
     </li>
   );

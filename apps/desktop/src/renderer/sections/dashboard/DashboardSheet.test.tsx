@@ -11,7 +11,7 @@ import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
 import { ShortcutProvider, ShortcutScope, useActiveScopes } from '../../shortcuts/react';
 import type { LinearAccountsClient } from '../linear/linear-issues';
-import { ACME, CURRENT_CYCLE, issue, NOW, PRIYA, SAM, STATES } from '../linear/test-issues';
+import { ACME, CURRENT_CYCLE, ENG, issue, NOW, PRIYA, SAM, STATES } from '../linear/test-issues';
 import { addDays } from '../notes/days';
 import { FrameControlsProvider, SectionProvider } from '../section';
 import { dashboard as definition } from '.';
@@ -244,11 +244,60 @@ describe('the Dashboard', () => {
     await waitFor(() => expect(within(band('Now')).getByTestId('band-count').textContent).toBe('02 open'));
   });
 
-  it('doesn’t tick a Linear issue: that comes with Linear-backed Todos', async () => {
+  it('doesn’t tick a Linear issue with no Linear Todo behind it yet', async () => {
     renderSheet();
     await loaded();
     await press('x');
     expect(store.query({ titleContains: 'outage' })[0]?.status).toBe('open');
+  });
+
+  it('ticks a Linear row’s Todo with x, moving the issue to Done; shown once; undo moves it back', async () => {
+    store.syncState.saveCatalog(
+      ACME,
+      'linear',
+      {
+        kind: 'linear',
+        teams: [
+          {
+            ...ENG,
+            states: [STATES.todo, STATES.progress, STATES.review, STATES.done],
+            members: [SAM],
+            labels: [],
+            cycles: [],
+            linearProjects: [],
+          },
+        ],
+      },
+      NOW,
+    );
+    // Linear sync, now knowing who the User is: Linear Todos for ENG-1, 2 and 3.
+    store.saveFromSource({
+      source: 'linear',
+      account: ACME,
+      me: SAM.id,
+      items: store.query({ kinds: ['linear-issue'] }).map((item) => ({
+        externalId: item.externalId as string,
+        kind: 'linear-issue' as const,
+        title: item.title,
+        people: item.people,
+        status: item.status,
+        detail: item.detail,
+      })),
+    });
+    const outage = () => store.query({ kinds: ['linear-issue'], titleContains: 'outage' })[0];
+    const todo = () => store.query({ kinds: ['todo'], titleContains: 'outage', includeDeleted: true })[0];
+    expect(todo()?.status).toBe('open');
+    renderSheet();
+    await loaded();
+    expect(titles('Now')).toEqual(['ENG-1 Fix the outage', 'Send the invoice']);
+
+    await press('x');
+    await waitFor(() => expect(todo()?.status).toBe('done'));
+    expect(outage()?.detail).toMatchObject({ state: { name: 'Done' } });
+
+    await press('z', { ctrlKey: true });
+    await waitFor(() => expect(todo()?.status).toBe('open'));
+    expect(outage()?.detail).toMatchObject({ state: { name: 'Todo' } });
   });
 
   it('clears a row with e: it leaves the Dashboard, stays in its Section, and comes back when its band changes', async () => {

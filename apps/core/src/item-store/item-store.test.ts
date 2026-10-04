@@ -86,7 +86,7 @@ describe('saving Items from a Source', () => {
     clock += 1000;
     const second = store.saveFromSource(emails({ externalId: 'm1', title: 'Final' }));
 
-    expect(second).toEqual({ created: [], updated: first.created, tombstoned: [], unchanged: [] });
+    expect(second).toEqual({ created: [], updated: first.created, tombstoned: [], unchanged: [], todos: [] });
     expect(store.query()).toMatchObject([{ title: 'Final', createdAt: clock - 1000, updatedAt: clock }]);
   });
 

@@ -1,5 +1,6 @@
+import type { Item } from '@commander/domain';
 import { cn, toast } from '@commander/ui';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { requestReveal, useReveal } from '../../frame/reveal';
 import type { ItemChanges } from '../../item-store/changes';
 import { useCommands } from '../../palette/commands';
@@ -14,7 +15,7 @@ import { Keys } from './Keys';
 import { sectionFor } from './links';
 import { TodoGroup } from './TodoGroup';
 import { TodoList } from './TodoList';
-import type { TodoLink, Todos } from './todos';
+import { type LinearState, linearIssueOf, type TodoLink, type Todos } from './todos';
 import { useTodos } from './use-todos';
 
 // Enter opens the selected Todo, except on a control that Enter presses (a button, a link).
@@ -36,6 +37,12 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
   const badges = useBadgePicker(state.apply, undo);
   const input = useRef<HTMLInputElement>(null);
   const openSection = useOpenSection();
+  // A Linear Todo: its issue (while it is still in Linear), the states it can move to, and whether
+  // Set Linear state…'s menu is open.
+  const behind = selected ? state.backing.get(selected.id) : undefined;
+  const issue = behind?.deletedAt === null ? linearIssueOf(behind) : null;
+  const linearStates = useLinearStates(todos, issue);
+  const [stateMenuOpen, setStateMenuOpen] = useState(false);
 
   useTabCount(state.list ? state.openCount : null);
   useRefreshWhenShown(refresh);
@@ -68,9 +75,30 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
     if (other.deletedAt !== null) return;
     if (other.kind === 'todo') return state.jumpTo(other.id);
     const section = sectionFor(other.kind);
-    // A Block opens in its Daily Note, scrolled to and highlighted.
-    if (section && other.kind === 'block') requestReveal(section, other.id);
+    // A Block opens in its Daily Note, scrolled to and highlighted; a Linear issue opens selected.
+    if (section && (other.kind === 'block' || other.kind === 'linear-issue'))
+      requestReveal(section, other.id);
     if (section) openSection(section);
+  };
+
+  const openIssue = () => {
+    if (!issue) return;
+    requestReveal('linear', issue.id);
+    openSection('linear');
+  };
+
+  const setLinearState = async (to: LinearState) => {
+    const identifier = issue?.detail.identifier;
+    const entry = await state.setLinearState(to);
+    if (!entry) return;
+    toast(`${identifier} moved to ${to.name}`, { action: { label: 'Undo', onClick: () => undo(entry.id) } });
+  };
+
+  // Set Linear state… from the palette or `s`: the detail pane opens with its menu open.
+  const chooseLinearState = () => {
+    if (!issue) return;
+    setDetailOpen(true);
+    setStateMenuOpen(true);
   };
 
   const openTodo = (todoId: string) => {
@@ -87,6 +115,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
         requestAnimationFrame(() => input.current?.focus());
       },
     },
+    { label: 'Set Linear state…', when: () => !!issue, run: chooseLinearState },
   ]);
 
   useShortcuts([
@@ -100,6 +129,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
     { keys: 'Ctrl+z', label: 'Undo', run: () => undo() },
     { keys: 'n', label: 'New Todo', run: () => input.current?.focus() },
     { keys: 'b', label: 'File under a Project', run: () => selected && badges.open(selected) },
+    { keys: 's', label: 'Set Linear state…', when: () => !!issue, run: chooseLinearState },
   ]);
 
   return (
@@ -125,6 +155,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
                 todos={open}
                 first={1}
                 madeFrom={state.madeFrom}
+                backing={state.backing}
                 selectedId={selected?.id ?? null}
                 onSelect={state.select}
                 onOpen={openTodo}
@@ -143,6 +174,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
                 todos={done}
                 first={open.length + 1}
                 madeFrom={state.madeFrom}
+                backing={state.backing}
                 selectedId={selected?.id ?? null}
                 onSelect={state.select}
                 onOpen={openTodo}
@@ -154,6 +186,18 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
             <TodoDetail
               todo={selected}
               madeFrom={selected ? state.madeFrom.get(selected.id) : undefined}
+              linear={
+                behind && linearIssueOf(behind)
+                  ? {
+                      issue: behind,
+                      states: linearStates,
+                      menuOpen: stateMenuOpen && !!issue,
+                      onMenuOpenChange: setStateMenuOpen,
+                      onSetState: setLinearState,
+                      onOpenIssue: openIssue,
+                    }
+                  : undefined
+              }
               links={state.links}
               history={state.history}
               onRename={(title) => state.rename(title)}
@@ -183,4 +227,26 @@ function useRefreshWhenShown(refresh: () => void) {
     window.addEventListener('focus', refresh);
     return () => window.removeEventListener('focus', refresh);
   }, [refresh]);
+}
+
+// The states a Linear Todo's issue can move to, read again whenever another issue is selected.
+function useLinearStates(todos: Todos, issue: Item | null): LinearState[] {
+  const [states, setStates] = useState<LinearState[]>([]);
+  const key = issue ? `${issue.id}:${issue.updatedAt}` : null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `key` stands for the issue
+  useEffect(() => {
+    if (!issue) {
+      setStates([]);
+      return;
+    }
+    let current = true;
+    todos.linearStates(issue).then(
+      (next) => current && setStates(next),
+      () => current && setStates([]),
+    );
+    return () => {
+      current = false;
+    };
+  }, [todos, key]);
+  return states;
 }

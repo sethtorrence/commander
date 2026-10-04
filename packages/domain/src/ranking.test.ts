@@ -192,6 +192,17 @@ describe('Items left off the Dashboard', () => {
     expect(rank([later])).toEqual([]);
   });
 
+  it('leaves off assigned issues that aren’t Linear Todos, urgent or overdue: backlog outside the current cycle', () => {
+    const parked = issue('ENG-17', {
+      priority: 1,
+      dueDate: '2026-09-30',
+      state: STATES.backlog,
+      cycle: null,
+    });
+    const planned = issue('ENG-18', { priority: 1, state: STATES.backlog, cycle: CURRENT_CYCLE });
+    expect(rank([parked, planned]).map((ranking) => ranking.itemId)).toEqual(['ENG-18']);
+  });
+
   it('leaves off issues assigned to someone else that the User did not create', () => {
     expect(rank([issue('ENG-13', { assignee: PRIYA, priority: 1, state: STATES.progress })])).toEqual([]);
   });

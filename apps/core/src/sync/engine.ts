@@ -67,10 +67,12 @@ export function supersededNote(source: Source, superseded: Superseded[]): string
   return `Changed in ${SOURCE_NAMES[source]}${by} at ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
-export type SyncAccount = { id: string; source: Source; needsReconnect: boolean };
+// `me`: who the User is at the Source in the Account (their Linear user id), when known.
+export type SyncAccount = { id: string; source: Source; needsReconnect: boolean; me?: string | null };
 export type SystemState = { awake: boolean; online: boolean };
 // After every sync of any Account: other Sources can hook in here (Teams syncs alongside each one).
-export type SyncedEvent = { account: string; source: Source; outcome: SyncOutcomeKind };
+// `itemIds`: the Items it changed (the Source's, and Todos that followed them), for open views.
+export type SyncedEvent = { account: string; source: Source; outcome: SyncOutcomeKind; itemIds: string[] };
 
 export type SyncEngineOptions = {
   store: ItemStore;
@@ -263,6 +265,8 @@ export function createSyncEngine({
     const { id: account, source } = entry.account;
     const startedAt = now();
     const saved = { created: 0, updated: 0, tombstoned: 0, unchanged: 0 };
+    const changed = new Set<string>();
+    const recheck = store.recheckIds({ source, account });
     let result: SyncResult | null = null;
     let failure: unknown = null;
     try {
@@ -273,6 +277,7 @@ export function createSyncEngine({
             account,
             cursor,
             accessToken: () => accessTokens.request(account),
+            recheck,
             saveCatalog(catalog) {
               if (!signal.aborted) store.syncState.saveCatalog(account, source, catalog, now());
             },
@@ -283,7 +288,10 @@ export function createSyncEngine({
                 account,
                 items: page.items,
                 deleted: page.deleted,
+                me: entry.account.me ?? null,
               });
+              for (const ids of [outcome.created, outcome.updated, outcome.tombstoned, outcome.todos])
+                for (const id of ids) changed.add(id);
               saved.created += outcome.created.length;
               saved.updated += outcome.updated.length;
               saved.tombstoned += outcome.tombstoned.length;
@@ -370,7 +378,8 @@ export function createSyncEngine({
       complexity: cost?.complexity ?? null,
       error: problem?.message ?? null,
     });
-    for (const listener of syncedListeners) listener({ account, source, outcome });
+    const itemIds = [...changed];
+    for (const listener of syncedListeners) listener({ account, source, outcome, itemIds });
   }
 
   function drop(entry: Entry) {
@@ -475,7 +484,14 @@ export function createSyncEngine({
         );
         if (result.item) {
           const why = supersededNote(source, result.superseded);
-          store.saveFromSource({ source, account, items: [result.item], deleted: [], why });
+          store.saveFromSource({
+            source,
+            account,
+            items: [result.item],
+            deleted: [],
+            why,
+            me: entry.account.me ?? null,
+          });
         }
       });
       entry.writesHeldUntil = null;
