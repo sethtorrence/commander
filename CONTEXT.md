@@ -150,6 +150,10 @@ _Avoid_: Time block, hold, focus time (that's the Calendar Section's panel of su
 The private event titled "Busy" that Block time across Accounts puts on another Account's main calendar for a busy event, carrying nothing else of it, and moving and going with it; Commander never copies one again.
 _Avoid_: Mirror, shadow event, blocker
 
+**Booking link**:
+The User's own Google appointment-schedule page, saved in Settings → Calendar, that Ares offers instead of a time when scheduling with someone outside the User's organisations; Commander only copies it and never hosts booking pages.
+_Avoid_: Scheduling link, booking page (that's Google's), Calendly
+
 **Daily template**:
 The Blocks each new Daily Note starts with, edited in Settings; a new day gets copies of them, not links to them.
 _Avoid_: Default note, skeleton, boilerplate

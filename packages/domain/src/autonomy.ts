@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { commanderEventDraft } from './commander-events';
+import { eventTime } from './calendar';
+import { commanderEventDraft, meetingGuest } from './commander-events';
 import { activityEntry, causedBy, itemChanges, itemRef, linkType, newItem } from './items';
 
 // Autonomy settings: how far Ares may go on his own, per Action kind, with Section and per-action
@@ -236,3 +237,20 @@ export const autonomyTarget = z.discriminatedUnion('scope', [
   z.object({ scope: z.literal('action'), action: z.string().min(1) }),
 ]);
 export type AutonomyTarget = z.infer<typeof autonomyTarget>;
+
+// What the User changed on a suggestion's card before accepting it (#132): a proposed meeting's Account
+// and calendar, title, time and guests. Accepted with them, the event is made as changed, by the User.
+export const acceptChanges = z.object({
+  event: z
+    .object({
+      account: id,
+      calendarId: id.nullable(),
+      title: z.string().trim().min(1).max(300),
+      start: eventTime,
+      end: eventTime,
+      attendees: z.array(meetingGuest).max(100),
+    })
+    .partial()
+    .optional(),
+});
+export type AcceptChanges = z.input<typeof acceptChanges>;

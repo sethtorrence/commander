@@ -185,7 +185,7 @@ export function FocusTimeSettings({
       </SettingRow>
       <SettingRow
         label="Block time across Accounts"
-        description="Off until you add a pair. Each busy event in the first Account puts a private event titled Busy, with nothing else of it, on the second Account’s main calendar, so nobody books over it. It moves and goes with its event. Commander’s own events are never copied."
+        description="Off until you add a pair. Each busy event in the first Account puts a private event titled Busy, with nothing else of it, on the second Account’s main calendar, so nobody books over it. It moves and goes with its event. Commander’s own focus blocks and Busy copies are never copied."
       >
         <div className="flex flex-col gap-2">
           {blockPairs.length > 0 && (

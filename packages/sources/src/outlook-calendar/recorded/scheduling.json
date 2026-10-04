@@ -1,0 +1,310 @@
+{
+  "meeting": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+          "value": [
+            {
+              "id": "AAMkAGI2-cal-default=",
+              "name": "Calendar",
+              "color": "auto",
+              "hexColor": "",
+              "isDefaultCalendar": true,
+              "changeKey": "ck-Calendar",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": false,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "id": "AAMkAGI2-cal-titanlink=",
+              "name": "Titanlink",
+              "color": "lightGreen",
+              "hexColor": "#33b679",
+              "isDefaultCalendar": false,
+              "changeKey": "ck-Titanlink",
+              "canShare": true,
+              "canViewPrivateItems": true,
+              "canEdit": true,
+              "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+              "defaultOnlineMeetingProvider": "teamsForBusiness",
+              "isTallyingResponses": true,
+              "isRemovable": true,
+              "owner": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendars/AAMkAGI2-cal-default=/events",
+        "body": {
+          "subject": "Pricing review",
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "isAllDay": false,
+          "showAs": "busy",
+          "attendees": [
+            {
+              "emailAddress": {
+                "address": "dana@contoso.test",
+                "name": "Dana Whitfield"
+              },
+              "type": "required"
+            },
+            {
+              "emailAddress": {
+                "address": "leo@acme.test"
+              },
+              "type": "required"
+            }
+          ],
+          "transactionId": "meeting:5b7d9f1a-3c5e-4a7b-9d1f-2e4a6c8e0b3d",
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderEvent",
+              "value": "meeting:5b7d9f1a-3c5e-4a7b-9d1f-2e4a6c8e0b3d"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars('AAMkAGI2-cal-default%3D')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAABmeet1\"",
+          "id": "AAMkAGI2-evt-meet1=",
+          "createdDateTime": "2026-10-03T12:00:01.0000000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:01.0000000Z",
+          "changeKey": "ck-meet1",
+          "categories": [],
+          "transactionId": "meeting:5b7d9f1a-3c5e-4a7b-9d1f-2e4a6c8e0b3d",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "iCalUId": "040000008200E00074C5B7101A82E008-meet1",
+          "uid": "040000008200E00074C5B7101A82E008-meet1",
+          "reminderMinutesBeforeStart": 15,
+          "isReminderOn": true,
+          "hasAttachments": false,
+          "subject": "Pricing review",
+          "bodyPreview": "",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": true,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "busy",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-meet1%3D&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "isOnlineMeeting": false,
+          "onlineMeetingProvider": "unknown",
+          "allowNewTimeProposals": true,
+          "isDraft": false,
+          "hideAttendees": false,
+          "responseStatus": {
+            "response": "organizer",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": ""
+          },
+          "start": {
+            "dateTime": "2026-10-06T14:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-06T15:00:00.0000000",
+            "timeZone": "Europe/London"
+          },
+          "location": {
+            "displayName": "",
+            "locationType": "default",
+            "uniqueIdType": "unknown",
+            "address": {},
+            "coordinates": {}
+          },
+          "locations": [],
+          "recurrence": null,
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "leo@acme.test",
+                "address": "leo@acme.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "onlineMeeting": null
+        }
+      }
+    }
+  ],
+  "get-schedule": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendar/getSchedule",
+        "body": {
+          "schedules": ["dana@contoso.test", "nobody@contoso.test"],
+          "startTime": {
+            "dateTime": "2026-10-05T23:00:00",
+            "timeZone": "UTC"
+          },
+          "endTime": {
+            "dateTime": "2026-10-07T23:00:00",
+            "timeZone": "UTC"
+          },
+          "availabilityViewInterval": 30
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#Collection(microsoft.graph.scheduleInformation)",
+          "value": [
+            {
+              "scheduleId": "dana@contoso.test",
+              "availabilityView": "000022000000",
+              "scheduleItems": [
+                {
+                  "isPrivate": false,
+                  "status": "busy",
+                  "subject": "Board prep",
+                  "location": "",
+                  "isMeeting": true,
+                  "start": {
+                    "dateTime": "2026-10-06T09:00:00.0000000",
+                    "timeZone": "UTC"
+                  },
+                  "end": {
+                    "dateTime": "2026-10-06T10:00:00.0000000",
+                    "timeZone": "UTC"
+                  }
+                },
+                {
+                  "isPrivate": false,
+                  "status": "free",
+                  "subject": "Optional talk",
+                  "location": "",
+                  "start": {
+                    "dateTime": "2026-10-06T11:00:00.0000000",
+                    "timeZone": "UTC"
+                  },
+                  "end": {
+                    "dateTime": "2026-10-06T12:00:00.0000000",
+                    "timeZone": "UTC"
+                  }
+                },
+                {
+                  "isPrivate": true,
+                  "status": "oof",
+                  "start": {
+                    "dateTime": "2026-10-07T00:00:00.0000000",
+                    "timeZone": "UTC"
+                  },
+                  "end": {
+                    "dateTime": "2026-10-07T12:00:00.0000000",
+                    "timeZone": "UTC"
+                  }
+                }
+              ],
+              "workingHours": {
+                "daysOfWeek": ["monday", "tuesday", "wednesday", "thursday", "friday"],
+                "startTime": "09:00:00.0000000",
+                "endTime": "17:00:00.0000000",
+                "timeZone": {
+                  "name": "GMT Standard Time"
+                }
+              }
+            },
+            {
+              "scheduleId": "nobody@contoso.test",
+              "error": {
+                "message": "The specified email address could not be found.",
+                "responseCode": "ErrorMailRecipientNotFound"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "get-schedule-forbidden": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/calendar/getSchedule"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorAccessDenied",
+            "message": "Access is denied. Check credentials and try again."
+          }
+        }
+      }
+    }
+  ]
+}

@@ -168,6 +168,27 @@ export class PartTooLarge extends Error {
   override name = 'PartTooLarge';
 }
 
+// Free/busy (#132): when other people are busy, for finding time with them. Asked of the User's Account
+// in the guests' own organisation (Google Workspace, a Microsoft work tenant), which is the only place a
+// provider shares it.
+export type FreeBusyRequest = {
+  account: string;
+  // The guests' addresses, lower-cased.
+  emails: string[];
+  // The range asked about, epoch ms.
+  from: number;
+  to: number;
+  accessToken(): Promise<AccessToken>;
+  signal: AbortSignal;
+};
+
+// Each guest's busy times in the range (epoch ms, in order), or why the provider wouldn't say (busy
+// null): an address it doesn't know, a calendar not shared, an error of its own.
+export type FreeBusyResult = {
+  calendars: { email: string; busy: { start: number; end: number }[] | null; problem: string | null }[];
+  cost: SyncCost;
+};
+
 export type SourceAdapter = {
   source: Source;
   cadence: Cadence;
@@ -185,6 +206,8 @@ export type SourceAdapter = {
   // Email Sources: one part of a message, for the reader. Rejects with PartNotFound, PartTooLarge,
   // or as `sync` does.
   fetchPart?(request: PartRequest): Promise<FetchedPart>;
+  // Calendar Sources: other people's free/busy, where the provider shares it. Rejects as `sync` does.
+  freeBusy?(request: FreeBusyRequest): Promise<FreeBusyResult>;
 };
 
 // The Source asked Commander to slow down: a 429, or a quota answer under another status (Gmail

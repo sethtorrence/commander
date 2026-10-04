@@ -29,7 +29,8 @@ import { createFakeGmail, type FakeGmail } from './fake-gmail';
 // `events.delete` (cancelling it, so incremental reads report it; 410 when already cancelled, 404 when
 // unknown). An inserted event is stored as sent, so `extendedProperties`, `visibility` and
 // `transparency` come back through `events.list` and incremental sync. Only owned and writable
-// calendars take writes. Nothing here talks to the real Google.
+// calendars take writes. And `freeBusy.query` for Ares's scheduler (#132): the busy times given for an
+// address, and `notFound` for any other. Nothing here talks to the real Google.
 
 export type FakeGoogleUser = { sub: string; email: string; name: string };
 
@@ -109,6 +110,9 @@ export type FakeGoogle = {
   }[];
   // The next `count` answers fail with 503 (Google is having trouble).
   failRsvps(count: number): void;
+  // What freeBusy.query answers for an address (#132): its busy times, epoch ms. Any address not set
+  // answers notFound, as a calendar Google won't share does.
+  setFreeBusy(email: string, busy: { start: number; end: number }[]): void;
   close(): Promise<void>;
 };
 
@@ -173,6 +177,7 @@ export async function startFakeGoogle(
   let expiredBefore = 0;
   let rateLimited = 0;
   let rsvpFailures = 0;
+  const freeBusy = new Map<string, { start: number; end: number }[]>();
   const calendarOf = (sub: string, calendarId: string) => {
     const found = userCalendars.get(sub)?.find((each) => each.calendar.id === calendarId);
     if (!found) throw new Error(`The fake Google has no calendar ${calendarId} for ${sub}`);
@@ -257,6 +262,9 @@ export async function startFakeGoogle(
       rateLimited = count;
     },
     rsvps: [],
+    setFreeBusy: (email, busy) => {
+      freeBusy.set(email.toLowerCase(), busy);
+    },
     failRsvps: (count) => {
       rsvpFailures = count;
     },
@@ -566,6 +574,32 @@ export async function startFakeGoogle(
     const answering = method === 'PATCH' && (sent as { attendeesOmitted?: unknown } | null)?.attendeesOmitted;
     if (one && (isEventRead || answering))
       return oneEvent(request, url, response, user, calendars, one, sent);
+    if (method === 'POST' && path === '/freeBusy') {
+      const asked = isRecord(sent) && Array.isArray(sent.items) ? sent.items : [];
+      const min = Date.parse(String(isRecord(sent) ? sent.timeMin : ''));
+      const max = Date.parse(String(isRecord(sent) ? sent.timeMax : ''));
+      const answered: Record<string, unknown> = {};
+      for (const item of asked) {
+        const id = isRecord(item) && typeof item.id === 'string' ? item.id : '';
+        const busy = freeBusy.get(id.toLowerCase());
+        answered[id] = busy
+          ? {
+              busy: busy
+                .filter((each) => each.end > min && each.start < max)
+                .map((each) => ({
+                  start: new Date(each.start).toISOString(),
+                  end: new Date(each.end).toISOString(),
+                })),
+            }
+          : { errors: [{ domain: 'global', reason: 'notFound' }], busy: [] };
+      }
+      return json(response, 200, {
+        kind: 'calendar#freeBusy',
+        timeMin: isRecord(sent) ? sent.timeMin : null,
+        timeMax: isRecord(sent) ? sent.timeMax : null,
+        calendars: answered,
+      });
+    }
     if (method !== 'GET') return calendarWrite(method, path, sent, user, response);
     const max = Number(url.searchParams.get('maxResults') ?? 250);
     const offset = Number(url.searchParams.get('pageToken') ?? 0);

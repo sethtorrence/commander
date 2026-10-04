@@ -1,12 +1,14 @@
 import './margin-cards.css';
 import { AresText } from '@commander/ui';
-import { useLayoutEffect, useRef } from 'react';
+import { type ReactNode, useLayoutEffect, useRef } from 'react';
+import type { MeetingProposal } from '../calendar/meetings';
 import type { MarginSuggestion } from './margin-suggestions';
 
 /*
   Ares's margin cards on a Daily Note's sheet (after the prototype's .agent-card, round-3/
   industrial.html): one per suggestion, level with the Block it is for, stacked below the outliner
-  key and each other where they would overlap. Pointing at a card marks its Block.
+  key and each other where they would overlap, in the order of their Blocks. Pointing at a card marks
+  its Block. Ares's proposed meetings (#132) sit among them, drawn by `renderMeeting`.
 */
 
 const GAP = 10;
@@ -29,11 +31,15 @@ export function MarginCards({
   suggestions,
   onAdd,
   onDismiss,
+  meetings = [],
+  renderMeeting,
 }: {
   day: string;
   suggestions: readonly MarginSuggestion[];
   onAdd: (id: number) => void;
   onDismiss: (id: number) => void;
+  meetings?: readonly MeetingProposal[];
+  renderMeeting?: (proposal: MeetingProposal) => ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -45,9 +51,12 @@ export function MarginCards({
       // Below the outliner key, where today's margin has one.
       const key = margin.parentElement?.querySelector<HTMLElement>('.n-legend');
       let floor = key ? key.offsetTop + key.offsetHeight + GAP : 0;
-      for (const card of margin.querySelectorAll<HTMLElement>('[data-ares-card]')) {
-        const wanted = anchorTop(day, card.dataset.block ?? '', margin) ?? floor;
-        const top = Math.max(wanted, floor);
+      // In the order of their Blocks down the page, whatever kind of card each is.
+      const cards = [...margin.querySelectorAll<HTMLElement>('[data-ares-card]')]
+        .map((card, index) => ({ card, index, wanted: anchorTop(day, card.dataset.block ?? '', margin) }))
+        .sort((a, b) => (a.wanted ?? Infinity) - (b.wanted ?? Infinity) || a.index - b.index);
+      for (const { card, wanted } of cards) {
+        const top = Math.max(wanted ?? floor, floor);
         card.style.top = `${top}px`;
         floor = top + card.offsetHeight + GAP;
       }
@@ -58,9 +67,9 @@ export function MarginCards({
     const observer = new ResizeObserver(layout);
     observer.observe(section);
     return () => observer.disconnect();
-  }, [day, suggestions]);
+  }, [day, suggestions, meetings]);
 
-  if (!suggestions.length) return null;
+  if (!suggestions.length && !meetings.length) return null;
   return (
     <div className="n-acs" ref={ref} data-testid="margin-cards">
       {suggestions.map((suggestion, index) => (
@@ -118,6 +127,7 @@ export function MarginCards({
           </div>
         </div>
       ))}
+      {renderMeeting && meetings.map((proposal) => renderMeeting(proposal))}
     </div>
   );
 }

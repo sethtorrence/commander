@@ -148,6 +148,7 @@ import {
   toItem,
 } from './rows';
 import { type ListChange, rulesIn } from './rules';
+import { type SchedulingSettingsStore, schedulingSettingsIn } from './scheduling-settings';
 import * as schema from './schema';
 import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
@@ -232,6 +233,9 @@ export type ItemStore = {
   // Settings → Calendar's focus time (focus-settings.ts): working hours, where focus blocks go, and
   // the pairs of Block time across Accounts.
   focusSettings: FocusSettingsStore;
+  // Settings → Calendar's scheduling (scheduling-settings.ts, #132): where new events go, and the
+  // booking link.
+  schedulingSettings: SchedulingSettingsStore;
   // Records several actions in order, all or none: a refused action rolls back the ones before it.
   recordAll(actions: ItemAction[], context: ActionContext): ActivityEntry[];
   activity(query?: ActivityQuery): ActivityEntry[];
@@ -2149,6 +2153,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     moveEvent,
     busyCopies: commanderEvents.busyCopies,
     focusSettings: focusSettingsIn(db, now),
+    schedulingSettings: schedulingSettingsIn(db, now),
     ensureDailyNote: (day, context, options) =>
       options?.fromTemplate ? ensureFromTemplate(day, context) : ensureDailyNote(day, context),
     dailyNotes,

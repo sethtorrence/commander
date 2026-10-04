@@ -37,6 +37,7 @@ import type {
   QueuedStatus,
   RuleTarget,
   RuleWhen,
+  SchedulingSettings,
   Source,
   SourceCatalog,
   SyncOutcomeKind,
@@ -913,3 +914,11 @@ export const emailImageTrust = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.account, t.kind, t.value] })],
 );
+
+// Settings → Calendar's scheduling (#132), in a single row: the Account and calendar new events go in,
+// and the User's Google booking link.
+export const schedulingSettings = sqliteTable('scheduling_settings', {
+  id: integer('id').primaryKey(),
+  settings: text('settings', { mode: 'json' }).$type<SchedulingSettings>().notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

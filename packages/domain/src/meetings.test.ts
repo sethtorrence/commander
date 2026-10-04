@@ -80,6 +80,10 @@ describe('which events get a meeting chip', () => {
     expect(isChipWorthy(event('Focus', at(9), at(10), { createdByCommander: 'focus-block' }))).toBe(false);
   });
 
+  it('but a meeting the User set up through Commander (#132) is a meeting like any other', () => {
+    expect(isChipWorthy(event('Call with Leo', at(9), at(10), { createdByCommander: 'meeting' }))).toBe(true);
+  });
+
   it('on a day: one that starts that day, by the User’s clock', () => {
     expect(chipWorthyOn(sync, '2026-10-03')).toBe(true);
     expect(chipWorthyOn(sync, '2026-10-04')).toBe(false);

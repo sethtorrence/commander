@@ -22,6 +22,8 @@ import {
   createLinearSource,
   createOutlookCalendarSource,
   createTeamsSource,
+  type FreeBusyRequest,
+  type FreeBusyResult,
   type GitHubSourceOptions,
   type GmailSourceOptions,
   type GoogleCalendarSourceOptions,
@@ -38,11 +40,13 @@ import { createSyncEngine, type SyncEngine } from './engine';
 
 export type { SyncEngine, SyncedEvent } from './engine';
 
-// An Account as Ares sees it: its Sources, its name and whether it needs reconnecting.
+// An Account as Ares sees it: its Sources, its name, the User's addresses in it (their own handles that
+// are email addresses, when the main process knows them) and whether it needs reconnecting.
 export type KnownAccount = {
   account: string;
   sources: readonly Source[];
   name: string | null;
+  addresses?: readonly string[];
   needsReconnect: boolean;
 };
 
@@ -148,6 +152,7 @@ export function setUpSync(
       account: account.id,
       sources: 'sources' in account ? account.sources : [account.source],
       name: account.name ?? null,
+      addresses: (account.own?.handles ?? []).filter((handle) => /^[^\s@]+@[^\s@]+$/.test(handle)),
       needsReconnect: account.needsReconnect || gone.has(account.id),
     }));
   }
@@ -223,6 +228,17 @@ export function setUpSync(
 
     // Where GitHub's REST API lives, as the main process last said.
     githubApiUrl: () => githubApiUrl,
+
+    // Guests' free/busy through one of the User's calendar Accounts (#132), borrowing its token.
+    freeBusy(
+      account: string,
+      source: Source,
+      request: Omit<FreeBusyRequest, 'account' | 'accessToken'>,
+    ): Promise<FreeBusyResult> {
+      const adapter = adapters.find((each) => each.source === source);
+      if (!adapter?.freeBusy) return Promise.reject(new Error(`${source} has no free/busy`));
+      return adapter.freeBusy({ ...request, account, accessToken: () => accessTokens.request(account) });
+    },
 
     // Who the User is in the Account (their Linear user id), when known.
     me(account: string): string | null {

@@ -20,6 +20,7 @@ import { setUpMarkdownCopy } from './markdown-copy';
 import { setUpMeetings } from './meetings';
 import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
+import { setUpScheduler } from './scheduling';
 import { setUpSnooze } from './snooze';
 import { setUpSync } from './sync';
 import { setUpUpdates, type Updates } from './updates';
@@ -206,6 +207,14 @@ sync.engine.onSynced((event) => {
   if (event.source === 'google-calendar' || event.source === 'outlook-calendar') meetings.refresh();
 });
 
+// Ares's scheduler (#132): Find time answers once guests' free/busy is in (or not to be had), asking the
+// providers through the User's own Accounts.
+const scheduler = setUpScheduler({
+  store: itemStore,
+  accounts: () => sync.accounts(),
+  freeBusy: (account, source, request) => sync.freeBusy(account, source, request),
+});
+
 // Block time across Accounts (#131): Busy copies follow each calendar sync, and the pairs in
 // Settings → Calendar (a pair switched on sets its action to Auto). Copies are made through the gate.
 const busyCopies = setUpBusyCopies({ store: itemStore, gate });
@@ -232,6 +241,7 @@ port.on('message', ({ data }) => {
   if (githubWatch.handle(data)) return;
   if (emailReader.handle(data)) return;
   if (githubDiscussion.handle(data)) return;
+  if (scheduler.handle(data, (reply) => port.postMessage(reply))) return;
   let changed: CoreMessage | null = null;
   let changedIds: string[] = [];
   // Settings → Calendar's focus time as it was, to tell which pairs the User switched on.

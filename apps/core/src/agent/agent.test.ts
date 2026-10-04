@@ -114,10 +114,9 @@ describe('the Agent', () => {
     expect(suggestCalls()).toHaveLength(0);
     await wait(1_000);
     expect(suggestCalls()).toHaveLength(1);
-    expect(statuses).toEqual([
-      { type: 'ares-status', working: true, running: ['Suggest Todos'] },
-      { type: 'ares-status', working: false, running: [] },
-    ]);
+    // Other jobs that follow typing (Propose events) look too, finding nothing for them here.
+    expect(statuses).toContainEqual({ type: 'ares-status', working: true, running: ['Suggest Todos'] });
+    expect(statuses.at(-1)).toEqual({ type: 'ares-status', working: false, running: [] });
   });
 
   it('doesn’t take a change to anything but a Block for typing in a Daily Note', async () => {

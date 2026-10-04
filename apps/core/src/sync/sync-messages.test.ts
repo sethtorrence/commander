@@ -205,19 +205,31 @@ describe('sync messages', () => {
     expect(lastStatus()).toBeUndefined();
   });
 
-  it('knows every Account listed: its Sources, its name, who the User is there, and whether it needs reconnecting', async () => {
+  it('knows every Account listed: its Sources, its name, who the User is there (their addresses too), and whether it needs reconnecting', async () => {
     sync.handle({
       type: 'sync-accounts',
       accounts: [
         { id: ACME, source: 'linear', needsReconnect: false, me: 'user-sam', name: 'Acme' },
-        { id: 'google:1045', sources: ['gmail'], needsReconnect: true, me: '1045' },
+        {
+          id: 'google:1045',
+          sources: ['gmail'],
+          needsReconnect: true,
+          me: '1045',
+          own: { handles: ['sam@acme.test'], name: 'Sam' },
+        },
       ],
       endpoints,
     });
     await vi.advanceTimersByTimeAsync(1);
     expect(sync.accounts()).toEqual([
-      { account: ACME, sources: ['linear'], name: 'Acme', needsReconnect: false },
-      { account: 'google:1045', sources: ['gmail'], name: null, needsReconnect: true },
+      { account: ACME, sources: ['linear'], name: 'Acme', addresses: [], needsReconnect: false },
+      {
+        account: 'google:1045',
+        sources: ['gmail'],
+        name: null,
+        addresses: ['sam@acme.test'],
+        needsReconnect: true,
+      },
     ]);
     expect(sync.me(ACME)).toBe('user-sam');
     expect(sync.me('linear:org-other')).toBeNull();
@@ -232,7 +244,7 @@ describe('sync messages', () => {
     sync.handle({ type: 'sync-command', command: { op: 'refresh', account: ACME } });
     await vi.advanceTimersByTimeAsync(1);
     expect(sync.accounts()).toEqual([
-      { account: ACME, sources: ['linear'], name: null, needsReconnect: true },
+      { account: ACME, sources: ['linear'], name: null, addresses: [], needsReconnect: true },
     ]);
     expect(accountsHeard).toBeGreaterThan(heard);
   });

@@ -3,6 +3,7 @@ import { type AgentJobsState, agentJobsState } from './agent';
 import {
   type AresActivity,
   type AutonomySettings,
+  acceptChanges,
   aresActivity,
   autonomyLevel,
   autonomySettings,
@@ -26,7 +27,8 @@ export const autonomyRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('settings') }),
   z.object({ op: z.literal('set-level'), target: autonomyTarget, level: autonomyLevel.nullable() }),
   z.object({ op: z.literal('activity'), query: proposalQuery.default({}) }),
-  z.object({ op: z.literal('accept'), proposalId }),
+  // `changes`: what the User changed on the card first (a proposed meeting's time, guests, calendar).
+  z.object({ op: z.literal('accept'), proposalId, changes: acceptChanges.optional() }),
   z.object({ op: z.literal('dismiss'), proposalId }),
   z.object({ op: z.literal('accept-all'), proposalIds: z.array(proposalId).min(1) }),
   z.object({ op: z.literal('undo'), proposalId }),

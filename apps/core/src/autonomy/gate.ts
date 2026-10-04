@@ -4,6 +4,7 @@
 // Ares never writes to the database himself.
 import {
   ACTION_KIND_NAMES,
+  type AcceptChanges,
   type ActionContext,
   type AresActivity,
   AUTONOMY_LEVEL_NAMES,
@@ -36,8 +37,9 @@ export type Gate = {
   setLevel(target: AutonomyTarget, level: AutonomyLevel | null): AutonomySettings;
   propose(proposal: Proposal): ProposalOutcome;
   // The User accepts a pending suggestion: it is carried out, as the User, with Ares's reason and
-  // its cause. Nothing further happens by itself: each next step is a fresh proposal.
-  accept(proposalId: number): ProposalRecord;
+  // its cause. Nothing further happens by itself: each next step is a fresh proposal. `changes`: what
+  // the User changed on its card first (a proposed meeting's time, guests, Account and calendar).
+  accept(proposalId: number, changes?: AcceptChanges): ProposalRecord;
   dismiss(proposalId: number): ProposalRecord;
   // Accepts several at once: only Organise and Tidy your Sources suggestions, and all or none.
   acceptAll(proposalIds: number[]): ProposalRecord[];
@@ -131,6 +133,10 @@ export function openGate({
       if (step.type === 'create-event' && action.actionKind === 'organise') {
         refuse('writes an event to a calendar', 'tidy-sources');
       }
+      // An event with guests is seen by them (#11): the Source invites them.
+      const guests =
+        step.type === 'create-event' ? [...step.event.attendees, ...step.event.guestsToFill] : [];
+      if (guests.length && action.actionKind !== 'act-for-you') refuse('invites guests', 'act-for-you');
       if (step.type !== 'update' || action.actionKind !== 'organise') continue;
       if (typeof step.itemId !== 'string') continue; // an Item this proposal creates is Commander's own
       const fromSource = itemStore.get(step.itemId)?.item.source != null;
@@ -207,7 +213,29 @@ export function openGate({
     return record;
   }
 
-  function acceptOne(proposalId: number): ProposalRecord {
+  // The suggestion's steps with the User's changes from its card: its event as changed. Moved to
+  // another Account without a calendar named, it goes on that Account's main calendar.
+  function withChanges(record: ProposalRecord, changes: AcceptChanges | undefined): ProposalRecord {
+    const event = changes?.event;
+    if (!event || !Object.keys(event).length) return record;
+    if (!record.itemActions.some((step) => step.type === 'create-event')) {
+      throw new GateError('invalid', 'That suggestion makes no event to change');
+    }
+    const itemActions = record.itemActions.map((step) => {
+      if (step.type !== 'create-event') return step;
+      const { calendarId, ...rest } = event;
+      const moved = rest.account !== undefined && rest.account !== step.event.account;
+      const calendar = calendarId !== undefined ? calendarId : moved ? null : step.event.calendarId;
+      const { calendarId: _was, ...kept } = step.event;
+      return {
+        ...step,
+        event: { ...kept, ...rest, guestsToFill: [], ...(calendar ? { calendarId: calendar } : {}) },
+      };
+    });
+    return { ...record, itemActions: proposalSchema.shape.itemActions.parse(itemActions) };
+  }
+
+  function acceptOne(proposalId: number, changes?: AcceptChanges): ProposalRecord {
     const record = requirePending(proposalId);
     // Filed by the User or a Rule since Ares suggested it: his suggestion no longer stands.
     if (overridesFiling(record.itemActions)) {
@@ -215,7 +243,7 @@ export function openGate({
     }
     return itemStore.autonomy.settleProposal(record.id, {
       status: 'accepted',
-      entryIds: carryOut(record, user),
+      entryIds: carryOut(withChanges(record, changes), user),
     });
   }
 
@@ -364,8 +392,8 @@ export function openGate({
       return changed(outcome, outcome.decision === 'auto' ? outcome.done.entryIds : [], [parsed.itemId]);
     },
 
-    accept(proposalId) {
-      const accepted = itemStore.transaction(() => acceptOne(proposalId));
+    accept(proposalId, changes) {
+      const accepted = itemStore.transaction(() => acceptOne(proposalId, changes));
       return changed(accepted, accepted.entryIds, [accepted.itemId]);
     },
 

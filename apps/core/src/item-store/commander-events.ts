@@ -1,5 +1,5 @@
-// Events Commander writes (the domain's commander-events.ts) in the Item store: a focus block or a busy
-// copy is made as an `event` Item at once, under a placeholder external id, and its creation queued for
+// Events Commander writes (the domain's commander-events.ts) in the Item store: a focus block, a busy
+// copy or a meeting with guests (#132, on the calendar chosen, the User its organiser) is made as an `event` Item at once, under a placeholder external id, and its creation queued for
 // the Source as the outgoing change `create`, in one transaction (ADR 0003, as Send to Linear does). The
 // sync engine sends it; the Source's answer (or a sync that gets there first) names the Item, which then
 // takes its real external id. Each busy copy is recorded against the event it copies, so it is made
@@ -92,7 +92,23 @@ export function commanderEventsIn(deps: CommanderEventsDeps) {
 
       let calendar: EventCalendar;
       let calendarId: string | null;
-      if (draft.kind === 'focus-block') {
+      if (draft.kind === 'meeting') {
+        // On the calendar chosen, or the Account's main calendar; one the User can add events to.
+        const chosen = draft.calendarId ? listed.find((each) => each.id === draft.calendarId) : primary;
+        if (!chosen) {
+          throw deps.invalid(
+            draft.calendarId
+              ? 'That Account doesn’t have the calendar chosen for this event'
+              : 'Commander doesn’t know that Account’s main calendar yet',
+          );
+        }
+        if (chosen.accessRole !== 'owner' && chosen.accessRole !== 'writer') {
+          throw deps.invalid(`You can’t add events to “${chosen.name}”`);
+        }
+        calendar = { id: chosen.id, name: chosen.name, colour: chosen.colour };
+        calendarId = chosen.id;
+        if (draft.filing) deps.checkFiling(draft.filing);
+      } else if (draft.kind === 'focus-block') {
         // The Commander calendar, if a sync has listed it; otherwise the adapter finds or makes it.
         const found = listed.find(
           (each) => each.name === COMMANDER_CALENDAR_NAME && each.accessRole === 'owner',
@@ -116,22 +132,36 @@ export function commanderEventsIn(deps: CommanderEventsDeps) {
       }
 
       const title = draft.kind === 'busy-block' ? BUSY_COPY_TITLE : draft.title;
+      // Google names a primary calendar after its Account's address.
+      const accountEmail = source === 'google-calendar' ? (primary?.id ?? null) : null;
+      const meeting = draft.kind === 'meeting';
+      // A meeting's guests, once each; until the Source answers, the User is its organiser.
+      const guests = meeting
+        ? [...new Map(draft.attendees.map((guest) => [guest.email, guest])).values()]
+        : [];
       const detail: EventDetail = {
         kind: 'event',
         calendar,
-        // Google names a primary calendar after its Account's address.
-        accountEmail: source === 'google-calendar' ? (primary?.id ?? null) : null,
+        accountEmail,
         start: draft.start,
         end: draft.end,
         allDay: draft.allDay,
         location: null,
         description: null,
-        organiser: null,
-        attendees: [],
+        organiser: meeting && accountEmail ? { email: accountEmail, name: null, self: true } : null,
+        attendees: guests.map((guest) => ({
+          email: guest.email,
+          name: guest.name,
+          self: false,
+          response: 'needs-action' as const,
+          organiser: false,
+          optional: false,
+          resource: false,
+        })),
         myResponse: null,
         meetingUrl: null,
         busy: true,
-        private: true,
+        private: !meeting,
         seriesId: null,
         webUrl: null,
         createdByCommander: draft.kind,
@@ -142,9 +172,9 @@ export function commanderEventsIn(deps: CommanderEventsDeps) {
         { kind: 'event', source, account: draft.account, externalId },
         {
           title,
-          people: [],
+          people: guests.map((guest) => guest.email),
           status: 'open',
-          filing: draft.kind === 'focus-block' ? (draft.filing ?? null) : null,
+          filing: draft.kind === 'busy-block' ? null : (draft.filing ?? null),
           detail,
           deletedAt: null,
         },
@@ -160,6 +190,7 @@ export function commanderEventsIn(deps: CommanderEventsDeps) {
         start: draft.start,
         end: draft.end,
         allDay: draft.allDay,
+        attendees: guests,
       };
       deps.outgoing.queue({
         account: draft.account,
