@@ -37,7 +37,7 @@ export function ProjectRankedList({
             const section = openIn(row);
             if (!section) return;
             onOpenSection(section[0]);
-            requestReveal(section[0], revealId(row));
+            requestReveal(section[0], revealId(row), row.focus?.messageId);
           }}
           onTick={(row) => void dashboard.tick(row)}
           onClear={dashboard.clear}

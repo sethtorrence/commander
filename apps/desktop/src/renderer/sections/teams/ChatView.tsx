@@ -1,6 +1,6 @@
 import type { ActivityEntry, ChatMessage } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
-import type { ReactNode } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
 import { ItemBadge } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
@@ -11,6 +11,7 @@ import { CHAT_TYPE_NAMES, ChatTypeGlyph, Mark } from './ChatRow';
 import { type Chat, mentionsOf, messagesByDay, peopleIn, reactionSummary } from './chats';
 import { MessageText, OutLink } from './MessageText';
 import { type ChatLink, describeChatEntry } from './teams-chats';
+import type { MessageFocus } from './use-teams';
 
 /*
   The Chat view beside the list, after the prototype's reader: the Chat's actions along the top
@@ -30,11 +31,18 @@ function Message({
   message,
   me,
   webUrl,
+  focus,
 }: {
   message: ChatMessage;
   me: string | null;
   webUrl: string | null;
+  /** Asked for (from the Dashboard): scrolled into view and marked, again on each new ask. */
+  focus?: MessageFocus | null;
 }) {
+  const element = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (focus) element.current?.scrollIntoView?.({ block: 'center' });
+  }, [focus]);
   const time = (
     <time
       dateTime={new Date(message.createdAt).toISOString()}
@@ -61,11 +69,15 @@ function Message({
   const mentioned = mentionsOf(message, me);
   return (
     <li
+      ref={element}
       data-testid="chat-message"
+      data-message-id={message.id}
+      data-focused={focus ? '' : undefined}
       aria-label={`${mine ? 'You' : message.from.name} at ${timeOfDay(message.createdAt)}`}
       className={cn(
-        'border-b border-line2 px-3.5 py-2.5 last:border-b-0',
+        'scroll-my-16 border-b border-line2 px-3.5 py-2.5 last:border-b-0',
         mentioned.length && 'shadow-[inset_3px_0_0_var(--ink)]',
+        focus && 'bg-signal-focus shadow-[inset_3px_0_0_var(--signal)]',
       )}
     >
       <div className="mb-1 flex items-baseline gap-2.5">
@@ -129,6 +141,7 @@ function Message({
 export function ChatView({
   chat,
   me,
+  focus,
   accountName,
   links,
   history,
@@ -143,6 +156,8 @@ export function ChatView({
   chat: Chat | null;
   /** The User's Teams user id in the Chat's Account. */
   me: string | null;
+  /** A message to scroll to and mark (the Dashboard opens a Chat at the message that put it there). */
+  focus?: MessageFocus | null;
   /** The Chat's Account, when more than one is connected. */
   accountName: string | null;
   links: ChatLink[];
@@ -226,7 +241,13 @@ export function ChatView({
                     </Eyebrow>
                     <ol className="m-0 list-none border border-line p-0">
                       {day.messages.map((message) => (
-                        <Message key={message.id} message={message} me={me} webUrl={webUrl} />
+                        <Message
+                          key={message.id}
+                          message={message}
+                          me={me}
+                          webUrl={webUrl}
+                          focus={focus?.chatId === chat.id && focus.messageId === message.id ? focus : null}
+                        />
                       ))}
                     </ol>
                   </section>

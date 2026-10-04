@@ -89,8 +89,9 @@ function hash(text: string): string {
 
 /**
  * What Ares ranks an Item by, as a short fingerprint: its title, status, Project and due date, a
- * Todo's origin and backing Item, and a Linear issue's state, priority, assignee, cycle and last
- * change. When it changes, his ranking of the Item no longer holds.
+ * Todo's origin and backing Item, a Linear issue's state, priority, assignee, cycle and last
+ * change, and a Chat's latest message, when it was read and its flags. When it changes, his ranking
+ * of the Item no longer holds.
  */
 export function rankingFingerprint(item: Item): string {
   const facts: unknown[] = [
@@ -110,6 +111,17 @@ export function rankingFingerprint(item: Item): string {
       detail.cycle?.id ?? null,
       detail.dueDate,
       detail.updatedAt,
+    );
+  }
+  // A Chat: what the band rules go by, so a newer message, a read or a reply means he ranks it again.
+  if (detail?.kind === 'chat') {
+    facts.push(
+      detail.chatType,
+      detail.lastMessageAt,
+      detail.lastReadAt,
+      detail.mentionsMe,
+      detail.latestFromMe,
+      detail.messages.at(-1)?.id ?? null,
     );
   }
   return hash(JSON.stringify(facts));
@@ -135,7 +147,7 @@ export function aresRanker(ranking: DashboardRanking | null, fallback: Ranker = 
   return (items, context) => {
     if (!ranking || rankingOrigin(ranking, context.now).by !== 'ares') return fallback(items, context);
     const entries = new Map(ranking.entries.map((entry) => [entry.itemId, entry]));
-    const candidates = dashboardCandidates(items);
+    const candidates = dashboardCandidates(items, context.muted);
     const byId = new Map(candidates.map((item) => [item.id, item]));
     const ruled = new Map(fallback(candidates, context).map((found) => [found.itemId, found]));
     const his: AresRankingEntry[] = [];

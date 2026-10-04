@@ -16,8 +16,7 @@ import { ProjectPageTab } from '../projects/page/ProjectPageTab';
 import { type ProjectsClient, projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
 import { DashboardProvider, useDashboard } from '../sections/dashboard/context';
-import { type DashboardClient, dashboardIn } from '../sections/dashboard/dashboard';
-import { linearAccountsIn } from '../sections/linear/linear-issues';
+import { type DashboardClient, dashboardAccountsIn, dashboardIn } from '../sections/dashboard/dashboard';
 import { FrameControlsProvider, HeaderSlotProvider, SectionProvider } from '../sections/section';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { ShortcutScope, useActiveScopes, useShortcuts } from '../shortcuts/react';
@@ -137,7 +136,7 @@ export function Frame() {
   const [cheatSheet, setCheatSheet] = useState(false);
   const projects = useMemo(() => projectsIn(window.commander.itemStore), []);
   const dashboard = useMemo(
-    () => dashboardIn(window.commander.itemStore, linearAccountsIn(window.commander), window.commander),
+    () => dashboardIn(window.commander.itemStore, dashboardAccountsIn(window.commander), window.commander),
     [],
   );
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);

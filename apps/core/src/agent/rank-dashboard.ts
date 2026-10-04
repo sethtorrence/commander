@@ -5,12 +5,15 @@
 //
 // - Looks at the open Todos (a Todo backed by a Linear issue is that issue), the Linear issues
 //   involving the User (their Linear Todos, and issues they created or have that changed in the last
-//   two days), and the pending "Suggest Todos" suggestions; at most 200 Items, the most pressing by
+//   two days), the Teams Chats that may need them (a mention, an unanswered one-to-one Chat, or
+//   unread messages from the last two days; never a muted Chat), and the pending "Suggest Todos"
+//   suggestions; at most 200 Items, the most pressing by
 //   the rules first. Cleared rows are left out until their Item changes; how he last ranked them
 //   stands. Nothing changed since his last ranking today: no call.
 // - Every Item goes in a data block of its own through the prompt builder (ADR 0004), labelled with
-//   a short reference (I1, I2…) that the reply names it by; Linear issues and suggestions are outside
-//   material. Today's date goes with the instructions.
+//   a short reference (I1, I2…) that the reply names it by; Linear issues, Chats and suggestions are
+//   outside material. A Chat goes with its name and type, the people in it, why it may need the User
+//   and its last few messages, each cut short. Today's date goes with the instructions.
 // - The reply's entries are checked one by one: an entry that names an Item it wasn't given (or one
 //   twice), a band that isn't one, a rank that isn't a number or a missing reason is dropped, and so
 //   is any Item he left out: the band rules place those (aresRanker, in the window).
@@ -22,11 +25,15 @@ import {
   type AresBand,
   type AresRankingEntry,
   aresBands,
+  type ChatDetail,
+  chatAttention,
+  chatFlags,
   dashboardCandidates,
   type Item,
   isLinearTodo,
   type LinearIssueDetail,
   localDay,
+  mutedChatIds,
   RANK_DASHBOARD,
   rankByBandRules,
   rankingFingerprint,
@@ -52,6 +59,10 @@ const CUT_REASON_WORDS = 12;
 const MAX_REASON_CHARS = 140;
 const MAX_DESCRIPTION = 300;
 const MAX_COMMENT = 200;
+// A Chat goes with its last few messages, each cut short, and at most this many people named.
+const CHAT_MESSAGES = 5;
+const MAX_MESSAGE = 200;
+const MAX_PEOPLE = 8;
 
 // Each entry is checked on its own (so one bad entry costs only that Item), hence the loose shape.
 const entry = z
@@ -130,7 +141,8 @@ Reply with only this JSON object: {"ranking":[{"ref":"I1","band":"now","rank":1,
 - band: one of now, today, waiting, fyi, none.
 - rank: the Item's place in its band, from 1 at the top, the most pressing first. Number each band on its own.
 - reason: why it is there, in a few plain words of your own (fewer than 12), as you would say it to the User: "Dana's waiting on this before Friday's review", "Overdue since Tuesday", "Priya has it now". No full stop. For band none it may be empty.
-- A Suggested Todo is one you suggested from the User's Daily Note that they haven't added yet: rank it like any other Todo.`;
+- A Suggested Todo is one you suggested from the User's Daily Note that they haven't added yet: rank it like any other Todo.
+- A Teams chat is a conversation in Microsoft Teams, with its last few messages. Place it when someone is waiting on the User (a question or mention aimed at them, a one-to-one message they haven't answered); chatter that asks nothing of them is none.`;
 
 // A reason as the Dashboard shows it: one line, no closing full stop, a few words.
 function cleanReason(reason: string): string {
@@ -209,6 +221,60 @@ export function rankDashboardJob(
     ].join('\n');
   }
 
+  const CHAT_TYPES: Record<ChatDetail['chatType'], string> = {
+    'one-on-one': 'one-to-one',
+    group: 'group',
+    meeting: 'meeting',
+  };
+
+  // A Chat as Ares reads it: its name and type, the people in it, why it may need the User, and its
+  // last few messages, each cut short. Message text is untrusted: the builder marks the block outside.
+  function chatText(item: Item, me: string | null, at: number): string {
+    const detail = item.detail as ChatDetail;
+    const flags = me ? chatFlags(detail, me) : detail;
+    const attention = chatAttention(item, me, at);
+    const others = detail.members.filter((member) => me === null || member.userId !== me);
+    const named = others.slice(0, MAX_PEOPLE).map((member) => member.name);
+    if (others.length > MAX_PEOPLE) named.push(`${others.length - MAX_PEOPLE} more`);
+    const people = me === null ? named : [...named, 'the User'];
+    const withWhom =
+      people.length > 1 ? `${people.slice(0, -1).join(', ')} and ${people.at(-1)}` : (people[0] ?? 'no one');
+    const who = (from: { userId: string | null; name: string } | null) =>
+      from && me !== null && from.userId === me ? 'the User' : (from?.name ?? 'someone');
+    const recent = detail.messages
+      .filter((message) => message.from !== null && !message.deleted)
+      .slice(-CHAT_MESSAGES)
+      .map(
+        (message) => `- ${stamp(message.createdAt)} ${who(message.from)}: ${cut(message.text, MAX_MESSAGE)}`,
+      );
+    return [
+      `Title: ${item.title}`,
+      `A Teams ${CHAT_TYPES[detail.chatType]} chat with ${withWhom}`,
+      ...(attention?.why === 'mention' ? ['An unread message mentions the User'] : []),
+      ...(attention?.why === 'unanswered'
+        ? [`The latest message is ${who(attention.message.from)}’s, and the User hasn’t replied`]
+        : []),
+      `Unread messages: ${flags.unreadCount}`,
+      `Project: ${projectName(item)}`,
+      ...(recent.length ? ['Last messages, oldest first:', ...recent] : ['No messages yet']),
+    ].join('\n');
+  }
+
+  // Who the User is in each Teams Account: the sender of the latest message in a Chat where it is theirs.
+  function usersFromChats(chats: Item[]): Record<string, string> {
+    const users: Record<string, string> = {};
+    for (const chat of chats) {
+      if (!chat.account || chat.detail?.kind !== 'chat' || !chat.detail.latestFromMe) continue;
+      const spoken = chat.detail.messages.filter((message) => message.from !== null && !message.deleted);
+      const latest = spoken.reduce<(typeof spoken)[number] | null>(
+        (newest, message) => (newest === null || message.createdAt >= newest.createdAt ? message : newest),
+        null,
+      );
+      if (latest?.from?.userId) users[chat.account] = latest.from.userId;
+    }
+    return users;
+  }
+
   // Who the User is in each Linear Account: the assignee of the issues behind their Linear Todos.
   function usersFrom(todos: Item[], byId: Map<string, Item>): Record<string, string> {
     const users: Record<string, string> = {};
@@ -268,17 +334,31 @@ export function rankDashboardJob(
       const today = localDay(at);
       const todos = itemStore.query({ kinds: ['todo'], statuses: ['open'], limit: 1000 });
       const issues = itemStore.query({ kinds: ['linear-issue'], statuses: ['open'], limit: 1000 });
+      const chats = itemStore.query({ kinds: ['chat'], statuses: ['open'], limit: 1000 });
+      // Muted Chats are never sent; excluded ones are deleted, so not among them.
+      const muted = mutedChatIds(chats, itemStore.chatSettings.list());
       const byId = new Map([...todos, ...issues].map((item) => [item.id, item]));
-      const users = usersFrom(todos, byId);
+      const users = { ...usersFrom(todos, byId), ...usersFromChats(chats) };
+      const meIn = (item: Item) => (item.account ? (users[item.account] ?? null) : null);
       const backing = new Set(
         todos.flatMap((todo) =>
           todo.detail?.kind === 'todo' && todo.detail.backedBy ? [todo.detail.backedBy] : [],
         ),
       );
 
+      // A Chat may need the User when the band rules place it (a mention, an unanswered one-to-one
+      // Chat), or it has unread messages from the last two days, which Ares judges.
+      const mayNeedUser = (chat: Item) => {
+        if (chat.detail?.kind !== 'chat') return false;
+        const me = meIn(chat);
+        if (chatAttention(chat, me, at)) return true;
+        const { unreadCount, lastMessageAt } = me ? chatFlags(chat.detail, me) : chat.detail;
+        return unreadCount > 0 && lastMessageAt !== null && at - lastMessageAt <= RECENT_MS;
+      };
+
       const involving = (issue: Item) => {
         if (issue.detail?.kind !== 'linear-issue') return null;
-        const me = issue.account ? (users[issue.account] ?? null) : null;
+        const me = meIn(issue);
         const linearTodo = backing.has(issue.id) || isLinearTodo(issue.detail, me, at);
         const { assignee, creator, updatedAt } = issue.detail;
         const mine = !!me && (assignee?.id === me || creator?.id === me);
@@ -287,10 +367,12 @@ export function rankDashboardJob(
 
       // The Items any ranker may place, the most pressing by the rules first, so each batch is a
       // fair slice and the merge interleaves like with like.
-      const open = dashboardCandidates([...todos, ...issues]).filter(
-        (item) => item.kind === 'todo' || involving(item),
+      const open = dashboardCandidates([...todos, ...issues, ...chats], muted).filter((item) =>
+        item.kind === 'todo' ? true : item.kind === 'chat' ? mayNeedUser(item) : involving(item),
       );
-      const ruled = new Map(rankByBandRules(open, { now: at, users }).map((r, index) => [r.itemId, index]));
+      const ruled = new Map(
+        rankByBandRules(open, { now: at, users, muted }).map((r, index) => [r.itemId, index]),
+      );
       const ordered = [...open]
         .sort(
           (a, b) =>
@@ -337,6 +419,15 @@ export function rankDashboardJob(
             item.id,
             { itemId: item.id, fingerprint },
             { what: 'Todo', from: item, text: todoText(item, at) },
+            fingerprint,
+          );
+          continue;
+        }
+        if (item.kind === 'chat') {
+          add(
+            item.id,
+            { itemId: item.id, fingerprint },
+            { what: 'Teams chat', from: item, text: chatText(item, meIn(item), at) },
             fingerprint,
           );
           continue;

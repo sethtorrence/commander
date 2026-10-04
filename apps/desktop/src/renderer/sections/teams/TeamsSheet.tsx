@@ -151,8 +151,9 @@ export function TeamsSheet({
     { keys: 'b', label: 'File under a Project', run: () => file() },
     { keys: 'Ctrl+z', label: 'Undo', run: () => state.undo() },
   ]);
-  // From the palette: open a Chat it found, whatever the filters were hiding.
-  useReveal('teams', (itemId) => state.reveal(itemId));
+  // From the palette: open a Chat it found, whatever the filters were hiding; from the Dashboard, at
+  // the message that put it there.
+  useReveal('teams', (itemId, messageId) => state.reveal(itemId, messageId));
 
   const status = checkLine(state.accounts, now);
   const checking = state.accounts.some((account) => account.sync?.activity === 'syncing');
@@ -218,6 +219,7 @@ export function TeamsSheet({
               <ChatView
                 chat={selected}
                 me={selected ? state.meIn(selected) : null}
+                focus={state.focus}
                 accountName={accountName(selected)}
                 links={state.links}
                 history={state.history}

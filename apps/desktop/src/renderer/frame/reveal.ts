@@ -7,20 +7,21 @@ import { useEffect, useRef } from 'react';
   soon as it starts to (every Section stays mounted, so it is usually listening already).
 */
 
-type Listener = (itemId: string) => void;
+// `focus`: where in the Item to show, when the asker knows (a Chat's message, by its id).
+type Listener = (itemId: string, focus?: string) => void;
 
 const listeners = new Map<string, Set<Listener>>();
 // A request no Section has taken yet, by Section id.
-const waiting = new Map<string, string>();
+const waiting = new Map<string, { itemId: string; focus?: string }>();
 
-/** Asks a Section (by its id) to show an Item. */
-export function requestReveal(sectionId: string, itemId: string): void {
+/** Asks a Section (by its id) to show an Item, at `focus` within it if given (a Chat's message). */
+export function requestReveal(sectionId: string, itemId: string, focus?: string): void {
   const heard = listeners.get(sectionId);
   if (!heard?.size) {
-    waiting.set(sectionId, itemId);
+    waiting.set(sectionId, { itemId, focus });
     return;
   }
-  for (const listener of heard) listener(itemId);
+  for (const listener of heard) listener(itemId, focus);
 }
 
 /** Hears the requests to show an Item in a Section, the waiting one first. Returns the stop function. */
@@ -31,16 +32,19 @@ export function onReveal(sectionId: string, listener: Listener): () => void {
   const pending = waiting.get(sectionId);
   if (pending !== undefined) {
     waiting.delete(sectionId);
-    listener(pending);
+    listener(pending.itemId, pending.focus);
   }
   return () => {
     heard.delete(listener);
   };
 }
 
-/** `onReveal` for a component: `show` is called with the id of each Item the Section is asked to show. */
+/**
+ * `onReveal` for a component: `show` is called with the id of each Item the Section is asked to
+ * show, and where in it, when asked.
+ */
 export function useReveal(sectionId: string, show: Listener): void {
   const latest = useRef(show);
   latest.current = show;
-  useEffect(() => onReveal(sectionId, (itemId) => latest.current(itemId)), [sectionId]);
+  useEffect(() => onReveal(sectionId, (itemId, focus) => latest.current(itemId, focus)), [sectionId]);
 }
