@@ -1,0 +1,546 @@
+{
+  "chat": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())/$entity",
+      "id": "19:priya_sam@unq.gbl.spaces",
+      "topic": null,
+      "createdDateTime": "2026-05-01T08:00:00.000Z",
+      "lastUpdatedDateTime": "2026-05-01T08:00:00.000Z",
+      "chatType": "oneOnOne",
+      "webUrl": "https://teams.microsoft.com/l/chat/19%3Apriya_sam%40unq.gbl.spaces/0?tenantId=fake-tenant",
+      "tenantId": "fake-tenant",
+      "onlineMeetingInfo": null,
+      "viewpoint": {
+        "isHidden": false,
+        "lastMessageReadDateTime": "2026-10-03T09:30:00.000Z"
+      },
+      "lastMessagePreview": {
+        "@odata.type": "#microsoft.graph.chatMessageInfo",
+        "id": "1791027000000",
+        "createdDateTime": "2026-10-03T11:30:00.000Z",
+        "isDeleted": false,
+        "messageType": "message",
+        "eventDetail": null,
+        "body": {
+          "contentType": "text",
+          "content": "Also, Sam Rivera: ship it?"
+        },
+        "from": {
+          "application": null,
+          "device": null,
+          "user": {
+            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+            "id": "u-priya",
+            "displayName": "Priya Patel",
+            "userIdentityType": "aadUser",
+            "tenantId": "fake-tenant"
+          }
+        }
+      }
+    }
+  },
+  "chatAfterReading": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())/$entity",
+      "id": "19:priya_sam@unq.gbl.spaces",
+      "topic": null,
+      "createdDateTime": "2026-05-01T08:00:00.000Z",
+      "lastUpdatedDateTime": "2026-05-01T08:00:00.000Z",
+      "chatType": "oneOnOne",
+      "webUrl": "https://teams.microsoft.com/l/chat/19%3Apriya_sam%40unq.gbl.spaces/0?tenantId=fake-tenant",
+      "tenantId": "fake-tenant",
+      "onlineMeetingInfo": null,
+      "viewpoint": {
+        "isHidden": false,
+        "lastMessageReadDateTime": "2026-10-03T12:00:02.000Z"
+      },
+      "lastMessagePreview": {
+        "@odata.type": "#microsoft.graph.chatMessageInfo",
+        "id": "1791027000000",
+        "createdDateTime": "2026-10-03T11:30:00.000Z",
+        "isDeleted": false,
+        "messageType": "message",
+        "eventDetail": null,
+        "body": {
+          "contentType": "text",
+          "content": "Also, Sam Rivera: ship it?"
+        },
+        "from": {
+          "application": null,
+          "device": null,
+          "user": {
+            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+            "id": "u-priya",
+            "displayName": "Priya Patel",
+            "userIdentityType": "aadUser",
+            "tenantId": "fake-tenant"
+          }
+        }
+      }
+    }
+  },
+  "chatAfterMarkingUnread": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())/$entity",
+      "id": "19:priya_sam@unq.gbl.spaces",
+      "topic": null,
+      "createdDateTime": "2026-05-01T08:00:00.000Z",
+      "lastUpdatedDateTime": "2026-05-01T08:00:00.000Z",
+      "chatType": "oneOnOne",
+      "webUrl": "https://teams.microsoft.com/l/chat/19%3Apriya_sam%40unq.gbl.spaces/0?tenantId=fake-tenant",
+      "tenantId": "fake-tenant",
+      "onlineMeetingInfo": null,
+      "viewpoint": {
+        "isHidden": false,
+        "lastMessageReadDateTime": "2026-10-03T11:29:59.999Z"
+      },
+      "lastMessagePreview": {
+        "@odata.type": "#microsoft.graph.chatMessageInfo",
+        "id": "1791027000000",
+        "createdDateTime": "2026-10-03T11:30:00.000Z",
+        "isDeleted": false,
+        "messageType": "message",
+        "eventDetail": null,
+        "body": {
+          "contentType": "text",
+          "content": "Also, Sam Rivera: ship it?"
+        },
+        "from": {
+          "application": null,
+          "device": null,
+          "user": {
+            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+            "id": "u-priya",
+            "displayName": "Priya Patel",
+            "userIdentityType": "aadUser",
+            "tenantId": "fake-tenant"
+          }
+        }
+      }
+    }
+  },
+  "chatReadLaterInTeams": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())/$entity",
+      "id": "19:priya_sam@unq.gbl.spaces",
+      "topic": null,
+      "createdDateTime": "2026-05-01T08:00:00.000Z",
+      "lastUpdatedDateTime": "2026-05-01T08:00:00.000Z",
+      "chatType": "oneOnOne",
+      "webUrl": "https://teams.microsoft.com/l/chat/19%3Apriya_sam%40unq.gbl.spaces/0?tenantId=fake-tenant",
+      "tenantId": "fake-tenant",
+      "onlineMeetingInfo": null,
+      "viewpoint": {
+        "isHidden": false,
+        "lastMessageReadDateTime": "2026-10-03T11:45:00.000Z"
+      },
+      "lastMessagePreview": {
+        "@odata.type": "#microsoft.graph.chatMessageInfo",
+        "id": "1791027000000",
+        "createdDateTime": "2026-10-03T11:30:00.000Z",
+        "isDeleted": false,
+        "messageType": "message",
+        "eventDetail": null,
+        "body": {
+          "contentType": "text",
+          "content": "Also, Sam Rivera: ship it?"
+        },
+        "from": {
+          "application": null,
+          "device": null,
+          "user": {
+            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+            "id": "u-priya",
+            "displayName": "Priya Patel",
+            "userIdentityType": "aadUser",
+            "tenantId": "fake-tenant"
+          }
+        }
+      }
+    }
+  },
+  "chatReadLaterInTeamsThenNewMessage": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())/$entity",
+      "id": "19:priya_sam@unq.gbl.spaces",
+      "topic": null,
+      "createdDateTime": "2026-05-01T08:00:00.000Z",
+      "lastUpdatedDateTime": "2026-05-01T08:00:00.000Z",
+      "chatType": "oneOnOne",
+      "webUrl": "https://teams.microsoft.com/l/chat/19%3Apriya_sam%40unq.gbl.spaces/0?tenantId=fake-tenant",
+      "tenantId": "fake-tenant",
+      "onlineMeetingInfo": null,
+      "viewpoint": {
+        "isHidden": false,
+        "lastMessageReadDateTime": "2026-10-03T11:45:00.000Z"
+      },
+      "lastMessagePreview": {
+        "@odata.type": "#microsoft.graph.chatMessageInfo",
+        "id": "1791028200000",
+        "createdDateTime": "2026-10-03T11:50:00.000Z",
+        "isDeleted": false,
+        "messageType": "message",
+        "eventDetail": null,
+        "body": {
+          "contentType": "text",
+          "content": "One more thing"
+        },
+        "from": {
+          "application": null,
+          "device": null,
+          "user": {
+            "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+            "id": "u-priya",
+            "displayName": "Priya Patel",
+            "userIdentityType": "aadUser",
+            "tenantId": "fake-tenant"
+          }
+        }
+      }
+    }
+  },
+  "messagePosted": {
+    "status": 201,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats('19%3Apriya_sam%40unq.gbl.spaces')/messages/$entity",
+      "id": "1791028805000",
+      "replyToId": null,
+      "etag": "1791028805000",
+      "messageType": "message",
+      "createdDateTime": "2026-10-03T12:00:05.000Z",
+      "lastModifiedDateTime": "2026-10-03T12:00:05.000Z",
+      "lastEditedDateTime": null,
+      "deletedDateTime": null,
+      "subject": null,
+      "summary": null,
+      "chatId": "19:priya_sam@unq.gbl.spaces",
+      "importance": "normal",
+      "locale": "en-us",
+      "webUrl": null,
+      "channelIdentity": null,
+      "policyViolation": null,
+      "eventDetail": null,
+      "from": {
+        "application": null,
+        "device": null,
+        "user": {
+          "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+          "id": "u-sam",
+          "displayName": "Sam Rivera",
+          "userIdentityType": "aadUser",
+          "tenantId": "fake-tenant"
+        }
+      },
+      "body": {
+        "contentType": "html",
+        "content": "On it &lt;b&gt;now&lt;/b&gt; &amp; back at 3 &quot;sharp&quot;.<br>Thanks, Priya"
+      },
+      "attachments": [],
+      "mentions": [],
+      "reactions": []
+    }
+  },
+  "newestWithTheReply": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats('19%3Apriya_sam%40unq.gbl.spaces')/messages",
+      "@odata.count": 2,
+      "value": [
+        {
+          "id": "1791028805000",
+          "replyToId": null,
+          "etag": "1791028805000",
+          "messageType": "message",
+          "createdDateTime": "2026-10-03T12:00:05.000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:05.000Z",
+          "lastEditedDateTime": null,
+          "deletedDateTime": null,
+          "subject": null,
+          "summary": null,
+          "chatId": "19:priya_sam@unq.gbl.spaces",
+          "importance": "normal",
+          "locale": "en-us",
+          "webUrl": null,
+          "channelIdentity": null,
+          "policyViolation": null,
+          "eventDetail": null,
+          "from": {
+            "application": null,
+            "device": null,
+            "user": {
+              "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+              "id": "u-sam",
+              "displayName": "Sam Rivera",
+              "userIdentityType": "aadUser",
+              "tenantId": "fake-tenant"
+            }
+          },
+          "body": {
+            "contentType": "html",
+            "content": "On it &lt;b&gt;now&lt;/b&gt; &amp; back at 3 &quot;sharp&quot;.<br>Thanks, Priya"
+          },
+          "attachments": [],
+          "mentions": [],
+          "reactions": []
+        },
+        {
+          "id": "1791027000000",
+          "replyToId": null,
+          "etag": "1791027000000",
+          "messageType": "message",
+          "createdDateTime": "2026-10-03T11:30:00.000Z",
+          "lastModifiedDateTime": "2026-10-03T11:30:00.000Z",
+          "lastEditedDateTime": null,
+          "deletedDateTime": null,
+          "subject": null,
+          "summary": null,
+          "chatId": "19:priya_sam@unq.gbl.spaces",
+          "importance": "normal",
+          "locale": "en-us",
+          "webUrl": null,
+          "channelIdentity": null,
+          "policyViolation": null,
+          "eventDetail": null,
+          "from": {
+            "application": null,
+            "device": null,
+            "user": {
+              "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+              "id": "u-priya",
+              "displayName": "Priya Patel",
+              "userIdentityType": "aadUser",
+              "tenantId": "fake-tenant"
+            }
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<p>Also, <at id=\"0\">Sam Rivera</at>: ship it?</p>"
+          },
+          "attachments": [],
+          "mentions": [],
+          "reactions": []
+        }
+      ]
+    }
+  },
+  "newestWithoutIt": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats('19%3Apriya_sam%40unq.gbl.spaces')/messages",
+      "@odata.count": 2,
+      "value": [
+        {
+          "id": "1791028210000",
+          "replyToId": null,
+          "etag": "1791028210000",
+          "messageType": "message",
+          "createdDateTime": "2026-10-03T12:00:06.000Z",
+          "lastModifiedDateTime": "2026-10-03T12:00:06.000Z",
+          "lastEditedDateTime": null,
+          "deletedDateTime": null,
+          "subject": null,
+          "summary": null,
+          "chatId": "19:priya_sam@unq.gbl.spaces",
+          "importance": "normal",
+          "locale": "en-us",
+          "webUrl": null,
+          "channelIdentity": null,
+          "policyViolation": null,
+          "eventDetail": null,
+          "from": {
+            "application": null,
+            "device": null,
+            "user": {
+              "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+              "id": "u-priya",
+              "displayName": "Priya Patel",
+              "userIdentityType": "aadUser",
+              "tenantId": "fake-tenant"
+            }
+          },
+          "body": {
+            "contentType": "html",
+            "content": "On it &lt;b&gt;now&lt;/b&gt; &amp; back at 3 &quot;sharp&quot;.<br>Thanks, Priya"
+          },
+          "attachments": [],
+          "mentions": [],
+          "reactions": []
+        },
+        {
+          "id": "1791027600000",
+          "replyToId": null,
+          "etag": "1791027600000",
+          "messageType": "message",
+          "createdDateTime": "2026-10-03T11:40:00.000Z",
+          "lastModifiedDateTime": "2026-10-03T11:40:00.000Z",
+          "lastEditedDateTime": null,
+          "deletedDateTime": null,
+          "subject": null,
+          "summary": null,
+          "chatId": "19:priya_sam@unq.gbl.spaces",
+          "importance": "normal",
+          "locale": "en-us",
+          "webUrl": null,
+          "channelIdentity": null,
+          "policyViolation": null,
+          "eventDetail": null,
+          "from": {
+            "application": null,
+            "device": null,
+            "user": {
+              "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+              "id": "u-sam",
+              "displayName": "Sam Rivera",
+              "userIdentityType": "aadUser",
+              "tenantId": "fake-tenant"
+            }
+          },
+          "body": {
+            "contentType": "html",
+            "content": "On it &lt;b&gt;now&lt;/b&gt; &amp; back at 3 &quot;sharp&quot;.<br>Thanks, Priya"
+          },
+          "attachments": [],
+          "mentions": [],
+          "reactions": []
+        }
+      ]
+    }
+  },
+  "noContent": {
+    "status": 204,
+    "headers": {},
+    "body": null
+  },
+  "forbidden": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "Forbidden",
+        "message": "Forbidden",
+        "innerError": {
+          "date": "2026-10-03T12:00:00",
+          "request-id": "fake-request",
+          "client-request-id": "fake-client-request"
+        }
+      }
+    }
+  },
+  "notFound": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "NotFound",
+        "message": "Chat not found.",
+        "innerError": {
+          "date": "2026-10-03T12:00:00",
+          "request-id": "fake-request",
+          "client-request-id": "fake-client-request"
+        }
+      }
+    }
+  },
+  "badRequest": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "BadRequest",
+        "message": "Message body is too large.",
+        "innerError": {
+          "date": "2026-10-03T12:00:00",
+          "request-id": "fake-request",
+          "client-request-id": "fake-client-request"
+        }
+      }
+    }
+  },
+  "unauthorized": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "InvalidAuthenticationToken",
+        "message": "Access token has expired or is not yet valid.",
+        "innerError": {
+          "date": "2026-10-03T12:00:00",
+          "request-id": "fake-request",
+          "client-request-id": "fake-client-request"
+        }
+      }
+    }
+  },
+  "throttled": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json",
+      "retry-after": "30"
+    },
+    "body": {
+      "error": {
+        "code": "TooManyRequests",
+        "message": "Too many requests.",
+        "innerError": {
+          "date": "2026-10-03T12:00:00",
+          "request-id": "fake-request",
+          "client-request-id": "fake-client-request"
+        }
+      }
+    }
+  },
+  "unavailable": {
+    "status": 503,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": {
+        "code": "ServiceUnavailable",
+        "message": "Service unavailable.",
+        "innerError": {
+          "date": "2026-10-03T12:00:00",
+          "request-id": "fake-request",
+          "client-request-id": "fake-client-request"
+        }
+      }
+    }
+  }
+}

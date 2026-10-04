@@ -9,12 +9,15 @@ import type { AddressInfo } from 'node:net';
 // carrying the tenant, the granted scopes in the token response (fewer than asked for, when an
 // administrator approved only some), `GET /me`, and the AADSTS errors of a tenant that needs admin
 // consent; and
-// for Teams sync, the User's Chats: `GET /me/chats?$expand=lastMessagePreview`, a Chat's members, and
-// its messages newest-modified first, filtered on `lastModifiedDateTime`, paged with nextLinks; and
-// for Outlook Calendar, `GET /me/calendars` and each calendar's `calendarView/delta` over a window,
-// paged by `Prefer: odata.maxpagesize`, ending in a delta link that later returns only changes
-// (deleted events as `@removed`), 410 SyncStateNotFound once delta links expire, and throttling.
-// Nothing here talks to the real Microsoft.
+// for Teams sync, the User's Chats: `GET /me/chats?$expand=lastMessagePreview` (and one Chat), a
+// Chat's members, and its messages newest-modified first, filtered on `lastModifiedDateTime`, paged
+// with nextLinks; for Teams write-back (#106), posting a message as the signed-in user and
+// `markChatReadForUser` / `markChatUnreadForUser`, each user's read time showing in the Chat's
+// viewpoint (a post can be taken and its answer dropped, as when a connection fails at the wrong
+// moment); and for Outlook Calendar, `GET /me/calendars` and each calendar's `calendarView/delta` over
+// a window, paged by `Prefer: odata.maxpagesize`, ending in a delta link that later returns only
+// changes (deleted events as `@removed`), 410 SyncStateNotFound once delta links expire, and
+// throttling. Nothing here talks to the real Microsoft.
 
 export type FakeMicrosoftUser = { id: string; displayName: string; userPrincipalName: string };
 
@@ -38,6 +41,8 @@ export type FakeChat = {
   // When it was renamed or its members changed.
   updatedAt: number;
   messages: FakeChatMessage[];
+  // When each user (by id) last read it, as `viewpoint.lastMessageReadDateTime` shows them.
+  readBy: Record<string, number>;
 };
 
 // An Outlook calendar the fake serves (as `GET /me/calendars` lists it), with its events: Graph event
@@ -85,8 +90,10 @@ export type FakeMicrosoft = {
   authorizeRequests: Record<string, string>[];
   // Every token request, as its form fields.
   tokenRequests: Record<string, string>[];
-  // Every Graph request, as its path and query (decoded).
+  // Every Graph GET, as its path and query (decoded).
   graphRequests: string[];
+  // Every Graph POST: its path (decoded) and JSON body.
+  graphPosts: { path: string; body: Record<string, unknown> }[];
   // Adds a Chat every signed-in user is in.
   addChat(
     chat: Pick<FakeChat, 'id' | 'members'> & Partial<Pick<FakeChat, 'topic' | 'chatType' | 'updatedAt'>>,
@@ -99,6 +106,14 @@ export type FakeMicrosoft = {
     at?: number,
     mentions?: FakeMicrosoftUser[],
   ): string;
+  // A Chat as the fake holds it (its messages, and who read it when).
+  chat(chatId: string): FakeChat;
+  // A user reads the Chat in Teams (now, or `at`).
+  readChat(chatId: string, userId: string, at?: number): void;
+  // The next message posted is taken, but the connection drops before Graph answers.
+  dropNextPostAnswer(): void;
+  // Posted messages are refused with this status until switched back (null).
+  refusePosts(status: 400 | 403 | 500 | null): void;
   // The next Graph requests are refused with this status and Retry-After (seconds), until switched back.
   throttleGraph(answer: { status: 429 | 503; retryAfter: number } | null): void;
   // Outlook Calendar: a user's calendars and their events (replacing any before).
@@ -192,6 +207,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
   let refreshFailing = false;
   let refreshDelay = 0;
   const chats: FakeChat[] = [];
+  let dropPostAnswer = false;
+  let refusingPosts: 400 | 403 | 500 | null = null;
   let throttled: { status: 429 | 503; retryAfter: number } | null = null;
   // Outlook Calendar: each user's calendars, every change numbered (`version`), deleted events kept
   // with the change that deleted them, and the delta and page tokens handed out.
@@ -223,6 +240,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     authorizeRequests: [],
     tokenRequests: [],
     graphRequests: [],
+    graphPosts: [],
     refreshes: 0,
     approve: (user) => {
       nextUser = user;
@@ -247,7 +265,21 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     },
     issuedTokens: () => [...issued],
     addChat: ({ id, members, topic = null, chatType = 'group', updatedAt = Date.now() }) => {
-      chats.push({ id, members, topic, chatType, updatedAt, messages: [] });
+      chats.push({ id, members, topic, chatType, updatedAt, messages: [], readBy: {} });
+    },
+    chat: (chatId) => {
+      const chat = chats.find((each) => each.id === chatId);
+      if (!chat) throw new Error(`No fake chat ${chatId}`);
+      return chat;
+    },
+    readChat: (chatId, userId, at = Date.now()) => {
+      fake.chat(chatId).readBy[userId] = at;
+    },
+    dropNextPostAnswer: () => {
+      dropPostAnswer = true;
+    },
+    refusePosts: (status) => {
+      refusingPosts = status;
     },
     postMessage: (chatId, from, html, at = Date.now(), mentions = []) => {
       const chat = chats.find((each) => each.id === chatId);
@@ -417,8 +449,9 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       null,
     );
 
-  function graphChat(chat: FakeChat) {
+  function graphChat(chat: FakeChat, user: FakeMicrosoftUser) {
     const last = latest(chat);
+    const readAt = chat.readBy[user.id];
     return {
       id: chat.id,
       topic: chat.topic,
@@ -428,7 +461,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       webUrl: `https://teams.microsoft.com/l/chat/${encodeURIComponent(chat.id)}/0?tenantId=${tenantId}`,
       tenantId,
       onlineMeetingInfo: null,
-      viewpoint: { isHidden: false, lastMessageReadDateTime: null },
+      viewpoint: { isHidden: false, lastMessageReadDateTime: readAt === undefined ? null : iso(readAt) },
       lastMessagePreview: last && {
         id: last.id,
         createdDateTime: iso(last.createdAt),
@@ -455,13 +488,41 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     });
   }
 
-  function chatResource(url: URL, response: ServerResponse) {
-    const match = /^\/v1\.0\/chats\/([^/]+)\/(members|messages)$/.exec(url.pathname);
+  function toGraphMessage(message: FakeChatMessage) {
+    return {
+      id: message.id,
+      replyToId: null,
+      messageType: 'message',
+      createdDateTime: iso(message.createdAt),
+      lastModifiedDateTime: iso(message.modifiedAt),
+      deletedDateTime: null,
+      from: identity(message.from),
+      body: { contentType: 'html', content: message.html },
+      attachments: [],
+      mentions: message.mentions.map((user, index) => ({
+        id: index,
+        mentionText: user.displayName,
+        mentioned: { user: { id: user.id, displayName: user.displayName, userIdentityType: 'aadUser' } },
+      })),
+      reactions: [],
+    };
+  }
+
+  // The Chat a /chats/{id}[/part] path names, and the part (null for the Chat itself).
+  function chatIn(url: URL): { chat: FakeChat; part: string | null } | null {
+    const match = /^\/v1\.0\/chats\/([^/]+)(?:\/([A-Za-z]+))?$/.exec(url.pathname);
     const chat = match && chats.find((each) => each.id === decodeURIComponent(match[1] ?? ''));
-    if (!match || !chat) {
+    return match && chat ? { chat, part: match[2] ?? null } : null;
+  }
+
+  function chatResource(url: URL, response: ServerResponse, user: FakeMicrosoftUser) {
+    const found = chatIn(url);
+    if (!found || (found.part !== null && found.part !== 'members' && found.part !== 'messages')) {
       return json(response, 404, { error: { code: 'NotFound', message: 'No such chat.' } });
     }
-    if (match[2] === 'members') {
+    const { chat, part } = found;
+    if (part === null) return json(response, 200, graphChat(chat, user));
+    if (part === 'members') {
       return paged(
         response,
         url,
@@ -481,23 +542,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     const messages = chat.messages
       .filter((message) => message.modifiedAt > since)
       .sort((a, b) => b.modifiedAt - a.modifiedAt)
-      .map((message) => ({
-        id: message.id,
-        replyToId: null,
-        messageType: 'message',
-        createdDateTime: iso(message.createdAt),
-        lastModifiedDateTime: iso(message.modifiedAt),
-        deletedDateTime: null,
-        from: identity(message.from),
-        body: { contentType: 'html', content: message.html },
-        attachments: [],
-        mentions: message.mentions.map((user, index) => ({
-          id: index,
-          mentionText: user.displayName,
-          mentioned: { user: { id: user.id, displayName: user.displayName, userIdentityType: 'aadUser' } },
-        })),
-        reactions: [],
-      }));
+      .map(toGraphMessage);
     return paged(response, url, messages);
   }
 
@@ -599,8 +644,69 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     return json(response, 200, { value, '@odata.deltaLink': `${link}?$deltatoken=${next}` });
   }
 
+  // A message posted as the signed-in user, or the Chat marked read or unread for them.
+  async function chatAction(
+    request: IncomingMessage,
+    url: URL,
+    response: ServerResponse,
+    user: FakeMicrosoftUser,
+  ) {
+    let sent: Record<string, unknown> | null = null;
+    try {
+      sent = JSON.parse(await body(request)) as Record<string, unknown>;
+    } catch {
+      sent = null;
+    }
+    fake.graphPosts.push({ path: decodeURIComponent(url.pathname), body: sent ?? {} });
+    const found = chatIn(url);
+    if (!found) return json(response, 404, { error: { code: 'NotFound', message: 'No such chat.' } });
+    if (!sent) return json(response, 400, { error: { code: 'BadRequest', message: 'Not JSON.' } });
+    const { chat, part } = found;
+    if (part === 'messages') {
+      if (refusingPosts) {
+        return json(response, refusingPosts, { error: { code: 'Refused', message: 'Refused by the fake.' } });
+      }
+      const content = (sent.body ?? {}) as { contentType?: unknown; content?: unknown };
+      if (content.contentType !== 'html' || typeof content.content !== 'string' || !content.content) {
+        return json(response, 400, { error: { code: 'BadRequest', message: 'Missing body.' } });
+      }
+      const at = Date.now();
+      const message: FakeChatMessage = {
+        id: String(at + chat.messages.length),
+        from: user,
+        html: content.content,
+        createdAt: at,
+        modifiedAt: at,
+        mentions: [],
+      };
+      chat.messages.push(message);
+      if (dropPostAnswer) {
+        // Taken, but the answer never arrives.
+        dropPostAnswer = false;
+        response.socket?.destroy();
+        return;
+      }
+      return json(response, 201, toGraphMessage(message));
+    }
+    if (part === 'markChatReadForUser' || part === 'markChatUnreadForUser') {
+      const who = (sent.user ?? {}) as { id?: unknown; tenantId?: unknown };
+      if (who.id !== user.id || who.tenantId !== tenantId) {
+        return json(response, 403, { error: { code: 'Forbidden', message: 'Not this user.' } });
+      }
+      if (part === 'markChatReadForUser') chat.readBy[user.id] = Date.now();
+      else {
+        const readAt = Date.parse(String(sent.lastMessageReadDateTime));
+        if (Number.isNaN(readAt)) return json(response, 400, { error: { code: 'BadRequest' } });
+        chat.readBy[user.id] = readAt;
+      }
+      response.writeHead(204).end();
+      return;
+    }
+    return json(response, 404, { error: { code: 'NotFound', message: 'Not in the fake.' } });
+  }
+
   function graph(request: IncomingMessage, url: URL, response: ServerResponse) {
-    fake.graphRequests.push(decodeURIComponent(url.pathname + url.search));
+    if (request.method === 'GET') fake.graphRequests.push(decodeURIComponent(url.pathname + url.search));
     const authorization = request.headers.authorization ?? '';
     const user = authorization.startsWith('Bearer ')
       ? grants.find((g) => g.accessToken === authorization.slice('Bearer '.length))?.user
@@ -619,8 +725,18 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
         .end(JSON.stringify({ error: { code: 'TooManyRequests', message: 'Too many requests.' } }));
       return;
     }
-    if (url.pathname === '/v1.0/me/chats') return paged(response, url, chats.map(graphChat));
-    if (url.pathname.startsWith('/v1.0/chats/')) return chatResource(url, response);
+    if (request.method === 'POST') {
+      if (url.pathname.startsWith('/v1.0/chats/')) return void chatAction(request, url, response, user);
+      return json(response, 404, { error: { code: 'ResourceNotFound', message: 'Not in the fake.' } });
+    }
+    if (url.pathname === '/v1.0/me/chats') {
+      return paged(
+        response,
+        url,
+        chats.map((chat) => graphChat(chat, user)),
+      );
+    }
+    if (url.pathname.startsWith('/v1.0/chats/')) return chatResource(url, response, user);
     if (url.pathname === '/v1.0/me/calendars') return calendarList(user, url, response);
     if (url.pathname.startsWith('/v1.0/me/calendars/')) return calendarView(user, request, url, response);
     if (url.pathname === '/v1.0/me') {
@@ -640,7 +756,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       return authorize(url, response);
     if (request.method === 'POST' && url.pathname === `${authority}/token`)
       return void tokenEndpoint(request, response);
-    if (request.method === 'GET' && url.pathname.startsWith('/v1.0/')) return graph(request, url, response);
+    if ((request.method === 'GET' || request.method === 'POST') && url.pathname.startsWith('/v1.0/'))
+      return graph(request, url, response);
     response.writeHead(404).end();
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

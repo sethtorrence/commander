@@ -11,7 +11,7 @@ import {
   outgoingQuery,
   type Source,
 } from '@commander/domain';
-import { and, asc, count, eq, inArray, isNull, lte, or } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
 
@@ -28,6 +28,8 @@ export type OutgoingRow = {
   entryId: number | null;
   status: OutgoingStatus;
   attempts: number;
+  // When the first attempt to send it began, if one has (its outcome may not be known).
+  attemptedAt: number | null;
   nextAttemptAt: number | null;
   error: string | null;
 };
@@ -48,7 +50,8 @@ export type OutgoingStore = {
   due(account: string, now: number): OutgoingRow[][];
   // When the Account's next change waiting on a back-off is due; null when none is waiting.
   nextDueAt(account: string): number | null;
-  markSending(ids: number[]): void;
+  // The changes are on their way now (`at`); the first such time is kept as `attemptedAt`.
+  markSending(ids: number[], at: number): void;
   // The changes reached the Source (or lost to a newer change there): they leave the queue.
   settle(ids: number[]): void;
   // A failed attempt: back to pending until `nextAttemptAt`, or stopped as Couldn't sync.
@@ -135,7 +138,14 @@ export function openOutgoingQueue(db: BetterSQLite3Database<typeof schema>): Out
       } else {
         if (isDeepStrictEqual(change.value, change.synced)) return;
         db.insert(table)
-          .values({ ...change, status: 'pending', attempts: 0, nextAttemptAt: null, error: null })
+          .values({
+            ...change,
+            status: 'pending',
+            attempts: 0,
+            attemptedAt: null,
+            nextAttemptAt: null,
+            error: null,
+          })
           .run();
       }
       changed(change.account);
@@ -212,8 +222,12 @@ export function openOutgoingQueue(db: BetterSQLite3Database<typeof schema>): Out
       return Math.min(...rows.map((row) => row.nextAttemptAt ?? 0));
     },
 
-    markSending(ids) {
-      if (ids.length) db.update(table).set({ status: 'sending' }).where(byId(ids)).run();
+    markSending(ids, at) {
+      if (!ids.length) return;
+      db.update(table)
+        .set({ status: 'sending', attemptedAt: sql`coalesce(${table.attemptedAt}, ${at})` })
+        .where(byId(ids))
+        .run();
     },
 
     settle(ids) {

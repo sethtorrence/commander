@@ -150,12 +150,21 @@ test('a mention reaches the Dashboard, Enter opens the Chat at it, and a reply c
   await expect(focused).toContainText('can you sign off on the launch?');
   await expect(focused).toBeInViewport();
 
-  // The User answers Priya (in Teams, until the Section's reply box arrives): back on the Dashboard,
-  // which checks Teams again, her row has gone; the unread mention stays.
-  microsoft.postMessage(PRIYA_CHAT, SAM, '<p>Looking at it now</p>');
+  // Opening the Chat read it (#106), so the mention is no longer unread. The User answers Priya from
+  // the reply box: back on the Dashboard, which checks Teams again, both rows have gone.
+  await teams.locator('[data-testid="teams-chat"][aria-label="Priya Patel"]').click();
+  await expect(view.getByRole('heading', { name: 'Priya Patel' })).toBeVisible();
+  const box = view.getByRole('textbox', { name: 'Reply' });
+  await box.fill('Looking at it now');
+  await box.press('Control+Enter');
+  await expect
+    .poll(() => microsoft.chat(PRIYA_CHAT).messages.filter((message) => message.from.id === SAM.id).length)
+    .toBe(2);
+  await expect(view.getByTestId('chat-reply')).toBeHidden();
+  await view.getByRole('heading', { name: 'Priya Patel' }).click();
   await window.keyboard.press('Escape');
   const again = microsoft.graphRequests.length;
   await window.keyboard.press('1');
   await expect.poll(() => microsoft.graphRequests.slice(again)).toContain(CHECK);
-  await expect(rows).toHaveText([/Launch crew/]);
+  await expect(rows).toHaveCount(0);
 });

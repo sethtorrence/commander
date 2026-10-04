@@ -1,4 +1,4 @@
-import type { ActivityEntry, ChatMessage } from '@commander/domain';
+import type { ActivityEntry, ChatMessage, ChatReply, OutgoingChange } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
@@ -18,8 +18,12 @@ import type { MessageFocus } from './use-teams';
   (Open in Teams, Project, Mute, Exclude), its name, the people in it and its marks, then its
   messages by day, newest at the bottom, and a side panel with its Project, Links both ways and
   activity log, as in the other detail panes. Message text is untrusted Source content, shown by
-  MessageText (text only, no images, web and mail links only). Read-only for now: replying (#106)
-  goes in the `reply` slot under the messages.
+  MessageText (text only, no images, web and mail links only).
+
+  Replying (#106): the reply box goes in the `reply` slot under the messages. A reply shows at once
+  below them as on its way (or why it is waiting), then as Couldn't sync with Retry if Teams won't
+  take it; once Teams has it, it is one of the messages, under Teams's id. Mark as unread (or read)
+  sits with the Chat's actions.
 */
 
 const isWebAddress = (url: string | null): url is string => !!url && /^https?:\/\//i.test(url);
@@ -138,6 +142,77 @@ function Message({
   );
 }
 
+/** A reply written here that Teams doesn't have yet: on its way, waiting, or Couldn't sync with Retry. */
+function Reply({
+  reply,
+  change,
+  waiting,
+  onRetry,
+}: {
+  reply: ChatReply;
+  change: OutgoingChange | undefined;
+  waiting: string | null;
+  onRetry: () => void;
+}) {
+  const failed = change?.status === 'failed';
+  return (
+    <li
+      data-testid="chat-reply"
+      aria-label={`Your reply at ${timeOfDay(reply.createdAt)}`}
+      className="border-b border-line2 px-3.5 py-2.5 last:border-b-0"
+    >
+      <div className="mb-1 flex items-baseline gap-2.5">
+        <span className="font-sans text-note font-semibold text-ink">You</span>
+        <time
+          dateTime={new Date(reply.createdAt).toISOString()}
+          className="font-mono text-label-lg whitespace-nowrap text-muted tabular-nums"
+        >
+          {timeOfDay(reply.createdAt)}
+        </time>
+        {failed ? (
+          <Mark title={change.error ?? 'Teams didn’t take it'}>Couldn’t sync</Mark>
+        ) : (
+          <Mark title="On its way to Teams">Sending…</Mark>
+        )}
+      </div>
+      <p className="m-0 text-[14px] leading-[1.5] whitespace-pre-wrap text-text [overflow-wrap:anywhere]">
+        {reply.text}
+      </p>
+      {failed ? (
+        <CouldntSync change={change} onRetry={onRetry} />
+      ) : (
+        waiting && (
+          <p role="status" className="m-0 mt-1.5 text-note text-muted">
+            {waiting}
+          </p>
+        )
+      )}
+    </li>
+  );
+}
+
+/** Couldn't sync with Retry, for a change made here that Teams won't take. */
+function CouldntSync({ change, onRetry }: { change: OutgoingChange; onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="mt-2 flex items-center justify-between gap-2.5 border border-ink px-2.5 py-1.5 text-note"
+    >
+      <span>
+        <b className="font-semibold text-ink">Couldn’t sync</b>
+        {change.error && <span className="text-muted"> · {change.error}</span>}
+      </span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="cursor-pointer border border-ink bg-transparent px-2.5 py-0.5 font-mono text-label-lg font-semibold uppercase tracking-label text-ink hover:bg-raise"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 export function ChatView({
   chat,
   me,
@@ -151,6 +226,10 @@ export function ChatView({
   onExclude,
   onClose,
   onOpenLink,
+  outgoing = [],
+  waiting = null,
+  onRetry = () => {},
+  onToggleRead,
   reply,
 }: {
   chat: Chat | null;
@@ -170,12 +249,20 @@ export function ChatView({
   onExclude: () => void;
   onClose: () => void;
   onOpenLink: (link: ChatLink) => void;
-  /** Where replying goes (#106). */
+  /** The Chat's changes still on their way to Teams, or that couldn't sync. */
+  outgoing?: OutgoingChange[];
+  /** Why they can't go yet (offline, needs reconnecting), when they can't. */
+  waiting?: string | null;
+  onRetry?: () => void;
+  /** Marks the Chat unread (or read, when it is unread); absent when there is nothing to mark. */
+  onToggleRead?: (() => void) | null;
+  /** The reply box. */
   reply?: ReactNode;
 }) {
   const { projects, archived, projectOf } = useProjects();
   const project = chat ? projectOf(chat.filing) : undefined;
   const webUrl = chat && isWebAddress(chat.detail.webUrl) ? chat.detail.webUrl : null;
+  const readFailed = outgoing.find((change) => change.field === 'read' && change.status === 'failed');
   return (
     <section
       tabIndex={-1}
@@ -183,7 +270,7 @@ export function ChatView({
       className="min-w-0 border-l border-line focus-visible:outline-none"
     >
       <div className="sticky top-(--body) flex max-h-[calc(100vh-var(--body))] flex-col">
-        <div className="z-2 flex h-11 flex-none items-stretch border-b border-line bg-sheet">
+        <div className="z-2 flex h-11 min-w-0 flex-none items-stretch overflow-x-auto border-b border-line bg-sheet [scrollbar-width:none]">
           {chat && (
             <>
               {webUrl && (
@@ -198,6 +285,12 @@ export function ChatView({
                 <Kbd>B</Kbd>
                 Project
               </button>
+              {onToggleRead && (
+                <button type="button" onClick={onToggleRead} className={action}>
+                  <Kbd>Ctrl U</Kbd>
+                  {chat.detail.unreadCount > 0 ? 'Mark as read' : 'Mark as unread'}
+                </button>
+              )}
               <button type="button" onClick={onMute} className={action}>
                 {chat.muted ? 'Unmute' : 'Mute'}
               </button>
@@ -213,7 +306,7 @@ export function ChatView({
           </button>
         </div>
         {chat ? (
-          <div className="grid min-h-80 flex-1 grid-cols-[minmax(0,1fr)_minmax(220px,280px)]">
+          <div className="grid min-h-80 flex-1 grid-cols-[minmax(0,1fr)_clamp(160px,38%,280px)]">
             <div className="min-w-0 overflow-auto px-[22px] pt-[18px] pb-24 [scrollbar-width:thin]">
               <Eyebrow className="flex items-center gap-2">
                 <ChatTypeGlyph type={chat.detail.chatType} />
@@ -232,6 +325,7 @@ export function ChatView({
                 {chat.muted && <Mark title="Muted: kept and synced, but not counted as unread">Muted</Mark>}
                 <ItemWarning item={chat} variant="pane" />
               </div>
+              {readFailed && <CouldntSync change={readFailed} onRetry={onRetry} />}
               {chat.detail.messages.length ? (
                 messagesByDay(chat.detail.messages, now).map((day) => (
                   <section key={day.key} aria-label={day.label} className="mt-[18px]">
@@ -257,6 +351,25 @@ export function ChatView({
                   No messages in the last 30 days.
                 </p>
               )}
+              {chat.detail.replies?.length ? (
+                <section aria-label="On its way to Teams" className="mt-[18px]">
+                  <Eyebrow className="mb-2 flex items-center gap-2.5">
+                    On its way to Teams
+                    <span className="h-px flex-1 bg-line" />
+                  </Eyebrow>
+                  <ol className="m-0 list-none border border-line p-0">
+                    {chat.detail.replies.map((each) => (
+                      <Reply
+                        key={each.clientId}
+                        reply={each}
+                        change={outgoing.find((change) => change.field === `message:${each.clientId}`)}
+                        waiting={waiting}
+                        onRetry={onRetry}
+                      />
+                    ))}
+                  </ol>
+                </section>
+              ) : null}
               {reply ?? (
                 <p className="mt-4 mb-0 font-mono text-label leading-tight uppercase tracking-label text-faint">
                   Read-only here for now · reply in Teams
@@ -285,7 +398,7 @@ export function ChatView({
                       className="flex justify-between gap-2.5 border-b border-line2 px-2.5 py-[7px] text-note leading-[18px] last:border-b-0"
                     >
                       <span className="text-text">
-                        {describeChatEntry(entry, history, [...projects, ...archived])}
+                        {describeChatEntry(entry, history, [...projects, ...archived], outgoing)}
                       </span>
                       <time
                         dateTime={new Date(entry.at).toISOString()}

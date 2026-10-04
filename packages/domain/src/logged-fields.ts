@@ -6,7 +6,9 @@ import type { ItemDetail, ItemKind } from './items';
 // make, the log keeps such a field empty and records a summary instead: how many there are, how many
 // were added, changed or removed, and the newest. Nothing reads those fields back from the log, and
 // such an entry can't be undone (a message arriving in Teams isn't Commander's to take back).
-// Changes made in Commander are always logged whole, so their undo works as before.
+// Changes made in Commander are logged whole, so their undo works as before, except for such fields
+// they didn't touch (reading a Chat or replying to it leaves its messages as they were), which are
+// left out of both states: undo restores a Chat's synced fields one by one, never its messages.
 //
 // Each field listed is an array of entries with an `id` (and a `createdAt`, for the newest). Other
 // Sources with large detail (long Linear descriptions or comment threads, email bodies) can list
@@ -92,4 +94,23 @@ export function compactForLog<D extends ItemDetail | null>(
     after: empty(after),
     summaries: fields.map((field) => summarise(field, value(sameKind, field), value(after, field))),
   };
+}
+
+/**
+ * A change made in Commander as the log keeps it: the fields summarised in the log that it left as
+ * they were are emptied in both states. Everything else, and every field it did change, is kept whole.
+ */
+export function withoutUntouched<D extends ItemDetail | null>(
+  before: D | null,
+  after: D,
+): { before: D | null; after: D } {
+  if (!before || !after || before.kind !== after.kind) return { before, after };
+  const value = (detail: D, field: string) => (detail as Record<string, unknown>)[field];
+  const untouched = summarisedInLog(after.kind).filter((field) =>
+    same(value(before, field), value(after, field)),
+  );
+  if (!untouched.length) return { before, after };
+  const empty = (detail: D) =>
+    ({ ...detail, ...Object.fromEntries(untouched.map((field) => [field, []])) }) as D;
+  return { before: empty(before), after: empty(after) };
 }

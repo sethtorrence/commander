@@ -1,8 +1,8 @@
-import type { ActivityEntry, Project } from '@commander/domain';
+import type { ActivityEntry, ChatDetail, OutgoingChange, Project } from '@commander/domain';
 import type { AccountSummary } from '@commander/domain/ipc';
 import { describe, expect, it } from 'vitest';
 import { checkLine, describeChatEntry } from './teams-chats';
-import { NOW, TEAMS } from './test-chats';
+import { chat, NOW, TEAMS } from './test-chats';
 
 // How the Teams Section words a Chat's activity log and its thin status line.
 
@@ -81,6 +81,77 @@ describe('a Chat’s activity, in words', () => {
         [],
       ),
     ).toBe('This chat contains instructions aimed at Ares. He ignored them.');
+  });
+});
+
+describe('replies and read state, in words', () => {
+  const detail = chat({ id: '19:priya', title: 'Priya Patel' }).detail as ChatDetail;
+  const unread = { ...detail, unreadCount: 2 };
+  const read = { ...detail, unreadCount: 0 };
+  const reply = { clientId: 'c1', text: 'On it.', createdAt: NOW };
+  const replied = entry({
+    changes: [{ field: 'detail', before: read, after: { ...read, replies: [reply] } }],
+  });
+  const outgoing = (status: OutgoingChange['status']): OutgoingChange => ({
+    id: 1,
+    itemId: 'chat-1',
+    source: 'teams',
+    account: TEAMS,
+    field: 'message:c1',
+    status,
+    madeAt: NOW,
+    attempts: 0,
+    error: null,
+  });
+
+  it('says a reply was sent to Teams once it is there, and where it stands until then', () => {
+    expect(describeChatEntry(replied, [replied])).toBe('Replied by you · sent to Teams');
+    expect(describeChatEntry(replied, [replied], [], [outgoing('pending')])).toBe(
+      'Replied by you · sending to Teams',
+    );
+    expect(describeChatEntry(replied, [replied], [], [outgoing('failed')])).toBe(
+      'Replied by you · couldn’t sync',
+    );
+  });
+
+  it('says a cancelled reply was cancelled, and never sent', () => {
+    const cancelled = entry({ action: 'undo', undoes: replied.id });
+    expect(describeChatEntry(replied, [cancelled, replied])).toBe('Replied by you · cancelled');
+    expect(describeChatEntry(cancelled, [cancelled, replied])).toBe('Reply cancelled by you');
+  });
+
+  it('says when the User read the Chat or marked it unread, and what undo reversed', () => {
+    const readIt = entry({ changes: [{ field: 'detail', before: unread, after: read }] });
+    const markedUnread = entry({ changes: [{ field: 'detail', before: read, after: unread }] });
+    const undone = entry({ action: 'undo', undoes: readIt.id });
+    expect(describeChatEntry(readIt, [readIt])).toBe('Marked read by you');
+    expect(describeChatEntry(markedUnread, [markedUnread])).toBe('Marked unread by you');
+    expect(describeChatEntry(undone, [undone, readIt])).toBe('Mark as read undone by you');
+  });
+
+  it('says when the Chat was read, or marked unread, in Teams', () => {
+    const summaries = [{ field: 'messages', count: 1, added: 0, changed: 0, removed: 0, latest: null }];
+    const readThere = entry({
+      by: teams,
+      summaries,
+      changes: [{ field: 'detail', before: unread, after: { ...read, lastReadAt: NOW } }],
+    });
+    const unreadThere = entry({
+      by: teams,
+      summaries,
+      changes: [{ field: 'detail', before: read, after: { ...unread, lastReadAt: NOW - 1 } }],
+    });
+    expect(describeChatEntry(readThere, [readThere])).toBe('Read in Teams');
+    expect(describeChatEntry(unreadThere, [unreadThere])).toBe('Marked unread in Teams');
+  });
+
+  it('gives Teams’s note when a newer change there won over the User’s', () => {
+    const note = entry({
+      by: teams,
+      why: 'Changed in Teams at 14:02',
+      summaries: [{ field: 'messages', count: 1, added: 0, changed: 0, removed: 0, latest: null }],
+    });
+    expect(describeChatEntry(note, [note])).toBe('Changed in Teams at 14:02');
   });
 });
 

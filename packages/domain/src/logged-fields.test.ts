@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compactForLog, summarisedInLog } from './logged-fields';
+import { compactForLog, summarisedInLog, withoutUntouched } from './logged-fields';
 import type { ChatDetail, ChatMessage } from './teams';
 
 const T = Date.UTC(2026, 9, 3, 9);
@@ -64,5 +64,26 @@ describe('detail fields the activity log keeps only in summary', () => {
 
     const todo = { kind: 'todo', origin: 'manual', dueOn: null, backedBy: null } as const;
     expect(compactForLog(todo, todo)).toEqual({ before: todo, after: todo, summaries: [] });
+  });
+});
+
+describe('changes made in Commander', () => {
+  it('leave out the summarised fields they didn’t touch (reading a Chat or replying never changes its messages)', () => {
+    const before = chat([message('1', T), message('2', T + 1)], 2);
+    const after = { ...before, unreadCount: 0, lastReadAt: T + 1 };
+
+    expect(withoutUntouched(before, after)).toEqual({
+      before: { ...before, messages: [] },
+      after: { ...after, messages: [] },
+    });
+  });
+
+  it('are logged whole when they did touch them, and details without such fields stay as they are', () => {
+    const before = chat([message('1', T)]);
+    const after = chat([message('1', T, 'Edited')]);
+    expect(withoutUntouched(before, after)).toEqual({ before, after });
+    expect(withoutUntouched(null, after)).toEqual({ before: null, after });
+    const todo = { kind: 'todo', origin: 'manual', dueOn: null, backedBy: null } as const;
+    expect(withoutUntouched(todo, todo)).toEqual({ before: todo, after: todo });
   });
 });

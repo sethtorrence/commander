@@ -145,3 +145,24 @@ export function teamsText(content: string, contentType: 'html' | 'text' = 'html'
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+const ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/**
+ * A reply's plain text as the HTML body Teams takes: every character that means something in HTML
+ * escaped, and line breaks as <br>. Nothing the User typed can become markup (no mention, link or
+ * image made by typing its tag), so it reaches Teams exactly as written.
+ */
+export function teamsHtml(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[&<>"']/g, (char) => ESCAPES[char] ?? char))
+    .join('<br>');
+}

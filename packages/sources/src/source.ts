@@ -90,7 +90,16 @@ export type SyncResult = { cursor: unknown; cost: SyncCost };
 // Two-way sync: one change the User made to a synced field (see the domain's synced-fields.ts), as
 // the outgoing queue hands it over: the field's new value, the Source's value when last synced, and
 // when the User made it (an edit made offline carries the time it was made, not sent).
-export type FieldChange = { field: string; value: unknown; synced: unknown; madeAt: number };
+// `attemptedAt`: when an earlier attempt to send it began, if one did. Its outcome isn't known (it
+// timed out, the connection dropped, Commander quit mid-way), so before sending again what the
+// Source can't take twice (a Teams message), the adapter checks whether that attempt got through.
+export type FieldChange = {
+  field: string;
+  value: unknown;
+  synced: unknown;
+  madeAt: number;
+  attemptedAt?: number | null;
+};
 
 export type WriteRequest = {
   account: string;
@@ -98,6 +107,11 @@ export type WriteRequest = {
   externalId: string;
   // The Item's queued changes, one per field (oldest first).
   changes: FieldChange[];
+  // Who the User is at the Source in the Account (their Teams user id), when known.
+  me?: string | null;
+  // The Account's Items Commander holds with these external ids, as last saved: for Sources whose
+  // write answers with only part of the Item (a Teams Chat's new message, not its whole history).
+  stored?(externalIds: string[]): StoredItem[];
   // A current access token: every write runs as the User.
   accessToken(): Promise<AccessToken>;
   signal: AbortSignal;

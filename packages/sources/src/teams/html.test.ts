@@ -1,8 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { teamsText } from './html';
+import { teamsHtml, teamsText } from './html';
 
 // Teams message bodies arrive as HTML. Commander keeps them as plain text with light structure
 // (paragraphs, lists, links, @mentions), never as markup: Chat text is untrusted Source content.
+// Replies go the other way: the User's plain text, escaped, never markup.
+
+describe('a reply’s text as the HTML Teams takes', () => {
+  it('escapes everything that means something in HTML, and keeps line breaks', () => {
+    expect(teamsHtml('Fish & <b>chips</b>\r\n"Tonight"\nit\'s <script>x</script>')).toBe(
+      'Fish &amp; &lt;b&gt;chips&lt;/b&gt;<br>&quot;Tonight&quot;<br>it&#39;s &lt;script&gt;x&lt;/script&gt;',
+    );
+  });
+
+  it('reads back as the same text (spacing at the ends of lines aside)', () => {
+    expect(teamsText(teamsHtml('Line one & <two>\n  "three"'))).toBe('Line one & <two>\n"three"');
+  });
+});
 
 describe('converting Teams HTML to plain text', () => {
   it('keeps paragraphs and line breaks, and decodes entities', () => {

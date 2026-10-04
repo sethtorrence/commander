@@ -33,6 +33,7 @@ export const graphChat = z.object({
       id: z.string(),
       createdDateTime: z.iso.datetime({ offset: true }),
       isDeleted: z.boolean().nullish(),
+      from: identitySet,
     })
     .nullish(),
 });
