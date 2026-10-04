@@ -126,8 +126,8 @@ describe('Ares’s jobs, from the window', () => {
       this.enabled = enabled;
       return this.jobs();
     },
-    run(job: string) {
-      this.ran.push(job);
+    run(job: string, itemIds?: string[]) {
+      this.ran.push(itemIds ? `${job} ${itemIds.join(',')}` : job);
     },
     status: () => ({ working: false, running: [] }),
   };
@@ -147,7 +147,9 @@ describe('Ares’s jobs, from the window', () => {
       result: { jobs: [{ enabled: false }] },
     });
     expect(ask({ op: 'run-job', job: 'suggest-todos' })).toMatchObject({ ok: true });
-    expect(jobs.ran).toEqual(['suggest-todos']);
+    // On given Items (Prepare now on one meeting).
+    expect(ask({ op: 'run-job', job: 'prepare-meetings', itemIds: ['event-1'] })).toMatchObject({ ok: true });
+    expect(jobs.ran).toEqual(['suggest-todos', 'prepare-meetings event-1']);
   });
 
   it('says so when the Core has no job runner', () => {

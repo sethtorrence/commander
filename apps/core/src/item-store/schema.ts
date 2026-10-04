@@ -21,6 +21,7 @@ import type {
   LinearIssueDetail,
   LinkTargetType,
   LinkType,
+  MeetingPrepDetail,
   ModelCall,
   ModelProvider,
   ModelTier,
@@ -735,3 +736,18 @@ export const calendarSettings = sqliteTable('calendar_settings', {
   secondTimeZone: text('second_time_zone'),
   updatedAt: integer('updated_at').notNull(),
 });
+
+// Kind-specific detail for meeting preps (#130): Ares's preparation for one event, with the event as a
+// column so its prep is found by it (one live prep per event: re-running replaces it).
+export const meetingPrepDetails = sqliteTable(
+  'meeting_prep_details',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => items.id),
+    eventId: text('event_id').notNull(),
+    // The rest of the detail, without `kind`.
+    data: text('data', { mode: 'json' }).$type<Omit<MeetingPrepDetail, 'kind'>>().notNull(),
+  },
+  (t) => [index('meeting_prep_details_event').on(t.eventId)],
+);

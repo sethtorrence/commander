@@ -183,7 +183,8 @@ export function suggestTodosJob(
       const changes = itemStore.agent.userChangesSince(cursor, ['block']);
       // Before its first run it starts from today's note rather than every Block ever written.
       const ids = new Set(cursor === null ? [] : changes.itemIds);
-      for (const trigger of triggers) if ('itemIds' in trigger) for (const id of trigger.itemIds) ids.add(id);
+      for (const trigger of triggers)
+        if ('itemIds' in trigger) for (const id of trigger.itemIds ?? []) ids.add(id);
       const catchUp =
         cursor === null || triggers.some((trigger) => trigger.kind === 'idle' || trigger.kind === 'request');
       if (catchUp) {

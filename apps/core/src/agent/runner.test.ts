@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { type Gate, openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
-import { type AgentJob, createJobRunner, type JobRunner } from './runner';
+import { type AgentJob, createJobRunner, type JobRunner, type Trigger } from './runner';
 
 // The job runner through its interface, on a real Item store, gate and model client over a temporary
 // database. Only the model is fake: a provider adapter that answers from a script, so the client's
@@ -100,7 +100,8 @@ function noteJob(
     triggers: { typing: { pauseMs: 20_000 }, idle: true, 'source-sync': true, 'items-arrived': true },
     gather({ triggers, seen }) {
       const ids = new Set<string>(pool());
-      for (const trigger of triggers) if ('itemIds' in trigger) for (const id of trigger.itemIds) ids.add(id);
+      for (const trigger of triggers)
+        if ('itemIds' in trigger) for (const id of trigger.itemIds ?? []) ids.add(id);
       const items = [...ids]
         .map((itemId) => ({ itemId, fingerprint: blockText(itemId) }))
         .filter(({ itemId, fingerprint }) => !seen(itemId, fingerprint));
@@ -661,5 +662,216 @@ describe('a job whose result is a view (ranking)', () => {
     expect(runner?.jobs()).toEqual([
       expect.objectContaining({ lastOutcome: 'failed', lastProblem: 'Z.ai is down' }),
     ]);
+  });
+
+  it('may both apply its view and propose (a meeting prep and the Todos it asks for)', async () => {
+    const block = writeBlock('call the bank');
+    script.push(reply([{ ref: 'B1', title: 'Call the bank', confidence: 0.95 }]));
+    const applied: unknown[][] = [];
+    const job = noteJob(
+      {
+        job: 'both',
+        name: 'Both',
+        action: { action: 'both', actionKind: 'organise', section: null },
+        apply(answers) {
+          applied.push(answers.map(({ output }) => output.todos.length));
+          return { dropped: [] };
+        },
+      },
+      () => [block],
+    );
+    start([job]);
+    runner?.run('both');
+    await runner?.settled();
+    expect(applied).toEqual([[1]]);
+    expect(todos()).toEqual(['Call the bank']);
+  });
+});
+
+describe('a proposal for another action', () => {
+  it('goes to the gate under the action it names (Suggest Todos), not the job’s', async () => {
+    const block = writeBlock('call the bank');
+    script.push(reply([{ ref: 'B1', title: 'Call the bank', confidence: 0.95 }]));
+    const base = noteJob({}, () => [block]);
+    const job = noteJob(
+      {
+        job: 'other',
+        name: 'Other',
+        action: { action: 'other', actionKind: 'organise', section: null },
+        proposals: (output, input) => {
+          const made = base.proposals?.(output, input) ?? { proposals: [], dropped: [] };
+          return {
+            ...made,
+            proposals: made.proposals.map((proposal) => ({
+              ...proposal,
+              as: { action: 'note-todos', actionKind: 'organise' as const, section: 'notes' as const },
+            })),
+          };
+        },
+      },
+      () => [block],
+    );
+    start([base, job]);
+    gate.setLevel({ scope: 'action', action: 'note-todos' }, 'ask');
+    runner?.run('other');
+    await runner?.settled();
+    expect(gate.activity()).toEqual([
+      expect.objectContaining({ action: 'note-todos', section: 'notes', decision: 'ask', status: 'pending' }),
+    ]);
+  });
+});
+
+describe('a job that runs at given times (`at`)', () => {
+  const MINUTE = 60_000;
+  type Planned = { key: string; at: number; until: number; itemIds: string[] };
+
+  // A job that asks to run at the times `planned()` gives, and records the triggers it ran on.
+  const timedJob = (runs: Trigger[][], planned: () => Planned[]) =>
+    noteJob({
+      job: 'timed',
+      name: 'Timed',
+      action: { action: 'timed', actionKind: 'organise', section: null },
+      triggers: { at: { plan: () => planned() } },
+      gather({ triggers }) {
+        runs.push(triggers);
+        return null;
+      },
+    });
+
+  const startTimed = (job: AgentJob) =>
+    createJobRunner({
+      jobs: [job],
+      client: client(),
+      gate,
+      store: store.agent,
+      now: () => clock,
+      log: (message) => logged.push(message),
+      tickMs: null,
+    });
+
+  async function tick(at: number) {
+    clock = at;
+    runner?.tick();
+    await runner?.settled();
+  }
+
+  it('fires each time once, on time', async () => {
+    const start = clock;
+    const runs: Trigger[][] = [];
+    const plan = [{ key: 'e1@1', at: start + 10 * MINUTE, until: start + 40 * MINUTE, itemIds: ['e1'] }];
+    runner = startTimed(timedJob(runs, () => plan));
+    runner.replan();
+
+    await tick(start + 9 * MINUTE);
+    expect(runs).toEqual([]);
+    await tick(start + 10 * MINUTE);
+    expect(runs).toEqual([
+      [{ kind: 'at', key: 'e1@1', at: start + 10 * MINUTE, until: start + 40 * MINUTE, itemIds: ['e1'] }],
+    ]);
+    await tick(start + 11 * MINUTE);
+    runner.replan();
+    await tick(start + 12 * MINUTE);
+    expect(runs).toHaveLength(1);
+  });
+
+  it('asks the job for its times again on a re-plan (after a calendar sync)', async () => {
+    const start = clock;
+    const runs: Trigger[][] = [];
+    let plan: Planned[] = [
+      { key: 'e1@10', at: start + 10 * MINUTE, until: start + 40 * MINUTE, itemIds: ['e1'] },
+    ];
+    runner = startTimed(timedJob(runs, () => plan));
+    runner.replan();
+
+    // The meeting moved an hour later.
+    plan = [{ key: 'e1@70', at: start + 70 * MINUTE, until: start + 100 * MINUTE, itemIds: ['e1'] }];
+    runner.replan();
+    await tick(start + 10 * MINUTE);
+    expect(runs).toEqual([]);
+    await tick(start + 70 * MINUTE);
+    expect(runs.map((triggers) => triggers.map((trigger) => 'key' in trigger && trigger.key))).toEqual([
+      ['e1@70'],
+    ]);
+  });
+
+  it('runs a time missed while the machine slept on waking, if it still matters', async () => {
+    const start = clock;
+    const runs: Trigger[][] = [];
+    const plan = [{ key: 'e1@1', at: start + 10 * MINUTE, until: start + 40 * MINUTE, itemIds: ['e1'] }];
+    runner = startTimed(timedJob(runs, () => plan));
+    runner.replan();
+
+    // Asleep from minute 5 to minute 25: the meeting hasn't started yet.
+    await tick(start + 5 * MINUTE);
+    await tick(start + 25 * MINUTE);
+    expect(runs).toHaveLength(1);
+  });
+
+  it('drops a missed time once it stops mattering (the meeting has started)', async () => {
+    const start = clock;
+    const runs: Trigger[][] = [];
+    const plan = [{ key: 'e1@1', at: start + 10 * MINUTE, until: start + 40 * MINUTE, itemIds: ['e1'] }];
+    runner = startTimed(timedJob(runs, () => plan));
+    runner.replan();
+
+    await tick(start + 41 * MINUTE);
+    await tick(start + 42 * MINUTE);
+    expect(runs).toEqual([]);
+  });
+
+  it('runs a time already due when it is planned (a meeting synced 20 minutes before it starts)', async () => {
+    const start = clock;
+    const runs: Trigger[][] = [];
+    const plan = [{ key: 'e1@1', at: start - 10 * MINUTE, until: start + 20 * MINUTE, itemIds: ['e1'] }];
+    runner = startTimed(timedJob(runs, () => plan));
+    runner.replan();
+    await runner.settled();
+    expect(runs).toHaveLength(1);
+  });
+
+  it('tries a time again on the next tick while it still matters, when the call failed', async () => {
+    const start = clock;
+    const block = writeBlock('need to send Dana the Q3 numbers');
+    script.push(new ModelError('no-key', 'No Z.ai API key is saved.'));
+    const plan = [{ key: 'e1@1', at: start, until: start + 30 * MINUTE, itemIds: [block] }];
+    runner = startTimed(noteJob({ job: 'timed', triggers: { at: { plan: () => plan } } }, () => [block]));
+    runner.replan();
+    await runner.settled();
+    expect(calls).toHaveLength(1);
+
+    script.push(reply([{ ref: 'B1', title: 'Send Dana the Q3 numbers', confidence: 0.9 }]));
+    await tick(start + MINUTE);
+    expect(calls).toHaveLength(2);
+    expect(todos()).toEqual(['Send Dana the Q3 numbers']);
+    await tick(start + 2 * MINUTE);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('looks for due times on its own timer, which also catches up after a sleep', async () => {
+    vi.useFakeTimers({ now: clock });
+    const start = clock;
+    const runs: Trigger[][] = [];
+    const plan = [{ key: 'e1@1', at: start + 10 * MINUTE, until: start + 40 * MINUTE, itemIds: ['e1'] }];
+    runner = createJobRunner({
+      jobs: [timedJob(runs, () => plan)],
+      client: client(),
+      gate,
+      store: store.agent,
+      now: () => Date.now(),
+      tickMs: 30_000,
+    });
+    runner.replan();
+    await vi.advanceTimersByTimeAsync(9 * MINUTE);
+    expect(runs).toEqual([]);
+    await vi.advanceTimersByTimeAsync(MINUTE + 30_000);
+    expect(runs).toHaveLength(1);
+  });
+
+  it('passes the Items a request names to the job', async () => {
+    const runs: Trigger[][] = [];
+    runner = startTimed(timedJob(runs, () => []));
+    runner.run('timed', ['e1']);
+    await runner.settled();
+    expect(runs).toEqual([[{ kind: 'request', itemIds: ['e1'] }]]);
   });
 });

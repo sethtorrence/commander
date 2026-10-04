@@ -1,5 +1,5 @@
 import { Button, ButtonGroup, cn, Kbd, Led, Switch } from '@commander/ui';
-import { type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { type ComponentType, type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
@@ -10,7 +10,7 @@ import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
 import { TodoGroup } from '../todos/TodoGroup';
-import { type AgendaEntry, editUrl, newEventUrl, newOutlookEventUrl } from './agenda';
+import { type AgendaEntry, type CalendarEvent, editUrl, newEventUrl, newOutlookEventUrl } from './agenda';
 import {
   addressOf,
   type CalendarAccount,
@@ -125,6 +125,7 @@ export function CalendarSheet({
   timeZone = systemTimeZone(),
   settings,
   open = openInBrowser,
+  Prep,
 }: {
   events: CalendarEvents;
   accounts: CalendarAccountsClient;
@@ -134,6 +135,8 @@ export function CalendarSheet({
   settings?: CalendarSettingsClient;
   /** Opens an address in the system browser. */
   open?: (url: string) => void;
+  /** Ares's prep for the opened meeting (#130), in its detail pane. */
+  Prep?: ComponentType<{ event: CalendarEvent }>;
 }) {
   const { filter, include } = useProjectFilter();
   const { projects, openPage } = useProjects();
@@ -438,6 +441,7 @@ export function CalendarSheet({
                   onFile={file}
                   onClose={() => setDetailOpen(false)}
                   onOpenLink={openLink}
+                  Prep={Prep}
                 />
               )}
             </div>

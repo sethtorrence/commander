@@ -126,6 +126,10 @@ _Avoid_: Line, paragraph, bullet, node
 A Block in today's Daily Note, under its top-level Meetings Block, that stands for one of today's calendar events and shows it as a compact live card; the meeting's notes go under it, and it takes the event's Project.
 _Avoid_: Meeting block, event card, meeting note
 
+**Meeting prep**:
+Ares's short homework for a meeting, made half an hour before it: what it is about, what was said last time, what is open with the people in it and what is worth raising, each line linked to the Items it rests on; shown folded under the Meeting chip, never as Blocks.
+_Avoid_: Briefing, agenda, meeting notes
+
 **Daily template**:
 The Blocks each new Daily Note starts with, edited in Settings; a new day gets copies of them, not links to them.
 _Avoid_: Default note, skeleton, boilerplate

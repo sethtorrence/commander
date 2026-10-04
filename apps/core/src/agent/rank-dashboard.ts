@@ -13,7 +13,9 @@
 // - Every Item goes in a data block of its own through the prompt builder (ADR 0004), labelled with
 //   a short reference (I1, I2…) that the reply names it by; Linear issues, Chats and suggestions are
 //   outside material. A Chat goes with its name and type, the people in it, why it may need the User
-//   and its last few messages, each cut short. Today's date goes with the instructions.
+//   and its last few messages, each cut short. Today's date goes with the instructions. The meetings
+//   of the next three hours and Ares's preps for them (#130) go along as context, in blocks of their
+//   own with no reference, so a Todo a meeting needs can rise before it.
 // - The reply's entries are checked one by one: an entry that names an Item it wasn't given (or one
 //   twice), a band that isn't one, a rank that isn't a number or a missing reason is dropped, and so
 //   is any Item he left out: the band rules place those (aresRanker, in the window).
@@ -29,11 +31,16 @@ import {
   chatAttention,
   chatFlags,
   dashboardCandidates,
+  type EventDetail,
   type Item,
+  isChipWorthy,
   isLinearTodo,
+  isMeetingPrep,
   type LinearIssueDetail,
   localDay,
+  meetingTimes,
   mutedChatIds,
+  prepLines,
   RANK_DASHBOARD,
   rankByBandRules,
   rankingFingerprint,
@@ -63,6 +70,9 @@ const MAX_COMMENT = 200;
 const CHAT_MESSAGES = 5;
 const MAX_MESSAGE = 200;
 const MAX_PEOPLE = 8;
+// The meetings read as context (#130): those in the next few hours, at most a handful.
+const MEETINGS_AHEAD_MS = 3 * HOUR;
+const MAX_MEETINGS = 5;
 
 // Each entry is checked on its own (so one bad entry costs only that Item), hence the loose shape.
 const entry = z
@@ -142,7 +152,8 @@ Reply with only this JSON object: {"ranking":[{"ref":"I1","band":"now","rank":1,
 - rank: the Item's place in its band, from 1 at the top, the most pressing first. Number each band on its own.
 - reason: why it is there, in a few plain words of your own (fewer than 12), as you would say it to the User: "Dana's waiting on this before Friday's review", "Overdue since Tuesday", "Priya has it now". No full stop. For band none it may be empty.
 - A Suggested Todo is one you suggested from the User's Daily Note that they haven't added yet: rank it like any other Todo.
-- A Teams chat is a conversation in Microsoft Teams, with its last few messages. Place it when someone is waiting on the User (a question or mention aimed at them, a one-to-one message they haven't answered); chatter that asks nothing of them is none.`;
+- A Teams chat is a conversation in Microsoft Teams, with its last few messages. Place it when someone is waiting on the User (a question or mention aimed at them, a one-to-one message they haven't answered); chatter that asks nothing of them is none.
+- Blocks labelled "Meeting at …" or "Prep for the meeting at …" are not Items to rank: they are the User's meetings in the next few hours and your preparation for them. A Todo a meeting needs done first (something to read, send or decide before it) should rise before the meeting.`;
 
 // A reason as the Dashboard shows it: one line, no closing full stop, a few words.
 function cleanReason(reason: string): string {
@@ -314,6 +325,45 @@ export function rankDashboardJob(
         };
         return [{ item, block: itemStore.get(proposal.itemId)?.item }];
       });
+  }
+
+  // The meetings in the next few hours and Ares's preps for them (#130), as context: each in a data
+  // block of its own (the event and the prep are outside words), labelled without a reference, so
+  // nothing in them can be ranked.
+  function meetingContext(at: number): PromptData[] {
+    const meetings = itemStore
+      .events({ from: at, to: at + MEETINGS_AHEAD_MS })
+      .filter(
+        (item): item is Item & { detail: EventDetail } => isChipWorthy(item) && item.detail.start.at >= at,
+      )
+      .sort((a, b) => a.detail.start.at - b.detail.start.at)
+      .slice(0, MAX_MEETINGS);
+    const preps = new Map(
+      itemStore
+        .meetingPreps(meetings.map((meeting) => meeting.id))
+        .flatMap((prep) => (isMeetingPrep(prep) ? [[prep.detail.eventId, prep] as const] : [])),
+    );
+    return meetings.flatMap((meeting) => {
+      const time = clockTime(meeting.detail.start.at);
+      const blocks: PromptData[] = [
+        {
+          label: `Meeting at ${time} · ${meeting.title}`,
+          from: meeting,
+          text: `Title: ${meeting.title}\nWhen: ${meetingTimes(meeting.detail)}`,
+        },
+      ];
+      const prep = preps.get(meeting.id);
+      if (prep) {
+        blocks.push({
+          label: `Prep for the meeting at ${time}`,
+          from: prep,
+          text: prepLines(prep.detail)
+            .map((line) => `- ${cut(line.text, 200)}`)
+            .join('\n'),
+        });
+      }
+      return blocks;
+    });
   }
 
   return {
@@ -488,7 +538,7 @@ export function rankDashboardJob(
 
     prompt: (input) => ({
       instructions: instructions(now()),
-      data: input.candidates.map((candidate) => candidate.data),
+      data: [...meetingContext(now()), ...input.candidates.map((candidate) => candidate.data)],
     }),
 
     output: OUTPUT,

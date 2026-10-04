@@ -22,9 +22,12 @@ export type SearchableItem = Pick<
 
 export type SearchText = { title: string; identifier: string; body: string };
 
-/** The Item's searchable text, or null when it has none or shouldn't be found (a tombstone). */
+/**
+ * The Item's searchable text, or null when it has none or shouldn't be found (a tombstone, or Ares's
+ * meeting prep, shown with its meeting rather than on its own).
+ */
 export function searchTextOf(item: SearchableItem): SearchText | null {
-  if (item.deletedAt !== null) return null;
+  if (item.deletedAt !== null || item.kind === 'meeting-prep') return null;
   const detail = item.detail;
   let identifier = '';
   let body = '';

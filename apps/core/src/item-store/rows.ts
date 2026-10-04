@@ -21,6 +21,7 @@ export type LinearIssueDetailRow = typeof schema.linearIssueDetails.$inferSelect
 export type ChatDetailRow = typeof schema.chatDetails.$inferSelect;
 export type EventDetailRow = typeof schema.eventDetails.$inferSelect;
 export type GitHubDetailRow = typeof schema.githubDetails.$inferSelect;
+export type MeetingPrepDetailRow = typeof schema.meetingPrepDetails.$inferSelect;
 export type ActivityRow = typeof schema.activity.$inferSelect;
 
 export function stateOf(item: Item): ItemState {
@@ -69,6 +70,11 @@ export const chatDetailOf = (chat: ChatDetailRow): ItemDetail => ({ kind: 'chat'
 
 export const eventDetailOf = (event: EventDetailRow): ItemDetail => ({ kind: 'event', ...event.data });
 export const githubDetailOf = (row: GitHubDetailRow): ItemDetail => row.data;
+
+export const meetingPrepDetailOf = (prep: MeetingPrepDetailRow): ItemDetail => ({
+  kind: 'meeting-prep',
+  ...prep.data,
+});
 
 export function toItem(row: ItemRow, detail: ItemDetail | null): Item {
   return {

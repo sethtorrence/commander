@@ -34,7 +34,12 @@ export const autonomyRequest = z.discriminatedUnion('op', [
   // Settings → Ares, and running one now.
   z.object({ op: z.literal('jobs') }),
   z.object({ op: z.literal('set-job-enabled'), job: z.string().min(1), enabled: z.boolean() }),
-  z.object({ op: z.literal('run-job'), job: z.string().min(1) }),
+  // `itemIds`: the Items to run it on, for a job that takes them (Prepare now on one meeting).
+  z.object({
+    op: z.literal('run-job'),
+    job: z.string().min(1),
+    itemIds: z.array(z.string().min(1)).min(1).max(20).optional(),
+  }),
   // Ares's filing (#71): the User's answer on a dashed Badge (its Project to Confirm, another to
   // Change, null for Unfiled), and his filing record for the activity page.
   z.object({ op: z.literal('settle-filing'), proposalId, projectId: z.string().min(1).nullable() }),

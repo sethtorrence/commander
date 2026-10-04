@@ -107,6 +107,16 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     sourceName: z.string().min(1),
     name: z.string().nullable(),
   }),
+  // A meeting's prep is ready (#130): "Prep for “1:1 with Priya” at 15:00 is ready". Open opens the
+  // meeting with its prep; the line expires when the meeting ends. `title` is the event's (outside
+  // words), for the plain sentence.
+  z.object({
+    kind: z.literal('meeting-prep'),
+    eventId: itemId,
+    prepId: itemId,
+    title: z.string(),
+    startsAt: timestamp,
+  }),
   // "Always file Linear team OPS under TX?" (#71): the User's corrections and confirmations point one
   // Source field value at one Project often enough. Accepting opens the Rule, filled in, to go at the
   // top of the list; dismissing it stops it coming back.

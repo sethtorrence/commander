@@ -385,6 +385,30 @@ describe('giving an Update', () => {
     expect(updates.state().queued).toBe(2);
   });
 
+  it('a ready meeting prep needs the User now, says when, and is gone once the meeting ends', async () => {
+    const start = clock + 30 * MINUTE;
+    updates.queue.enqueue({
+      group: 'now',
+      mergeKey: 'meeting-prep:event-1',
+      about: {
+        kind: 'meeting-prep',
+        eventId: 'event-1',
+        prepId: 'prep-1',
+        title: '1:1 with Priya',
+        startsAt: start,
+      },
+      itemIds: ['event-1'],
+      section: 'calendar',
+      expiresAt: start + 30 * MINUTE,
+    });
+    const update = await updates.give();
+    expect(update?.lines.map((line) => [line.group, line.text])).toEqual([
+      ['now', 'Prep for “1:1 with Priya” at 10:30 is ready.'],
+    ]);
+    clock = start + 30 * MINUTE;
+    expect(queued()).toEqual([]);
+  });
+
   it('over the cap, the plain sentences too', async () => {
     suggest('need to send Dana the Q3 numbers', 'Send Dana the Q3 numbers');
     script.push(new ModelError('over-cap', 'This month’s model spend has reached the cap.'));
