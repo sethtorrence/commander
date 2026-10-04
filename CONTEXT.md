@@ -114,6 +114,10 @@ _Avoid_: Line, paragraph, bullet, node
 The Blocks each new Daily Note starts with, edited in Settings; a new day gets copies of them, not links to them.
 _Avoid_: Default note, skeleton, boilerplate
 
+**Markdown copy**:
+The read-only `YYYY-MM-DD.md` file of each Daily Note that Commander writes to a folder the User chooses, for Obsidian, grep and backups; never read back, so the database stays the source of truth.
+_Avoid_: Export, sync, vault, mirror
+
 ## Processing
 
 **Core**:

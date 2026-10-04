@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { attachmentScheme, type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
-import { app, BrowserWindow, ipcMain, protocol, shell, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, protocol, shell, utilityProcess } from 'electron';
 import { setUpAccounts } from './accounts/set-up-accounts';
 import { attachmentSchemePrivileges, serveAttachment } from './attachments-protocol';
 import { createAutonomyChannels } from './autonomy-channel';
@@ -11,6 +11,7 @@ import { displayServerFromHyprland, inferDisplayServer } from './display-server'
 import { keepLinksInBrowser } from './external-links';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
+import { createMarkdownCopyChannel } from './markdown-copy-channel';
 import { setUpModels } from './models';
 import { revealWhenPainted } from './reveal';
 import { setUpSecretStorage } from './secret-storage';
@@ -80,6 +81,21 @@ function startCore(secrets: Secrets) {
   const models = setUpModels(secrets, core);
   const autonomy = createAutonomyChannels((message) => core.postMessage(message));
   ipcMain.handle(ipc.autonomy, (_event, request: unknown) => autonomy.window.request(request));
+  const markdownCopy = createMarkdownCopyChannel({
+    userData: app.getPath('userData'),
+    send: (message) => core.postMessage(message),
+    // Read at call time, so the end-to-end tests can stand in for the system picker.
+    async chooseFolder() {
+      const options: Electron.OpenDialogOptions = {
+        title: 'Markdown copy folder',
+        buttonLabel: 'Use this folder',
+        properties: ['openDirectory', 'createDirectory'],
+      };
+      const result = await (window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options));
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    },
+  });
+  ipcMain.handle(ipc.markdownCopy, (_event, request: unknown) => markdownCopy.request(request));
   if (testHooks) {
     Object.assign(globalThis, {
       commanderTestHooks: { autonomy: autonomy.test.request, setOnline: accounts.setOnline },
@@ -87,6 +103,7 @@ function startCore(secrets: Secrets) {
   }
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
+    if (markdownCopy.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.
     if (models(raw)) return;
     if (accounts.fromCore(raw)) return;

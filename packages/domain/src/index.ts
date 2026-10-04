@@ -12,6 +12,7 @@ export * from './items';
 export * from './linear';
 export * from './linear-todos';
 export * from './links';
+export * from './markdown-copy-messages';
 export * from './model-messages';
 export * from './models';
 export * from './outgoing';
