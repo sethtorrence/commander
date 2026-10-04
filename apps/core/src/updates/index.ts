@@ -13,16 +13,22 @@
 //   the smaller things folded after more than 8 hours away (never after a busy day). Every Update
 //   given is kept, so the last one, or any earlier one, can be reopened. Asking for one first runs a
 //   light sync of every Teams Account, waiting up to 5 seconds before going on with what's there.
-// - The Summarise Skill (#109) summarises a Chat on request, over a range of its messages.
+// - The Summarise Skill (#109) summarises a Chat on request, over a range of its messages, and the
+//   Draft Skill (#110) drafts a reply to one, for the User to edit and send (never while "Draft
+//   replies" is Off).
 // - Acting on a line: Done and Dismiss take it out of the queue (Dismiss also dismisses the
 //   suggestions it is about), Snooze hides it until later, and Accept takes a suggestion in place,
 //   through the gate, or raises an action's Autonomy level one step (never past its hard limit).
 import {
   type AutonomyLevel,
   autonomyLevels,
+  type ChatDraft,
   type ChatSummary,
   chosenLevel,
   createSkillRegistry,
+  DRAFT_REPLIES,
+  DRAFT_SKILL,
+  decide,
   type GivenUpdate,
   HARD_LIMITS,
   isAllowed,
@@ -44,6 +50,7 @@ import {
 } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import { z } from 'zod';
+import { draftReply } from '../agent/draft-reply';
 import { summariseChat } from '../agent/summarise-chat';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
@@ -102,6 +109,8 @@ export type Updates = {
   give(): Promise<UpdateView | null>;
   // The Summarise Skill: Ares summarises a Chat over a range of its messages.
   summarise(itemId: string, range: SummaryRange): Promise<ChatSummary>;
+  // The Draft Skill: Ares drafts a reply to a Chat, for the User to edit and send.
+  draft(itemId: string): Promise<ChatDraft>;
   history(limit?: number): UpdateSummary[];
   past(id: number): UpdateView;
   act(queuedId: number, action: QueuedAction, snooze?: SnoozeChoice): QueuedLine;
@@ -377,12 +386,32 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     });
   }
 
+  async function draft(itemId: string): Promise<ChatDraft> {
+    const found = item(itemId);
+    if (!found || found.deletedAt !== null) throw new Error('That Chat is no longer in Commander');
+    const off =
+      decide(
+        { action: DRAFT_REPLIES, actionKind: 'organise', section: 'teams', confidence: 1, chained: false },
+        gate.settings(),
+      ) === 'off';
+    if (off) throw new Error('Drafting replies is Off in Settings → Autonomy');
+    return draftReply(found, {
+      client: options.client,
+      now,
+      me: options.me,
+      secrets: options.secrets,
+      injectionWarnings: itemStore.injectionWarnings,
+      onItemsChanged: options.onItemsChanged,
+    });
+  }
+
   const skills = createSkillRegistry();
   skills.register({ ...UPDATE_SKILL, run: () => asked() });
   skills.register<{ itemId: string; range: SummaryRange }, ChatSummary>({
     ...SUMMARISE_SKILL,
     run: ({ itemId, range }) => summarise(itemId, range),
   });
+  skills.register<{ itemId: string }, ChatDraft>({ ...DRAFT_SKILL, run: ({ itemId }) => draft(itemId) });
 
   async function answer(raw: unknown): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
     const parsed = updatesRequest.safeParse(raw);
@@ -397,6 +426,8 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
           return { ok: true, result: await skills.run(request.skill, undefined) };
         case 'summarise-chat':
           return { ok: true, result: await summarise(request.itemId, request.range) };
+        case 'draft-reply':
+          return { ok: true, result: await draft(request.itemId) };
         case 'history':
           return { ok: true, result: history(request.limit) };
         case 'past':
@@ -420,6 +451,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     state,
     give,
     summarise,
+    draft,
     history,
     past,
     act,

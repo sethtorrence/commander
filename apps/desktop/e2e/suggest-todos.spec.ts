@@ -101,7 +101,10 @@ test('type, pause, a margin card, Add: the Todo is in Todos with origin Ares; Di
   const window = await commander.window();
   await connectFakeModel(window);
   // Settings → Ares lists the job, switched on.
-  await expect(window.getByRole('switch', { name: 'Suggest Todos' })).toHaveAttribute('aria-checked', 'true');
+  await expect(window.getByRole('switch', { name: 'Suggest Todos', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
 
   // The User writes two lines in today's note, then pauses.
   const sheet = await openNotes(window);

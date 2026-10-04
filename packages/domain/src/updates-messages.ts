@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type ChatSummary, chatSummary, summaryRange } from './teams-ares';
+import { type ChatDraft, chatDraft } from './teams-work';
 import {
   type QueuedLine,
   queuedAction,
@@ -25,6 +26,8 @@ export const updatesRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('run-skill'), skill: z.literal('update') }),
   // Summarise (#109): Ares summarises a Chat over a range of its messages, on request.
   z.object({ op: z.literal('summarise-chat'), itemId: z.string().min(1), range: summaryRange }),
+  // Draft (#110): Ares drafts a reply to a Chat, on request, for the User to edit and send.
+  z.object({ op: z.literal('draft-reply'), itemId: z.string().min(1) }),
   // Past Updates, newest first, and one of them reopened.
   z.object({ op: z.literal('history'), limit: z.number().int().positive().max(200).optional() }),
   z.object({ op: z.literal('past'), id }),
@@ -43,6 +46,7 @@ export type UpdatesResults = {
   state: UpdatesState;
   'run-skill': UpdateView | null;
   'summarise-chat': ChatSummary;
+  'draft-reply': ChatDraft;
   history: UpdateSummary[];
   past: UpdateView;
   act: QueuedLine;
@@ -52,6 +56,7 @@ export const updatesResult = {
   state: updatesState,
   'run-skill': updateView.nullable(),
   'summarise-chat': chatSummary,
+  'draft-reply': chatDraft,
   history: z.array(updateSummary),
   past: updateView,
   act: queuedLine,

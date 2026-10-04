@@ -28,6 +28,9 @@ import type { MessageFocus } from './use-teams';
   below them as on its way (or why it is waiting), then as Couldn't sync with Retry if Teams won't
   take it; once Teams has it, it is one of the messages, under Teams's id. Mark as unread (or read)
   sits with the Chat's actions.
+
+  Ares's work (#110): his suggested Todos go beside the messages they came from (`afterMessage`), and
+  his suggested reply and Draft come with the reply box in the `reply` slot.
 */
 
 const isWebAddress = (url: string | null): url is string => !!url && /^https?:\/\//i.test(url);
@@ -40,12 +43,15 @@ function Message({
   me,
   webUrl,
   focus,
+  after,
 }: {
   message: ChatMessage;
   me: string | null;
   webUrl: string | null;
   /** Asked for (from the Dashboard): scrolled into view and marked, again on each new ask. */
   focus?: MessageFocus | null;
+  /** What goes beside the message: Ares's suggested Todos from it (#110). */
+  after?: ReactNode;
 }) {
   const element = useRef<HTMLLIElement>(null);
   useEffect(() => {
@@ -152,6 +158,7 @@ function Message({
           ))}
         </ul>
       )}
+      {after}
     </li>
   );
 }
@@ -247,6 +254,7 @@ export function ChatView({
   reply,
   actions,
   ares,
+  afterMessage,
 }: {
   chat: Chat | null;
   /** The User's Teams user id in the Chat's Account. */
@@ -278,6 +286,8 @@ export function ChatView({
   actions?: ReactNode;
   /** What Ares says about the Chat, above its messages (waiting on you, a summary; #109). */
   ares?: ReactNode;
+  /** What goes beside a message: Ares's suggested Todos from it (#110). */
+  afterMessage?: (message: ChatMessage) => ReactNode;
 }) {
   const { projects, archived, projectOf } = useProjects();
   const people = usePeople();
@@ -365,6 +375,7 @@ export function ChatView({
                           me={me}
                           webUrl={webUrl}
                           focus={focus?.chatId === chat.id && focus.messageId === message.id ? focus : null}
+                          after={afterMessage?.(message)}
                         />
                       ))}
                     </ol>

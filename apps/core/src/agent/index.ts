@@ -3,7 +3,7 @@
 // change to Todos or Linear issues a Todos-changed one), when Ares did or suggested something, and
 // when a Source has synced; it works out for itself when the machine has been idle long enough for
 // catch-up work. The main process's idle and lock reports (Updates, #70) call `idle()` too.
-import type { CoreMessage, Enqueue } from '@commander/domain';
+import { type CoreMessage, DRAFT_REPLIES, type Enqueue, SUGGEST_TEAMS_REPLIES } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
@@ -19,7 +19,9 @@ import { createJobRunner, type JobRunner } from './runner';
 import { createSeriesFiling } from './series-filing';
 import { spotStuckLinearJob } from './spot-stuck-linear';
 import { clearAnswered, spotWaitingJob } from './spot-waiting';
+import { suggestChatTodosJob } from './suggest-chat-todos';
 import { dismissAnsweredInvitations, suggestInvitationRepliesJob } from './suggest-invitation-replies';
+import { dismissSettledReplies, suggestTeamsRepliesJob } from './suggest-teams-replies';
 import { suggestTodosJob } from './suggest-todos';
 
 export type { JobRunner } from './runner';
@@ -69,9 +71,12 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   const idleAfterMs = options.idleAfterMs ?? IDLE_AFTER_MS;
   let wasRanking = false;
   // Ares set or cleared a Chat's waiting flag: open views catch up, and the Dashboard is ranked again.
+  // A flagged Chat gets a suggested reply; one whose flag went loses it (#110).
   const flagsChanged = (itemIds: string[]) => {
     options.onItemsChanged?.(itemIds);
     runner.trigger({ kind: 'todos-changed', itemIds });
+    dismissStale();
+    runner.run(SUGGEST_TEAMS_REPLIES, itemIds);
   };
   const runner: JobRunner = createJobRunner({
     jobs: [
@@ -86,6 +91,8 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
         onItemsChanged: options.onItemsChanged,
       }),
       suggestInvitationRepliesJob(itemStore, { now }),
+      suggestChatTodosJob(itemStore, { now, me: options.me }),
+      suggestTeamsRepliesJob(itemStore, { now, me: options.me }),
       blockTimeForTodosJob(itemStore, { now }),
       proposeEventsJob(itemStore, { now }),
     ],
@@ -107,13 +114,24 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     },
   });
 
+  // Draft (#110) runs on request, outside the runner (it changes nothing), under an Organise action
+  // of its own, so the Settings grid can switch it off.
+  options.gate.registerAction({
+    action: DRAFT_REPLIES,
+    actionKind: 'organise',
+    name: 'Draft replies',
+    hint: 'Draft beside a Chat’s reply box: a reply for you to edit and send. It changes nothing',
+  });
+
   const filing = createFiling({ itemStore, gate: options.gate });
-  // Ares's filing suggestions the User or a Rule has since overruled, and his suggested replies to
-  // invitations the User has since answered (or that are over): they no longer stand.
+  // Ares's filing suggestions the User or a Rule has since overruled, his suggested replies to
+  // invitations the User has since answered (or that are over), and his suggested Teams replies to
+  // Chats no longer waiting on the User: they no longer stand.
   const dismissStale = () => {
     try {
       filing.dismissStale();
       dismissAnsweredInvitations(itemStore, options.gate, now());
+      dismissSettledReplies(itemStore, options.gate);
     } catch (error) {
       options.log?.(`Couldn’t settle Ares’s suggestions that no longer stand: ${error}`);
     }

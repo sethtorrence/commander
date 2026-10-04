@@ -1,9 +1,11 @@
-import type {
-  ActionKind,
-  AresActivity,
-  AutonomySection,
-  ItemKind,
-  ProposedItemAction,
+import {
+  type ActionKind,
+  type AresActivity,
+  type AutonomySection,
+  chatReply,
+  type ItemKind,
+  MESSAGE_FIELD,
+  type ProposedItemAction,
 } from '@commander/domain';
 
 /*
@@ -75,6 +77,10 @@ export function describeItemActions(
         ];
       }
       case 'edit-fields': {
+        // A reply to a Teams Chat (#110), in full: what the User sends if they accept.
+        const message = Object.entries(action.fields).find(([field]) => field.startsWith(MESSAGE_FIELD))?.[1];
+        const sent = chatReply.safeParse(message);
+        if (sent.success) return [`Send this reply in Teams: “${sent.data.text}”`];
         const reply = REPLIES[String(action.fields.response)];
         if (!reply) return Object.keys(action.fields).map((field) => `Change its ${field}`);
         return [action.fields.seriesResponse ? reply[1] : reply[0]];

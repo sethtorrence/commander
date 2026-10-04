@@ -66,6 +66,47 @@ describe('suggestedTodoOf', () => {
     });
   });
 
+  it('makes one from a Teams Chat (#110) open the Chat at its message', () => {
+    const fromChat = pending({
+      section: 'teams',
+      itemId: 'chat-1',
+      itemActions: [
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title: 'Send Omar the TL budget',
+            people: [],
+            status: 'open',
+            filing: null,
+            detail: {
+              kind: 'todo',
+              origin: 'ares',
+              dueOn: '2026-10-02',
+              backedBy: null,
+              fromMessage: { itemId: 'chat-1', messageId: 'msg-7' },
+            },
+          },
+        },
+        { type: 'link', from: { step: 0 }, linkType: 'made-from', to: 'chat-1' },
+      ],
+      reason: 'Omar Haddad asked in Teams: “Can you send me the TL budget by Friday?”',
+      item: { id: 'chat-1', kind: 'chat', title: 'Omar Haddad', source: 'teams', deletedAt: null },
+    });
+    const suggested = suggestedTodoOf(fromChat);
+    expect(suggested?.item).toMatchObject({
+      title: 'Send Omar the TL budget',
+      detail: { dueOn: '2026-10-02' },
+    });
+    expect(suggested?.suggestion).toEqual({
+      proposalId: 12,
+      blockId: 'chat-1',
+      reason: 'Omar Haddad asked in Teams: “Can you send me the TL budget by Friday?”',
+      source: 'Omar Haddad',
+      fromMessage: { itemId: 'chat-1', messageId: 'msg-7' },
+    });
+  });
+
   it('leaves out anything else: settled suggestions, other actions, no Todo to add', () => {
     expect(suggestedTodoOf(pending({ status: 'dismissed' }))).toBeNull();
     expect(suggestedTodoOf(pending({ action: 'file-projects' }))).toBeNull();

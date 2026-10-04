@@ -10,7 +10,8 @@ import {
   Ares's suggested Todos on the Dashboard (#72): each pending "Suggest Todos" suggestion is shown as
   the Todo it would add, styled as a suggestion, with Add (the User accepts it through the gate) and
   Dismiss. It isn't an Item yet, so it goes by an id of its own (`suggestion:12`), which Ares's ranking
-  uses too. One he hasn't ranked waits at the end of Today, with why he suggested it.
+  uses too. One he hasn't ranked waits at the end of Today, with why he suggested it. One from a Teams
+  Chat (#110) opens the Chat at the message it came from; one from a Daily Note opens its Block.
 */
 
 const SUGGEST_TODOS = 'suggest-todos';
@@ -19,12 +20,14 @@ const SUGGEST_TODOS = 'suggest-todos';
 export interface SuggestedTodo {
   /** The gate's proposal id: what Add and Dismiss settle. */
   proposalId: number;
-  /** The Block it was suggested for. */
+  /** The Block it was suggested for (or the Chat, for one from Teams). */
   blockId: string;
   /** Why Ares suggested it, in his words. */
   reason: string;
-  /** The Block's text: what his words may link to (AresText). */
+  /** The Block's text (or the Chat's name): what his words may link to (AresText). */
   source: string;
+  /** For one from a Teams Chat (#110): the Chat and the message it came from, where it opens. */
+  fromMessage?: { itemId: string; messageId: string };
 }
 
 /** A pending Suggest Todos suggestion as a Dashboard row's Item, or null for anything else. */
@@ -45,8 +48,14 @@ export function suggestedTodoOf(row: AresActivity): { item: Item; suggestion: Su
     createdAt: row.at,
     updatedAt: row.at,
     deletedAt: null,
-    detail: { kind: 'todo', origin: 'ares', dueOn: null, backedBy: null },
+    detail: {
+      kind: 'todo',
+      origin: 'ares',
+      dueOn: create.item.detail?.kind === 'todo' ? create.item.detail.dueOn : null,
+      backedBy: null,
+    },
   };
+  const fromMessage = create.item.detail?.kind === 'todo' ? create.item.detail.fromMessage : null;
   return {
     item,
     suggestion: {
@@ -54,6 +63,7 @@ export function suggestedTodoOf(row: AresActivity): { item: Item; suggestion: Su
       blockId: row.itemId,
       reason: row.reason,
       source: row.item?.title ?? '',
+      ...(fromMessage && { fromMessage }),
     },
   };
 }

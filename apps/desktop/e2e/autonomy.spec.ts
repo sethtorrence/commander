@@ -127,10 +127,12 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
     /Spot what’s waiting on you/,
     /File into Projects/,
     /Prepare for meetings/,
+    /Draft replies/,
     /Block time for Todos/,
     /Hold time for yourself/,
     /Block time across Accounts/,
     /Reply to invitations/,
+    /Reply in Teams/,
     /Create events with guests/,
   ]);
   await expect(grid.getByTestId('registered-action').nth(1)).toContainText('Ask works as Auto here');

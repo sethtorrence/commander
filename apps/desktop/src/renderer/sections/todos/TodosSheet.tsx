@@ -1,4 +1,4 @@
-import type { Item } from '@commander/domain';
+import { fromMessageOf, type Item } from '@commander/domain';
 import { Button, cn, toast } from '@commander/ui';
 import { useEffect, useRef, useState } from 'react';
 import { requestReveal, useReveal } from '../../frame/reveal';
@@ -98,9 +98,14 @@ export function TodosSheet({
     if (other.kind === 'todo') return state.jumpTo(other.id);
     const section = sectionFor(other.kind);
     // A Block opens in its Daily Note, scrolled to and highlighted; a Linear issue, or a GitHub pull
-    // request, issue or review request (its pull request), opens selected.
+    // request, issue or review request (its pull request), opens selected; a Chat opens at the message
+    // an Ares Todo came from (#110).
     if (section && (other.kind === 'block' || other.kind === 'linear-issue' || section === 'github'))
       requestReveal(section, other.id);
+    if (other.kind === 'chat') {
+      const from = fromMessageOf(selected);
+      requestReveal('teams', other.id, from?.itemId === other.id ? from.messageId : undefined);
+    }
     if (section) openSection(section);
   };
 

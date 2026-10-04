@@ -1,5 +1,5 @@
 import { MAX_REPLY_LENGTH } from '@commander/domain';
-import { Kbd } from '@commander/ui';
+import { Kbd, Led } from '@commander/ui';
 
 /*
   The reply box at the bottom of the Chat view (#106): plain text with line breaks, sent with
@@ -16,12 +16,18 @@ export function ReplyBox({
   draft,
   onDraft,
   onSend,
+  onAskAres,
+  drafting = false,
 }: {
   /** Who the reply goes to: the Chat's name. */
   to: string;
   draft: string;
   onDraft: (text: string) => void;
   onSend: () => void;
+  /** Draft (#110): Ares drafts a reply into the box. Absent, there is no Draft button. */
+  onAskAres?: () => void;
+  /** Whether Ares is drafting one now. */
+  drafting?: boolean;
 }) {
   const tooLong = draft.length > MAX_REPLY_LENGTH;
   return (
@@ -43,6 +49,17 @@ export function ReplyBox({
           <span className="flex items-center gap-1.5 font-mono text-label uppercase tracking-label text-faint">
             <Kbd>Ctrl ↵</Kbd> sends to Teams
           </span>
+        )}
+        {onAskAres && (
+          <button
+            type="button"
+            disabled={drafting}
+            onClick={onAskAres}
+            className="flex cursor-pointer items-center gap-1.5 border border-line bg-sheet px-3 py-1 font-mono text-label-lg font-semibold uppercase tracking-label text-ink hover:border-ink disabled:cursor-progress disabled:text-faint"
+          >
+            {drafting && <Led size="sm" />}
+            {drafting ? 'Drafting…' : 'Draft'}
+          </button>
         )}
         <button
           type="button"

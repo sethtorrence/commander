@@ -76,6 +76,9 @@ export const todoDetail = z.object({
   dueOn: z.iso.date().nullable(),
   // The Item behind a backed Todo (a Linear issue, a review request); ticking writes through to it.
   backedBy: id.nullable(),
+  // For a Todo Ares made from a Teams Chat (#110): the Chat and the message, so its made-from Link
+  // opens the Chat at that message. Absent for every other Todo.
+  fromMessage: z.object({ itemId: id, messageId: id }).nullable().optional(),
 });
 // A Daily Note: the single note for one calendar day (ADR 0002), keyed by that local date.
 export const dailyNoteDetail = z.object({

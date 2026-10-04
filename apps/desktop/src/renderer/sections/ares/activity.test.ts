@@ -32,6 +32,13 @@ describe('describeItemActions', () => {
     ).toEqual(['Answer Maybe to every event in the series']);
   });
 
+  it('shows the full text of a reply to a Teams Chat (#110)', () => {
+    const reply = { clientId: 'c1', text: 'Hi Omar, yes: by Friday.', createdAt: 1 };
+    expect(
+      describeItemActions([{ type: 'edit-fields', itemId: 'chat-1', fields: { 'message:c1': reply } }]),
+    ).toEqual(['Send this reply in Teams: “Hi Omar, yes: by Friday.”']);
+  });
+
   it('says plainly when it deletes, and shows Links when they are all it does', () => {
     expect(describeItemActions([{ type: 'delete', itemId: 'm1' }])).toEqual(['Delete it']);
     expect(describeItemActions([{ type: 'link', from: 'a', linkType: 'about', to: 'b' }])).toEqual([

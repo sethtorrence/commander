@@ -1,7 +1,7 @@
 import { requestReveal } from '../../frame/reveal';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { useDashboardIfAny } from './context';
-import { openIn, RankedList, revealId, useFeedSelection } from './RankedList';
+import { openIn, RankedList, revealFocus, revealId, useFeedSelection } from './RankedList';
 
 /**
  * The Dashboard's ranked list scoped to one Project, for its Project page: the same bands, rows and
@@ -37,7 +37,7 @@ export function ProjectRankedList({
             const section = openIn(row);
             if (!section) return;
             onOpenSection(section[0]);
-            requestReveal(section[0], revealId(row), row.focus?.messageId);
+            requestReveal(section[0], revealId(row), revealFocus(row));
           }}
           onTick={(row) => void dashboard.tick(row)}
           onClear={dashboard.clear}

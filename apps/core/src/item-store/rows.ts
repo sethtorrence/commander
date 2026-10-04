@@ -45,6 +45,7 @@ export const todoDetailOf = (todo: TodoDetailRow): ItemDetail => ({
   origin: todo.origin,
   dueOn: todo.dueOn,
   backedBy: todo.backedBy,
+  ...(todo.fromMessage && { fromMessage: todo.fromMessage }),
 });
 
 export const dailyNoteDetailOf = (note: DailyNoteDetailRow): ItemDetail => ({

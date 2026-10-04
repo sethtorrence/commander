@@ -19,6 +19,9 @@ import type { ItemStore } from '../item-store';
 import type { AgentJob, JobInput } from './runner';
 
 export const SUGGEST_TODOS = 'suggest-todos';
+// The action's hint in the Settings grid: the same action covers Todos from Teams (#110).
+export const SUGGEST_TODOS_HINT =
+  'Todos from what you write in your Daily Notes, and from what’s asked of you in Teams';
 
 // About this long after the User stops typing.
 export const TYPING_PAUSE_MS = 20_000;
@@ -175,7 +178,7 @@ export function suggestTodosJob(
       action: SUGGEST_TODOS,
       actionKind: 'organise',
       section: 'notes',
-      hint: 'Todos from what you write in your Daily Notes',
+      hint: SUGGEST_TODOS_HINT,
     },
     triggers: { typing: { pauseMs: TYPING_PAUSE_MS }, idle: true },
 
