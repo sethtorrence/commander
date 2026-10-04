@@ -53,8 +53,9 @@ export type ModelKeyStatus = { saved: boolean };
 export type SaveModelKeyResult = { ok: true } | { ok: false; error: string };
 
 // Accounts, as the window sees them: never a token or an API key.
-// The Sources the User can connect Accounts to so far (see account-messages.ts).
-export type AccountSource = 'linear' | 'teams';
+// The kinds of Account the User can connect so far (see account-messages.ts). Most are named after
+// the one Source they carry; a Google Account carries two (Gmail and Google Calendar).
+export type AccountSource = 'linear' | 'teams' | 'google';
 export type AccountMethod = 'oauth' | 'api-key';
 // 'needs-reconnect': its sign-in failed for good (revoked, or a refresh past the replay window).
 export type AccountStatus = 'connected' | 'needs-reconnect';
@@ -80,7 +81,18 @@ export type TeamsAccountSummary = AccountSummaryBase & {
   // The work account signed in with (its user principal name, usually its email address).
   userPrincipalName: string;
 };
-export type AccountSummary = LinearAccountSummary | TeamsAccountSummary;
+// One of the Sources an Account carries, sharing its sign-in. `granted`: the User gave Commander
+// every permission it needs (Google lets them untick some); `enabled`: the User has it switched on.
+// Only a granted Source can be on.
+export type CarriedSource = { source: AccountSyncStatus['source']; granted: boolean; enabled: boolean };
+export type GoogleAccountSummary = AccountSummaryBase & {
+  source: 'google';
+  // The Google address signed in with.
+  email: string;
+  // Gmail and Google Calendar.
+  sources: CarriedSource[];
+};
+export type AccountSummary = LinearAccountSummary | TeamsAccountSummary | GoogleAccountSummary;
 // How this build can connect each Source's Accounts.
 export type SourceSignIn = {
   source: AccountSource;
@@ -119,6 +131,8 @@ export type AccountsRequest =
   | { op: 'connect'; source: 'linear'; method: 'api-key'; apiKey: string; reconnect?: string }
   | { op: 'cancel-sign-in' }
   | { op: 'remove'; accountId: string }
+  // Switches one of the Sources an Account carries on or off (only a granted one can be on).
+  | { op: 'set-source-enabled'; accountId: string; source: CarriedSource['source']; enabled: boolean }
   // Syncs the Account at once (Sync now; Sections call it when they open).
   | { op: 'sync-now'; accountId: string }
   // Minutes between the Account's syncs, from its Source's choices.

@@ -1,4 +1,8 @@
-import type { AccountSource, AccountSummary as WindowAccountSummary } from '@commander/domain/ipc';
+import type {
+  AccountSource,
+  CarriedSource,
+  AccountSummary as WindowAccountSummary,
+} from '@commander/domain/ipc';
 import type { TokenSet } from '../oauth/authorization-code';
 import { RefreshError } from '../oauth/authorization-code';
 import { SignInError } from '../oauth/sign-in-error';
@@ -36,6 +40,9 @@ export type AccountIdentity = {
   user: { id: string; name: string };
   // What only the Source needs (see AccountRecord.details).
   details: Record<string, string>;
+  // For an Account carrying several Sources: which the sign-in granted (see AccountRecord.sources).
+  // Absent: as the Account already had them.
+  sources?: { source: CarriedSource['source']; granted: boolean }[];
 };
 
 // What one Source brings to its Accounts. `S` is what its browser sign-in hands back: the tokens,
@@ -97,6 +104,8 @@ export type SourceAccounts = {
   cancelSignIn(): void;
   // Deletes the Account's Items (through `removeItems`), its keyring entry, then the Account.
   remove(accountId: string): Promise<void>;
+  // Switches one of the Sources the Account carries on or off. Rejects for one not granted.
+  setSourceEnabled(accountId: string, source: CarriedSource['source'], enabled: boolean): Promise<void>;
   // A current access token, refreshed first when it is near expiry. Rejects with AccessTokenError.
   accessToken(accountId: string): Promise<AccessToken>;
   // Finds out who the User is in each Account that doesn't know yet (Accounts connected before
@@ -124,6 +133,19 @@ export type SourceAccountsOptions = {
 const REFRESH_MARGIN_MS = 10 * 60_000;
 
 const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+
+// The Sources an Account carries after a sign-in: granted ones are on, unless the User had switched
+// one off while it was granted; one not granted is off, waiting for Grant access.
+function carriedAfterSignIn(
+  signedIn: AccountIdentity['sources'],
+  existing: CarriedSource[] | undefined,
+): CarriedSource[] | undefined {
+  if (!signedIn) return existing;
+  return signedIn.map(({ source, granted }) => {
+    const before = existing?.find((each) => each.source === source);
+    return { source, granted, enabled: granted && (before?.granted ? before.enabled : true) };
+  });
+}
 
 export function createSourceAccounts<S extends TokenSet>(
   definition: AccountSourceDefinition<S>,
@@ -198,6 +220,8 @@ export function createSourceAccounts<S extends TokenSet>(
       user: identity.user,
       details: identity.details,
     };
+    const sources = carriedAfterSignIn(identity.sources, existing?.sources);
+    if (sources) record.sources = sources;
     await store.put(record);
     changed();
     return definition.summarize(record);
@@ -321,6 +345,26 @@ export function createSourceAccounts<S extends TokenSet>(
       await removeItems({ id, name: record.name });
       await secrets.delete(credentialKey(id));
       await store.remove(id);
+      changed();
+    },
+
+    async setSourceEnabled(id, carried, enabled) {
+      const record = await store.get(id);
+      const current =
+        record?.source === source ? record.sources?.find((each) => each.source === carried) : undefined;
+      if (!record || !current) throw new Error(`${capitalised(label)} Accounts don’t carry ${carried}.`);
+      if (enabled && !current.granted) {
+        throw new Error(
+          `Commander doesn’t have permission for that yet. Use Grant access to give it in ${label}.`,
+        );
+      }
+      if (current.enabled === enabled) return;
+      await store.put({
+        ...record,
+        sources: (record.sources ?? []).map((each) =>
+          each.source === carried ? { ...each, enabled } : each,
+        ),
+      });
       changed();
     },
 

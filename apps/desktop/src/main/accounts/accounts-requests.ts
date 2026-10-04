@@ -61,6 +61,10 @@ export async function answerAccountsRequest(
         source = sourceOf(accounts, request.accountId);
         await accounts.remove(request.accountId);
         break;
+      case 'set-source-enabled':
+        source = sourceOf(accounts, request.accountId);
+        await accounts.setSourceEnabled(request.accountId, request.source, request.enabled);
+        break;
       case 'sync-now':
         sync.refresh(request.accountId);
         break;

@@ -93,6 +93,38 @@ describe('sync messages', () => {
     expect(lastStatus()).toMatchObject({ cadenceMinutes: 60, nextSyncAt: T0 + 5 * 60_000 + 60 * 60_000 });
   });
 
+  it('takes Accounts listed with the Sources they carry, and commands naming one of them', async () => {
+    const logs: string[] = [];
+    sync.stop();
+    sync = setUpSync(store, {
+      send: (message) => sent.push(message),
+      accessTokens: { request: async () => ({ token: 'secret', kind: 'api-key' }) },
+      linearSource: ({ apiUrl }) => adapterFor(apiUrl),
+      random: () => 0,
+      log: (message) => logs.push(message),
+    });
+    sync.handle({
+      type: 'sync-accounts',
+      // A Google Account with no adapter in the Core yet is left alone.
+      accounts: [
+        { id: ACME, sources: ['linear'], needsReconnect: false },
+        { id: 'google:1045', sources: ['gmail', 'google-calendar'], needsReconnect: false },
+      ],
+      endpoints,
+    });
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    sync.handle({
+      type: 'sync-command',
+      command: { op: 'set-cadence', account: ACME, source: 'linear', minutes: 30 },
+    });
+    sync.handle({ type: 'sync-command', command: { op: 'refresh', account: ACME, source: 'linear' } });
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(logs.filter((line) => line.startsWith('Rejected'))).toEqual([]);
+    expect(endpointsSeen).toHaveLength(2);
+    expect(lastStatus()).toMatchObject({ source: 'linear', cadenceMinutes: 30 });
+  });
+
   it('pauses while the machine sleeps', async () => {
     sync.handle({ type: 'system-state', awake: false, online: true });
     sync.handle(accounts());
@@ -115,7 +147,7 @@ describe('sync messages', () => {
     await vi.advanceTimersByTimeAsync(1);
     sync.forget(ACME);
 
-    expect(store.syncState.get(ACME)).toBeNull();
+    expect(store.syncState.get(ACME, 'linear')).toBeNull();
     expect(lastStatus()).toBeUndefined();
   });
 

@@ -1,4 +1,4 @@
-import type { AccountSource, SourceSignIn } from '@commander/domain/ipc';
+import type { AccountSource, CarriedSource, SourceSignIn } from '@commander/domain/ipc';
 import {
   type AccessToken,
   AccessTokenError,
@@ -21,6 +21,7 @@ export type Accounts = {
   list(): Promise<AccountSummary[]>;
   accessToken(accountId: string): Promise<AccessToken>;
   remove(accountId: string): Promise<void>;
+  setSourceEnabled(accountId: string, source: CarriedSource['source'], enabled: boolean): Promise<void>;
   reportRefused(accountId: string): Promise<void>;
   identifyUsers(): Promise<void>;
   // Cancels any browser sign-in waiting for the User.
@@ -60,6 +61,12 @@ export function combineAccounts(sources: readonly SourceAccounts[]): Accounts {
 
     async remove(accountId) {
       await owner(accountId)?.remove(accountId);
+    },
+
+    async setSourceEnabled(accountId, source, enabled) {
+      const accounts = owner(accountId);
+      if (!accounts) throw new Error(`No Account ${accountId}`);
+      await accounts.setSourceEnabled(accountId, source, enabled);
     },
 
     async reportRefused(accountId) {

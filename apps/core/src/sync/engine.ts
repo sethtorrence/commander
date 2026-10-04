@@ -1,10 +1,13 @@
 // The sync engine: one scheduler for every Account of every Source, in the Core. Each Account has
-// its own queue, so one Account's failure or slowness never holds up another. It runs each Source's
-// adapter on the Account's cadence (with a little random spread) or at once on `refresh`, never two
-// syncs of one Account together; saves what the adapter hands over through the Item store; pauses
-// while the machine is asleep or offline and catches up once after; backs off exponentially (capped)
-// on failures, always honouring the Source's Retry-After; and skips Accounts that need reconnecting.
-// Where each Account stands is kept in the Item store's database, so it carries on after a restart.
+// its own queue, so one Account's failure or slowness never holds up another. An Account may carry
+// several Sources that share its sign-in (a Google Account: Gmail and Google Calendar); each of them
+// keeps its own cursor, cadence, status and back-off, but they take turns on the Account's one queue,
+// so no two calls for one identity ever run at once. It runs each Source's adapter on its cadence
+// (with a little random spread) or at once on `refresh`, never two syncs of one Account together;
+// saves what the adapter hands over through the Item store; pauses while the machine is asleep or
+// offline and catches up once after; backs off exponentially (capped) on failures, always honouring
+// the Source's Retry-After; and skips Accounts that need reconnecting. Where each Account stands
+// (Source by Source) is kept in the Item store's database, so it carries on after a restart.
 //
 // Two-way sync's outgoing side runs on the same per-Account queue: changes made in Commander to
 // Source Items are queued by the Item store (with the time they were made) and sent from here, one
@@ -68,8 +71,14 @@ export function supersededNote(source: Source, superseded: Superseded[]): string
   return `Changed in ${SOURCE_NAMES[source]}${by} at ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
-// `me`: who the User is at the Source in the Account (their Linear user id), when known.
-export type SyncAccount = { id: string; source: Source; needsReconnect: boolean; me?: string | null };
+// `me`: who the User is at the Source in the Account (their Linear user id), when known. Most
+// Accounts carry one Source (`source`); one that carries several lists those to sync (`sources`).
+export type SyncAccount = { id: string; needsReconnect: boolean; me?: string | null } & (
+  | { source: Source }
+  | { sources: readonly Source[] }
+);
+export const sourcesOf = (account: SyncAccount): readonly Source[] =>
+  'sources' in account ? account.sources : [account.source];
 export type SystemState = { awake: boolean; online: boolean };
 // After every sync of any Account: other Sources can hook in here (Teams syncs alongside each one).
 // `itemIds`: the Items it changed (the Source's, and Todos that followed them), for open views.
@@ -90,11 +99,13 @@ export type SyncEngine = {
   // Every Account to sync, with whether it needs reconnecting. Accounts not listed stop syncing.
   setAccounts(accounts: SyncAccount[]): void;
   setSystemState(state: SystemState): void;
-  // Syncs the Account at once, or joins its sync already running. Resolves when that sync is over
-  // (at once when skipped: offline, asleep, needing reconnecting, or waiting out a rate limit).
-  refresh(account: string): Promise<void>;
-  // Minutes between the Account's syncs, from its Source's choices. Kept across restarts.
-  setCadence(account: string, minutes: number): void;
+  // Syncs the Account at once (every Source it carries, or just `source`), or joins its sync already
+  // running. Resolves when that sync is over (at once when skipped: offline, asleep, needing
+  // reconnecting, or waiting out a rate limit).
+  refresh(account: string, source?: Source): Promise<void>;
+  // Minutes between the Account's syncs (of `source`, or of each of its Sources offering that
+  // choice), from its Source's choices. Kept across restarts.
+  setCadence(account: string, minutes: number, source?: Source): void;
   // The Account was removed: stop it at once, save nothing more from it, and drop its sync state.
   forget(account: string): void;
   statuses(): AccountSyncStatus[];
@@ -103,14 +114,25 @@ export type SyncEngine = {
   stop(): void;
 };
 
-type Entry = {
-  account: SyncAccount;
+// One Source of an Account: its own schedule and sync, on the Account's queue.
+type Lane = {
+  source: Source;
   adapter: SourceAdapter;
   timer: ReturnType<typeof setTimeout> | null;
   dueAt: number | null;
+  // Asked for (perhaps still waiting its turn), and actually running.
   running: Promise<void> | null;
+  active: boolean;
   abort: AbortController | null;
-  // The Account's syncs and outgoing writes take turns on this chain, never overlapping.
+  // Items saved from the Source's answers to writes since the last sync, reported with the next one.
+  written: Set<string>;
+};
+
+type Entry = {
+  account: SyncAccount;
+  lanes: Map<Source, Lane>;
+  // The Account's syncs (of every Source it carries) and outgoing writes take turns on this chain,
+  // never overlapping.
   turn: Promise<void>;
   writing: Promise<void> | null;
   // More changes arrived while writing: look again once done.
@@ -119,8 +141,6 @@ type Entry = {
   writeAbort: AbortController | null;
   // No writes before this (a rate limit, or a refused sign-in being checked).
   writesHeldUntil: number | null;
-  // Items saved from the Source's answers to writes since the last sync, reported with the next one.
-  written: Set<string>;
 };
 
 const backoff = (failures: number) =>
@@ -156,13 +176,14 @@ export function createSyncEngine({
   let stopped = false;
 
   const paused = () => !system.awake || !system.online;
-  const isCurrent = (entry: Entry) => !stopped && entries.get(entry.account.id) === entry;
+  const isCurrent = (entry: Entry, lane?: Lane) =>
+    !stopped && entries.get(entry.account.id) === entry && (!lane || entry.lanes.get(lane.source) === lane);
 
-  function load({ account }: Entry): SyncState {
+  function load({ account }: Entry, { source }: Lane): SyncState {
     return (
-      store.syncState.get(account.id) ?? {
+      store.syncState.get(account.id, source) ?? {
         account: account.id,
-        source: account.source,
+        source,
         cadenceMinutes: null,
         cursor: null,
         lastSyncedAt: null,
@@ -173,33 +194,35 @@ export function createSyncEngine({
     );
   }
 
-  const cadenceMs = (entry: Entry, state: SyncState) =>
-    (state.cadenceMinutes ?? entry.adapter.cadence.defaultMinutes) * 60_000;
+  const cadenceMs = (lane: Lane, state: SyncState) =>
+    (state.cadenceMinutes ?? lane.adapter.cadence.defaultMinutes) * 60_000;
 
-  function statusOf(entry: Entry): AccountSyncStatus {
-    const state = load(entry);
+  function statusOf(entry: Entry, lane: Lane): AccountSyncStatus {
+    const state = load(entry, lane);
     let activity: SyncActivity = 'idle';
     if (entry.account.needsReconnect) activity = 'needs-reconnect';
-    else if (entry.running) activity = 'syncing';
+    else if (lane.active) activity = 'syncing';
     else if (!system.awake) activity = 'asleep';
     else if (!system.online) activity = 'offline';
     else if (state.retryAt !== null) activity = 'backing-off';
     return {
       account: entry.account.id,
-      source: entry.account.source,
+      source: lane.source,
       activity,
-      cadenceMinutes: cadenceMs(entry, state) / 60_000,
-      cadenceChoices: [...entry.adapter.cadence.choices],
+      cadenceMinutes: cadenceMs(lane, state) / 60_000,
+      cadenceChoices: [...lane.adapter.cadence.choices],
       lastSyncedAt: state.lastSyncedAt,
-      nextSyncAt: entry.dueAt,
-      itemCount: store.syncState.countItems(entry.account.source, entry.account.id),
+      nextSyncAt: lane.dueAt,
+      itemCount: store.syncState.countItems(lane.source, entry.account.id),
       problem: state.problem,
       outgoing: store.outgoing.counts(entry.account.id),
     };
   }
 
   function statuses() {
-    return [...entries.values()].map(statusOf);
+    return [...entries.values()].flatMap((entry) =>
+      [...entry.lanes.values()].map((lane) => statusOf(entry, lane)),
+    );
   }
 
   function emit() {
@@ -208,68 +231,101 @@ export function createSyncEngine({
     for (const listener of statusListeners) listener(current);
   }
 
-  function clearTimer(entry: Entry) {
-    if (entry.timer) clearTimeout(entry.timer);
-    entry.timer = null;
-    entry.dueAt = null;
+  function clearTimer(lane: Lane) {
+    if (lane.timer) clearTimeout(lane.timer);
+    lane.timer = null;
+    lane.dueAt = null;
   }
 
-  // Works out the Account's next sync and arms its timer.
-  function schedule(entry: Entry) {
-    clearTimer(entry);
-    if (!isCurrent(entry) || entry.running || entry.account.needsReconnect || paused()) return;
-    const state = load(entry);
+  const clearTimers = (entry: Entry) => {
+    for (const lane of entry.lanes.values()) clearTimer(lane);
+  };
+
+  const scheduleAll = (entry: Entry) => {
+    for (const lane of entry.lanes.values()) schedule(entry, lane);
+  };
+
+  // Syncs every Source of the Account (or just `source`) at once, one after another on its queue.
+  const runAll = (entry: Entry, trigger: SyncTrigger, source?: Source) =>
+    Promise.all(
+      [...entry.lanes.values()]
+        .filter((lane) => source === undefined || lane.source === source)
+        .map((lane) => run(entry, lane, trigger)),
+    ).then(() => {});
+
+  // Works out the Source's next sync and arms its timer.
+  function schedule(entry: Entry, lane: Lane) {
+    clearTimer(lane);
+    if (!isCurrent(entry, lane) || lane.running || entry.account.needsReconnect || paused()) return;
+    const state = load(entry, lane);
     let due: number;
     if (state.retryAt !== null) due = state.retryAt;
     else if (state.lastSyncedAt === null) due = now();
-    else due = state.lastSyncedAt + cadenceMs(entry, state) + random() * SPREAD_MS;
+    else due = state.lastSyncedAt + cadenceMs(lane, state) + random() * SPREAD_MS;
     // Overdue (after a restart, sleep or going offline): catch up once, soon, spread a little.
     if (due < now()) due = now() + random() * SPREAD_MS;
-    arm(entry, due);
+    arm(entry, lane, due);
   }
 
-  function arm(entry: Entry, due: number) {
-    entry.dueAt = Math.round(due);
-    const wait = Math.max(0, entry.dueAt - now());
-    entry.timer = setTimeout(
+  function arm(entry: Entry, lane: Lane, due: number) {
+    lane.dueAt = Math.round(due);
+    const wait = Math.max(0, lane.dueAt - now());
+    lane.timer = setTimeout(
       () => {
-        entry.timer = null;
-        if (wait > MAX_TIMER_MS) arm(entry, due);
-        else void run(entry, 'scheduled');
+        lane.timer = null;
+        if (wait > MAX_TIMER_MS) arm(entry, lane, due);
+        else void run(entry, lane, 'scheduled');
       },
       Math.min(wait, MAX_TIMER_MS),
     );
   }
 
-  function run(entry: Entry, trigger: SyncTrigger): Promise<void> {
-    if (entry.running) return entry.running;
-    if (!isCurrent(entry) || entry.account.needsReconnect || paused()) return Promise.resolve();
-    const state = load(entry);
+  function run(entry: Entry, lane: Lane, trigger: SyncTrigger): Promise<void> {
+    if (lane.running) return lane.running;
+    if (!isCurrent(entry, lane) || entry.account.needsReconnect || paused()) return Promise.resolve();
+    const state = load(entry, lane);
     // A refresh never cuts a Source's Retry-After short.
     if (trigger === 'refresh' && state.problem?.kind === 'rate-limited' && (state.retryAt ?? 0) > now()) {
       return Promise.resolve();
     }
-    clearTimer(entry);
+    clearTimer(lane);
     const abort = new AbortController();
-    entry.abort = abort;
-    entry.running = takeTurn(entry, () => execute(entry, load(entry).cursor, trigger, abort.signal))
-      .catch((error) => log(`Sync engine error for ${entry.account.id}: ${String(error)}`))
+    lane.abort = abort;
+    lane.running = takeTurn(entry, async () => {
+      // Switched off or removed while it waited its turn.
+      if (abort.signal.aborted || !isCurrent(entry, lane)) return;
+      lane.active = true;
+      emit();
+      try {
+        await execute(entry, lane, load(entry, lane).cursor, trigger, abort.signal);
+      } finally {
+        lane.active = false;
+      }
+    })
+      .catch((error) => log(`Sync engine error for ${entry.account.id} (${lane.source}): ${String(error)}`))
       .finally(() => {
-        entry.running = null;
-        entry.abort = null;
-        schedule(entry);
+        lane.running = null;
+        lane.abort = null;
+        schedule(entry, lane);
         emit();
       });
     emit();
-    return entry.running;
+    return lane.running;
   }
 
-  async function execute(entry: Entry, startCursor: unknown, trigger: SyncTrigger, signal: AbortSignal) {
-    const { id: account, source } = entry.account;
+  async function execute(
+    entry: Entry,
+    lane: Lane,
+    startCursor: unknown,
+    trigger: SyncTrigger,
+    signal: AbortSignal,
+  ) {
+    const { id: account } = entry.account;
+    const { source } = lane;
     const startedAt = now();
     const saved = { created: 0, updated: 0, tombstoned: 0, unchanged: 0 };
-    const changed = new Set<string>(entry.written);
-    entry.written.clear();
+    const changed = new Set<string>(lane.written);
+    lane.written.clear();
     const recheck = store.recheckIds({ source, account });
     let result: SyncResult | null = null;
     let failure: unknown = null;
@@ -277,7 +333,7 @@ export function createSyncEngine({
       let cursor = startCursor;
       for (;;) {
         try {
-          result = await entry.adapter.sync({
+          result = await lane.adapter.sync({
             account,
             cursor,
             accessToken: () => accessTokens.request(account),
@@ -317,10 +373,10 @@ export function createSyncEngine({
     } catch (error) {
       failure = error;
     }
-    if (signal.aborted || !isCurrent(entry)) return;
+    if (signal.aborted || !isCurrent(entry, lane)) return;
 
     // Read again: the User may have changed the cadence while the sync ran.
-    const latest = load(entry);
+    const latest = load(entry, lane);
     let next: SyncState;
     let outcome: SyncOutcomeKind;
     let cost: SyncCost | null = null;
@@ -386,19 +442,48 @@ export function createSyncEngine({
     for (const listener of syncedListeners) listener({ account, source, outcome, itemIds });
   }
 
+  function dropLane(entry: Entry, lane: Lane) {
+    clearTimer(lane);
+    lane.abort?.abort();
+    entry.lanes.delete(lane.source);
+  }
+
   function drop(entry: Entry) {
-    clearTimer(entry);
+    for (const lane of entry.lanes.values()) dropLane(entry, lane);
     clearWriteTimer(entry);
-    entry.abort?.abort();
     entry.writeAbort?.abort();
     entries.delete(entry.account.id);
   }
+
+  function addLane(entry: Entry, adapter: SourceAdapter): Lane {
+    const lane: Lane = {
+      source: adapter.source,
+      adapter,
+      timer: null,
+      dueAt: null,
+      running: null,
+      active: false,
+      abort: null,
+      written: new Set(),
+    };
+    entry.lanes.set(adapter.source, lane);
+    return lane;
+  }
+
+  // The lane of a Source the Account syncs and can write to.
+  const writerOf = (entry: Entry, source: Source) => {
+    const lane = entry.lanes.get(source);
+    return lane?.adapter.write ? lane : undefined;
+  };
 
   // ------------------------------------------------------------------------------------------
   // Outgoing changes (Two-way sync)
 
   const canWrite = (entry: Entry) =>
-    !!entry.adapter.write && isCurrent(entry) && !entry.account.needsReconnect && !paused();
+    [...entry.lanes.values()].some((lane) => !!lane.adapter.write) &&
+    isCurrent(entry) &&
+    !entry.account.needsReconnect &&
+    !paused();
 
   function clearWriteTimer(entry: Entry) {
     if (entry.writeTimer) clearTimeout(entry.writeTimer);
@@ -415,7 +500,11 @@ export function createSyncEngine({
     clearWriteTimer(entry);
     entry.writing = takeTurn(entry, () => sendDue(entry))
       .then((wrote) => {
-        if (wrote && isCurrent(entry)) void run(entry, 'refresh');
+        if (!isCurrent(entry)) return;
+        for (const source of wrote) {
+          const lane = entry.lanes.get(source);
+          if (lane) void run(entry, lane, 'refresh');
+        }
       })
       .catch((error) => log(`Outgoing changes for ${entry.account.id} stopped: ${String(error)}`))
       .finally(() => {
@@ -444,15 +533,19 @@ export function createSyncEngine({
     );
   }
 
-  async function sendDue(entry: Entry): Promise<boolean> {
-    let wrote = false;
+  // Resolves with the Sources it wrote to, to refresh.
+  async function sendDue(entry: Entry): Promise<Set<Source>> {
+    const wrote = new Set<Source>();
     for (;;) {
       if (!canWrite(entry)) return wrote;
       if (entry.writesHeldUntil !== null && entry.writesHeldUntil > now()) return wrote;
-      const [changes] = store.outgoing.due(entry.account.id, now());
-      if (!changes) return wrote;
+      // Changes to a Source the Account doesn't sync now (switched off) wait for it.
+      const changes = store.outgoing
+        .due(entry.account.id, now())
+        .find(([first]) => first && writerOf(entry, first.source));
+      if (!changes?.[0]) return wrote;
       const outcome = await writeItem(entry, changes);
-      if (outcome === 'written') wrote = true;
+      if (outcome === 'written') wrote.add(changes[0].source);
       if (outcome === 'stop') return wrote;
     }
   }
@@ -460,16 +553,18 @@ export function createSyncEngine({
   // Writes one Item's due changes: settled when they reached the Source (or lost to a newer change
   // there), else back in the queue or stopped as Couldn't sync.
   async function writeItem(entry: Entry, changes: OutgoingRow[]): Promise<WriteOutcome> {
-    const { id: account, source } = entry.account;
+    const { id: account } = entry.account;
     const [first] = changes;
-    if (!first || !entry.adapter.write) return 'stop';
+    const lane = first && writerOf(entry, first.source);
+    if (!first || !lane?.adapter.write) return 'stop';
+    const { source } = lane;
     const ids = changes.map((change) => change.id);
     store.outgoing.markSending(ids);
     emit();
     const abort = new AbortController();
     entry.writeAbort = abort;
     try {
-      const result = await entry.adapter.write({
+      const result = await lane.adapter.write({
         account,
         externalId: first.externalId,
         changes: changes.map(({ field, value, synced, madeAt }) => ({ field, value, synced, madeAt })),
@@ -486,7 +581,7 @@ export function createSyncEngine({
           changes.map((change) => change.field),
           at,
         );
-        entry.written.add(first.itemId);
+        lane.written.add(first.itemId);
         if (result.item) {
           const why = supersededNote(source, result.superseded);
           const saved = store.saveFromSource({
@@ -498,7 +593,7 @@ export function createSyncEngine({
             me: entry.account.me ?? null,
           });
           for (const ids of [saved.created, saved.updated, saved.tombstoned, saved.todos])
-            for (const id of ids) entry.written.add(id);
+            for (const id of ids) lane.written.add(id);
         }
       });
       entry.writesHeldUntil = null;
@@ -508,14 +603,14 @@ export function createSyncEngine({
         store.outgoing.release(ids, null);
         return 'stop';
       }
-      return writeFailed(entry, changes, error);
+      return writeFailed(entry, source, changes, error);
     } finally {
       entry.writeAbort = null;
     }
   }
 
-  function writeFailed(entry: Entry, changes: OutgoingRow[], error: unknown): WriteOutcome {
-    const { id: account, source } = entry.account;
+  function writeFailed(entry: Entry, source: Source, changes: OutgoingRow[], error: unknown): WriteOutcome {
+    const { id: account } = entry.account;
     const ids = changes.map((change) => change.id);
     const message = error instanceof Error ? error.message : String(error);
     log(`A change to ${source} for ${account} did not go through: ${message}`);
@@ -570,42 +665,45 @@ export function createSyncEngine({
       const listed = new Set(accounts.map((account) => account.id));
       for (const entry of entries.values()) if (!listed.has(entry.account.id)) drop(entry);
       for (const account of accounts) {
-        const adapter = bySource.get(account.source);
-        if (!adapter) continue;
-        const entry = entries.get(account.id);
+        const adapters = sourcesOf(account).flatMap((source) => bySource.get(source) ?? []);
+        let entry = entries.get(account.id);
+        if (!entry && adapters.length === 0) continue;
+        const isNew = !entry;
         if (!entry) {
-          const added: Entry = {
+          entry = {
             account,
-            adapter,
-            timer: null,
-            dueAt: null,
-            running: null,
-            abort: null,
+            lanes: new Map(),
             turn: Promise.resolve(),
             writing: null,
             writeAgain: false,
             writeTimer: null,
             writeAbort: null,
             writesHeldUntil: null,
-            written: new Set(),
           };
-          entries.set(account.id, added);
-          schedule(added);
-          kickWrites(added);
-          continue;
+          entries.set(account.id, entry);
         }
         const reconnected = entry.account.needsReconnect && !account.needsReconnect;
         entry.account = account;
+        // Sources switched off (or no longer carried) stop; those switched on start.
+        const wanted = new Set(adapters.map((adapter) => adapter.source));
+        for (const lane of entry.lanes.values()) if (!wanted.has(lane.source)) dropLane(entry, lane);
+        const added = adapters.filter((adapter) => !entry.lanes.has(adapter.source));
+        for (const adapter of added) schedule(entry, addLane(entry, adapter));
+        if (entry.lanes.size === 0) {
+          drop(entry);
+          continue;
+        }
         if (reconnected) {
           // A fresh sign-in: forget the old failures and sync at once.
-          store.syncState.save({ ...load(entry), failures: 0, retryAt: null, problem: null });
+          for (const lane of entry.lanes.values())
+            store.syncState.save({ ...load(entry, lane), failures: 0, retryAt: null, problem: null });
           entry.writesHeldUntil = null;
-          void run(entry, 'refresh');
-          kickWrites(entry);
+          void runAll(entry, 'refresh');
         } else if (account.needsReconnect) {
-          clearTimer(entry);
+          clearTimers(entry);
           clearWriteTimer(entry);
         }
+        if (isNew || reconnected || added.length > 0) kickWrites(entry);
       }
       emit();
     },
@@ -615,35 +713,41 @@ export function createSyncEngine({
       system = { ...state };
       if (paused()) {
         for (const entry of entries.values()) {
-          clearTimer(entry);
+          clearTimers(entry);
           clearWriteTimer(entry);
         }
       } else if (wasPaused) {
         for (const entry of entries.values()) {
-          schedule(entry);
+          scheduleAll(entry);
           kickWrites(entry);
         }
       }
       emit();
     },
 
-    refresh(account) {
+    refresh(account, source) {
       const entry = entries.get(account);
       if (!entry) return Promise.resolve();
-      const running = run(entry, 'refresh');
+      const running = runAll(entry, 'refresh', source);
       emit();
       return running;
     },
 
-    setCadence(account, minutes) {
+    setCadence(account, minutes, source) {
       const entry = entries.get(account);
       if (!entry) return;
-      if (!entry.adapter.cadence.choices.includes(minutes)) {
+      const lanes = [...entry.lanes.values()].filter(
+        (lane) =>
+          (source === undefined || lane.source === source) && lane.adapter.cadence.choices.includes(minutes),
+      );
+      if (lanes.length === 0) {
         log(`Ignored a cadence of ${minutes} minutes for ${account}: not one of its Source's choices`);
         return;
       }
-      store.syncState.save({ ...load(entry), cadenceMinutes: minutes });
-      if (!entry.running && entry.timer) schedule(entry);
+      for (const lane of lanes) {
+        store.syncState.save({ ...load(entry, lane), cadenceMinutes: minutes });
+        if (!lane.running && lane.timer) schedule(entry, lane);
+      }
       emit();
     },
 
@@ -670,9 +774,11 @@ export function createSyncEngine({
     stop() {
       stopListening();
       for (const entry of entries.values()) {
-        clearTimer(entry);
+        for (const lane of entry.lanes.values()) {
+          clearTimer(lane);
+          lane.abort?.abort();
+        }
         clearWriteTimer(entry);
-        entry.abort?.abort();
         entry.writeAbort?.abort();
       }
       stopped = true;

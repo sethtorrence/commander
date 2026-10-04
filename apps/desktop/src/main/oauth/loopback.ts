@@ -5,7 +5,8 @@ import { SignInError } from './sign-in-error';
 // The browser half of an OAuth sign-in: a one-shot listener on a loopback port. The Source
 // redirects the browser to http://localhost:<port><path>?code=…&state=…; the first reply settles the
 // sign-in and the listener closes, whatever the outcome. The port is either fixed (registered with
-// the Source, as Linear needs) or 0 for any free one (Microsoft ignores the port of http://localhost).
+// the Source, as Linear needs) or 0 for any free one (Microsoft ignores the port of http://localhost;
+// Google takes any port on http://127.0.0.1).
 
 export type RedirectListener = {
   redirectUri: string;
@@ -82,6 +83,7 @@ async function listenOnLoopback(port: number, handle: Parameters<typeof createSe
 export async function listenForRedirect({
   port,
   path = '/callback',
+  host = 'localhost',
   state,
   sourceName,
   timeoutMs = 5 * 60_000,
@@ -90,6 +92,8 @@ export async function listenForRedirect({
   port: number;
   // The redirect's path: '/callback' for Linear, '/' for a bare http://localhost:<port>.
   path?: string;
+  // The redirect's host. Listening is on both loopback addresses either way.
+  host?: 'localhost' | '127.0.0.1';
   state: string;
   // The Source, as the browser page and the messages name it ("Linear", "Microsoft").
   sourceName: string;
@@ -197,7 +201,7 @@ export async function listenForRedirect({
 
   return {
     // A bare http://localhost:<port> carries no path: Entra matches the registered one exactly.
-    redirectUri: `http://localhost:${listening.port}${path === '/' ? '' : path}`,
+    redirectUri: `http://${host}:${listening.port}${path === '/' ? '' : path}`,
     port: listening.port,
     result,
     close: () => finish(new SignInError('cancelled', 'The sign-in was cancelled.')),

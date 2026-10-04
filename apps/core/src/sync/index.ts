@@ -73,8 +73,8 @@ export function setUpSync(
           const parsed = coreSyncCommand.safeParse(raw);
           if (!parsed.success) return reject(parsed.error);
           const { command } = parsed.data;
-          if (command.op === 'refresh') void engine.refresh(command.account);
-          else engine.setCadence(command.account, command.minutes);
+          if (command.op === 'refresh') void engine.refresh(command.account, command.source);
+          else engine.setCadence(command.account, command.minutes, command.source);
           return true;
         }
         case 'system-state': {

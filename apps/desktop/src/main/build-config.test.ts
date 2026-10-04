@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { linearConfig, microsoftConfig, parseBuildConfig } from './build-config';
+import { googleConfig, linearConfig, microsoftConfig, parseBuildConfig } from './build-config';
 
 const repoRoot = join(import.meta.dirname, '../../../..');
 
@@ -56,6 +56,7 @@ describe('the Linear sign-in settings', () => {
   const build = {
     linear: { clientId: 'abc123', redirectPort: 48613 },
     microsoft: { clientId: null, tenantId: null },
+    google: { clientId: null, clientSecret: null },
   };
 
   it('use Linear’s real endpoints with the build’s client ID and port', () => {
@@ -99,6 +100,7 @@ describe('the Microsoft sign-in settings', () => {
   const build = {
     linear: { clientId: null, redirectPort: 48613 },
     microsoft: { clientId: 'app-id', tenantId: 'tenant-id' },
+    google: { clientId: null, clientSecret: null },
   };
 
   it('use Microsoft’s real identity platform and Graph with the build’s app', () => {
@@ -130,6 +132,61 @@ describe('the Microsoft sign-in settings', () => {
     };
 
     expect(() => microsoftConfig(build, { COMMANDER_TEST_MICROSOFT: JSON.stringify(elsewhere) })).toThrow(
+      /loopback/,
+    );
+  });
+});
+
+describe('the Google sign-in settings', () => {
+  const example = () =>
+    parseBuildConfig(JSON.parse(readFileSync(join(repoRoot, 'config/example.json'), 'utf8')));
+
+  it('commit no Google client, so a fresh checkout can’t connect Google', () => {
+    expect(example().google).toEqual({ clientId: null, clientSecret: null });
+  });
+
+  it('read the Desktop app client’s ID and secret, and keep reading a config from before Google', () => {
+    const build = parseBuildConfig({
+      linear: { clientId: null, redirectPort: 48613 },
+      google: { clientId: ' 1234-abc.apps.googleusercontent.com ', clientSecret: 'GOCSPX-x' },
+    });
+    expect(build.google).toEqual({
+      clientId: '1234-abc.apps.googleusercontent.com',
+      clientSecret: 'GOCSPX-x',
+    });
+    expect(parseBuildConfig({ linear: { clientId: null, redirectPort: 48613 } }).google).toEqual({
+      clientId: null,
+      clientSecret: null,
+    });
+  });
+
+  it('use Google’s real endpoints with the build’s client', () => {
+    const build = parseBuildConfig({
+      linear: { clientId: null, redirectPort: 48613 },
+      google: { clientId: 'id', clientSecret: 'secret' },
+    });
+
+    expect(googleConfig(build, {})).toEqual({
+      clientId: 'id',
+      clientSecret: 'secret',
+      authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+      tokenUrl: 'https://oauth2.googleapis.com/token',
+      userinfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
+    });
+  });
+
+  it('can point at a fake Google on this machine, for the end-to-end tests, and nowhere else', () => {
+    const fake = {
+      clientId: 'fake',
+      clientSecret: 'fake-secret',
+      authorizeUrl: 'http://127.0.0.1:50000/o/oauth2/v2/auth',
+      tokenUrl: 'http://127.0.0.1:50000/token',
+      userinfoUrl: 'http://127.0.0.1:50000/v1/userinfo',
+    };
+    expect(googleConfig(example(), { COMMANDER_TEST_GOOGLE: JSON.stringify(fake) })).toEqual(fake);
+
+    const elsewhere = { ...fake, tokenUrl: 'https://oauth2.googleapis.com/token' };
+    expect(() => googleConfig(example(), { COMMANDER_TEST_GOOGLE: JSON.stringify(elsewhere) })).toThrow(
       /loopback/,
     );
   });

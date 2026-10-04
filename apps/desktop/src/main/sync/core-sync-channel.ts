@@ -9,8 +9,10 @@ import {
   type CoreSystemState,
   coreAccountRefused,
   coreSyncStatus,
+  SOURCES_OF_ACCOUNT,
   type Source,
 } from '@commander/domain';
+import type { AccountSource, CarriedSource } from '@commander/domain/ipc';
 import { z } from 'zod';
 
 export type CoreSyncMessage = CoreSyncAccounts | CoreSyncCommand | CoreSystemState;
@@ -27,27 +29,32 @@ export function createCoreSyncChannel({
   // The Source refused an Account's sign-in during a sync.
   onRefused: (account: string) => void;
 }) {
-  let latest = new Map<string, AccountSyncStatus>();
+  // The Core's statuses, one per Source of each Account (most Accounts carry one).
+  let latest: AccountSyncStatus[] = [];
   const listeners = new Set<() => void>();
 
   return {
     setAccounts(
       accounts: {
         id: string;
-        source: Source;
+        source: AccountSource;
         status: 'connected' | 'needs-reconnect';
         // Who the User is in the Account (their Linear user), for "assigned to me"; null until known.
         user: { id: string; name: string } | null;
+        // The Sources an Account carrying several has, and which are on.
+        sources?: CarriedSource[];
       }[],
     ) {
       send({
         type: 'sync-accounts',
-        accounts: accounts.map(({ id, source, status, user }) => ({
-          id,
-          source,
-          needsReconnect: status === 'needs-reconnect',
-          me: user?.id ?? null,
-        })),
+        accounts: accounts.flatMap(({ id, source, status, user, sources }): CoreSyncAccounts['accounts'] => {
+          const account = { id, needsReconnect: status === 'needs-reconnect', me: user?.id ?? null };
+          const [only, ...others] = SOURCES_OF_ACCOUNT[source];
+          if (!sources && only && others.length === 0) return [{ ...account, source: only }];
+          // Only the Sources switched on sync; with none on, the Account doesn't.
+          const on: Source[] = (sources ?? []).filter((each) => each.enabled).map((each) => each.source);
+          return on.length > 0 ? [{ ...account, sources: on }] : [];
+        }),
         endpoints,
       });
     },
@@ -64,9 +71,13 @@ export function createCoreSyncChannel({
       send({ type: 'system-state', ...state });
     },
 
-    // The Core's latest sync status for an Account, if it has reported one.
-    status(account: string): AccountSyncStatus | null {
-      return latest.get(account) ?? null;
+    // The Core's latest sync status for an Account (of `source`, or its first), if it reported one.
+    status(account: string, source?: Source): AccountSyncStatus | null {
+      return (
+        latest.find(
+          (status) => status.account === account && (source === undefined || status.source === source),
+        ) ?? null
+      );
     },
 
     onChange(listener: () => void) {
@@ -89,7 +100,7 @@ export function createCoreSyncChannel({
         console.warn('Rejected malformed sync status from the Core:', report.error.message);
         return true;
       }
-      latest = new Map(report.data.accounts.map((status) => [status.account, status]));
+      latest = report.data.accounts;
       for (const listener of listeners) listener();
       return true;
     },

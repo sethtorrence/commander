@@ -13,6 +13,8 @@ export type SignInFailure =
   | 'wrong-workspace'
   | 'wrong-account'
   | 'admin-consent'
+  // A Google Workspace admin hasn't allowed Commander (admin_policy_enforced, org_internal).
+  | 'admin-blocked'
   | 'keyring-unavailable';
 
 // What the Source itself said when it refused (OAuth's `error` and `error_description`), so a

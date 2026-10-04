@@ -63,12 +63,18 @@ type _StatusMatches = [AccountSyncStatus] extends [z.infer<typeof accountSyncSta
 const _statusMatches: _StatusMatches = true;
 void _statusMatches;
 
-// Main process → Core: the Accounts to sync, sent at start-up and whenever they change.
+// Main process → Core: the Accounts to sync, sent at start-up and whenever they change. Most carry
+// one Source (`source`); an Account carrying several that share its sign-in (a Google Account's Gmail
+// and Google Calendar) lists those switched on (`sources`), each synced on its own.
+const syncAccountBase = { id: accountId, needsReconnect: z.boolean(), me: accountId.nullable().optional() };
 export const coreSyncAccounts = z.object({
   type: z.literal('sync-accounts'),
   // `me`: who the User is in the Account (their Linear user id), for Linear Todos; null until known.
   accounts: z.array(
-    z.object({ id: accountId, source, needsReconnect: z.boolean(), me: accountId.nullable().optional() }),
+    z.union([
+      z.object({ ...syncAccountBase, source }),
+      z.object({ ...syncAccountBase, sources: z.array(source).min(1) }),
+    ]),
   ),
   // Where to reach each Source (the end-to-end tests point Linear at a fake on this machine).
   endpoints: z.object({ linear: z.string().url() }),
@@ -76,11 +82,17 @@ export const coreSyncAccounts = z.object({
 export type CoreSyncAccounts = z.infer<typeof coreSyncAccounts>;
 
 // Main process → Core: what the User asked for in Settings → Accounts (or a Section asked for).
+// `source`: just one of the Sources the Account carries; otherwise all of them.
 export const coreSyncCommand = z.object({
   type: z.literal('sync-command'),
   command: z.discriminatedUnion('op', [
-    z.object({ op: z.literal('refresh'), account: accountId }),
-    z.object({ op: z.literal('set-cadence'), account: accountId, minutes: z.number().int().positive() }),
+    z.object({ op: z.literal('refresh'), account: accountId, source: source.optional() }),
+    z.object({
+      op: z.literal('set-cadence'),
+      account: accountId,
+      source: source.optional(),
+      minutes: z.number().int().positive(),
+    }),
   ]),
 });
 export type CoreSyncCommand = z.infer<typeof coreSyncCommand>;

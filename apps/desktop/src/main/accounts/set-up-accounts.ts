@@ -2,7 +2,8 @@ import { join } from 'node:path';
 import type { CoreAccessTokenReply, CoreRemoveAccountItems } from '@commander/domain';
 import { ipc } from '@commander/domain/ipc';
 import { app, BrowserWindow, ipcMain, net, powerMonitor, shell } from 'electron';
-import { linearConfig, microsoftConfig, parseBuildConfig } from '../build-config';
+import { googleConfig, linearConfig, microsoftConfig, parseBuildConfig } from '../build-config';
+import { createGoogleAccounts } from '../google/google-accounts';
 import { createLinearAccounts } from '../linear/linear-accounts';
 import { createTeamsAccounts } from '../microsoft/teams-accounts';
 import type { Secrets } from '../secrets';
@@ -55,11 +56,20 @@ export function setUpAccounts({
       config: microsoftConfig(build, process.env),
       removeItems: ({ id, name }) => core.removeItems({ source: 'teams', account: id, name }),
     }),
+    // One sign-in for both Google Sources: removing the Account removes the Items of each.
+    createGoogleAccounts({
+      ...shared,
+      config: googleConfig(build, process.env),
+      removeItems: async ({ id, name }) => {
+        await core.removeItems({ source: 'gmail', account: id, name });
+        await core.removeItems({ source: 'google-calendar', account: id, name });
+      },
+    }),
   ]);
 
   // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
   // reports a sign-in a Source refused, which may mean the Account needs reconnecting. Sources the
-  // Core can't sync yet (Teams, for now) are passed on and left alone there.
+  // Core can't sync yet (Teams, Gmail and Google Calendar, for now) are passed on and left alone there.
   const sync = createCoreSyncChannel({
     send: sendToCore,
     endpoints: { linear: linearSettings.apiUrl },

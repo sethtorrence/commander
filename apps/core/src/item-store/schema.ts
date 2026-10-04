@@ -231,19 +231,25 @@ export const linearIssueDetails = sqliteTable('linear_issue_details', {
 
 // Where each Account's sync stands, so it carries on after a restart: the Source's cursor, when it
 // last synced, any back-off, and the User's cadence. Never a token.
-export const syncState = sqliteTable('sync_state', {
-  account: text('account').primaryKey(),
-  source: text('source').$type<Source>().notNull(),
-  // Minutes between syncs; null means the Source's default.
-  cadenceMinutes: integer('cadence_minutes'),
-  // Whatever the Source's adapter needs to fetch only what changed since (opaque to the engine).
-  cursor: text('cursor', { mode: 'json' }),
-  lastSyncedAt: integer('last_synced_at'),
-  // Failures in a row, and when to try again (back-off, or the Source's Retry-After).
-  failures: integer('failures').notNull().default(0),
-  retryAt: integer('retry_at'),
-  problem: text('problem', { mode: 'json' }).$type<SyncProblem>(),
-});
+// One row per Source of each Account: an Account carrying several Sources (a Google Account's Gmail
+// and Google Calendar) keeps a cursor, cadence and back-off for each.
+export const syncState = sqliteTable(
+  'sync_state',
+  {
+    account: text('account').notNull(),
+    source: text('source').$type<Source>().notNull(),
+    // Minutes between syncs; null means the Source's default.
+    cadenceMinutes: integer('cadence_minutes'),
+    // Whatever the Source's adapter needs to fetch only what changed since (opaque to the engine).
+    cursor: text('cursor', { mode: 'json' }),
+    lastSyncedAt: integer('last_synced_at'),
+    // Failures in a row, and when to try again (back-off, or the Source's Retry-After).
+    failures: integer('failures').notNull().default(0),
+    retryAt: integer('retry_at'),
+    problem: text('problem', { mode: 'json' }).$type<SyncProblem>(),
+  },
+  (t) => [primaryKey({ columns: [t.account, t.source] })],
+);
 
 // One row per sync run: what it saved and what it cost the Source (Linear's reported complexity).
 export const syncRuns = sqliteTable(

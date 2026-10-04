@@ -3,6 +3,7 @@ import type {
   AccountsRequest,
   AccountsResponse,
   AccountsState,
+  GoogleAccountSummary,
   LinearAccountSummary,
   TeamsAccountSummary,
 } from '@commander/domain/ipc';
@@ -63,7 +64,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const source = (name: 'linear' | 'teams') => within(screen.getByTestId(`source-${name}`));
+const source = (name: 'linear' | 'teams' | 'google') => within(screen.getByTestId(`source-${name}`));
 
 describe('Settings → Accounts', () => {
   it('groups the Accounts by Source, each Source with its own Connect', async () => {
@@ -171,5 +172,101 @@ describe('Settings → Accounts', () => {
     fireEvent.click(alert.getByRole('button', { name: 'Copy link' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(url));
     expect(source('linear').queryByRole('alert')).toBeNull();
+  });
+});
+
+describe('Google in Settings → Accounts', () => {
+  const alex: GoogleAccountSummary = {
+    id: 'google:1045',
+    source: 'google',
+    name: 'Google · alex@gmail.test',
+    email: 'alex@gmail.test',
+    method: 'oauth',
+    status: 'connected',
+    user: { id: '1045', name: 'Alex Kim' },
+    sync: null,
+    sources: [
+      { source: 'gmail', granted: true, enabled: true },
+      { source: 'google-calendar', granted: false, enabled: false },
+    ],
+  };
+  const withGoogle = (oauth: boolean): AccountsState['sources'] => [
+    ...bothConfigured,
+    { source: 'google', oauth, apiKey: false },
+  ];
+  const google = () => within(screen.getByTestId('source-google'));
+
+  it('connects Google through the browser', async () => {
+    state = { accounts: [], sources: withGoogle(true) };
+    render(<AccountsPanel no="02" />);
+
+    fireEvent.click(await waitFor(() => google().getByRole('button', { name: 'Connect Google' })));
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'google',
+        method: 'oauth',
+        reconnect: undefined,
+      }),
+    );
+  });
+
+  it('hides Connect Google, saying why, in a build without the Google client', async () => {
+    state = { accounts: [], sources: withGoogle(false) };
+    render(<AccountsPanel no="02" />);
+
+    await waitFor(() => expect(google().getByText(/See “Connecting Google” in the README/)).toBeTruthy());
+    expect(google().queryByRole('button', { name: 'Connect Google' })).toBeNull();
+  });
+
+  it('lists Gmail and Google Calendar under the Account, each switchable, with Grant access for one not granted', async () => {
+    state = { accounts: [alex], sources: withGoogle(true) };
+    render(<AccountsPanel no="02" />);
+    await waitFor(() => google().getByTestId('account'));
+
+    expect(google().getByText(/Google account · Alex Kim · Signed in with Google/)).toBeTruthy();
+    const gmail = within(google().getByTestId('carried-source-gmail'));
+    const calendar = within(google().getByTestId('carried-source-google-calendar'));
+    expect(gmail.getByText('Gmail')).toBeTruthy();
+    expect(gmail.getByRole('switch', { name: 'Gmail' }).getAttribute('aria-checked')).toBe('true');
+    expect(gmail.queryByRole('button', { name: 'Grant access' })).toBeNull();
+    expect(calendar.getByText('Google Calendar')).toBeTruthy();
+    expect((calendar.getByRole('switch', { name: 'Google Calendar' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+
+    fireEvent.click(gmail.getByRole('switch', { name: 'Gmail' }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'set-source-enabled',
+        accountId: alex.id,
+        source: 'gmail',
+        enabled: false,
+      }),
+    );
+
+    fireEvent.click(calendar.getByRole('button', { name: 'Grant access' }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'google',
+        method: 'oauth',
+        reconnect: alex.id,
+      }),
+    );
+  });
+
+  it('shows a blocked Workspace plainly under Google', async () => {
+    state = { accounts: [], sources: withGoogle(true) };
+    const blocked =
+      'Your Google Workspace admin hasn’t allowed Commander. Ask them to allow it, or connect a personal account.';
+    answer = (request) =>
+      request.op === 'connect' ? { ok: false, source: 'google', error: blocked, state } : { ok: true, state };
+    render(<AccountsPanel no="02" />);
+
+    fireEvent.click(await waitFor(() => google().getByRole('button', { name: 'Connect Google' })));
+
+    await waitFor(() => expect(google().getByRole('alert').textContent).toBe(blocked));
   });
 });
