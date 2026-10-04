@@ -2,7 +2,17 @@ import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { attachmentScheme, type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
-import { app, BrowserWindow, dialog, ipcMain, powerMonitor, protocol, shell, utilityProcess } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Notification,
+  powerMonitor,
+  protocol,
+  shell,
+  utilityProcess,
+} from 'electron';
 import { setUpAccounts } from './accounts/set-up-accounts';
 import { attachmentSchemePrivileges, serveAttachment } from './attachments-protocol';
 import { createAutonomyChannels } from './autonomy-channel';
@@ -12,11 +22,13 @@ import { keepLinksInBrowser } from './external-links';
 import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
 import { createMarkdownCopyChannel } from './markdown-copy-channel';
+import { createMeetingHeadsUp } from './meeting-heads-up';
 import { setUpModels } from './models';
 import { alwaysHere, watchPresence } from './presence';
 import { revealWhenPainted } from './reveal';
 import { setUpSecretStorage } from './secret-storage';
 import type { Secrets } from './secrets';
+import { focusThroughHyprland, summonWindow } from './summon';
 import type { CommanderTray } from './tray';
 import { createUpdatesChannel } from './updates-channel';
 import { windowWebPreferences } from './window-config';
@@ -114,6 +126,20 @@ function startCore(secrets: Secrets) {
   // Update ready on return.
   // The end-to-end tests stand in for powerMonitor (their input never reaches the system).
   const monitor = process.env.COMMANDER_TEST_PRESENCE === 'here' ? alwaysHere : powerMonitor;
+  // The opt-in heads-up 2 minutes before a meeting (the Core decides when): a system notification
+  // that opens the event. The end-to-end tests only note it, never showing one on the desktop.
+  const headsUp = createMeetingHeadsUp({
+    notify: (options) => {
+      if (testHooks) return { on: () => {}, show: () => {} };
+      return Notification.isSupported() ? new Notification(options) : null;
+    },
+    open: (itemId) => {
+      if (!window || window.isDestroyed()) return;
+      summonWindow(window);
+      focusThroughHyprland();
+      window.webContents.send(ipc.openItem, { sectionId: 'calendar', itemId });
+    },
+  });
   const stopPresence = watchPresence({ monitor, send: (report) => core.postMessage(report) });
   core.on('exit', stopPresence);
   if (testHooks) {
@@ -122,6 +148,8 @@ function startCore(secrets: Secrets) {
         autonomy: autonomy.test.request,
         setOnline: accounts.setOnline,
         saveGitHubItems: accounts.saveGitHubItems,
+        meetingHeadsUps: headsUp.shown,
+        clickMeetingHeadsUp: headsUp.click,
       },
     });
   }
@@ -136,6 +164,7 @@ function startCore(secrets: Secrets) {
       console.warn('Rejected malformed message from core:', parsed.error);
       return;
     }
+    if (headsUp.handle(parsed.message)) return;
     if (parsed.message.type === 'ares-updates') {
       queued = parsed.message.queued;
       tray?.setQueued(queued);

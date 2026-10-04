@@ -96,3 +96,54 @@ describe('a Block’s text with chips', () => {
     expect(selectionIn(element)).toEqual([text.length, text.length]);
   });
 });
+
+describe('a meeting chip', () => {
+  const meeting = (target: BlockLinkTarget) => ({
+    text: '10:00–10:30 Weekly sync <with> Priya',
+    title: 'Weekly sync, 10:00–10:30 on Primary: open it in the Calendar Section',
+    project: {
+      id: 'p',
+      name: 'Longtail',
+      code: 'LT',
+      accent: 'blue',
+      order: 0,
+      archived: false,
+      createdAt: 0,
+    },
+    meeting: {
+      colour: '#33b679',
+      joinUrl: target.type === 'event' ? 'https://meet.google.com/abc-defg-hij' : null,
+      status: null,
+      struck: false,
+    },
+  });
+
+  it('is drawn as a card (calendar colour, Badge, times and title, Join), its token kept as the text', () => {
+    const element = editor();
+    renderBlockText(element, '[[event:e-1]]', meeting);
+    expect(element.textContent).toBe('[[event:e-1]]');
+    const chip = element.querySelector<HTMLElement>('.n-chip') as HTMLElement;
+    expect(chip.dataset.chip).toBe('event');
+    expect(chip.dataset.label).toBe('10:00–10:30 Weekly sync <with> Priya');
+    expect(chip.dataset.state).toBe('on');
+    expect(chip.style.getPropertyValue('--cal')).toBe('#33b679');
+    expect(chip.querySelector<HTMLElement>('.n-meet-badge')?.dataset.code).toBe('LT');
+    expect(chip.querySelector<HTMLElement>('.n-meet-join')?.dataset.join).toBe(
+      'https://meet.google.com/abc-defg-hij',
+    );
+    expect(chip.querySelector('.n-meet-note')).toBeNull();
+  });
+
+  it('is struck through with what happened when cancelled', () => {
+    const element = editor();
+    const cancelled = (target: BlockLinkTarget) => ({
+      ...meeting(target),
+      meeting: { colour: '#33b679', joinUrl: null, status: 'Cancelled', struck: true },
+    });
+    renderBlockText(element, '[[event:e-1]]', cancelled);
+    const chip = element.querySelector<HTMLElement>('.n-chip') as HTMLElement;
+    expect(chip.dataset.state).toBe('struck');
+    expect(chip.querySelector<HTMLElement>('.n-meet-note')?.dataset.note).toBe('Cancelled');
+    expect(chip.querySelector('.n-meet-join')).toBeNull();
+  });
+});

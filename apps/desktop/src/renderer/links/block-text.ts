@@ -1,4 +1,14 @@
-import { type BlockLinkTarget, blockLinksIn, blockLinkToken, type Project } from '@commander/domain';
+import {
+  type BlockLinkTarget,
+  blockLinksIn,
+  blockLinkToken,
+  type Item,
+  isEvent,
+  meetingStatus,
+  meetingStatusText,
+  meetingTimes,
+  type Project,
+} from '@commander/domain';
 import { longDate, weekday } from '../sections/notes/days';
 import { shortDay } from './link-targets';
 
@@ -67,21 +77,74 @@ export function splitLinks(text: string): TextPart[] {
 export interface ChipLabelContext {
   today: string;
   projectById(projectId: string): Project | undefined;
+  /** Calendar events, as Commander holds them (tombstones too), for meeting chips' live cards. */
+  eventById?(eventId: string): Item | undefined;
+}
+
+/** A meeting chip's live card: its calendar colour, join link and how the meeting stands. */
+export interface MeetingCard {
+  colour: string;
+  /** The online meeting's link, while the meeting is on. */
+  joinUrl: string | null;
+  /** "Cancelled", "Declined", "Moved to Thu 10:00"; null while it is on. */
+  status: string | null;
+  /** Cancelled or declined: drawn struck through. */
+  struck: boolean;
 }
 
 export interface ChipLabel {
   text: string;
   /** Its tooltip: what it is and where clicking goes. */
   title: string;
-  /** For a Project chip, to show its Badge. */
+  /** For a Project chip (or a meeting filed under one), to show its Badge. */
   project?: Project;
+  /** For a meeting chip: the rest of its card. */
+  meeting?: MeetingCard;
+}
+
+/** Where a chip is shown: the day of the Daily Note it is in, which a meeting is read from. */
+export interface ChipPlace {
+  day: string;
 }
 
 /** How chips are labelled where they are shown. */
-export type LabelChip = (target: BlockLinkTarget) => ChipLabel;
+export type LabelChip = (target: BlockLinkTarget, place?: ChipPlace) => ChipLabel;
 
-/** What a chip shows: "Thu 1 Oct", or the Project's name with its Badge. */
-export function chipLabel(target: BlockLinkTarget, { today, projectById }: ChipLabelContext): ChipLabel {
+/**
+ * What a chip shows: "Thu 1 Oct", the Project's name with its Badge, or a meeting's card ("10:00–10:30
+ * Weekly sync with Priya", calendar colour, join link, Badge, and whether it was cancelled or moved,
+ * read from the day of the note it is in).
+ */
+export function chipLabel(
+  target: BlockLinkTarget,
+  { today, projectById, eventById }: ChipLabelContext,
+  place?: ChipPlace,
+): ChipLabel {
+  if (target.type === 'event') {
+    const event = eventById?.(target.eventId);
+    if (!isEvent(event)) {
+      return {
+        text: 'A meeting',
+        title: 'A calendar event Commander doesn’t have',
+        meeting: { colour: 'transparent', joinUrl: null, status: null, struck: false },
+      };
+    }
+    const status = meetingStatus(event, place?.day ?? today);
+    const times = event.detail.allDay ? 'All day' : meetingTimes(event.detail);
+    const project = event.filing ? projectById(event.filing.projectId) : undefined;
+    const struck = status.kind === 'cancelled' || status.kind === 'declined';
+    return {
+      text: `${times} ${event.title}`,
+      title: `${event.title}, ${times} on ${event.detail.calendar.name}: open it in the Calendar Section`,
+      ...(project && { project }),
+      meeting: {
+        colour: event.detail.calendar.colour,
+        joinUrl: status.kind === 'on' ? event.detail.meetingUrl : null,
+        status: meetingStatusText(status),
+        struck,
+      },
+    };
+  }
   if (target.type === 'day') {
     const { day } = target;
     return { text: shortDay(day, today), title: `${weekday(day)} ${longDate(day)}: go to its Daily Note` };

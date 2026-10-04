@@ -628,3 +628,78 @@ describe('Ares’s suggested Todos', () => {
     await waitFor(() => expect(store.query({ kinds: ['todo'], titleContains: 'passport' })).toHaveLength(1));
   });
 });
+
+describe('meetings on the Dashboard', () => {
+  const MINUTE = 60_000;
+  function meeting(id: string, title: string, start: number, extra: Record<string, unknown> = {}) {
+    return {
+      externalId: id,
+      kind: 'event' as const,
+      title,
+      detail: {
+        kind: 'event' as const,
+        calendar: { id: 'primary', name: 'Primary', colour: '#9fe1e7' },
+        accountEmail: 'sam@example.test',
+        start: { at: start, timeZone: null, date: null },
+        end: { at: start + 30 * MINUTE, timeZone: null, date: null },
+        allDay: false,
+        location: null,
+        description: null,
+        organiser: null,
+        attendees: [],
+        myResponse: null,
+        meetingUrl: null,
+        busy: true,
+        private: false,
+        seriesId: null,
+        webUrl: null,
+        createdByCommander: null,
+        ...extra,
+      },
+    };
+  }
+
+  it('shows today’s and tomorrow’s schedule, each row opening its event; the next meeting is in Now', async () => {
+    client = dashboardIn(itemClient, accounts.client, undefined, () => NOW);
+    const tomorrow = new Date(NOW);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    store.saveFromSource({
+      source: 'google-calendar',
+      account: 'google:1',
+      items: [
+        meeting('standup', 'Standup', NOW + 12 * MINUTE),
+        meeting('declined', 'Offsite', NOW + 3 * 60 * MINUTE, { myResponse: 'declined' }),
+        meeting('review', 'Design review', tomorrow.getTime()),
+      ],
+    });
+    renderSheet();
+    await waitFor(() => expect(titles('Now')).toHaveLength(3));
+    expect(titles('Now')[0]).toBe('Standup');
+    const row = within(band('Now')).getAllByTestId('dashboard-row')[0] as HTMLElement;
+    expect(within(row).getByTestId('row-reason').textContent).toBe('Starts in 12 minutes');
+    expect(within(row).getByTestId('source-stamp').textContent).toMatch(/^CALPrimary · /);
+
+    const today = screen.getByRole('region', { name: 'Meetings · Today' });
+    expect(
+      within(today)
+        .getAllByTestId('schedule-event')
+        .map((each) => each.textContent),
+    ).toEqual([`${clockTime(new Date(NOW + 12 * MINUTE)).slice(0, 5)}Standup—`]);
+    const next = screen.getByRole('region', { name: 'Meetings · Tomorrow' });
+    expect(within(next).getAllByTestId('schedule-event')).toHaveLength(1);
+
+    const revealed: string[] = [];
+    const stop = onReveal('calendar', (itemId) => revealed.push(itemId));
+    fireEvent.click(within(next).getByTestId('schedule-event'));
+    stop();
+    expect(controls.openSection).toHaveBeenCalledWith('calendar');
+    expect(revealed).toEqual([
+      store.query({ kinds: ['event'] }).find((e) => e.title === 'Design review')?.id,
+    ]);
+
+    // A meeting can't be ticked.
+    fireEvent.click(row);
+    press('x');
+    expect(titles('Now')).toHaveLength(3);
+  });
+});

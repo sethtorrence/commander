@@ -38,7 +38,13 @@ export const ipc = {
   askForUpdate: 'ask-for-update',
   // Settings → GitHub: what each GitHub Account watches; see github-watch-messages.ts.
   githubWatch: 'github-watch',
+  // Main tells the window to show an Item where it lives (a meeting's heads-up was clicked), as an
+  // OpenItem.
+  openItem: 'open-item',
 } as const;
+
+// An Item to show in its Section: the Calendar Section and the event, for a meeting's heads-up.
+export type OpenItem = { sectionId: string; itemId: string };
 
 // What the header's window controls ask for.
 export const WINDOW_CONTROLS = ['minimise', 'toggle-maximise', 'close'] as const;

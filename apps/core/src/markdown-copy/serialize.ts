@@ -7,8 +7,10 @@
     beneath it; every other Block is a list item, nested by tabs (as Obsidian indents).
   - Block text is already Markdown (bold, italic, code, links, image embeds), so it goes in as it is,
     except: a Todo gets `[ ]` or `[x]`; a Block's own Project is added as `#LT` unless the text says it
-    already (inherited Projects are not repeated); `[[project:<id>]]` becomes `[[Project name]]`; and
-    text Markdown would read as a list, checkbox or quote is escaped, since Commander shows it as text.
+    already (inherited Projects are not repeated); `[[project:<id>]]` becomes `[[Project name]]`; a
+    calendar event's `[[event:<id>]]` (a meeting chip) becomes the meeting's line, "10:00–10:30 Weekly
+    sync with Priya" (struck through when cancelled); and text Markdown would read as a list, checkbox
+    or quote is escaped, since Commander shows it as text.
 */
 import { blockLinkToken, blockTags, labelBlockLinks } from '@commander/domain';
 
@@ -26,11 +28,13 @@ export interface CopyBlock {
   todo: 'open' | 'done' | null;
 }
 
-/** How Projects read in the copy: undefined for one that isn't known. */
+/** How Projects (and meetings) read in the copy: undefined for one that isn't known. */
 export interface CopyProjects {
   code(projectId: string): string | undefined;
   /** The Project's name; a merged Project's is the one it went into. */
   name(projectId: string): string | undefined;
+  /** A calendar event as one line: "10:00–10:30 Weekly sync with Priya". */
+  meeting?(eventId: string): string | undefined;
 }
 
 // A heading Block, as the Notes Section reads one (`#` straight before letters is a Project code).
@@ -56,6 +60,7 @@ const wikiSafe = (name: string) =>
 function textOf(block: CopyBlock, projects: CopyProjects): string {
   let text = labelBlockLinks(block.text, (target) => {
     if (target.type === 'day') return blockLinkToken(target);
+    if (target.type === 'event') return projects.meeting?.(target.eventId) ?? 'a meeting';
     const name = projects.name(target.projectId);
     const safe = name === undefined ? '' : wikiSafe(name);
     return safe ? `[[${safe}]]` : blockLinkToken(target);

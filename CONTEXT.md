@@ -118,6 +118,10 @@ _Avoid_: Journal, entry, page
 One line of a Daily Note; Blocks nest under one another, and each belongs to a Project (inherited from its parent unless set) and can become a Todo.
 _Avoid_: Line, paragraph, bullet, node
 
+**Meeting chip**:
+A Block in today's Daily Note, under its top-level Meetings Block, that stands for one of today's calendar events and shows it as a compact live card; the meeting's notes go under it, and it takes the event's Project.
+_Avoid_: Meeting block, event card, meeting note
+
 **Daily template**:
 The Blocks each new Daily Note starts with, edited in Settings; a new day gets copies of them, not links to them.
 _Avoid_: Default note, skeleton, boilerplate

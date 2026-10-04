@@ -123,6 +123,15 @@ export const eventQuery = z.object({
 export type EventQuery = z.input<typeof eventQuery>;
 
 // ---------------------------------------------------------------------------------------------
+// Settings → Calendar
+
+// `headsUp`: a system notification 2 minutes before each meeting (#128). The one interruption
+// Commander makes (decision #23), so it is off until the User turns it on.
+export const calendarSettings = z.object({ headsUp: z.boolean() });
+export type CalendarSettings = z.infer<typeof calendarSettings>;
+export const defaultCalendarSettings: CalendarSettings = { headsUp: false };
+
+// ---------------------------------------------------------------------------------------------
 // Rule fields: one set of readers, registered under each calendar Source's name. Each reads the events
 // of every calendar Source alike, so a calendar Rule written once files Google and Microsoft events
 // both: people and titles are the same wherever an event comes from, and calendar and Account ids are

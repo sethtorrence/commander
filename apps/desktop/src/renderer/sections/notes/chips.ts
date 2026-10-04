@@ -19,9 +19,57 @@ const escapeHtml = (text: string) =>
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
   );
 
+const attributesHtml = (attributes: [string, string][]) =>
+  attributes.map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(' ');
+
+/**
+ * A meeting chip (#128): the event's compact live card, drawn by CSS from empty parts (links.css), so
+ * the chip's text is still only its token. The calendar colour, the Badge of the event's Project, the
+ * times and title, Join (the online meeting's link, while the meeting is on) and what happened to it
+ * (struck through when cancelled or declined, "Moved to Thu 10:00").
+ */
+function meetingHtml(token: string, shown: ReturnType<LabelChip>): string {
+  const card = shown.meeting;
+  let style = `--cal: ${card?.colour ?? 'transparent'};`;
+  if (shown.project) {
+    const ink = accentTextColour(shown.project.accent);
+    style += ` --accent: ${accentColour(shown.project.accent)};${ink ? ` --on-chip: ${ink};` : ''}`;
+  }
+  const state = card?.struck ? 'struck' : card?.status ? 'moved' : 'on';
+  const html = attributesHtml([
+    ['class', 'n-chip n-meet'],
+    ['contenteditable', 'false'],
+    ['role', 'link'],
+    ['data-chip', 'event'],
+    ['data-token', token],
+    ['data-label', shown.text],
+    ['data-state', state],
+    ['aria-label', card?.status ? `${shown.text} (${card.status})` : shown.text],
+    ['title', shown.title],
+    ['style', style],
+  ]);
+  const parts = [
+    `<span class="n-chip-raw">${escapeHtml(token)}</span>`,
+    '<span class="n-meet-cal"></span>',
+    shown.project
+      ? `<span class="n-meet-badge" ${attributesHtml([['data-code', shown.project.code]])}></span>`
+      : '',
+    `<span class="n-meet-label" ${attributesHtml([['data-label', shown.text]])}></span>`,
+    card?.joinUrl
+      ? `<span class="n-meet-join" ${attributesHtml([
+          ['data-join', card.joinUrl],
+          ['title', `Join the meeting: ${card.joinUrl}`],
+        ])}></span>`
+      : '',
+    card?.status ? `<span class="n-meet-note" ${attributesHtml([['data-note', card.status]])}></span>` : '',
+  ];
+  return `<span ${html}>${parts.join('')}</span>`;
+}
+
 /** The markup for one chip: its token, hidden, and its label (data-label) drawn by CSS. */
 export function chipHtml(token: string, target: BlockLinkTarget, label: LabelChip): string {
   const shown = label(target);
+  if (target.type === 'event') return meetingHtml(token, shown);
   const attributes: [string, string][] = [
     ['class', 'n-chip'],
     ['contenteditable', 'false'],
@@ -38,8 +86,7 @@ export function chipHtml(token: string, target: BlockLinkTarget, label: LabelChi
     const style = `--accent: ${accentColour(shown.project.accent)};${ink ? ` --on-chip: ${ink};` : ''}`;
     attributes.push(['style', style]);
   }
-  const html = attributes.map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(' ');
-  return `<span ${html}><span class="n-chip-raw">${escapeHtml(token)}</span></span>`;
+  return `<span ${attributesHtml(attributes)}><span class="n-chip-raw">${escapeHtml(token)}</span></span>`;
 }
 
 /** The chip an event happened on, if any. */

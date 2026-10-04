@@ -1,4 +1,4 @@
-import type { Project } from '@commander/domain';
+import type { EventDetail, Item, Project } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { chipLabel, insertLink, linkQueryAt, removeLinkAt, splitLinks } from './block-text';
 
@@ -88,5 +88,81 @@ describe('a chip’s label', () => {
       text: 'Unknown Project',
       title: 'This Project no longer exists',
     });
+  });
+});
+
+describe('a meeting chip’s label: the event’s live card', () => {
+  const at = (hour: number, minute = 0, date = 3) => new Date(2026, 9, date, hour, minute).getTime();
+  const sync: Item = {
+    id: 'e-sync',
+    kind: 'event',
+    source: 'google-calendar',
+    account: 'google:1',
+    externalId: 'sync',
+    title: 'Weekly sync with Priya',
+    people: [],
+    filing: { projectId: P, filedBy: 'user' },
+    status: 'open',
+    createdAt: 0,
+    updatedAt: 0,
+    deletedAt: null,
+    detail: {
+      kind: 'event',
+      calendar: { id: 'primary', name: 'Primary', colour: '#33b679' },
+      accountEmail: null,
+      start: { at: at(10), timeZone: null, date: null },
+      end: { at: at(10, 30), timeZone: null, date: null },
+      allDay: false,
+      location: null,
+      description: null,
+      organiser: null,
+      attendees: [],
+      myResponse: null,
+      meetingUrl: 'https://meet.google.com/abc-defg-hij',
+      busy: true,
+      private: false,
+      seriesId: null,
+      webUrl: null,
+      createdByCommander: null,
+    },
+  };
+  const events = new Map([[sync.id, sync]]);
+  const context = {
+    today: '2026-10-03',
+    projectById: (id: string) => (id === P ? longtail : undefined),
+    eventById: (id: string) => events.get(id),
+  };
+  const target = { type: 'event' as const, eventId: sync.id };
+
+  it('shows its times, title, calendar colour, meeting link and Badge', () => {
+    expect(chipLabel(target, context)).toEqual({
+      text: '10:00–10:30 Weekly sync with Priya',
+      title: 'Weekly sync with Priya, 10:00–10:30 on Primary: open it in the Calendar Section',
+      project: longtail,
+      meeting: {
+        colour: '#33b679',
+        joinUrl: 'https://meet.google.com/abc-defg-hij',
+        status: null,
+        struck: false,
+      },
+    });
+  });
+
+  it('says when it was cancelled, declined or moved, from the day of its note', () => {
+    events.set(sync.id, { ...sync, deletedAt: at(9) });
+    expect(chipLabel(target, context).meeting).toMatchObject({
+      status: 'Cancelled',
+      struck: true,
+      joinUrl: null,
+    });
+    const moved = {
+      ...sync,
+      detail: { ...(sync.detail as EventDetail), start: { at: at(10, 0, 8), timeZone: null, date: null } },
+    };
+    events.set(sync.id, moved);
+    expect(chipLabel(target, context).meeting).toMatchObject({ status: 'Moved to Thu 10:00', struck: false });
+    expect(chipLabel(target, context, { day: '2026-10-08' }).meeting?.status).toBeNull();
+    events.delete(sync.id);
+    expect(chipLabel(target, context)).toMatchObject({ text: 'A meeting', meeting: { struck: false } });
   });
 });

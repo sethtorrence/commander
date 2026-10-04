@@ -24,12 +24,15 @@ function Spec({
   today,
   outline,
   suggested,
+  meetings,
 }: {
   day: string;
   today: boolean;
   outline: Outline;
   /** How many of Ares's suggestions wait in the margin. */
   suggested: number;
+  /** How many meetings its chips list. */
+  meetings: number;
 }) {
   const date = dateOf(day);
   const todos = [...outline.values()].filter((block) => block.todo);
@@ -37,7 +40,7 @@ function Spec({
   // Todos Ares added for its Blocks, and his suggestions still waiting.
   const fromAres = todos.filter((block) => block.todo?.ares).length + suggested;
   const rows: [string, string, string?][] = [
-    ['Meetings', '00'],
+    ['Meetings', pad(meetings)],
     today ? ['Open Todos', pad(todos.length - done)] : ['Todos done', `${done}/${todos.length}`],
     ['Blocks', pad(outline.size, 3)],
   ];
@@ -115,7 +118,7 @@ function Legend() {
       <Key keys={<Kbd>[ ]</Kbd>}>start a line, get a Todo</Key>
       <Key keys={<Kbd>#LT</Kbd>}>file it under a Project</Key>
       <Key keys={<Kbd>Ctrl ↵</Kbd>}>make a Todo, tick it</Key>
-      <Key keys={<Kbd>[[</Kbd>}>link a day or a Project</Key>
+      <Key keys={<Kbd>[[</Kbd>}>link a day, Project or meeting</Key>
       <Key keys={<Kbd>Ctrl .</Kbd>}>fold, unfold</Key>
       <Key
         keys={
@@ -144,6 +147,8 @@ export interface DaySheetProps {
   mentions?: readonly Mention[];
   /** How chips are labelled. */
   label?: LabelChip;
+  /** How many meetings its meeting chips list (#128). */
+  meetings?: number;
   onOpenMention?(mention: Mention): void;
   /** Ares's suggestions for its Blocks, as cards in the margin. */
   margin?: DayMargin;
@@ -205,6 +210,7 @@ export function DaySheet({
   projects,
   mentions,
   label,
+  meetings = 0,
   onOpenMention,
   margin,
 }: DaySheetProps) {
@@ -219,7 +225,13 @@ export function DaySheet({
       data-testid="daily-note"
       aria-label={`${weekday(day)} ${longDate(day)}`}
     >
-      <Spec day={day} today={isToday} outline={outline} suggested={margin?.suggestions.length ?? 0} />
+      <Spec
+        day={day}
+        today={isToday}
+        outline={outline}
+        suggested={margin?.suggestions.length ?? 0}
+        meetings={meetings}
+      />
       <Sheet className="n-sheet">
         <SheetStrip
           eyebrow={dayLabel(day, today)}

@@ -136,6 +136,7 @@ export function aresRanker(ranking: DashboardRanking | null, fallback: Ranker = 
     if (!ranking || rankingOrigin(ranking, context.now).by !== 'ares') return fallback(items, context);
     const entries = new Map(ranking.entries.map((entry) => [entry.itemId, entry]));
     const candidates = dashboardCandidates(items);
+    const byId = new Map(candidates.map((item) => [item.id, item]));
     const ruled = new Map(fallback(candidates, context).map((found) => [found.itemId, found]));
     const his: AresRankingEntry[] = [];
     const theirs: Ranking[] = [];
@@ -146,13 +147,20 @@ export function aresRanker(ranking: DashboardRanking | null, fallback: Ranker = 
         if (entry.band !== 'none') his.push(entry);
       } else if (rules) theirs.push(rules);
     }
+    // A meeting about to start (placed by the rules: Ares isn't given events) can't wait: it goes first.
+    const meetings = theirs.filter((found) => byId.get(found.itemId)?.kind === 'event');
+    const others = theirs.filter((found) => byId.get(found.itemId)?.kind !== 'event');
     return dashboardBands.flatMap((band: DashboardBand) =>
       [
+        ...meetings
+          .filter((found) => found.band === band)
+          .sort((a, b) => a.rank - b.rank)
+          .map(({ itemId, reason }) => ({ itemId, reason })),
         ...his
           .filter((entry) => entry.band === band)
           .sort((a, b) => a.rank - b.rank)
           .map(({ itemId, reason }) => ({ itemId, reason })),
-        ...theirs
+        ...others
           .filter((found) => found.band === band)
           .sort((a, b) => a.rank - b.rank)
           .map(({ itemId, reason }) => ({ itemId, reason })),

@@ -217,7 +217,7 @@ export function linearSendIn(deps: LinearSendDeps) {
       const title = !item
         ? ''
         : item.detail?.kind === 'block'
-          ? issueTitleFrom(item.detail.text, deps.projects())
+          ? issueTitleFrom(item.detail.text, deps.projects(), (id) => deps.readItem(id)?.title)
           : item.title;
       const project = item ? (item.filing?.projectId ?? null) : projectId;
       return {

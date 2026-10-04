@@ -344,3 +344,66 @@ describe('the Project page', () => {
     stop();
   });
 });
+
+describe('the Project page’s schedule', () => {
+  it('lists the Project’s events for the next 7 days, each opening in the Calendar Section', async () => {
+    const HOUR = 3_600_000;
+    const today = new Date();
+    const at = (days: number, hour: number) =>
+      new Date(today.getFullYear(), today.getMonth(), today.getDate() + days, hour).getTime();
+    const event = (id: string, title: string, when: number) => ({
+      externalId: id,
+      kind: 'event' as const,
+      title,
+      detail: {
+        kind: 'event' as const,
+        calendar: { id: 'primary', name: 'Primary', colour: '#9fe1e7' },
+        accountEmail: null,
+        start: { at: when, timeZone: null, date: null },
+        end: { at: when + HOUR, timeZone: null, date: null },
+        allDay: false,
+        location: null,
+        description: null,
+        organiser: null,
+        attendees: [],
+        myResponse: null,
+        meetingUrl: null,
+        busy: true,
+        private: false,
+        seriesId: null,
+        webUrl: null,
+        createdByCommander: null,
+      },
+    });
+    const { created } = store.saveFromSource({
+      source: 'google-calendar',
+      account: 'google:1',
+      items: [
+        event('review', 'Longtail review', at(3, 15)),
+        event('later', 'Longtail retro', at(9, 10)),
+        event('other', 'Dentist', at(3, 9)),
+      ],
+    });
+    for (const itemId of created.slice(0, 2))
+      store.record(
+        { type: 'update', itemId, changes: { filing: { projectId: lt.id, filedBy: 'user' } } },
+        { by: { kind: 'user' } },
+      );
+    const { onOpenSection } = await renderLoadedPage();
+
+    const schedule = await screen.findByRole('region', { name: 'Longtail: schedule' });
+    await waitFor(() =>
+      expect(
+        within(schedule)
+          .getAllByTestId('schedule-event')
+          .map((row) => row.textContent),
+      ).toEqual(['15:00Longtail reviewLT']),
+    );
+    const revealed: string[] = [];
+    const stop = onReveal('calendar', (itemId) => revealed.push(itemId));
+    fireEvent.click(within(schedule).getByTestId('schedule-event'));
+    stop();
+    expect(onOpenSection).toHaveBeenCalledWith('calendar');
+    expect(revealed).toEqual([created[0]]);
+  });
+});

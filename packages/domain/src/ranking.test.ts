@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { EventDetail } from './calendar';
 import type { Item } from './items';
 import type { LinearIssueDetail, LinearUser } from './linear';
 import { type RankingContext, rankByBandRules } from './ranking';
@@ -88,6 +89,38 @@ function issue(
       ...detail,
     },
     ...rest,
+  };
+}
+
+const MINUTE = 60_000;
+
+function meeting(id: string, start: number, minutes: number, detail: Partial<EventDetail> = {}): Item {
+  return {
+    ...base(id, `Meeting ${id}`),
+    kind: 'event',
+    source: 'google-calendar',
+    account: 'google:1',
+    externalId: id,
+    detail: {
+      kind: 'event',
+      calendar: { id: 'primary', name: 'Primary', colour: '#9fe1e7' },
+      accountEmail: 'sam@example.test',
+      start: { at: start, timeZone: null, date: null },
+      end: { at: start + minutes * MINUTE, timeZone: null, date: null },
+      allDay: false,
+      location: null,
+      description: null,
+      organiser: null,
+      attendees: [],
+      myResponse: 'accepted',
+      meetingUrl: null,
+      busy: true,
+      private: false,
+      seriesId: null,
+      webUrl: null,
+      createdByCommander: null,
+      ...detail,
+    },
   };
 }
 
@@ -280,5 +313,49 @@ describe('the clock', () => {
   it('drops an FYI issue once its change is more than a day old', () => {
     const changed = issue('ENG-17', { creator: ME, assignee: PRIYA, updatedAt: NOW - HOUR });
     expect(rank([changed], { ...context, now: NOW + DAY })).toEqual([]);
+  });
+});
+
+describe('meetings', () => {
+  // NOW is 11:40.
+  it('the next meeting enters Now 15 minutes before it starts, saying when', () => {
+    const at = (offset: number) => ({ ...context, now: NOW + offset * MINUTE });
+    const standup = meeting('standup', NOW + 12 * MINUTE, 30);
+    expect(rank([standup])).toEqual([
+      { itemId: 'standup', band: 'now', reason: 'Starts in 12 minutes', rank: 1 },
+    ]);
+    expect(rank([standup], at(-4))).toEqual([]);
+    expect(rank([standup], at(-3))[0]?.reason).toBe('Starts in 15 minutes');
+    expect(rank([standup], at(11))[0]?.reason).toBe('Starts in 1 minute');
+    expect(rank([standup], at(12))[0]?.reason).toBe('Started just now · ends 12:22');
+  });
+
+  it('stays in Now until it ends, then leaves', () => {
+    const standup = meeting('standup', NOW - 10 * MINUTE, 30);
+    expect(rank([standup])[0]).toMatchObject({ band: 'now', reason: 'Started 10 minutes ago · ends 12:00' });
+    expect(rank([standup], { ...context, now: NOW + 20 * MINUTE })).toEqual([]);
+  });
+
+  it('other meetings stay in the schedule, not the feed', () => {
+    const later = meeting('later', NOW + 2 * 60 * MINUTE, 30);
+    const tomorrow = meeting('tomorrow', NOW + DAY, 30);
+    expect(rank([later, tomorrow])).toEqual([]);
+  });
+
+  it('leaves out what gets no meeting chip: declined, all-day, free, cancelled', () => {
+    const soon = NOW + 5 * MINUTE;
+    expect(
+      rank([
+        meeting('declined', soon, 30, { myResponse: 'declined' }),
+        meeting('allday', soon, 30, { allDay: true }),
+        meeting('free', soon, 30, { busy: false }),
+        { ...meeting('cancelled', soon, 30), deletedAt: NOW - HOUR },
+      ]),
+    ).toEqual([]);
+  });
+
+  it('come first in Now: a meeting is about to start, the rest can wait a moment', () => {
+    const items = [todo('overdue', { dueOn: '2026-09-30' }), meeting('sync', NOW + 5 * MINUTE, 30)];
+    expect(rank(items).map(({ itemId }) => itemId)).toEqual(['sync', 'overdue']);
   });
 });

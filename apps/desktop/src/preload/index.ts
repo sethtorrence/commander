@@ -25,6 +25,7 @@ import {
   type Diagnostics,
   ipc,
   type ModelKeyStatus,
+  type OpenItem,
   type SaveModelKeyResult,
   type SecretStorageStatus,
   type WindowControl,
@@ -86,6 +87,14 @@ const commander = {
     ipcRenderer.on(ipc.askForUpdate, handler);
     return () => {
       ipcRenderer.off(ipc.askForUpdate, handler);
+    };
+  },
+  // A meeting's heads-up was clicked: the window shows the event in the Calendar Section.
+  onOpenItem(listener: (target: OpenItem) => void) {
+    const handler = (_event: unknown, target: OpenItem) => listener(target);
+    ipcRenderer.on(ipc.openItem, handler);
+    return () => {
+      ipcRenderer.off(ipc.openItem, handler);
     };
   },
   // Settings → Notes → Markdown copy folder. The folder comes only from the system picker, which the

@@ -2,6 +2,8 @@ import type { ActivityEntry, CoreMessage, DashboardState, Item } from '@commande
 import type { AccountSummary } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import type { AutonomyClient } from '../ares/activity';
+import { addDays, dayKey, dayStart } from '../calendar/agenda';
+import { localTimeZone } from '../calendar/ScheduleCard';
 import type { LinearAccountsClient } from '../linear/linear-issues';
 import type { Clears } from './feed';
 import { type SuggestedTodo, suggestedTodoOf } from './suggested-todos';
@@ -15,7 +17,10 @@ import { type SuggestedTodo, suggestedTodoOf } from './suggested-todos';
 */
 
 export interface DashboardClient {
-  /** The open Items the Dashboard ranks: open Todos and open Linear issues, not deleted. */
+  /**
+   * The open Items the Dashboard ranks: open Todos and open Linear issues, not deleted, and today's and
+   * tomorrow's events (its schedule; the next meeting is ranked into Now).
+   */
   items(): Promise<Item[]>;
   /** The Linear Accounts, each with who the User is there (for "assigned to me") and its syncing. */
   accounts: LinearAccountsClient;
@@ -33,7 +38,10 @@ export interface DashboardClient {
   suggestions(): Promise<{ item: Item; suggestion: SuggestedTodo }[]>;
   /** Adds a suggested Todo (accepts it, through the gate) or dismisses it. */
   settle(proposalId: number, op: 'accept' | 'dismiss'): Promise<void>;
-  /** Hears when Ares ranked again, or did or suggested something. Returns the function that stops it. */
+  /**
+   * Hears when Ares ranked again, or did or suggested something, or today's meetings changed. Returns
+   * the function that stops it.
+   */
   onAresChange(listener: () => void): () => void;
 }
 
@@ -50,6 +58,7 @@ export function dashboardIn(
   itemStore: ItemStoreClient,
   accounts: LinearAccountsClient,
   ares?: DashboardAres,
+  clock: () => number = Date.now,
 ): DashboardClient {
   return {
     state: () => itemStore({ op: 'dashboard' }),
@@ -73,16 +82,27 @@ export function dashboardIn(
     onAresChange(listener) {
       if (!ares) return () => {};
       return ares.onCoreMessage((message) => {
-        if (message.type === 'dashboard-ranked' || message.type === 'ares-activity') listener();
+        // Today's meetings changed (their chips did): the schedule and the next meeting follow.
+        if (
+          message.type === 'dashboard-ranked' ||
+          message.type === 'ares-activity' ||
+          message.type === 'meeting-chips'
+        )
+          listener();
       });
     },
 
     async items() {
-      const [todos, issues] = await Promise.all([
+      const timeZone = localTimeZone();
+      const today = dayKey(clock(), timeZone);
+      const from = dayStart(today, timeZone);
+      const to = dayStart(addDays(today, 2), timeZone);
+      const [todos, issues, events] = await Promise.all([
         itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
+        itemStore({ op: 'events', query: { from, to, limit: MOST } }),
       ]);
-      return [...todos, ...issues];
+      return [...todos, ...issues, ...events];
     },
 
     accounts,

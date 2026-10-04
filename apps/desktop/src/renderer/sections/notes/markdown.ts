@@ -211,7 +211,11 @@ const escapeHtml = (text: string) =>
 
 // Without labels (the Markdown tests, say), a chip shows its token's target as it is.
 const plainLabel: LabelChip = (target) =>
-  target.type === 'day' ? { text: target.day, title: target.day } : { text: 'Project', title: 'A Project' };
+  target.type === 'day'
+    ? { text: target.day, title: target.day }
+    : target.type === 'event'
+      ? { text: 'A meeting', title: 'A calendar event' }
+      : { text: 'Project', title: 'A Project' };
 
 function spansHtml(spans: Span[], label: LabelChip): string {
   return spans

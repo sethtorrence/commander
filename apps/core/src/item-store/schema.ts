@@ -632,3 +632,32 @@ export const calendars = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.account, t.calendarId] })],
 );
+
+// Meeting chips (#128): the chip each of today's meetings got in that day's Daily Note, so no event
+// ever gets a second one there (re-opening, restarting or re-syncing adds nothing), even after the
+// User deleted it. A chip the Core removed itself (an event moved away, with nothing under its chip)
+// loses its row, so the event gets one again if it comes back to the day.
+export const meetingChips = sqliteTable(
+  'meeting_chips',
+  {
+    dailyNoteId: text('daily_note_id')
+      .notNull()
+      .references(() => items.id),
+    eventId: text('event_id')
+      .notNull()
+      .references(() => items.id),
+    blockId: text('block_id')
+      .notNull()
+      .references(() => items.id),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.dailyNoteId, t.eventId] }), index('meeting_chips_block').on(t.blockId)],
+);
+
+// Settings → Calendar, in a single row: whether the User asked for a system notification 2 minutes
+// before each meeting (#128, decision #23: the one interruption, off until they turn it on).
+export const calendarSettings = sqliteTable('calendar_settings', {
+  id: integer('id').primaryKey(),
+  headsUp: integer('heads_up', { mode: 'boolean' }).notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

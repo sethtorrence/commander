@@ -205,3 +205,43 @@ describe('how a row is labelled', () => {
     expect(at(issue('ENG-5'), 'fyi')).toEqual(['3H', 'Changed']);
   });
 });
+
+describe('a meeting on the Dashboard', () => {
+  const start = NOW + 12 * 60_000;
+  const sync: Item = {
+    ...todo('sync'),
+    kind: 'event',
+    source: 'google-calendar',
+    account: 'google:1',
+    title: 'Weekly sync',
+    detail: {
+      kind: 'event',
+      calendar: { id: 'c', name: 'Titanlink', colour: '#33b679' },
+      accountEmail: null,
+      start: { at: start, timeZone: null, date: null },
+      end: { at: start + 30 * 60_000, timeZone: null, date: null },
+      allDay: false,
+      location: null,
+      description: null,
+      organiser: null,
+      attendees: [],
+      myResponse: null,
+      meetingUrl: null,
+      busy: true,
+      private: false,
+      seriesId: null,
+      webUrl: null,
+      createdByCommander: null,
+    },
+  };
+  const row = { item: sync, band: 'now' as const, reason: '', rank: 1, done: false };
+
+  it('is stamped CAL with its calendar', () => {
+    expect(sourceTag(sync)).toEqual({ stamp: 'CAL', text: 'Titanlink · 11:52–12:22' });
+  });
+
+  it('says when it starts, then when it ends', () => {
+    expect(rowMeta(row, NOW)).toEqual(['12M', 'Starts']);
+    expect(rowMeta(row, start + 60_000)).toEqual(['Now', 'Ends 12:22']);
+  });
+});

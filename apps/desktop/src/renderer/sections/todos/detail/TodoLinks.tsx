@@ -1,9 +1,13 @@
+import { labelBlockLinks } from '@commander/domain';
+import { useChipLabel } from '../../../links/use-chip-label';
 import { goneNote, kindTag, linkLabel } from '../links';
 import type { TodoLink } from '../todos';
 import { KindTag, PaneEmpty, PanePart } from './parts';
 
 /** The Todo's Links both ways (.rel): each one opens the Item at its other end. */
 export function TodoLinks({ links, onOpen }: { links: TodoLink[]; onOpen: (link: TodoLink) => void }) {
+  // A Block's title keeps its `[[` tokens (a meeting chip's is one): they read as their chips do.
+  const label = useChipLabel();
   return (
     <PanePart label="Links" count={links.length}>
       {links.length ? (
@@ -23,7 +27,7 @@ export function TodoLinks({ links, onOpen }: { links: TodoLink[]; onOpen: (link:
                   {linkLabel(link)}
                 </span>
                 <span className={gone ? 'text-faint line-through decoration-1' : undefined}>
-                  {link.other.title}
+                  {labelBlockLinks(link.other.title, (target) => label(target).text)}
                 </span>
                 {gone && <span className="ml-1.5 text-note text-faint">{gone}</span>}
               </span>

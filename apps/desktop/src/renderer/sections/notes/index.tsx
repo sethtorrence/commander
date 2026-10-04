@@ -1,6 +1,14 @@
 import './notes.css';
 import './formatting.css';
-import type { BlockLinkTarget, DailyNoteProjects, Filing } from '@commander/domain';
+import {
+  type BlockLinkTarget,
+  blockLinksIn,
+  type DailyNoteProjects,
+  type Filing,
+  type Item,
+  meetingChipEventId,
+  meetingStatus,
+} from '@commander/domain';
 import { DimensionLine, toast } from '@commander/ui';
 import {
   useCallback,
@@ -16,6 +24,7 @@ import { isoWeek } from '../../frame/calendar';
 import { requestReveal, useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { itemChangesFromCore } from '../../item-store/changes';
+import { useEvents } from '../../links/use-events';
 import { useDayMentions } from '../../links/use-mentions';
 import { useCommands } from '../../palette/commands';
 import { BadgePicker } from '../../projects/BadgePicker';
@@ -24,7 +33,7 @@ import { useProjects } from '../../projects/context';
 import type { ProjectFilter } from '../../projects/filter';
 import { useShortcuts } from '../../shortcuts/react';
 import { useSendToLinear } from '../linear/SendToLinear';
-import { type SectionDefinition, useHeaderSlot, useSection } from '../section';
+import { type SectionDefinition, useHeaderSlot, useOpenSection, useSection } from '../section';
 import { BlockIssuesContext, useBlockIssues } from './BlockLinear';
 import { useOutlineLinks } from './BlockLinks';
 import { effectiveFilings, filterView, noteCounts } from './block-projects';
@@ -42,6 +51,34 @@ const onAresActivity = (listener: () => void) =>
   window.commander.onCoreMessage((message) => {
     if (message.type === 'ares-activity') listener();
   });
+
+// Word from the Core that it changed today's meeting chips (#128).
+const onMeetingChips = (listener: () => void) =>
+  window.commander.onCoreMessage((message) => {
+    if (message.type === 'meeting-chips') listener();
+  });
+
+// How many meetings a day's note lists: its meeting chips, less those cancelled, declined or moved
+// away (an event not read yet counts).
+function meetingsIn(day: DayState, events: ReadonlyMap<string, Item>): number {
+  let count = 0;
+  for (const block of day.outline.values()) {
+    const eventId = meetingChipEventId(block.text);
+    if (!eventId) continue;
+    const event = events.get(eventId);
+    if (!event || meetingStatus(event, day.day).kind === 'on') count += 1;
+  }
+  return count;
+}
+
+// The calendar events the days on screen link to (meeting chips and other `[[event:]]` links).
+function linkedEventIds(days: readonly DayState[]): string[] {
+  const ids = new Set<string>();
+  for (const day of days)
+    for (const block of day.outline.values())
+      for (const { target } of blockLinksIn(block.text)) if (target.type === 'event') ids.add(target.eventId);
+  return [...ids];
+}
 
 // How far below the window's top a day's sheet sits when the stream scrolls to it.
 const bodyTop = () =>
@@ -257,7 +294,13 @@ function useBlockPicker(notebook: Notebook) {
     <BadgePicker
       target={{ id: target.block.id, title: target.block.text, filing: target.filing }}
       anchor={target.anchor}
-      clearLabel={target.block.parentId ? 'Follow its parent' : 'Unfiled'}
+      clearLabel={
+        meetingChipEventId(target.block.text)
+          ? 'Follow its meeting'
+          : target.block.parentId
+            ? 'Follow its parent'
+            : 'Unfiled'
+      }
       onClose={close}
       onPick={(projectId) => {
         setTarget(null);
@@ -345,6 +388,27 @@ function NotesSection() {
       highlightBlock(withParents(notebook.snapshot(), itemId));
     else requestAnimationFrame(() => scrollToDay(day));
   });
+  // The Core changed today's meeting chips (a sync, today's note made): shown at once, unless the User
+  // is writing in the stream, when they show as soon as the caret leaves it, so no typing is lost.
+  const chipsWaiting = useRef(false);
+  useEffect(() => {
+    const element = stream.current;
+    const stopListening = onMeetingChips(() => {
+      if (!shown.current) return;
+      if (element?.contains(document.activeElement)) chipsWaiting.current = true;
+      else void notebook.refresh();
+    });
+    const onLeave = (event: FocusEvent) => {
+      if (!chipsWaiting.current || element?.contains(event.relatedTarget as Node | null)) return;
+      chipsWaiting.current = false;
+      void notebook.refresh();
+    };
+    element?.addEventListener('focusout', onLeave);
+    return () => {
+      stopListening();
+      element?.removeEventListener('focusout', onLeave);
+    };
+  }, [notebook]);
   // Ares's suggestions for Blocks, in the margin; and what he adds (a Todo for a Block) shows at once.
   const margin = useMarginSuggestions(window.commander.autonomy, onAresActivity, active);
   useEffect(
@@ -368,19 +432,33 @@ function NotesSection() {
   useEffect(() => window.commander.onSaveBeforeQuit?.(() => notebook.flush()), [notebook]);
 
   // Following a `[[` chip: a day comes on screen (a day ahead too, blank) and is scrolled to; a
-  // Project opens its page.
+  // Project opens its page; a meeting opens its event in the Calendar Section.
   const { openPage } = useProjects();
+  const openSection = useOpenSection();
   const follow = useCallback(
     async (target: BlockLinkTarget) => {
       if (target.type === 'project') return openPage?.(target.projectId);
+      if (target.type === 'event') {
+        requestReveal('calendar', target.eventId);
+        openSection('calendar');
+        return;
+      }
       await notebook.showDay(target.day);
       requestAnimationFrame(() => scrollToDay(target.day));
     },
-    [notebook, openPage],
+    [notebook, openPage, openSection],
   );
+  // The events behind meeting chips and event links, read live, and those the `[[` picker offers.
+  const linkedEvents = useMemo(() => linkedEventIds(state.days), [state.days]);
+  const events = useEvents(window.commander.itemStore, linkedEvents, {
+    changes: itemChangesFromCore,
+    meetingChips: onMeetingChips,
+    active,
+  });
   const links = useOutlineLinks(
     today,
     useCallback((target: BlockLinkTarget) => void follow(target), [follow]),
+    { events },
   );
 
   // The caret goes where the Notebook says, once the Block is on screen.
@@ -525,6 +603,7 @@ function NotesSection() {
                 projects={noteFilter.views.get(day.day)}
                 mentions={mentions.get(day.day)}
                 label={links.label}
+                meetings={meetingsIn(day, events.byId)}
                 onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
                 margin={marginOf(day.outline)}
               />

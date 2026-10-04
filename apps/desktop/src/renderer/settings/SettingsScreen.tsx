@@ -16,6 +16,7 @@ import { TeamsSettings } from '../sections/teams/TeamsSettings';
 import { AccountsPanel } from './AccountsPanel';
 import { AutonomyPanel } from './AutonomyPanel';
 import { AresSettings } from './ares/AresSettings';
+import { CalendarSettings } from './CalendarSettings';
 import { Diagnostics } from './Diagnostics';
 import { GitHubWatchPanel } from './github/GitHubWatchPanel';
 import { SettingRow, SettingsGroup } from './parts';
@@ -97,6 +98,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
       <RulesSettings no="12" shown={open} />
       <GitHubWatchPanel no="13" />
       <TeamsSettings no="14" shown={open} />
+      <CalendarSettings no="15" />
     </Sheet>
   );
 }

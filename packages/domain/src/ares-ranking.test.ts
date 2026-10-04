@@ -219,3 +219,42 @@ describe('rankingOrigin', () => {
     expect(rankingOrigin(null, NOW)).toEqual({ by: 'rules', at: null, why: null });
   });
 });
+
+describe('aresRanker and meetings', () => {
+  it('puts the next meeting (placed by the rules, never by Ares) at the top of Now', () => {
+    const runbook = issue('ENG-2');
+    const start = NOW + 10 * 60_000;
+    const sync: Item = {
+      ...todo('sync'),
+      kind: 'event',
+      source: 'google-calendar',
+      account: 'google:1',
+      externalId: 'sync',
+      title: 'Weekly sync',
+      detail: {
+        kind: 'event',
+        calendar: { id: 'primary', name: 'Primary', colour: '#9fe1e7' },
+        accountEmail: null,
+        start: { at: start, timeZone: null, date: null },
+        end: { at: start + HOUR, timeZone: null, date: null },
+        allDay: false,
+        location: null,
+        description: null,
+        organiser: null,
+        attendees: [],
+        myResponse: null,
+        meetingUrl: null,
+        busy: true,
+        private: false,
+        seriesId: null,
+        webUrl: null,
+        createdByCommander: null,
+      },
+    };
+    const ranker = aresRanker(byAres([entry(runbook, 'now', 1, 'Priya needs it before the 3pm review')]));
+    expect(ranker([runbook, sync], context).map(({ itemId, rank }) => [itemId, rank])).toEqual([
+      ['sync', 1],
+      ['ENG-2', 2],
+    ]);
+  });
+});

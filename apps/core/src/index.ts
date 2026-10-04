@@ -12,6 +12,7 @@ import { setUpGitHubWatch } from './github-watch';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 import { setUpMarkdownCopy } from './markdown-copy';
+import { setUpMeetings } from './meetings';
 import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
 import { setUpSync } from './sync';
@@ -137,6 +138,22 @@ updates = setUpUpdates({
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
 sync.engine.onSynced(() => updates?.sweep());
 
+// Today's meetings (#128): the meeting chips in today's Daily Note follow each calendar sync, and the
+// opt-in heads-up comes 2 minutes before a meeting (shown by the main process) while someone is there.
+const meetings = setUpMeetings({
+  store: itemStore,
+  send: (message) => {
+    port.postMessage(message);
+    // The Markdown copy writes the chips too.
+    if (message.type === 'items-changed') markdownCopy.itemsChanged(message.itemIds);
+  },
+  presence: () => updates?.presence.current().state ?? 'active',
+});
+meetings.refresh();
+sync.engine.onSynced((event) => {
+  if (event.source === 'google-calendar' || event.source === 'outlook-calendar') meetings.refresh();
+});
+
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
   if (models.handle(data)) return;
@@ -168,6 +185,9 @@ port.on('message', ({ data }) => {
   }
   // After the reply, so the window that made the change has its answer first.
   if (changed) port.postMessage(changed);
+  // Today's Daily Note made (Notes opening, or the date passing midnight): its meeting chips go in.
+  if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'daily-note')
+    meetings.refresh();
   // The Markdown copy writes the days the change touched, a moment later.
   if (reply?.type === 'item-store-reply') {
     markdownCopy.itemsChanged(changedIds);
@@ -181,6 +201,7 @@ const closeStore = () => {
   if (closed) return;
   closed = true;
   agent.stop();
+  meetings.stop();
   updates?.stop();
   sync.stop();
   markdownCopy.stop();

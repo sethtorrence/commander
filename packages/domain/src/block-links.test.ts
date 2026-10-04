@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { blockLinksIn, blockLinkToken, labelBlockLinks } from './block-links';
+import { blockLinksIn, blockLinkToken, labelBlockLinks, meetingChipEventId } from './block-links';
 
 const LT = '0b6c5f7e-2f9a-4b8e-9d1c-3a4b5c6d7e8f';
+const SYNC = '5e1d1a2b-7c3d-4e5f-8a9b-0c1d2e3f4a5b';
 
 describe('[[ link tokens in a Block’s text', () => {
   it('writes a day as its date and a Project by its id', () => {
@@ -32,5 +33,27 @@ describe('[[ link tokens in a Block’s text', () => {
     const label = (target: Parameters<Parameters<typeof labelBlockLinks>[1]>[0]) =>
       target.type === 'day' ? `[[${target.day}]]` : '[[Longtail]]';
     expect(labelBlockLinks(text, label)).toBe('Ask about [[Longtail]] on [[2026-10-05]]');
+  });
+
+  it('writes a calendar event by its Item id, and finds it among the others', () => {
+    expect(blockLinkToken({ type: 'event', eventId: SYNC })).toBe(`[[event:${SYNC}]]`);
+    expect(blockLinksIn(`Prep for [[event:${SYNC}]] on [[2026-10-03]]`)).toEqual([
+      { target: { type: 'event', eventId: SYNC }, start: 9, end: 9 + 10 + SYNC.length },
+      {
+        target: { type: 'day', day: '2026-10-03' },
+        start: 9 + 10 + SYNC.length + 4,
+        end: 9 + 10 + SYNC.length + 18,
+      },
+    ]);
+  });
+});
+
+describe('meeting chips', () => {
+  it('a Block that starts with an event link is about that meeting', () => {
+    expect(meetingChipEventId(`[[event:${SYNC}]]`)).toBe(SYNC);
+    expect(meetingChipEventId(`  [[event:${SYNC}]] agenda`)).toBe(SYNC);
+    expect(meetingChipEventId(`Prep for [[event:${SYNC}]]`)).toBeNull();
+    expect(meetingChipEventId(`[[project:${LT}]]`)).toBeNull();
+    expect(meetingChipEventId('')).toBeNull();
   });
 });

@@ -2,7 +2,9 @@
 // picker, a Rule, Ares) or else its parent's, all the way up; a top-level Block with none is Unfiled.
 // The effective Project is kept on every Block's Item, filed as inherited, so queries and the Project
 // filter need no tree walk. A Todo made from a Block (a made-from Link) takes its Block's Project as
-// inherited and follows it until the User files the Todo by hand.
+// inherited and follows it until the User files the Todo by hand. A meeting chip (a Block starting with
+// a calendar event's `[[event:<id>]]`, #128) takes its event's Project instead of its parent's, and
+// follows the event when it is re-filed, until the User files the chip itself.
 //
 // The Item store calls in here around each change it records: `settled` before writing, so a Block's
 // (or a following Todo's) inherited Project is right in the change's own entry, and `afterUpdate` /
@@ -20,6 +22,7 @@ import {
   type ItemKind,
   inheritedFiling,
   isOwnFiling,
+  meetingChipEventId,
   type Project,
 } from '@commander/domain';
 import { and, eq, isNull } from 'drizzle-orm';
@@ -51,7 +54,8 @@ export type BlockFiling = {
   // The state as it should be written: a Block without its own Project takes its parent's, and a
   // Todo following its Block takes the Block's.
   settled(itemId: string, kind: ItemKind, state: ItemState): ItemState;
-  // After an Item changed: when a Block's Project or parent changed, re-files what follows it.
+  // After an Item changed: when a Block's Project or parent changed, re-files what follows it; when an
+  // event's Project changed, its meeting chips (and what follows them).
   afterUpdate(item: Item, before: ItemState, entry: ActivityEntry, at: number): void;
   // After a Link appeared: a Todo made from a Block takes the Block's Project.
   afterLink(link: { from: string; linkType: string; to: string }, entry: ActivityEntry, at: number): void;
@@ -63,6 +67,36 @@ export function blockFilingIn(deps: Deps): BlockFiling {
   const { db } = deps;
 
   const filingOf = (id: string | null): Filing => (id ? (deps.readItem(id)?.filing ?? null) : null);
+
+  // The Project a Block takes when it has none of its own: a meeting chip its event's (when the event
+  // has one), any other Block its parent's.
+  function inheritedFor(detail: { parentId: string | null; text: string }): Filing {
+    const eventId = meetingChipEventId(detail.text);
+    const event = eventId ? deps.readItem(eventId) : undefined;
+    const fromEvent = event?.kind === 'event' ? event.filing : null;
+    return inheritedFiling(fromEvent ?? filingOf(detail.parentId));
+  }
+
+  // The live meeting chips of an event: Blocks linking to it that start with its token.
+  function chipsOf(eventId: string): Item[] {
+    const { links, items } = schema;
+    const rows = db
+      .select({ item: items })
+      .from(links)
+      .innerJoin(items, eq(items.id, links.fromItemId))
+      .where(
+        and(
+          eq(links.toItemId, eventId),
+          eq(links.type, 'refers-to'),
+          eq(items.kind, 'block'),
+          isNull(items.deletedAt),
+        ),
+      )
+      .all();
+    return deps
+      .withDetails(rows.map((row) => row.item))
+      .filter((block) => block.detail?.kind === 'block' && meetingChipEventId(block.detail.text) === eventId);
+  }
 
   // The live Block a Todo was made from, if it was.
   function madeFromBlock(todoId: string): Item | undefined {
@@ -169,7 +203,7 @@ export function blockFilingIn(deps: Deps): BlockFiling {
   return {
     settled(itemId, kind, state) {
       if (kind === 'block' && state.detail?.kind === 'block' && !isOwnFiling(state.filing)) {
-        return { ...state, filing: inheritedFiling(filingOf(state.detail.parentId)) };
+        return { ...state, filing: inheritedFor(state.detail) };
       }
       if (kind === 'todo' && state.filing?.filedBy === 'inherited') {
         const block = madeFromBlock(itemId);
@@ -179,6 +213,17 @@ export function blockFilingIn(deps: Deps): BlockFiling {
     },
 
     afterUpdate(item, before, entry, at) {
+      if (item.kind === 'event') {
+        if (isDeepStrictEqual(before.filing, item.filing)) return;
+        for (const chip of chipsOf(item.id)) {
+          if (isOwnFiling(chip.filing) || chip.detail?.kind !== 'block') continue;
+          const filing = inheritedFor(chip.detail);
+          const causedBy = { entryId: entry.id, itemId: item.id };
+          refile(chip, filing, 'Follows its meeting', entry.by, causedBy, at);
+          cascade({ ...chip, filing }, chip.filing, entry, at);
+        }
+        return;
+      }
       if (item.kind !== 'block' || item.detail?.kind !== 'block') return;
       const parentWas = before.detail?.kind === 'block' ? before.detail.parentId : null;
       if (isDeepStrictEqual(before.filing, item.filing) && parentWas === item.detail.parentId) return;
