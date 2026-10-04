@@ -1,6 +1,6 @@
 import type { AccountSyncStatus } from '@commander/domain/ipc';
 import { describe, expect, it } from 'vitest';
-import { describeSync } from './account-sync';
+import { describeHourUse, describeSync } from './account-sync';
 
 // How Settings → Accounts puts an Account's sync into plain words.
 
@@ -76,5 +76,25 @@ describe('describing an Account’s sync', () => {
       next: 'Next full sync 4 Oct 09:00',
       problem: null,
     });
+  });
+});
+
+describe('describing a Source’s use of its hourly limits', () => {
+  const github: AccountSyncStatus = {
+    ...idle,
+    account: 'github:583231',
+    source: 'github',
+    cadenceChoices: [15],
+    hourUse: { requests: 12, complexity: 1234, requestLimit: 5000, complexityLimit: 5000 },
+  };
+
+  it('says how much of GitHub’s REST and GraphQL limits the last hour used', () => {
+    expect(describeHourUse(github)).toBe(
+      'Last hour: 12 of 5,000 REST requests · 1,234 of 5,000 GraphQL points',
+    );
+  });
+
+  it('says nothing for Sources without hourly limits', () => {
+    expect(describeHourUse(idle)).toBeNull();
   });
 });

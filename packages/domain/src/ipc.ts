@@ -170,6 +170,8 @@ export type AccountSyncStatus = {
   outgoing: { pending: number; failed: number };
   // Sources with a light sync only (Teams): whether it also checks whenever another Source syncs.
   alsoAfterOtherSources?: boolean;
+  // Sources with hourly limits only (GitHub): the last hour's use, against the limits.
+  hourUse?: { requests: number; complexity: number; requestLimit: number; complexityLimit: number };
 };
 export type AccountsState = {
   accounts: AccountSummary[];

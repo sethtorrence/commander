@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { eventDetail } from './calendar';
+import { githubIssueDetail, githubReleaseDetail, pullRequestDetail, reviewRequestDetail } from './github';
 import { linearIssueDetail } from './linear';
 import { fieldSummary } from './logged-fields';
 import { chatDetail } from './teams';
@@ -13,6 +14,8 @@ export const itemKinds = [
   'linear-issue',
   'pull-request',
   'review-request',
+  'github-issue',
+  'github-release',
   'chat',
   'channel-post',
   'todo',
@@ -96,6 +99,10 @@ export const itemDetail = z.discriminatedUnion('kind', [
   linearIssueDetail,
   chatDetail,
   eventDetail,
+  pullRequestDetail,
+  githubIssueDetail,
+  reviewRequestDetail,
+  githubReleaseDetail,
 ]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 

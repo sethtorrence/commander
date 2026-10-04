@@ -1,8 +1,9 @@
-import type { Item } from '@commander/domain';
+import { githubIdentifier, type Item } from '@commander/domain';
 
 // What search reads of an Item: its title, its identifier (a Linear issue's ENG-418, a Daily Note's
-// day) and the rest of its words (a Chat's: its recent messages; an event's: its location, attendees
-// and description). Search by meaning (#73) embeds the
+// day, a pull request's or GitHub issue's acme/api#12) and the rest of its words (a Chat's: its recent
+// messages; an event's: its location, attendees and description; a pull request's or issue's body; a
+// release's notes). Search by meaning (#73) embeds the
 // same text.
 
 // A Chat's messages that search reads, newest kept.
@@ -33,6 +34,12 @@ export function searchTextOf(item: SearchableItem): SearchText | null {
       person ? [person.name ?? '', person.email] : [],
     );
     body = [detail.location ?? '', ...people, detail.description ?? ''].filter(Boolean).join('\n');
+  } else if (detail?.kind === 'pull-request' || detail?.kind === 'github-issue') {
+    identifier = githubIdentifier(detail.repo, detail.number);
+    body = detail.body;
+  } else if (detail?.kind === 'github-release') {
+    identifier = detail.tag;
+    body = detail.notes;
   } else if (detail?.kind === 'chat') {
     body = detail.messages
       .slice(-CHAT_MESSAGES_SEARCHED)

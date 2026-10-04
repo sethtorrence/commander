@@ -117,3 +117,24 @@ describe('a Linear Account’s sync', () => {
     expect(screen.queryByRole('switch')).toBeNull();
   });
 });
+
+describe('a GitHub Account’s sync', () => {
+  it('syncs every 15 minutes, the only choice, and shows the last hour’s use of GitHub’s limits', () => {
+    show({
+      ...linear,
+      name: 'octocat',
+      sync: {
+        ...linear.sync,
+        account: 'github:583231',
+        source: 'github',
+        cadenceChoices: [15],
+        hourUse: { requests: 3, complexity: 41, requestLimit: 5000, complexityLimit: 5000 },
+      },
+    } as unknown as LinearAccountSummary);
+
+    expect(screen.getByText('Syncs every 15 min')).toBeTruthy();
+    expect(screen.getByTestId('account-hour-use').textContent).toBe(
+      'Last hour: 3 of 5,000 REST requests · 41 of 5,000 GraphQL points',
+    );
+  });
+});

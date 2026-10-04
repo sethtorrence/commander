@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -7,8 +7,11 @@ import type { AddressInfo } from 'node:net';
 // its errors with HTTP 200, as GitHub does; `slow_down` raising the interval), 8-hour user tokens
 // with rotating refresh tokens, classic personal access tokens and gh's OAuth token with their
 // scopes in X-OAuth-Scopes, `GET /user`, `GET /user/installations` (GitHub App tokens only), orgs and
-// repos (what Settings → GitHub lists, #113) and a sliver of GraphQL (`viewer`, and its
-// contributions by repository). Nothing here talks to the real GitHub.
+// repos (what Settings → GitHub lists, #113), and what GitHub sync reads (#114): the gates (org repos
+// and issues, the User's repos and teams, a repo's issues) answering If-None-Match with a free 304,
+// X-RateLimit headers, and the GraphQL GitHub sync sends (open work, search, repos, the sweep) over
+// pull requests, issues, releases and commits added here. It can also refuse with a rate limit (403 or
+// 429, with Retry-After). Nothing here talks to the real GitHub.
 //
 // What a GitHub App's user token may see of orgs without an install is untested against GitHub: here
 // /user/memberships/orgs and /user/orgs refuse it ("Resource not accessible by integration"), the
@@ -52,6 +55,52 @@ export type FakeGitHubRepo = {
   collaborators?: number[];
 };
 
+// A pull request: in a repo ("owner/name"), by a user (login). `reviewers` and `teams` ("org/slug")
+// are asked to review it. Times are ISO strings.
+export type FakeGitHubPullRequest = {
+  repo: string;
+  number: number;
+  title: string;
+  body?: string;
+  author: string;
+  state?: 'OPEN' | 'CLOSED' | 'MERGED';
+  draft?: boolean;
+  reviewers?: string[];
+  teams?: string[];
+  assignees?: string[];
+  labels?: string[];
+  checks?: 'SUCCESS' | 'FAILURE' | 'PENDING' | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type FakeGitHubIssue = {
+  repo: string;
+  number: number;
+  title: string;
+  body?: string;
+  author: string;
+  state?: 'OPEN' | 'CLOSED';
+  assignees?: string[];
+  labels?: string[];
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type FakeGitHubRelease = {
+  repo: string;
+  tag: string;
+  name?: string;
+  notes?: string;
+  publishedAt: string;
+};
+
+// A commit on a repo's default branch, newest last.
+export type FakeGitHubCommit = { repo: string; message: string; author: string; committedAt: string };
+
+// A team: its org, slug and members (user ids).
+export type FakeGitHubTeam = { org: string; slug: string; members: number[] };
+
 export type FakeGitHubOptions = {
   clientId?: string;
   appSlug?: string;
@@ -78,7 +127,8 @@ export type FakeGitHub = {
   deviceCodeRequests: Record<string, string>[];
   // Every token request (polls and refreshes), as its form fields.
   tokenRequests: Record<string, string>[];
-  // Every API request, as its method and path ("GET /user").
+  // Every API request, as its method and path ("GET /user"); GraphQL requests with their operation
+  // ("POST /graphql CommanderOpenWork"), and 304s marked ("GET /user/teams 304").
   apiRequests: string[];
   // How many refreshes GitHub accepted.
   refreshes: number;
@@ -108,6 +158,17 @@ export type FakeGitHub = {
   addRepo(repo: FakeGitHubRepo): string;
   // The user pushed to, opened a pull request in or reviewed in a repo ("owner/name") lately.
   contribute(userId: number, repo: string, kind?: 'commit' | 'pull-request' | 'review'): void;
+  // What GitHub sync reads: pull requests, issues, releases, default-branch commits and teams.
+  addPullRequest(pull: FakeGitHubPullRequest): void;
+  // Changes a pull request (and its updatedAt, to now unless given).
+  updatePullRequest(repo: string, number: number, changes: Partial<FakeGitHubPullRequest>): void;
+  addIssue(issue: FakeGitHubIssue): void;
+  addRelease(release: FakeGitHubRelease): void;
+  addCommit(commit: FakeGitHubCommit): void;
+  addTeam(team: FakeGitHubTeam): void;
+  // Every API request answers with this rate limit until switched off (null): a 403 or 429, with
+  // Retry-After in seconds when given.
+  throttleApi(limit: { status: 403 | 429; retryAfter?: number } | null): void;
   // Revokes every token of a user: refreshes with theirs now fail for good, and the API refuses them.
   revoke(userId: number): void;
   // Refreshes answer 503 until switched back.
@@ -177,6 +238,15 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
   const orgs: FakeGitHubOrg[] = [];
   const repos: (FakeGitHubRepo & { id: number; nodeId: string })[] = [];
   const contributions: { userId: number; repo: string; kind: 'commit' | 'pull-request' | 'review' }[] = [];
+  const pulls: FakeGitHubPullRequest[] = [];
+  const issues: FakeGitHubIssue[] = [];
+  const releases: FakeGitHubRelease[] = [];
+  const commits: FakeGitHubCommit[] = [];
+  const teams: FakeGitHubTeam[] = [];
+  let throttle: { status: 403 | 429; retryAfter?: number } | null = null;
+  // GraphQL points spent, for rateLimit.
+  let pointsSpent = 0;
+  let restSpent = 0;
   const issued: string[] = [];
   let slowDowns = 0;
   let refreshFailing = false;
@@ -232,6 +302,28 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     },
     contribute: (userId, repo, kind = 'commit') => {
       contributions.push({ userId, repo, kind });
+    },
+    addPullRequest: (pull) => {
+      pulls.push(pull);
+    },
+    updatePullRequest: (repo, number, changes) => {
+      const pull = pulls.find((each) => each.repo === repo && each.number === number);
+      if (pull) Object.assign(pull, { updatedAt: new Date().toISOString() }, changes);
+    },
+    addIssue: (issue) => {
+      issues.push(issue);
+    },
+    addRelease: (release) => {
+      releases.push(release);
+    },
+    addCommit: (commit) => {
+      commits.push(commit);
+    },
+    addTeam: (team) => {
+      teams.push(team);
+    },
+    throttleApi: (limit) => {
+      throttle = limit;
     },
     revoke: (userId) => {
       for (let i = grants.length - 1; i >= 0; i--) if (grants[i]?.user.id === userId) grants.splice(i, 1);
@@ -375,9 +467,358 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
   const notForApps = (response: ServerResponse) =>
     json(response, 403, { message: 'Resource not accessible by integration', status: '403' });
 
+  // ----------------------------------------------------------------------------------------------
+  // What GitHub sync reads (#114).
+
+  type Caller = NonNullable<ReturnType<typeof caller>>;
+  const inAnHour = () => Math.floor(Date.now() / 1000) + 3600;
+  const restLimit = () => ({
+    'x-ratelimit-limit': '5000',
+    'x-ratelimit-remaining': String(Math.max(0, 5000 - restSpent)),
+    'x-ratelimit-reset': String(inAnHour()),
+    'x-ratelimit-resource': 'core',
+  });
+  const repoNamed = (fullName: string) => repos.find((repo) => `${repo.owner}/${repo.name}` === fullName);
+  // Whether a token reaches a repo: through the app's installations, or the User's own access.
+  const reaches = (who: Caller, repo: (typeof repos)[number]) => {
+    if (who.kind !== 'app') return repo.private === false || canReach(who.user, repo);
+    const installed = installations.some((each) => installedRepos(each).includes(repo));
+    return installed && (repo.private === false || canReach(who.user, repo));
+  };
+
+  // A list GitHub gates with ETags: a 304 (free) when If-None-Match names what it would send.
+  function gated(
+    request: IncomingMessage,
+    response: ServerResponse,
+    logged: number,
+    value: unknown,
+    headers: Record<string, string>,
+  ) {
+    const text = JSON.stringify(value);
+    const etag = `W/"${createHash('sha1').update(text).digest('hex')}"`;
+    if (request.headers['if-none-match'] === etag) {
+      fake.apiRequests[logged] = `${fake.apiRequests[logged]} 304`;
+      response.writeHead(304, { etag, ...restLimit() }).end();
+      return;
+    }
+    restSpent += 1;
+    json(response, 200, value, { ...headers, etag, ...restLimit() });
+  }
+
+  const updatedOf = (entry: { createdAt?: string; updatedAt?: string }) =>
+    entry.updatedAt ?? entry.createdAt ?? '2026-10-01T09:00:00Z';
+  const slug = (fullName: string) => fullName.replace('/', '_');
+  const repoRef = (repo: (typeof repos)[number]) => ({
+    id: repo.nodeId,
+    name: repo.name,
+    owner: { login: repo.owner },
+  });
+  const teamRef = (team: string) => {
+    const [org, name] = team.split('/');
+    return { __typename: 'Team', slug: name, organization: { login: org } };
+  };
+  const pullId = (pull: FakeGitHubPullRequest) => `PR_fake_${slug(pull.repo)}_${pull.number}`;
+  const issueId = (issue: FakeGitHubIssue) => `I_fake_${slug(issue.repo)}_${issue.number}`;
+
+  function pullNode(pull: FakeGitHubPullRequest) {
+    const repo = repoNamed(pull.repo);
+    if (!repo) throw new Error(`No repo ${pull.repo}`);
+    const state = pull.state ?? 'OPEN';
+    const updated = updatedOf(pull);
+    const asked = [
+      ...(pull.reviewers ?? []).map((login) => ({ __typename: 'User', login })),
+      ...(pull.teams ?? []).map(teamRef),
+    ];
+    return {
+      __typename: 'PullRequest',
+      id: pullId(pull),
+      number: pull.number,
+      url: `${fake.webUrl}/${pull.repo}/pull/${pull.number}`,
+      title: pull.title,
+      body: pull.body ?? '',
+      isDraft: pull.draft ?? false,
+      state,
+      createdAt: pull.createdAt ?? updated,
+      updatedAt: updated,
+      mergedAt: state === 'MERGED' ? updated : null,
+      closedAt: state === 'OPEN' ? null : updated,
+      additions: 10,
+      deletions: 2,
+      changedFiles: 1,
+      baseRefName: 'main',
+      headRefName: `branch-${pull.number}`,
+      reviewDecision: asked.length ? 'REVIEW_REQUIRED' : null,
+      repository: repoRef(repo),
+      author: { login: pull.author, email: '' },
+      labels: { nodes: (pull.labels ?? []).map((name) => ({ name, color: 'ededed' })) },
+      assignees: { nodes: (pull.assignees ?? []).map((login) => ({ login })) },
+      reviewRequests: { nodes: asked.map((requestedReviewer) => ({ requestedReviewer })) },
+      timelineItems: { nodes: asked.map((requestedReviewer) => ({ createdAt: updated, requestedReviewer })) },
+      latestReviews: { nodes: [] },
+      commits: {
+        nodes: [
+          {
+            commit: {
+              statusCheckRollup: pull.checks === null ? null : { state: pull.checks ?? 'SUCCESS' },
+              author: { email: '', user: { login: pull.author } },
+            },
+          },
+        ],
+      },
+      closingIssuesReferences: { nodes: [] },
+    };
+  }
+
+  function issueNode(issue: FakeGitHubIssue) {
+    const repo = repoNamed(issue.repo);
+    if (!repo) throw new Error(`No repo ${issue.repo}`);
+    const state = issue.state ?? 'OPEN';
+    const updated = updatedOf(issue);
+    return {
+      __typename: 'Issue',
+      id: issueId(issue),
+      number: issue.number,
+      url: `${fake.webUrl}/${issue.repo}/issues/${issue.number}`,
+      title: issue.title,
+      body: issue.body ?? '',
+      state,
+      stateReason: state === 'CLOSED' ? 'COMPLETED' : null,
+      createdAt: issue.createdAt ?? updated,
+      updatedAt: updated,
+      closedAt: state === 'CLOSED' ? updated : null,
+      repository: repoRef(repo),
+      author: { login: issue.author, email: '' },
+      assignees: { nodes: (issue.assignees ?? []).map((login) => ({ login })) },
+      labels: { nodes: (issue.labels ?? []).map((name) => ({ name, color: 'ededed' })) },
+      milestone: null,
+      comments: { totalCount: 0 },
+      parent: null,
+      subIssuesSummary: null,
+    };
+  }
+
+  type Work = { kind: 'pull'; pull: FakeGitHubPullRequest } | { kind: 'issue'; issue: FakeGitHubIssue };
+  const workOf = (): Work[] => [
+    ...pulls.map((pull) => ({ kind: 'pull' as const, pull })),
+    ...issues.map((issue) => ({ kind: 'issue' as const, issue })),
+  ];
+  const entryOf = (work: Work) => (work.kind === 'pull' ? work.pull : work.issue);
+  const nodeOf = (work: Work) => (work.kind === 'pull' ? pullNode(work.pull) : issueNode(work.issue));
+
+  // Whether a time is in a search qualifier's window (">=T" or "A..B").
+  function inWindow(time: string | null, window: string): boolean {
+    if (time === null) return false;
+    const at = Date.parse(time);
+    if (window.startsWith('>=')) return at >= Date.parse(window.slice(2));
+    const [from, to] = window.split('..');
+    return at >= Date.parse(from ?? '') && at <= Date.parse(to ?? '');
+  }
+
+  // The pull requests and issues a search finds for the caller, most recently updated first.
+  function search(query: string, who: Caller): Work[] {
+    const myTeams = teams
+      .filter((team) => team.members.includes(who.user.id))
+      .map((team) => `${team.org}/${team.slug}`.toLowerCase());
+    const mine = (logins: string[] | undefined) => (logins ?? []).includes(who.user.login);
+    const matches = (work: Work, term: string) => {
+      const entry = entryOf(work);
+      const open = (entry.state ?? 'OPEN') === 'OPEN';
+      const [qualifier, value = ''] = term.split(/:(.*)/s);
+      switch (term) {
+        case 'is:open':
+          return open;
+        case 'is:closed':
+          return !open;
+        case 'is:pr':
+          return work.kind === 'pull';
+        case 'is:issue':
+          return work.kind === 'issue';
+        case 'author:@me':
+          return entry.author === who.user.login;
+        case 'assignee:@me':
+          return mine(entry.assignees);
+        case 'user-review-requested:@me':
+          return work.kind === 'pull' && mine(work.pull.reviewers);
+        case 'team-review-requested:@me':
+          return (
+            work.kind === 'pull' &&
+            (work.pull.teams ?? []).some((team) => myTeams.includes(team.toLowerCase()))
+          );
+      }
+      if (qualifier === 'org' || qualifier === 'user')
+        return entry.repo.split('/')[0]?.toLowerCase() === value.toLowerCase();
+      if (qualifier === 'updated') return inWindow(updatedOf(entry), value);
+      if (qualifier === 'created') return inWindow(entry.createdAt ?? updatedOf(entry), value);
+      if (qualifier === 'closed') return inWindow(open ? null : updatedOf(entry), value);
+      return true;
+    };
+    const terms = query.trim().split(/\s+/);
+    return workOf()
+      .filter((work) => {
+        const repo = repoNamed(entryOf(work).repo);
+        return repo !== undefined && reaches(who, repo) && terms.every((term) => matches(work, term));
+      })
+      .sort((a, b) => Date.parse(updatedOf(entryOf(b))) - Date.parse(updatedOf(entryOf(a))));
+  }
+
+  // One page of a search, as GraphQL's search connection answers it.
+  function searchPage(query: string, who: Caller, first: number, after: string | null) {
+    const found = search(query, who);
+    const start = after ? Number(after) : 0;
+    const page = found.slice(start, start + first);
+    const end = start + page.length;
+    return {
+      issueCount: found.length,
+      pageInfo: { hasNextPage: end < found.length, endCursor: page.length ? String(end) : null },
+      nodes: page.map(nodeOf),
+    };
+  }
+
+  function repoNode(repo: (typeof repos)[number], since: string) {
+    const fullName = `${repo.owner}/${repo.name}`;
+    const theirs = commits.filter((commit) => commit.repo === fullName);
+    const head = theirs.at(-1);
+    return {
+      ...repoRef(repo),
+      defaultBranchRef: {
+        name: 'main',
+        target: {
+          oid: head ? createHash('sha1').update(head.message).digest('hex') : `head-${repo.name}`,
+          committedDate: head?.committedAt ?? repo.pushedAt ?? '2026-10-01T12:00:00Z',
+          statusCheckRollup: { state: 'SUCCESS' },
+          history: {
+            nodes: theirs
+              .filter((commit) => Date.parse(commit.committedAt) >= Date.parse(since))
+              .reverse()
+              .map((commit) => ({
+                oid: createHash('sha1').update(commit.message).digest('hex'),
+                messageHeadline: commit.message.split('\n')[0],
+                message: commit.message,
+                committedDate: commit.committedAt,
+                author: {
+                  name: commit.author,
+                  email: `${commit.author}@example.test`,
+                  user: { login: commit.author },
+                },
+              })),
+          },
+        },
+      },
+      releases: {
+        nodes: releases
+          .filter((release) => release.repo === fullName)
+          .sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+          .map((release) => ({
+            id: `RE_fake_${slug(fullName)}_${release.tag}`,
+            tagName: release.tag,
+            name: release.name ?? null,
+            url: `${fake.webUrl}/${fullName}/releases/tag/${release.tag}`,
+            isDraft: false,
+            isPrerelease: false,
+            publishedAt: release.publishedAt,
+            description: release.notes ?? '',
+            author: { login: 'octocat' },
+          })),
+      },
+    };
+  }
+
+  // The open-work searches GitHub sync sends in one request.
+  const OPEN_WORK = {
+    mine: 'is:open is:pr author:@me',
+    direct: 'is:open is:pr user-review-requested:@me',
+    team: 'is:open is:pr team-review-requested:@me',
+    assigned: 'is:open is:issue assignee:@me',
+  };
+
+  // GitHub sync's GraphQL operations; null for any other.
+  function syncQuery(operationName: string, variables: Record<string, unknown>, who: Caller): unknown {
+    switch (operationName) {
+      case 'CommanderOpenWork': {
+        const first = Number(variables.first ?? 100);
+        return {
+          viewer: { login: who.user.login },
+          ...Object.fromEntries(
+            Object.entries(OPEN_WORK).map(([alias, query]) => [alias, searchPage(query, who, first, null)]),
+          ),
+        };
+      }
+      case 'CommanderNodes':
+        return {
+          nodes: ((variables.ids as string[]) ?? []).map((id) => {
+            const work = workOf().find(
+              (each) => (each.kind === 'pull' ? pullId(each.pull) : issueId(each.issue)) === id,
+            );
+            const repo = work ? repoNamed(entryOf(work).repo) : undefined;
+            return work && repo && reaches(who, repo) ? nodeOf(work) : null;
+          }),
+        };
+      case 'CommanderSearchCount':
+        return { search: { issueCount: search(String(variables.query), who).length } };
+      case 'CommanderOpenWorkPage':
+      case 'CommanderSearch':
+        return {
+          search: searchPage(
+            String(variables.query),
+            who,
+            Number(variables.first ?? 100),
+            (variables.after as string | null) ?? null,
+          ),
+        };
+      case 'CommanderRepos':
+        return {
+          nodes: ((variables.ids as string[]) ?? []).map((id) => {
+            const repo = repos.find((each) => each.nodeId === id);
+            return repo && reaches(who, repo) ? repoNode(repo, String(variables.since)) : null;
+          }),
+        };
+      case 'CommanderSweep':
+        return {
+          items: ((variables.ids as string[]) ?? []).map((id) => {
+            const pull = pulls.find((each) => pullId(each) === id);
+            const issue = issues.find((each) => issueId(each) === id);
+            const entry = pull ?? issue;
+            const repo = entry ? repoNamed(entry.repo) : undefined;
+            if (!entry || !repo) return null;
+            return {
+              __typename: pull ? 'PullRequest' : 'Issue',
+              id,
+              number: entry.number,
+              repository: { id: repo.nodeId },
+            };
+          }),
+          repos: ((variables.repos as string[]) ?? []).map((id) => {
+            const repo = repos.find((each) => each.nodeId === id);
+            return repo && reaches(who, repo) ? { id } : null;
+          }),
+        };
+      default:
+        return null;
+    }
+  }
+
+  // The issues and pull requests of some repos, as REST lists them (most recently updated first).
+  const restIssues = (who: Caller, inRepo: (repo: (typeof repos)[number]) => boolean) =>
+    workOf()
+      .filter((work) => {
+        const repo = repoNamed(entryOf(work).repo);
+        return repo !== undefined && inRepo(repo) && reaches(who, repo);
+      })
+      .sort((a, b) => Date.parse(updatedOf(entryOf(b))) - Date.parse(updatedOf(entryOf(a))))
+      .map((work) => {
+        const entry = entryOf(work);
+        return {
+          number: entry.number,
+          title: entry.title,
+          state: (entry.state ?? 'OPEN') === 'OPEN' ? 'open' : 'closed',
+          updated_at: updatedOf(entry),
+          ...(work.kind === 'pull' ? { pull_request: { url: '' } } : {}),
+        };
+      });
+
   async function api(request: IncomingMessage, url: URL, response: ServerResponse) {
     const path = url.pathname.slice('/api'.length) || '/';
-    fake.apiRequests.push(`${request.method} ${path}`);
+    const logged = fake.apiRequests.push(`${request.method} ${path}`) - 1;
     // GitHub refuses requests without a User-Agent.
     if (!request.headers['user-agent'])
       return json(response, 403, { message: 'Request forbidden by administrative rules.' });
@@ -385,6 +826,67 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     if (!who) return json(response, 401, { message: 'Bad credentials', status: '401' });
     // Classic and OAuth tokens list their scopes; GitHub App and fine-grained tokens don't.
     const headers: Record<string, string> = who.scopes ? { 'x-oauth-scopes': who.scopes.join(', ') } : {};
+    if (throttle) {
+      const limited = {
+        ...restLimit(),
+        ...(throttle.status === 403 ? { 'x-ratelimit-remaining': '0' } : {}),
+        ...(throttle.retryAfter !== undefined ? { 'retry-after': String(throttle.retryAfter) } : {}),
+      };
+      return json(
+        response,
+        throttle.status,
+        {
+          message:
+            'You have exceeded a secondary rate limit. Please wait a few minutes before you try again.',
+        },
+        limited,
+      );
+    }
+
+    if (request.method === 'GET' && path === '/user/teams') {
+      // A GitHub App's user token may not read teams without the members permission: refused here,
+      // the cautious reading.
+      if (who.kind === 'app') return notForApps(response);
+      const mine = teams.filter((team) => team.members.includes(who.user.id));
+      const listed = mine.map((team) => ({
+        slug: team.slug,
+        name: team.slug,
+        organization: { login: team.org },
+      }));
+      return gated(request, response, logged, paged(url, listed), headers);
+    }
+    const orgIssues = /^\/orgs\/([^/]+)\/issues$/.exec(path);
+    if (request.method === 'GET' && orgIssues) {
+      const org = orgOf(decodeURIComponent(orgIssues[1] ?? ''));
+      // Only for the org's members.
+      if (!org?.members.includes(who.user.id)) return json(response, 404, { message: 'Not Found' });
+      return gated(
+        request,
+        response,
+        logged,
+        paged(
+          url,
+          restIssues(who, (repo) => repo.owner === org.login),
+        ),
+        headers,
+      );
+    }
+    const repoIssues = /^\/repos\/([^/]+)\/([^/]+)\/issues$/.exec(path);
+    if (request.method === 'GET' && repoIssues) {
+      const fullName = `${decodeURIComponent(repoIssues[1] ?? '')}/${decodeURIComponent(repoIssues[2] ?? '')}`;
+      const repo = repoNamed(fullName);
+      if (!repo || !reaches(who, repo)) return json(response, 404, { message: 'Not Found' });
+      return gated(
+        request,
+        response,
+        logged,
+        paged(
+          url,
+          restIssues(who, (each) => each === repo),
+        ),
+        headers,
+      );
+    }
 
     if (request.method === 'GET' && path === '/user') {
       const { id, login, name } = who.user;
@@ -457,7 +959,11 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
         if (who.kind === 'app') return installation ? installedRepos(installation).includes(repo) : false;
         return canReach(who.user, repo);
       });
-      return json(response, 200, paged(url, visible).map(repoJson), headers);
+      if (url.searchParams.get('sort') === 'pushed')
+        visible.sort(
+          (a, b) => Date.parse(b.pushedAt ?? '1970-01-01') - Date.parse(a.pushedAt ?? '1970-01-01'),
+        );
+      return gated(request, response, logged, paged(url, visible).map(repoJson), headers);
     }
     const orgPath = /^\/orgs\/([^/]+)$/.exec(path);
     if (request.method === 'GET' && orgPath) {
@@ -467,10 +973,40 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     }
     if (request.method === 'GET' && path === '/user/repos') {
       const reachable = repos.filter((repo) => canReach(who.user, repo));
-      return json(response, 200, paged(url, reachable).map(repoJson), headers);
+      if (url.searchParams.get('sort') === 'pushed')
+        reachable.sort(
+          (a, b) => Date.parse(b.pushedAt ?? '1970-01-01') - Date.parse(a.pushedAt ?? '1970-01-01'),
+        );
+      return gated(request, response, logged, paged(url, reachable).map(repoJson), headers);
     }
     if (request.method === 'POST' && path === '/graphql') {
-      const { query } = JSON.parse(await body(request)) as { query?: string };
+      const { query, operationName, variables } = JSON.parse(await body(request)) as {
+        query?: string;
+        operationName?: string;
+        variables?: Record<string, unknown>;
+      };
+      if (operationName) fake.apiRequests[logged] = `POST /graphql ${operationName}`;
+      const answer = operationName ? syncQuery(operationName, variables ?? {}, who) : null;
+      if (answer) {
+        pointsSpent += 1;
+        const rateLimit = {
+          cost: 1,
+          limit: 5000,
+          remaining: Math.max(0, 5000 - pointsSpent),
+          resetAt: new Date(inAnHour() * 1000).toISOString(),
+        };
+        return json(
+          response,
+          200,
+          { data: { ...(answer as object), rateLimit } },
+          {
+            'x-ratelimit-limit': '5000',
+            'x-ratelimit-remaining': String(rateLimit.remaining),
+            'x-ratelimit-reset': String(inAnHour()),
+            'x-ratelimit-resource': 'graphql',
+          },
+        );
+      }
       if (query?.includes('contributionsCollection')) {
         const byKind = (kind: 'commit' | 'pull-request' | 'review') =>
           contributions

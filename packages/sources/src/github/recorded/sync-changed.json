@@ -1,0 +1,536 @@
+[
+  {
+    "request": {
+      "method": "GET",
+      "path": "/user/teams?per_page=100",
+      "etag": "W/\"teams-1\""
+    },
+    "response": {
+      "status": 304,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "core"
+      },
+      "body": null
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "path": "/graphql",
+      "operationName": "CommanderOpenWork",
+      "variables": {
+        "first": 100
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4988",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "graphql"
+      },
+      "body": {
+        "data": {
+          "viewer": {
+            "login": "octocat"
+          },
+          "mine": {
+            "issueCount": 1,
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": [
+              {
+                "__typename": "PullRequest",
+                "id": "PR_api_12",
+                "number": 12,
+                "updatedAt": "2026-10-02T15:00:00Z",
+                "repository": {
+                  "id": "R_kgDOAcmeApi",
+                  "name": "api",
+                  "owner": {
+                    "login": "acme"
+                  }
+                }
+              }
+            ]
+          },
+          "direct": {
+            "issueCount": 0,
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": []
+          },
+          "team": {
+            "issueCount": 1,
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": [
+              {
+                "__typename": "PullRequest",
+                "id": "PR_web_7",
+                "number": 7,
+                "updatedAt": "2026-10-02T15:00:00Z",
+                "repository": {
+                  "id": "R_kgDOAcmeWeb",
+                  "name": "web",
+                  "owner": {
+                    "login": "acme"
+                  }
+                }
+              }
+            ]
+          },
+          "assigned": {
+            "issueCount": 0,
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": []
+          },
+          "rateLimit": {
+            "cost": 1,
+            "limit": 5000,
+            "remaining": 4988,
+            "resetAt": "2026-10-03T13:00:00Z"
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/orgs/acme/repos?sort=pushed&per_page=100",
+      "etag": "W/\"acme-repos-1\""
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "core",
+        "etag": "W/\"acme-repos-2\""
+      },
+      "body": [
+        {
+          "id": 1190,
+          "node_id": "R_kgDOAcmeApi",
+          "name": "api",
+          "full_name": "acme/api",
+          "private": true,
+          "owner": {
+            "login": "acme",
+            "type": "Organization"
+          },
+          "archived": false,
+          "pushed_at": "2026-10-03T12:04:00Z"
+        },
+        {
+          "id": 1194,
+          "node_id": "R_kgDOAcmeWeb",
+          "name": "web",
+          "full_name": "acme/web",
+          "private": true,
+          "owner": {
+            "login": "acme",
+            "type": "Organization"
+          },
+          "archived": false,
+          "pushed_at": "2026-10-01T12:00:00Z"
+        }
+      ]
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/orgs/acme/issues?filter=all&state=all&sort=updated&per_page=1",
+      "etag": "W/\"acme-issues-1\""
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "core",
+        "etag": "W/\"acme-issues-2\""
+      },
+      "body": [
+        {
+          "number": 30
+        }
+      ]
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "path": "/graphql",
+      "operationName": "CommanderSearchCount",
+      "variables": {
+        "query": "org:acme updated:>=2026-10-03T11:55:00Z"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "graphql"
+      },
+      "body": {
+        "data": {
+          "search": {
+            "issueCount": 2
+          },
+          "rateLimit": {
+            "cost": 1,
+            "limit": 5000,
+            "remaining": 4990,
+            "resetAt": "2026-10-03T13:00:00Z"
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "path": "/graphql",
+      "operationName": "CommanderSearch",
+      "variables": {
+        "query": "org:acme updated:>=2026-10-03T11:55:00Z",
+        "first": 2,
+        "after": null
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4975",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "graphql"
+      },
+      "body": {
+        "data": {
+          "search": {
+            "issueCount": 2,
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": [
+              {
+                "__typename": "PullRequest",
+                "id": "PR_api_15",
+                "number": 15,
+                "url": "https://github.com/acme/api/pull/15",
+                "title": "Rotate the signing keys",
+                "body": "Moves signing to the new KMS key.",
+                "isDraft": false,
+                "state": "OPEN",
+                "createdAt": "2026-09-30T09:00:00Z",
+                "updatedAt": "2026-10-03T12:05:00Z",
+                "mergedAt": null,
+                "closedAt": null,
+                "additions": 10,
+                "deletions": 2,
+                "changedFiles": 3,
+                "baseRefName": "main",
+                "headRefName": "kms-keys",
+                "reviewDecision": "APPROVED",
+                "repository": {
+                  "id": "R_kgDOAcmeApi",
+                  "name": "api",
+                  "owner": {
+                    "login": "acme"
+                  }
+                },
+                "author": {
+                  "login": "priya",
+                  "email": "priya@acme.test"
+                },
+                "labels": {
+                  "nodes": []
+                },
+                "assignees": {
+                  "nodes": []
+                },
+                "reviewRequests": {
+                  "nodes": []
+                },
+                "timelineItems": {
+                  "nodes": [
+                    {
+                      "createdAt": "2026-10-02T10:00:00Z",
+                      "requestedReviewer": {
+                        "__typename": "Team",
+                        "slug": "platform",
+                        "organization": {
+                          "login": "acme"
+                        }
+                      }
+                    },
+                    {
+                      "createdAt": "2026-10-02T11:30:00Z",
+                      "requestedReviewer": {
+                        "__typename": "User",
+                        "login": "octocat"
+                      }
+                    }
+                  ]
+                },
+                "latestReviews": {
+                  "nodes": [
+                    {
+                      "author": {
+                        "login": "sam"
+                      },
+                      "state": "COMMENTED",
+                      "submittedAt": "2026-10-02T12:00:00Z"
+                    },
+                    {
+                      "author": {
+                        "login": "octocat"
+                      },
+                      "state": "APPROVED",
+                      "submittedAt": "2026-10-03T12:05:00Z"
+                    }
+                  ]
+                },
+                "commits": {
+                  "nodes": [
+                    {
+                      "commit": {
+                        "statusCheckRollup": {
+                          "state": "SUCCESS"
+                        },
+                        "author": {
+                          "email": "priya.patel@acme.test",
+                          "user": {
+                            "login": "priya"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "closingIssuesReferences": {
+                  "nodes": []
+                }
+              },
+              {
+                "__typename": "Issue",
+                "id": "I_api_30",
+                "number": 30,
+                "url": "https://github.com/acme/api/issues/30",
+                "title": "Webhooks drop on 502",
+                "body": "When the receiver answers 502 we drop the event.",
+                "state": "CLOSED",
+                "stateReason": "COMPLETED",
+                "createdAt": "2026-09-20T09:00:00Z",
+                "updatedAt": "2026-10-03T12:06:00Z",
+                "closedAt": "2026-10-03T12:06:00Z",
+                "repository": {
+                  "id": "R_kgDOAcmeApi",
+                  "name": "api",
+                  "owner": {
+                    "login": "acme"
+                  }
+                },
+                "author": {
+                  "login": "priya",
+                  "email": "priya@acme.test"
+                },
+                "assignees": {
+                  "nodes": [
+                    {
+                      "login": "octocat"
+                    }
+                  ]
+                },
+                "labels": {
+                  "nodes": [
+                    {
+                      "name": "bug",
+                      "color": "d73a4a"
+                    }
+                  ]
+                },
+                "milestone": {
+                  "title": "October",
+                  "dueOn": "2026-10-31T00:00:00Z"
+                },
+                "comments": {
+                  "totalCount": 4
+                },
+                "parent": {
+                  "number": 25,
+                  "title": "Reliable webhooks",
+                  "url": "https://github.com/acme/api/issues/25",
+                  "repository": {
+                    "name": "api",
+                    "owner": {
+                      "login": "acme"
+                    }
+                  }
+                },
+                "subIssuesSummary": {
+                  "total": 0,
+                  "completed": 0
+                }
+              }
+            ]
+          },
+          "rateLimit": {
+            "cost": 1,
+            "limit": 5000,
+            "remaining": 4975,
+            "resetAt": "2026-10-03T13:00:00Z"
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "POST",
+      "path": "/graphql",
+      "operationName": "CommanderRepos",
+      "variables": {
+        "ids": ["R_kgDOAcmeApi"],
+        "since": "2026-10-03T11:55:00.000Z"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4973",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "graphql"
+      },
+      "body": {
+        "data": {
+          "nodes": [
+            {
+              "id": "R_kgDOAcmeApi",
+              "name": "api",
+              "owner": {
+                "login": "acme"
+              },
+              "defaultBranchRef": {
+                "name": "main",
+                "target": {
+                  "oid": "b4b4b4",
+                  "committedDate": "2026-10-03T12:04:00Z",
+                  "statusCheckRollup": {
+                    "state": "SUCCESS"
+                  },
+                  "history": {
+                    "nodes": [
+                      {
+                        "oid": "b4b4b4",
+                        "messageHeadline": "Sign with the KMS key",
+                        "message": "Sign with the KMS key",
+                        "committedDate": "2026-10-03T12:04:00Z",
+                        "author": {
+                          "name": "Priya",
+                          "email": "priya@acme.test",
+                          "user": {
+                            "login": "priya"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              },
+              "releases": {
+                "nodes": [
+                  {
+                    "id": "RE_api_141",
+                    "tagName": "v1.4.1",
+                    "name": "Signing fix",
+                    "url": "https://github.com/acme/api/releases/tag/v1.4.1",
+                    "isDraft": false,
+                    "isPrerelease": false,
+                    "publishedAt": "2026-10-03T12:05:00Z",
+                    "description": "",
+                    "author": {
+                      "login": "priya"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "rateLimit": {
+            "cost": 1,
+            "limit": 5000,
+            "remaining": 4973,
+            "resetAt": "2026-10-03T13:00:00Z"
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/user/repos?sort=pushed&affiliation=owner,collaborator&per_page=100",
+      "etag": "W/\"personal-1\""
+    },
+    "response": {
+      "status": 304,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "core"
+      },
+      "body": null
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/repos/octocat/dotfiles/issues?state=all&sort=updated&per_page=1",
+      "etag": "W/\"dotfiles-issues-1\""
+    },
+    "response": {
+      "status": 304,
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-ratelimit-limit": "5000",
+        "x-ratelimit-remaining": "4990",
+        "x-ratelimit-reset": "1791032400",
+        "x-ratelimit-resource": "core"
+      },
+      "body": null
+    }
+  }
+]

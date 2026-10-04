@@ -85,6 +85,8 @@ const GROUP_OF: Record<string, string> = {
   event: 'Calendar',
   'pull-request': 'GitHub',
   'review-request': 'GitHub',
+  'github-issue': 'GitHub',
+  'github-release': 'GitHub',
   chat: 'Teams',
   'channel-post': 'Teams',
 };
@@ -98,6 +100,12 @@ function hitRow(hit: SearchHit, today: string): PaletteRow {
     case 'linear-issue': {
       const issue = detail?.kind === 'linear-issue' ? detail : null;
       return { ...row, tag: issue?.identifier ?? 'LIN', hint: issue?.state.name ?? 'Linear', action };
+    }
+    case 'pull-request':
+    case 'github-issue': {
+      const found = detail?.kind === 'pull-request' || detail?.kind === 'github-issue' ? detail : null;
+      const tag = found ? `${found.repo.name}#${found.number}` : kindTag(item.kind);
+      return { ...row, tag, hint: 'GitHub', action };
     }
     case 'todo': {
       const dueOn = detail?.kind === 'todo' ? detail.dueOn : null;

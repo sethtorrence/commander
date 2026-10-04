@@ -16,14 +16,17 @@ import {
 } from '@commander/domain';
 import {
   type CalendarChoices,
+  createGitHubSource,
   createGoogleCalendarSource,
   createLinearSource,
   createOutlookCalendarSource,
   createTeamsSource,
+  type GitHubSourceOptions,
   type GoogleCalendarSourceOptions,
   type LinearSourceOptions,
   type OutlookCalendarSourceOptions,
   type SourceAdapter,
+  type SyncWatch,
   type TeamsSourceOptions,
 } from '@commander/sources';
 import { z } from 'zod';
@@ -52,6 +55,11 @@ export type SyncOptions = {
   googleCalendarSource?: (options: GoogleCalendarSourceOptions) => SourceAdapter;
   // For tests: stands in for the Outlook Calendar adapter.
   outlookCalendarSource?: (options: OutlookCalendarSourceOptions) => SourceAdapter;
+  // For tests: stands in for the GitHub adapter.
+  githubSource?: (options: GitHubSourceOptions) => SourceAdapter;
+  // What a GitHub Account watches, for its syncs (Settings → GitHub works out the first selection
+  // when there is none yet, asking GitHub at `apiUrl`).
+  githubWatch?: (account: string, apiUrl: string) => Promise<SyncWatch | null>;
   random?: () => number;
   log?: (message: string) => void;
   // The Accounts changed, or whether one needs reconnecting did.
@@ -87,6 +95,8 @@ export function setUpSync(
     teamsSource = createTeamsSource,
     googleCalendarSource = createGoogleCalendarSource,
     outlookCalendarSource = createOutlookCalendarSource,
+    githubSource = createGitHubSource,
+    githubWatch,
     random,
     log = (message) => console.warn(message),
     onAccountsChanged,
@@ -96,6 +106,7 @@ export function setUpSync(
   let linearApiUrl = 'https://api.linear.app/graphql';
   let graphUrl = 'https://graph.microsoft.com/v1.0';
   let googleCalendarUrl = 'https://www.googleapis.com/calendar/v3';
+  let githubApiUrl = 'https://api.github.com';
   const engine: SyncEngine = createSyncEngine({
     store,
     adapters: [
@@ -110,8 +121,11 @@ export function setUpSync(
         graphUrl: () => graphUrl,
         calendars: calendarChoicesIn(store, 'outlook-calendar'),
       }),
+      githubSource({ apiUrl: () => githubApiUrl }),
     ],
     accessTokens,
+    watchOf: (account, source) =>
+      source === 'github' && githubWatch ? githubWatch(account, githubApiUrl) : null,
     onSignInRefused: (account) => send({ type: 'account-refused', account }),
     random,
     log,
@@ -160,6 +174,7 @@ export function setUpSync(
           linearApiUrl = parsed.data.endpoints.linear;
           if (parsed.data.endpoints.graph) graphUrl = parsed.data.endpoints.graph;
           if (parsed.data.endpoints.googleCalendar) googleCalendarUrl = parsed.data.endpoints.googleCalendar;
+          if (parsed.data.endpoints.github) githubApiUrl = parsed.data.endpoints.github;
           listed = parsed.data.accounts;
           engine.setAccounts(parsed.data.accounts);
           accountsMayHaveChanged();

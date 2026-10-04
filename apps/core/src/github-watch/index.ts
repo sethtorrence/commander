@@ -26,6 +26,7 @@ import {
   readGitHubOrg,
   readWorkedRepos,
   SignInRefused,
+  type SyncWatch,
 } from '@commander/sources';
 import { z } from 'zod';
 import { type AccessTokens, AccessTokenUnavailable } from '../access-tokens';
@@ -227,5 +228,14 @@ export function setUpGitHubWatch(
 
     // What an Account watches, for GitHub sync; null before its first selection.
     selection: (account: string): GitHubWatch | null => store.githubWatch.read(account).watch,
+
+    // What an Account watches as GitHub sync reads it: the selection, and the owners GitHub listed as
+    // orgs. Before the first selection, it is worked out first, as Settings → GitHub would (from what
+    // the User worked in lately); null when that can't be done yet.
+    async forSync(account: string, apiUrl: string): Promise<SyncWatch | null> {
+      if (!store.githubWatch.read(account).watch) await load(account, apiUrl);
+      const { watch, access } = store.githubWatch.read(account);
+      return watch ? { selection: watch, orgs: access?.orgs.map((org) => org.login) ?? [] } : null;
+    },
   };
 }

@@ -349,3 +349,20 @@ describe('for GitHub sync', () => {
     expect(watch().selection('github:2')).toBeNull();
   });
 });
+
+describe('what GitHub sync reads', () => {
+  it('works out the first selection when there is none yet, and hands over which owners are orgs', async () => {
+    const forSync = await watch().forSync(ACCOUNT, API);
+
+    expect(github.readWorkedRepos).toHaveBeenCalledTimes(1);
+    expect(forSync).toEqual({ selection: { orgs: [], repos: [ref(api), ref(dotfiles)] }, orgs: ['acme'] });
+    // Once chosen, it asks GitHub nothing more.
+    await watch().forSync(ACCOUNT, API);
+    expect(github.readAccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('is null while the first selection can’t be worked out', async () => {
+    github.readAccess.mockRejectedValue(new SourceUnavailable('GitHub couldn’t answer just now.'));
+    expect(await watch().forSync(ACCOUNT, API)).toBeNull();
+  });
+});

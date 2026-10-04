@@ -24,6 +24,8 @@ const KINDS: Record<string, { tag: string; section: string | null }> = {
   'linear-issue': { tag: 'LIN', section: 'linear' },
   'pull-request': { tag: 'GH', section: 'github' },
   'review-request': { tag: 'GH', section: 'github' },
+  'github-issue': { tag: 'GH', section: 'github' },
+  'github-release': { tag: 'GH', section: 'github' },
   chat: { tag: 'TMS', section: 'teams' },
   'channel-post': { tag: 'TMS', section: null },
   todo: { tag: 'TDO', section: 'todos' },

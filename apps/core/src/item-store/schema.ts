@@ -11,12 +11,12 @@ import type {
   FieldSummary,
   FiledBy,
   GitHubAccess,
+  GitHubItemDetail,
   GitHubRepoRef,
   GitHubWatch,
   ItemKind,
   ItemStatus,
   JobOutcome,
-  LinearCatalog,
   LinearIssueDetail,
   LinkTargetType,
   LinkType,
@@ -32,6 +32,7 @@ import type {
   RuleTarget,
   RuleWhen,
   Source,
+  SourceCatalog,
   SyncOutcomeKind,
   SyncProblem,
   SyncTrigger,
@@ -272,6 +273,18 @@ export const chatSettings = sqliteTable(
   (t) => [primaryKey({ columns: [t.account, t.chatId] })],
 );
 
+// Kind-specific detail for GitHub's Items (pull requests, issues, review requests and releases), as
+// GitHub sync reported them: one table for the four kinds, which are read and written together. The
+// `identifier` ("acme/api#12") is how people name a pull request or issue.
+export const githubDetails = sqliteTable('github_details', {
+  itemId: text('item_id')
+    .primaryKey()
+    .references(() => items.id),
+  identifier: text('identifier'),
+  // The rest of the detail, with its `kind`.
+  data: text('data', { mode: 'json' }).$type<GitHubItemDetail>().notNull(),
+});
+
 // Where each Account's sync stands, so it carries on after a restart: the Source's cursor, when it
 // last synced, any back-off, and the User's cadence. Never a token.
 // One row per Source of each Account: an Account carrying several Sources (a Google Account's Gmail
@@ -352,12 +365,13 @@ export const outgoingChanges = sqliteTable(
   (t) => [index('outgoing_changes_account').on(t.account), index('outgoing_changes_item').on(t.itemId)],
 );
 
-// What each Account's Source offers the detail pane's pickers (Linear: each team's states, members,
-// labels, cycles and Linear projects), as its last sync fetched it.
+// What each Account's Source keeps beside its Items, as its last sync fetched it: the detail pane's
+// pickers (Linear: each team's states, members, labels, cycles and Linear projects) or repo health
+// (GitHub).
 export const sourceCatalogs = sqliteTable('source_catalogs', {
   account: text('account').primaryKey(),
   source: text('source').$type<Source>().notNull(),
-  catalog: text('catalog', { mode: 'json' }).$type<LinearCatalog>().notNull(),
+  catalog: text('catalog', { mode: 'json' }).$type<SourceCatalog>().notNull(),
   fetchedAt: integer('fetched_at').notNull(),
 });
 

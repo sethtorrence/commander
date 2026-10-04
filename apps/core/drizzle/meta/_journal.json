@@ -169,6 +169,13 @@
       "when": 1791091056282,
       "tag": "0023_meeting_chips",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1791102640695,
+      "tag": "0024_github_sync",
+      "breakpoints": true
     }
   ]
 }

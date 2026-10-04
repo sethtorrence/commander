@@ -1,11 +1,12 @@
 import type { AccountSummary, AccountsRequest } from '@commander/domain/ipc';
 import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@commander/ui';
 import { useNow } from '../frame/use-now';
-import { describeSync } from './account-sync';
+import { describeHourUse, describeSync } from './account-sync';
 
 // One Account's sync in Settings → Accounts: last sync, how many Items, the next sync or why it's
 // waiting, any problem in plain words, Sync now, and how often it syncs. A Source with a light sync
-// (Teams) also has the switch for checking whenever another Source syncs, with Microsoft's caveat.
+// (Teams) also has the switch for checking whenever another Source syncs, with Microsoft's caveat. A
+// Source with hourly limits (GitHub) shows the last hour's use of them.
 
 // "Every 15 min", or for a Source with one choice, a plain line ("Full sync once a day").
 const every = (minutes: number) => (minutes === 1440 ? 'once a day' : `every ${minutes} min`);
@@ -22,6 +23,7 @@ export function AccountSync({
   const { synced, next, problem } = describeSync(sync, now);
   const canSync = sync.activity === 'idle' || sync.activity === 'backing-off';
   const light = sync.alsoAfterOtherSources !== undefined;
+  const hourUse = describeHourUse(sync);
   return (
     <div data-testid="account-sync" className="mt-3 max-w-[560px]">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -60,6 +62,11 @@ export function AccountSync({
           Sync now
         </Button>
       </div>
+      {hourUse && (
+        <p data-testid="account-hour-use" className="m-0 mt-2 text-note leading-[19px] text-muted">
+          {hourUse}
+        </p>
+      )}
       {light && (
         <div className="mt-3">
           <div className="flex items-center gap-3 text-note text-ink">

@@ -46,3 +46,19 @@ export function describeSync(
   }[status.activity];
   return { synced, next, problem: status.problem?.message ?? null };
 }
+
+// What a Source's hourly limits are counted in (GitHub: REST requests and GraphQL points).
+const units: Partial<Record<AccountSyncStatus['source'], [string, string]>> = {
+  github: ['REST requests', 'GraphQL points'],
+};
+
+const count = (n: number) => n.toLocaleString('en-GB');
+
+// "Last hour: 12 of 5,000 REST requests · 1,234 of 5,000 GraphQL points", for Sources with hourly
+// limits (GitHub's are shared with the User's other tools); null for the rest.
+export function describeHourUse(status: AccountSyncStatus): string | null {
+  const use = status.hourUse;
+  if (!use) return null;
+  const [requests, points] = units[status.source] ?? ['requests', 'points'];
+  return `Last hour: ${count(use.requests)} of ${count(use.requestLimit)} ${requests} · ${count(use.complexity)} of ${count(use.complexityLimit)} ${points}`;
+}

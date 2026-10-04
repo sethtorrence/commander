@@ -1,0 +1,452 @@
+{
+  "openWorkEmpty": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "graphql"
+    },
+    "body": {
+      "data": {
+        "viewer": {
+          "login": "octocat"
+        },
+        "mine": {
+          "issueCount": 0,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": []
+        },
+        "direct": {
+          "issueCount": 0,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": []
+        },
+        "team": {
+          "issueCount": 0,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": []
+        },
+        "assigned": {
+          "issueCount": 0,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": []
+        },
+        "rateLimit": {
+          "cost": 1,
+          "limit": 5000,
+          "remaining": 4990,
+          "resetAt": "2026-10-03T13:00:00Z"
+        }
+      }
+    }
+  },
+  "teams": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core",
+      "etag": "W/\"teams-1\""
+    },
+    "body": [
+      {
+        "slug": "platform",
+        "name": "Platform",
+        "organization": {
+          "login": "acme"
+        }
+      }
+    ]
+  },
+  "teamsRefused": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core"
+    },
+    "body": {
+      "message": "Resource not accessible by integration",
+      "status": "403"
+    }
+  },
+  "reposApi": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core",
+      "etag": "W/\"acme-repos-1\""
+    },
+    "body": [
+      {
+        "id": 1190,
+        "node_id": "R_kgDOAcmeApi",
+        "name": "api",
+        "full_name": "acme/api",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "type": "Organization"
+        },
+        "archived": false,
+        "pushed_at": "2026-10-02T16:00:00Z"
+      }
+    ]
+  },
+  "issuesGate": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core",
+      "etag": "W/\"acme-issues-1\""
+    },
+    "body": [
+      {
+        "number": 15
+      }
+    ]
+  },
+  "notFound": {
+    "status": 404,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core"
+    },
+    "body": {
+      "message": "Not Found",
+      "documentation_url": "https://docs.github.com/rest",
+      "status": "404"
+    }
+  },
+  "notModified": {
+    "status": 304,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core"
+    },
+    "body": null
+  },
+  "primaryLimit": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "0",
+      "x-ratelimit-reset": "1791034200",
+      "x-ratelimit-resource": "core"
+    },
+    "body": {
+      "message": "API rate limit exceeded for user ID 583231.",
+      "documentation_url": "https://docs.github.com/rest/overview/rate-limits-for-the-rest-api",
+      "status": "403"
+    }
+  },
+  "secondaryLimit": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4900",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core"
+    },
+    "body": {
+      "message": "You have exceeded a secondary rate limit. Please wait a few minutes before you try again.",
+      "status": "403"
+    }
+  },
+  "tooManyRequests": {
+    "status": 429,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4900",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "core",
+      "retry-after": "120"
+    },
+    "body": {
+      "message": "Too Many Requests",
+      "status": "429"
+    }
+  },
+  "graphqlRateLimited": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "0",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "graphql"
+    },
+    "body": {
+      "data": null,
+      "errors": [
+        {
+          "type": "RATE_LIMITED",
+          "code": "graphql_rate_limit",
+          "message": "API rate limit already exceeded for user ID 583231."
+        }
+      ]
+    }
+  },
+  "badCredentials": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+      "message": "Bad credentials",
+      "status": "401"
+    }
+  },
+  "timeout": {
+    "status": 502,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "data": null,
+      "errors": [
+        {
+          "message": "Something went wrong while executing your query. This may be the result of a timeout, or it could be a GitHub bug. Please include `0400:3F1A:2B5D` when reporting this issue."
+        }
+      ]
+    }
+  },
+  "searchPage": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4990",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "graphql"
+    },
+    "body": {
+      "data": {
+        "search": {
+          "issueCount": 1,
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          },
+          "nodes": [
+            {
+              "__typename": "PullRequest",
+              "id": "PR_api_12",
+              "number": 12,
+              "url": "https://github.com/acme/api/pull/12",
+              "title": "Retry webhooks with back-off",
+              "body": "Retries **failed webhooks** with exponential back-off.\n\nCloses #30.",
+              "isDraft": false,
+              "state": "OPEN",
+              "createdAt": "2026-09-30T09:00:00Z",
+              "updatedAt": "2026-10-02T15:00:00Z",
+              "mergedAt": null,
+              "closedAt": null,
+              "additions": 120,
+              "deletions": 14,
+              "changedFiles": 6,
+              "baseRefName": "main",
+              "headRefName": "retry-webhooks",
+              "reviewDecision": "REVIEW_REQUIRED",
+              "repository": {
+                "id": "R_kgDOAcmeApi",
+                "name": "api",
+                "owner": {
+                  "login": "acme"
+                }
+              },
+              "author": {
+                "login": "octocat",
+                "email": "octocat@github.test"
+              },
+              "labels": {
+                "nodes": [
+                  {
+                    "name": "enhancement",
+                    "color": "a2eeef"
+                  }
+                ]
+              },
+              "assignees": {
+                "nodes": [
+                  {
+                    "login": "octocat"
+                  }
+                ]
+              },
+              "reviewRequests": {
+                "nodes": [
+                  {
+                    "requestedReviewer": {
+                      "__typename": "User",
+                      "login": "priya"
+                    }
+                  }
+                ]
+              },
+              "timelineItems": {
+                "nodes": [
+                  {
+                    "createdAt": "2026-10-01T09:00:00Z",
+                    "requestedReviewer": {
+                      "__typename": "User",
+                      "login": "priya"
+                    }
+                  }
+                ]
+              },
+              "latestReviews": {
+                "nodes": []
+              },
+              "commits": {
+                "nodes": [
+                  {
+                    "commit": {
+                      "statusCheckRollup": {
+                        "state": "PENDING"
+                      },
+                      "author": {
+                        "email": "octocat@users.noreply.github.com",
+                        "user": {
+                          "login": "octocat"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "closingIssuesReferences": {
+                "nodes": [
+                  {
+                    "number": 30,
+                    "title": "Webhooks drop on 502",
+                    "url": "https://github.com/acme/api/issues/30",
+                    "repository": {
+                      "name": "api",
+                      "owner": {
+                        "login": "acme"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "rateLimit": {
+          "cost": 1,
+          "limit": 5000,
+          "remaining": 4990,
+          "resetAt": "2026-10-03T13:00:00Z"
+        }
+      }
+    }
+  },
+  "repoNode": {
+    "id": "R_kgDOAcmeApi",
+    "name": "api",
+    "owner": {
+      "login": "acme"
+    },
+    "defaultBranchRef": {
+      "name": "main",
+      "target": {
+        "oid": "a1b2c3",
+        "committedDate": "2026-10-02T16:00:00Z",
+        "statusCheckRollup": {
+          "state": "SUCCESS"
+        },
+        "history": {
+          "nodes": []
+        }
+      }
+    },
+    "releases": {
+      "nodes": []
+    }
+  },
+  "sweep": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4970",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "graphql"
+    },
+    "body": {
+      "data": {
+        "items": [
+          null,
+          {
+            "__typename": "Issue",
+            "id": "I_api_30",
+            "number": 4,
+            "repository": {
+              "id": "R_kgDOAcmeWeb"
+            }
+          },
+          {
+            "__typename": "PullRequest",
+            "id": "PR_api_12",
+            "number": 12,
+            "repository": {
+              "id": "R_kgDOAcmeApi"
+            }
+          }
+        ],
+        "repos": [
+          {
+            "id": "R_kgDOAcmeApi"
+          }
+        ],
+        "rateLimit": {
+          "cost": 1,
+          "limit": 5000,
+          "remaining": 4970,
+          "resetAt": "2026-10-03T13:00:00Z"
+        }
+      },
+      "errors": [
+        {
+          "type": "NOT_FOUND",
+          "path": ["items", 0],
+          "message": "Could not resolve to a node with the global id of 'PR_api_15'"
+        }
+      ]
+    }
+  }
+}

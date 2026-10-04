@@ -30,6 +30,7 @@ import {
   type FieldSummary,
   type Filing,
   firstMatch,
+  githubIdentifier,
   type Item,
   type ItemAction,
   type ItemDetail,
@@ -37,6 +38,7 @@ import {
   type ItemQuery,
   type ItemRef,
   type ItemView,
+  isGitHubItemDetail,
   itemAction,
   itemQuery,
   type LinearCatalog,
@@ -104,6 +106,7 @@ import {
   chatDetailOf,
   dailyNoteDetailOf,
   eventDetailOf,
+  githubDetailOf,
   type ItemRow,
   type ItemState,
   itemColumns,
@@ -333,6 +336,13 @@ type NewEntry = {
 
 // Daily Notes and Blocks only make sense with their detail: the day, or the place in the outline.
 const NEEDS_DETAIL: ReadonlySet<ItemKind> = new Set(['daily-note', 'block']);
+// GitHub's Item kinds, whose detail is kept in one table.
+const GITHUB_KINDS: ReadonlySet<ItemKind> = new Set([
+  'pull-request',
+  'github-issue',
+  'review-request',
+  'github-release',
+]);
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const MONTHS = [
@@ -583,6 +593,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const found = db.select().from(eventDetails).where(inArray(eventDetails.itemId, eventIds)).all();
       for (const row of found) details.set(row.itemId, eventDetailOf(row));
     }
+    const githubIds = rows.filter((row) => GITHUB_KINDS.has(row.kind)).map((row) => row.id);
+    if (githubIds.length) {
+      const { githubDetails } = schema;
+      const found = db.select().from(githubDetails).where(inArray(githubDetails.itemId, githubIds)).all();
+      for (const row of found) details.set(row.itemId, githubDetailOf(row));
+    }
     // The warning mark: an Item's own, or (for a Todo) the Item's behind it.
     const backedBy = (id: string) => {
       const detail = details.get(id);
@@ -660,6 +676,19 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (detail?.kind !== 'block') db.delete(blockDetails).where(eq(blockDetails.itemId, id)).run();
     if (detail?.kind !== 'linear-issue')
       db.delete(linearIssueDetails).where(eq(linearIssueDetails.itemId, id)).run();
+    if (isGitHubItemDetail(detail)) {
+      const { githubDetails } = schema;
+      const identifier =
+        detail.kind === 'pull-request' || detail.kind === 'github-issue'
+          ? githubIdentifier(detail.repo, detail.number)
+          : null;
+      db.insert(githubDetails)
+        .values({ itemId: id, identifier, data: detail })
+        .onConflictDoUpdate({ target: githubDetails.itemId, set: { identifier, data: detail } })
+        .run();
+      return;
+    }
+    db.delete(schema.githubDetails).where(eq(schema.githubDetails.itemId, id)).run();
     switch (detail?.kind) {
       case 'todo': {
         const values = { origin: detail.origin, dueOn: detail.dueOn, backedBy: detail.backedBy };
@@ -1530,8 +1559,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     // The Item's Todo (a Linear Todo) follows it, once it is filed.
     const follow = (itemId: string, before: ItemState | null, entryId?: number) =>
       linearTodos.follow(requireItem(itemId), before, { by, causedBy: entryId ? { entryId } : null });
-    for (const incoming of batch.items) {
+    for (const handed of batch.items) {
       const at = now();
+      const incoming = withItemRefs(batch.source, batch.account, handed);
       const existing = findBySourceIdentity(batch.source, batch.account, incoming.externalId);
       if (existing && existing.deletedAt !== null && outgoing.queued(existing.id, DELETE_FIELD)) {
         // Deleted in Commander (an undone Send to Linear), on its way to being deleted at the Source.
@@ -1602,6 +1632,18 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     result.todos = [...new Set(linearTodos.takeChanged())];
     return result;
   });
+
+  // A GitHub review request names its pull request's Item by id: filled in from the pull request's
+  // external id in the same Account (saved before it in the batch, or by an earlier sync).
+  function withItemRefs<T extends { detail: ItemDetail | null }>(
+    source: Source,
+    account: string,
+    item: T,
+  ): T {
+    if (item.detail?.kind !== 'review-request') return item;
+    const pull = findBySourceIdentity(source, account, item.detail.pullRequest);
+    return { ...item, detail: { ...item.detail, pullRequestId: pull?.id ?? null } };
+  }
 
   // Deletes Items as one change: they stay as tombstones, so Links to them show them as gone.
   function removeItems(found: Item[], context: ActionContext): string[] {
