@@ -478,7 +478,7 @@ describe('what a sync saves', () => {
     await vi.advanceTimersByTimeAsync(60 * MIN);
 
     expect(store.query({ account: ACME })).toEqual([]);
-    expect(store.syncState.get(ACME)).toBeNull();
+    expect(store.syncState.get(ACME, 'linear')).toBeNull();
     expect(syncTimes()).toEqual([0]);
     expect(status()).toBeUndefined();
   });

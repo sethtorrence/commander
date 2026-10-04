@@ -5,9 +5,16 @@ import { type Source, source } from './items';
 // Accounts across the process seams. Tokens and API keys live in the main process (the keyring);
 // the window only ever sees AccountSummary, and the Core borrows access tokens, in memory only.
 
-// The Sources the User can connect Accounts to so far; the others follow.
-export const accountSources = ['linear', 'teams', 'github'] as const satisfies readonly Source[];
+// The kinds of Account the User can connect so far; the others follow. Each carries the Sources
+// listed here, sharing its sign-in: a Google Account carries Gmail and Google Calendar.
+export const accountSources = ['linear', 'teams', 'github', 'google'] as const;
 export const accountSource = z.enum(accountSources);
+export const SOURCES_OF_ACCOUNT: Record<z.infer<typeof accountSource>, readonly Source[]> = {
+  linear: ['linear'],
+  teams: ['teams'],
+  github: ['github'],
+  google: ['gmail', 'google-calendar'],
+};
 // The zod-free AccountSource type in ipc.ts must match.
 const _sourceMatches: [AccountSource] extends [z.infer<typeof accountSource>]
   ? [z.infer<typeof accountSource>] extends [AccountSource]
@@ -42,6 +49,12 @@ export const accountsRequest = z.union([
   z.object({ op: z.literal('refresh-details'), accountId: z.string().min(1) }),
   z.object({ op: z.literal('cancel-sign-in') }),
   z.object({ op: z.literal('remove'), accountId: z.string().min(1) }),
+  z.object({
+    op: z.literal('set-source-enabled'),
+    accountId: z.string().min(1),
+    source,
+    enabled: z.boolean(),
+  }),
   z.object({ op: z.literal('sync-now'), accountId: z.string().min(1) }),
   z.object({
     op: z.literal('set-sync-cadence'),

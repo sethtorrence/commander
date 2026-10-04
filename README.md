@@ -49,15 +49,21 @@ cp config/example.json config/local.json   # then fill in the client IDs
   "github": {
     "clientId": "Commander's GitHub App: its Client ID",
     "appSlug": "the app's slug, from github.com/apps/<slug>"
+  },
+  "google": {
+    "clientId": "Commander's Google Desktop app OAuth client: its client ID",
+    "clientSecret": "that client's client secret"
   }
 }
 ```
 
-The `microsoft` block is optional: without it (or with `null`s), Teams can't be connected. The `github` block is optional too: without a client ID, GitHub connects only with a token or gh's sign-in. Restart `pnpm dev` after changing the file.
+The `microsoft` and `google` blocks are optional: without them (or with `null`s), Teams or Google can't be connected. The `github` block is optional too: without a client ID, GitHub connects only with a token or gh's sign-in. Restart `pnpm dev` after changing the file.
 
 ### Accounts
 
 **Settings → Accounts** (`,`) lists the Accounts of every Source, grouped by Source, each with its own **Connect**. Every Account can show **Reconnect** (when its sign-in failed for good) and be **Removed**. However a Source signs in, its tokens and API keys are stored only in the system keyring, through the secrets module; the window never receives one. The Accounts themselves (their names, how they signed in, and whether they need reconnecting) are kept in `accounts.json` in the `userData` folder. Each Source plugs into the same Account code (`apps/desktop/src/main/accounts/source-accounts.ts`) with its own sign-in, refresh and naming.
+
+An Account can carry more than one Source that share its sign-in: a Google Account carries **Gmail** and **Google Calendar**, each with its own switch in Settings → Accounts. The sync engine keeps one queue per Account, so two Sources of one Account never call out at the same time, but each Source has its own cursor, cadence, status and back-off (kept per Account and Source in `commander.db`). Linear, Teams and GitHub Accounts carry one Source each and work as before.
 
 ### Connecting Linear
 
@@ -116,6 +122,38 @@ The end-to-end tests never contact Microsoft: they point sign-in and Graph at a 
 7. Run `pnpm dev`, choose **Connect GitHub** in Settings → Accounts, and enter the code at github.com/login/device.
 
 The tests never contact GitHub: they point sign-in and the API at a fake GitHub on this machine (device flow, REST and a sliver of GraphQL) through `COMMANDER_TEST_GITHUB`, which only accepts loopback URLs, and put a stand-in `gh` first on the `PATH`.
+
+### Connecting Google
+
+**Connect Google** in Settings → Accounts signs in once for both Google Sources, **Gmail** and **Google Calendar**. Each Google account is its own Account, shown as "Google · <address>" and keyed by Google's account ID (the ID token's `sub`), so connecting the same account again updates it, and you can connect several. Nothing syncs yet: Google Calendar sync (M5) and Gmail sync (M6) plug into this Account.
+
+- Sign-in is OAuth 2.0 with PKCE (S256) in your browser, through Commander's Google "Desktop app" OAuth client. Commander listens on `http://127.0.0.1:<a free port>` only while a sign-in is open (Google accepts any port for desktop clients), checks the `state` it sent, and asks for `access_type=offline` and `prompt=consent` so Google always returns a refresh token, and `include_granted_scopes=true` so a later sign-in keeps what you already allowed.
+- It asks for these permissions, and nothing broader (no IMAP, no `https://mail.google.com/`):
+
+  | Permission | For |
+  |---|---|
+  | `openid`, `email`, `profile` | Who you are: the Account's ID, address and name |
+  | `https://www.googleapis.com/auth/gmail.modify` | Gmail: read, label, archive, send and trash mail (never delete forever) |
+  | `https://www.googleapis.com/auth/calendar.events` | Google Calendar: read and write events, including replies to invitations and events with guests |
+  | `https://www.googleapis.com/auth/calendar.calendarlist.readonly` | Which calendars you have |
+  | `https://www.googleapis.com/auth/calendar.app.created` | The "Commander" calendar for focus blocks |
+  | `https://www.googleapis.com/auth/calendar.freebusy` | Colleagues' free/busy when finding time |
+
+  `gmail.modify` is a restricted scope; the Calendar ones are sensitive or non-sensitive. That's fine unverified for personal use (under 100 users); verification is for paying Users later.
+- Google lets you untick permissions on its consent screen. A Source missing any of its permissions stays off, with **Grant access** beside it, which signs in again for that Account; the Account works for whatever you allowed. You can also switch a granted Source off and on.
+- If a Google Workspace admin hasn't allowed Commander (`admin_policy_enforced` or `org_internal`), Commander says so plainly rather than showing a generic error. Google may show that on its own page in your browser instead; then cancel the sign-in in Commander.
+- **Connect Google** is shown only when `config/local.json` has `google.clientId`; otherwise a line explains why. The client secret is sent with the code exchange and each refresh: Google says a desktop client's secret isn't treated as a secret, but it still lives only in `config/local.json`, never in the repo.
+- Access tokens last about an hour. The main process refreshes one when it is within 10 minutes of expiry, one refresh at a time per Account (Google keeps the same refresh token). If Google refuses a refresh for good (`invalid_grant`: revoked, expired, or the password changed), the Account shows **Reconnect** and its syncing pauses.
+- **Remove** deletes the Account's keyring entry and its Gmail and Google Calendar Items.
+
+**Setting up Commander's Google client (once, by the owner):** in the Google Cloud console, in the "Commander" project on your personal Google account:
+
+1. **APIs & Services → Library:** enable the **Gmail API** and the **Google Calendar API**.
+2. **Google Auth Platform → Audience:** user type **External**. Then **Data access → Add or remove scopes:** add the eight permissions in the table above. Back in **Audience**, choose **Publish app** so its status is **In production**, and leave it unverified: the "Google hasn't verified this app" warning is expected for personal use. In **Testing**, sign-ins expire after 7 days. No test users are needed once it is in production.
+3. **Clients:** use the existing **Desktop app** OAuth client (no redirect URI to register: desktop clients accept any loopback port). From the client JSON you downloaded (keep it outside the repo), copy `installed.client_id` into `google.clientId` and `installed.client_secret` into `google.clientSecret` in `config/local.json` (see Build config above). Keep them out of the repo, issues, PRs and logs.
+4. Run `pnpm dev`, choose **Connect Google**, accept the unverified-app warning (Advanced → Go to Commander), allow both Gmail and Calendar, and check that the Account appears with both Sources on.
+
+The end-to-end tests never contact Google: they point sign-in at a fake Google on this machine through `COMMANDER_TEST_GOOGLE`, which only accepts loopback URLs.
 
 ### Syncing
 

@@ -43,7 +43,14 @@ export async function signInWithBrowser({
   timeoutMs?: number;
   now?: () => number;
 }): Promise<TokenSet> {
-  const { idToken: _idToken, ...tokens } = await signInWith({ client: linearClient(client), ...options });
+  const {
+    idToken: _idToken,
+    scope: _scope,
+    ...tokens
+  } = await signInWith({
+    client: linearClient(client),
+    ...options,
+  });
   return tokens;
 }
 

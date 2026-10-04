@@ -5,9 +5,11 @@ import { createPkce } from './pkce';
 import { SignInError, type SourceError } from './sign-in-error';
 
 // OAuth 2.0 for a public desktop client, as every Source with a browser sign-in uses it:
-// authorization code with PKCE (S256) and no client secret, the browser coming back to a loopback
-// listener, and refresh tokens that may rotate on every refresh. Each Source supplies its endpoints,
-// scopes and redirect (see linear/oauth.ts and microsoft/microsoft-sign-in.ts).
+// authorization code with PKCE (S256), the browser coming back to a loopback listener, and refresh
+// tokens that may rotate on every refresh (or, as Google's, stay the same). Each Source supplies its
+// endpoints, scopes and redirect (see linear/oauth.ts, microsoft/microsoft-sign-in.ts and
+// google/google-sign-in.ts). No client secret, except Google's desktop one, which Google itself
+// says isn't treated as a secret (it still comes only from the git-ignored build config).
 
 export type AuthorizationCodeClient = {
   // The Source, as messages name it ("Linear", "Microsoft").
@@ -15,14 +17,20 @@ export type AuthorizationCodeClient = {
   clientId: string;
   authorizeUrl: string;
   tokenUrl: string;
+  // Sent with the code exchange and each refresh, for Sources whose desktop clients have one (Google).
+  clientSecret?: string;
   // The loopback port registered with the app, or 0 for any free one.
   port: number;
+  // The redirect's host: 'localhost' (the default), or '127.0.0.1' where the Source asks for it (Google).
+  redirectHost?: 'localhost' | '127.0.0.1';
   // The redirect's path on the loopback port: '/callback', or '/' for a bare http://localhost:<port>.
   callbackPath: string;
   // The scope parameter, as the Source writes it (Linear: "read,write"; Microsoft: space-separated).
   scope: string;
   // Sent again with each refresh, for Sources that want it (Microsoft).
   refreshScope?: string;
+  // More authorization parameters the Source needs (Google: access_type=offline, prompt=consent).
+  authorizeParams?: Record<string, string>;
 };
 
 export type TokenSet = {
@@ -32,15 +40,19 @@ export type TokenSet = {
   expiresAt: number;
 };
 
-// A sign-in's tokens, with the OpenID Connect ID token when the Source sent one (never stored).
-export type SignedInTokens = TokenSet & { idToken?: string };
+// A sign-in's tokens, with the OpenID Connect ID token when the Source sent one (never stored), and
+// the scopes granted when the Source says (the User may have unticked some).
+export type SignedInTokens = TokenSet & { idToken?: string; scope?: string };
 
 const tokenResponse = z.object({
   access_token: z.string().min(1),
   refresh_token: z.string().min(1),
   expires_in: z.coerce.number().positive(),
   id_token: z.string().min(1).optional(),
+  scope: z.string().optional(),
 });
+// A refresh may bring no new refresh token (Google's don't rotate): the one used stays good.
+const refreshResponse = tokenResponse.extend({ refresh_token: z.string().min(1).optional() });
 
 const errorResponse = z.object({ error: z.string(), error_description: z.string().optional() });
 
@@ -71,15 +83,19 @@ async function readBody(response: Response): Promise<unknown> {
   return response.json().catch(() => null);
 }
 
-function readTokens(body: unknown, now: number): SignedInTokens | null {
-  const parsed = tokenResponse.safeParse(body);
+// `keptRefreshToken`: for a refresh, the refresh token used, kept when the Source sends no new one.
+function readTokens(body: unknown, now: number, keptRefreshToken?: string): SignedInTokens | null {
+  const parsed = (keptRefreshToken ? refreshResponse : tokenResponse).safeParse(body);
   if (!parsed.success) return null;
-  const { access_token, refresh_token, expires_in, id_token } = parsed.data;
+  const { access_token, refresh_token, expires_in, id_token, scope } = parsed.data;
+  const refreshToken = refresh_token ?? keptRefreshToken;
+  if (!refreshToken) return null;
   return {
     accessToken: access_token,
-    refreshToken: refresh_token,
+    refreshToken,
     expiresAt: now + expires_in * 1000,
     ...(id_token ? { idToken: id_token } : {}),
+    ...(scope !== undefined ? { scope } : {}),
   };
 }
 
@@ -110,6 +126,7 @@ export async function signInWithBrowser({
   const listener = await listenForRedirect({
     port: client.port,
     path: client.callbackPath,
+    host: client.redirectHost,
     state,
     sourceName: client.sourceName,
     timeoutMs,
@@ -127,6 +144,7 @@ export async function signInWithBrowser({
       state,
       code_challenge: pkce.challenge,
       code_challenge_method: pkce.method,
+      ...client.authorizeParams,
     }).toString();
     await openBrowser(authorize.toString());
     const { code } = await listener.result;
@@ -138,6 +156,7 @@ export async function signInWithBrowser({
         code,
         redirect_uri: listener.redirectUri,
         client_id: client.clientId,
+        ...(client.clientSecret ? { client_secret: client.clientSecret } : {}),
         code_verifier: pkce.verifier,
       });
     } catch {
@@ -170,7 +189,10 @@ export async function refreshTokens({
   refreshToken,
   now = Date.now,
 }: {
-  client: Pick<AuthorizationCodeClient, 'sourceName' | 'clientId' | 'tokenUrl' | 'refreshScope'>;
+  client: Pick<
+    AuthorizationCodeClient,
+    'sourceName' | 'clientId' | 'clientSecret' | 'tokenUrl' | 'refreshScope'
+  >;
   refreshToken: string;
   now?: () => number;
 }): Promise<TokenSet> {
@@ -180,6 +202,7 @@ export async function refreshTokens({
       grant_type: 'refresh_token',
       refresh_token: refreshToken,
       client_id: client.clientId,
+      ...(client.clientSecret ? { client_secret: client.clientSecret } : {}),
       ...(client.refreshScope ? { scope: client.refreshScope } : {}),
     });
   } catch {
@@ -195,13 +218,13 @@ export async function refreshTokens({
       );
     }
   }
-  const tokens = response.ok ? readTokens(body, now()) : null;
+  const tokens = response.ok ? readTokens(body, now(), refreshToken) : null;
   if (!tokens)
     throw new RefreshError(
       false,
       `${client.sourceName} could not refresh the sign-in (HTTP ${response.status})`,
     );
   // The ID token isn't kept: only a sign-in's names an Account.
-  const { idToken: _idToken, ...tokenSet } = tokens;
+  const { idToken: _idToken, scope: _scope, ...tokenSet } = tokens;
   return tokenSet;
 }

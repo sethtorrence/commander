@@ -4,6 +4,8 @@ import type {
   AccountsRequest,
   AccountsState,
   AdminConsentNeeded,
+  CarriedSource,
+  GoogleAccountSummary,
   SourceSignIn,
 } from '@commander/domain/ipc';
 import {
@@ -20,6 +22,7 @@ import {
   DialogTitle,
   Input,
   Led,
+  Switch,
   toast,
 } from '@commander/ui';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
@@ -47,15 +50,77 @@ const SOURCES: Record<AccountSource, { name: string; items: string }> = {
   linear: { name: 'Linear', items: 'Linear issues' },
   teams: { name: 'Microsoft Teams', items: 'Teams Chats' },
   github: { name: 'GitHub', items: 'GitHub pull requests and issues' },
+  google: { name: 'Google', items: 'emails and calendar events' },
+};
+
+// The Sources an Account can carry, as the User knows them.
+const CARRIED_NAMES: Partial<Record<CarriedSource['source'], string>> = {
+  gmail: 'Gmail',
+  'google-calendar': 'Google Calendar',
 };
 
 const linearMethods = { oauth: 'Signed in with Linear', 'api-key': 'Personal API key' } as const;
 
 function describeAccount(account: AccountSummary): string {
-  if (account.source === 'github') return describeGitHubAccount(account);
-  return account.source === 'linear'
-    ? `Linear workspace · linear.app/${account.urlKey} · ${linearMethods[account.method]}`
-    : `Microsoft work account · ${account.user?.name ?? account.userPrincipalName} · Signed in with Microsoft`;
+  switch (account.source) {
+    case 'github':
+      return describeGitHubAccount(account);
+    case 'linear':
+      return `Linear workspace · linear.app/${account.urlKey} · ${linearMethods[account.method]}`;
+    case 'teams':
+      return `Microsoft work account · ${account.user?.name ?? account.userPrincipalName} · Signed in with Microsoft`;
+    case 'google':
+      return `Google account · ${account.user?.name ?? account.email} · Signed in with Google`;
+  }
+}
+
+// The Sources a Google Account carries: each switchable, and Grant access for one whose permissions
+// the User didn't give (signing in again for this Account asks for them).
+function CarriedSources({
+  account,
+  busy,
+  onGrant,
+  request,
+}: {
+  account: GoogleAccountSummary;
+  busy: boolean;
+  onGrant: (() => void) | null;
+  request: (request: AccountsRequest) => void;
+}) {
+  return (
+    <ul data-testid="carried-sources" className="m-0 mt-3 flex max-w-[560px] list-none flex-col gap-2 p-0">
+      {account.sources.map((carried) => {
+        const name = CARRIED_NAMES[carried.source] ?? carried.source;
+        return (
+          <li
+            key={carried.source}
+            data-testid={`carried-source-${carried.source}`}
+            className="flex min-h-8 items-center gap-3"
+          >
+            <Switch
+              aria-label={name}
+              checked={carried.enabled}
+              disabled={!carried.granted || busy}
+              onCheckedChange={(enabled) =>
+                request({ op: 'set-source-enabled', accountId: account.id, source: carried.source, enabled })
+              }
+            />
+            <span className="min-w-[140px] text-note text-ink">{name}</span>
+            {carried.granted ? (
+              <span className="text-note text-muted">{carried.enabled ? 'On' : 'Off'}</span>
+            ) : (
+              <>
+                <span className="text-note text-muted">Not allowed in Google</span>
+                <Button disabled={busy || !onGrant} onClick={() => onGrant?.()}>
+                  Grant access
+                </Button>
+              </>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 function RemoveAccount({ account, onRemove }: { account: AccountSummary; onRemove: () => Promise<boolean> }) {
@@ -105,7 +170,8 @@ function AccountRow({
 }: {
   account: AccountSummary;
   busy: boolean;
-  // null: this build can't reconnect it (no app registration for its Source).
+  // null: this build can't reconnect it (no app registration for its Source). Also grants access
+  // to a Source the Account carries but wasn't allowed.
   onReconnect: (() => void) | null;
   onRemove: () => Promise<boolean>;
   request: (request: AccountsRequest) => void;
@@ -135,6 +201,9 @@ function AccountRow({
         </ButtonGroup>
       </div>
       {children}
+      {account.source === 'google' && (
+        <CarriedSources account={account} busy={busy} onGrant={onReconnect} request={request} />
+      )}
       <AccountSync account={account} request={request} />
     </SettingRow>
   );
@@ -422,6 +491,23 @@ export function AccountsPanel({ no }: { no: string }) {
         onOpenForm={() => setGitHubForm({})}
         onCloseForm={() => setGitHubForm(null)}
       />
+    ),
+    google: (signIn) => (
+      <SettingRow
+        label="Google"
+        description="Connect a Google account once for both Gmail and Google Calendar. Each Google account is its own Account; connect as many as you use."
+      >
+        {waiting('google') ? (
+          <WaitingForBrowser />
+        ) : signIn.oauth ? (
+          <Button variant="primary" disabled={busy !== null} onClick={() => connectWithBrowser('google')}>
+            Connect Google
+          </Button>
+        ) : (
+          <Note>This build has no Google sign-in set up. See “Connecting Google” in the README.</Note>
+        )}
+        {problemFor('google')}
+      </SettingRow>
     ),
   };
 

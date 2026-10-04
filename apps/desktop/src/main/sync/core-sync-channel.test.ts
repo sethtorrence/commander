@@ -50,6 +50,42 @@ describe('the Core sync channel', () => {
     ]);
   });
 
+  it('sends an Account carrying several Sources with those switched on, and none when all are off', () => {
+    const { sync, sent } = channel();
+    const google = (gmail: boolean, calendar: boolean) => ({
+      id: 'google:1045',
+      source: 'google' as const,
+      status: 'connected' as const,
+      user: { id: '1045', name: 'Alex' },
+      sources: [
+        { source: 'gmail' as const, granted: true, enabled: gmail },
+        { source: 'google-calendar' as const, granted: calendar, enabled: calendar },
+      ],
+    });
+    sync.setAccounts([google(true, false)]);
+    sync.setAccounts([google(false, false)]);
+
+    expect(sent).toEqual([
+      {
+        type: 'sync-accounts',
+        accounts: [{ id: 'google:1045', sources: ['gmail'], needsReconnect: false, me: '1045' }],
+        endpoints,
+      },
+      { type: 'sync-accounts', accounts: [], endpoints },
+    ]);
+  });
+
+  it('keeps a status for each Source of an Account', () => {
+    const { sync } = channel();
+    const gmail = { ...status, account: 'google:1045', source: 'gmail' as const };
+    const calendar = { ...gmail, source: 'google-calendar' as const, itemCount: 9 };
+    sync.handle({ type: 'sync-status', accounts: [gmail, calendar] });
+
+    expect(sync.status('google:1045', 'google-calendar')).toEqual(calendar);
+    expect(sync.status('google:1045', 'gmail')).toEqual(gmail);
+    expect(sync.status('google:1045')).toEqual(gmail);
+  });
+
   it('relays Sync now, cadence changes and the machine’s state', () => {
     const { sync, sent } = channel();
     sync.refresh('linear:org-acme');

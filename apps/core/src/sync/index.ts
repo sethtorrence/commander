@@ -84,8 +84,9 @@ export function setUpSync(
           const parsed = coreSyncCommand.safeParse(raw);
           if (!parsed.success) return reject(parsed.error);
           const { command } = parsed.data;
-          if (command.op === 'refresh') void engine.refresh(command.account);
-          else if (command.op === 'set-cadence') engine.setCadence(command.account, command.minutes);
+          if (command.op === 'refresh') void engine.refresh(command.account, command.source);
+          else if (command.op === 'set-cadence')
+            engine.setCadence(command.account, command.minutes, command.source);
           else engine.setAlsoAfterOtherSources(command.account, command.enabled);
           return true;
         }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { GITHUB_ENDPOINTS, type GitHubConfig } from './github/github-config';
+import { GOOGLE_ENDPOINTS, type GoogleConfig } from './google/google-config';
 import { LINEAR_ENDPOINTS, type LinearConfig } from './linear/linear-config';
 import { MICROSOFT_ENDPOINTS, type MicrosoftConfig } from './microsoft/microsoft-config';
 
@@ -7,7 +8,7 @@ import { MICROSOFT_ENDPOINTS, type MicrosoftConfig } from './microsoft/microsoft
 // their fixed loopback ports. The repo is public, so real values live in the git-ignored
 // config/local.json; config/example.json is committed with none. electron.vite.config.ts reads
 // whichever exists and injects it into the main process at build time. See the README ("Connecting
-// Linear", "Connecting Teams", "Connecting GitHub").
+// Linear", "Connecting Teams", "Connecting GitHub", "Connecting Google").
 
 const port = z.number().int().min(1025).max(65535);
 
@@ -43,6 +44,12 @@ const buildConfig = z.object({
   github: z
     .object({ clientId: optionalId, appSlug: optionalSlug })
     .default({ clientId: null, appSlug: null }),
+  // Commander's Google "Desktop app" OAuth client: its ID, and the secret Google gives desktop
+  // clients (not treated as a secret by Google, but never committed either). No client ID: Google
+  // can't be connected. Optional, so a config/local.json from before Google still builds.
+  google: z
+    .object({ clientId: optionalId, clientSecret: optionalId })
+    .default({ clientId: null, clientSecret: null }),
 });
 
 export type BuildConfig = z.infer<typeof buildConfig>;
@@ -115,5 +122,23 @@ const githubOverride = z.object({
 export function githubConfig(build: BuildConfig, env: NodeJS.ProcessEnv): GitHubConfig {
   return (
     testOverride(env, 'COMMANDER_TEST_GITHUB', githubOverride) ?? { ...build.github, ...GITHUB_ENDPOINTS }
+  );
+}
+
+// COMMANDER_TEST_GOOGLE points sign-in at a fake Google (google/fake-google-server.ts).
+const googleOverride = z.object({
+  clientId: z.string().min(1).nullable(),
+  clientSecret: z.string().min(1).nullable(),
+  authorizeUrl: loopbackUrl,
+  tokenUrl: loopbackUrl,
+  userinfoUrl: loopbackUrl,
+});
+
+export function googleConfig(build: BuildConfig, env: NodeJS.ProcessEnv): GoogleConfig {
+  return (
+    testOverride(env, 'COMMANDER_TEST_GOOGLE', googleOverride) ?? {
+      ...build.google,
+      ...GOOGLE_ENDPOINTS,
+    }
   );
 }
