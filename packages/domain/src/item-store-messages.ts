@@ -18,6 +18,13 @@ import {
 } from './email-threads';
 import { type FocusSettings, focusSettings } from './focus-time';
 import {
+  type OversightSettings,
+  type OversightSummary,
+  oversightRangeSpan,
+  oversightSettings,
+  oversightSummarySchema,
+} from './github-oversight';
+import {
   type ActivityEntry,
   activityEntry,
   activityQuery,
@@ -164,6 +171,15 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('email-thread'), account: z.string().min(1), threadKey: z.string().min(1) }),
   // Ares's meeting preps (#130) for these events: at most one each.
   z.object({ op: z.literal('meeting-preps'), eventIds: z.array(z.string().min(1)).max(500) }),
+  // The oversight summary (#119): the summary for a range, over everything, one Project (its id) or
+  // Unfiled (null); and Settings → GitHub's oversight settings.
+  z.object({
+    op: z.literal('github-oversight'),
+    range: oversightRangeSpan,
+    projectId: z.string().min(1).nullable().optional(),
+  }),
+  z.object({ op: z.literal('github-oversight-settings') }),
+  z.object({ op: z.literal('save-github-oversight-settings'), settings: oversightSettings }),
   // Settings → People (#117): everyone Commander knows, and the User's merges, splits, renames and
   // undos, each kept in the People log. People are not Items: not in the activity log.
   z.object({ op: z.literal('people') }),
@@ -230,6 +246,9 @@ export type ItemStoreResults = {
   'email-threads': EmailThreadList;
   'email-thread': EmailThread | null;
   'meeting-preps': Item[];
+  'github-oversight': OversightSummary;
+  'github-oversight-settings': OversightSettings;
+  'save-github-oversight-settings': OversightSettings;
   people: Person[];
   'change-people': PeopleChange;
   invitations: Item[];
@@ -280,6 +299,9 @@ export const itemStoreResult = {
   'email-threads': emailThreadList,
   'email-thread': emailThread.nullable(),
   'meeting-preps': z.array(item),
+  'github-oversight': oversightSummarySchema,
+  'github-oversight-settings': oversightSettings,
+  'save-github-oversight-settings': oversightSettings,
   people: z.array(person),
   'change-people': peopleChange,
   invitations: z.array(item),

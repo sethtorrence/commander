@@ -14,6 +14,8 @@ import { sectionFor } from '../todos/links';
 import { TodoGroup } from '../todos/TodoGroup';
 import type { GitHubAccountsClient, GitHubWork, WorkLink } from './github-work';
 import { ViewSwitch, WorkFilterBar } from './ListControls';
+import { OversightPanel } from './OversightPanel';
+import { type OversightClient, targetOf } from './oversight';
 import { useGitHub } from './use-github';
 import { WorkDetail } from './WorkDetail';
 import { WorkRow } from './WorkRow';
@@ -60,20 +62,21 @@ const and = (names: string[]) =>
  * Your work (#116) is the default view: the User's pull requests, the reviews asked of them and the
  * issues assigned to them.
  *
- * `summary` is the slot above the view switch for Ares's oversight summary (#119); open work (#116)
- * and the People view (#122) join the Section later.
+ * Above the view switch, the oversight summary (#119) when given its `oversight` client: each of its
+ * lines opens its Items here. The People view (#122) joins the Section later.
  */
 export function GitHubSheet({
   work,
   accounts,
   changes,
-  summary,
+  oversight,
 }: {
   work: GitHubWork;
   accounts: GitHubAccountsClient;
   /** Word of Items changed elsewhere (Ares filing a pull request, say), so the list catches up. */
   changes?: ItemChanges;
-  summary?: ReactNode;
+  /** The oversight summaries, from the Core. */
+  oversight?: OversightClient;
 }) {
   const { filter, include } = useProjectFilter();
   const { projects, openPage } = useProjects();
@@ -142,7 +145,22 @@ export function GitHubSheet({
       className="flex flex-col"
     >
       <SectionProjectFilter items={state.forProjectFilter} />
-      {summary}
+      {oversight && (
+        <OversightPanel
+          client={oversight}
+          accounts={accounts}
+          changes={changes}
+          onOpen={(line) => {
+            const target = targetOf(line);
+            if (target.kind === 'item') state.reveal(target.itemId);
+            else if (target.kind === 'items') state.showOnly(target.itemIds, target.label);
+            else {
+              state.clearFilters();
+              state.setFilter('repo', target.repo);
+            }
+          }}
+        />
+      )}
       <ViewSwitch
         view={state.view}
         counts={state.viewCounts}
@@ -155,6 +173,24 @@ export function GitHubSheet({
         onFilter={state.setFilter}
         onClear={state.clearFilters}
       />
+      {state.only && (
+        <p
+          role="status"
+          data-testid="github-only"
+          className="m-0 flex h-9 flex-none items-center gap-3 border-b border-line bg-raise pr-4 pl-[41px] text-note text-text"
+        >
+          <span className="min-w-0 flex-1 truncate">
+            Showing {state.only.itemIds.size} from the summary: {state.only.label}
+          </span>
+          <button
+            type="button"
+            onClick={state.showAll}
+            className="cursor-pointer border-0 bg-transparent font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted hover:text-ink"
+          >
+            Show all
+          </button>
+        </p>
+      )}
       {state.loaded && state.accounts.length === 0 && !state.allWork.length ? (
         <EmptySheet>No GitHub Account connected yet. Connect one in Settings → Accounts (,).</EmptySheet>
       ) : (
@@ -210,6 +246,10 @@ export function GitHubSheet({
                 onFile={file}
                 onClose={() => setDetailOpen(false)}
                 onOpenLink={openLink}
+                onRemoveLink={(link) => {
+                  const from = selected?.id;
+                  if (from) void state.apply(() => work.unlink(from, link));
+                }}
                 onOpenWork={state.reveal}
               />
             )}

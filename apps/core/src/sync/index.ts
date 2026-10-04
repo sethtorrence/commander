@@ -217,6 +217,9 @@ export function setUpSync(
 
     accounts: () => accounts(),
 
+    // Where GitHub's REST API lives, as the main process last said.
+    githubApiUrl: () => githubApiUrl,
+
     // Who the User is in the Account (their Linear user id), when known.
     me(account: string): string | null {
       return listed.find((each) => each.id === account)?.me ?? null;

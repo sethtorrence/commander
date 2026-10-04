@@ -2,7 +2,7 @@
 // utilityProcess and talks to the main process only through validated messages.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CoreMessage } from '@commander/domain';
+import type { CoreAccountRefused, CoreMessage } from '@commander/domain';
 import { createAccessTokens } from './access-tokens';
 import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
@@ -10,6 +10,7 @@ import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { setUpBusyCopies } from './busy-copies';
 import { setUpGitHubDiscussion } from './github-discussion';
+import { setUpGitHubOversight } from './github-oversight';
 import { setUpGitHubWatch } from './github-watch';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
@@ -77,6 +78,19 @@ const sync = setUpSync(itemStore, {
   accessTokens,
   githubWatch: (account, apiUrl) => githubWatch.forSync(account, apiUrl),
   onAccountsChanged: () => updates?.sweep(),
+});
+// The oversight summary (#119): finishes Links after GitHub and Linear syncs, and the writer's detail
+// fetched for the pull requests in today's summary. What it links shows at once in open views.
+const githubOversight = setUpGitHubOversight(itemStore, {
+  accessTokens,
+  apiUrl: () => sync.githubApiUrl(),
+  onSignInRefused: (account) =>
+    port.postMessage({ type: 'account-refused', account } satisfies CoreAccountRefused),
+});
+sync.engine.onSynced((event) => {
+  void githubOversight.synced(event).then((itemIds) => {
+    if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
+  });
 });
 // The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Notes.
 const markdownCopy = setUpMarkdownCopy({

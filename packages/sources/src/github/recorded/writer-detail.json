@@ -1,0 +1,385 @@
+{
+  "batch": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-limit": "5000",
+      "x-ratelimit-remaining": "4980",
+      "x-ratelimit-reset": "1791032400",
+      "x-ratelimit-resource": "graphql"
+    },
+    "body": {
+      "data": {
+        "nodes": [
+          {
+            "__typename": "PullRequest",
+            "id": "PR_kwDOAcme12",
+            "body": "Retries failed webhook deliveries with exponential back-off.\n\nCloses #30. Fixes ENG-412.",
+            "closingIssuesReferences": {
+              "nodes": [
+                {
+                  "number": 30,
+                  "title": "Webhooks drop on 502",
+                  "body": "Deliveries that get a 502 are never retried.",
+                  "repository": {
+                    "name": "api",
+                    "owner": {
+                      "login": "acme"
+                    }
+                  }
+                }
+              ]
+            },
+            "reviews": {
+              "nodes": [
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "state": "CHANGES_REQUESTED",
+                  "body": "Cap the retries, please.",
+                  "submittedAt": "2026-10-02T10:00:00Z",
+                  "createdAt": "2026-10-02T09:58:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "state": "COMMENTED",
+                  "body": "",
+                  "submittedAt": "2026-10-02T11:00:00Z",
+                  "createdAt": "2026-10-02T11:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "sam"
+                  },
+                  "state": "PENDING",
+                  "body": "Half-written",
+                  "submittedAt": null,
+                  "createdAt": "2026-10-03T08:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "state": "APPROVED",
+                  "body": "",
+                  "submittedAt": "2026-10-03T12:00:00Z",
+                  "createdAt": "2026-10-03T12:00:00Z"
+                }
+              ]
+            },
+            "reviewThreads": {
+              "nodes": [
+                {
+                  "path": "apps/core/src/webhooks/retry.ts",
+                  "comments": {
+                    "nodes": [
+                      {
+                        "author": {
+                          "login": "omar"
+                        },
+                        "body": "Why 7 attempts?",
+                        "createdAt": "2026-10-02T11:00:00Z"
+                      },
+                      {
+                        "author": {
+                          "login": "priya"
+                        },
+                        "body": "GitHub's own retry count.",
+                        "createdAt": "2026-10-02T12:00:00Z"
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "comments": {
+              "totalCount": 34,
+              "nodes": [
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 1",
+                  "createdAt": "2026-10-01T00:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 2",
+                  "createdAt": "2026-10-01T01:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 3",
+                  "createdAt": "2026-10-01T02:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 4",
+                  "createdAt": "2026-10-01T03:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 5",
+                  "createdAt": "2026-10-01T04:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 6",
+                  "createdAt": "2026-10-01T05:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 7",
+                  "createdAt": "2026-10-01T06:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 8",
+                  "createdAt": "2026-10-01T07:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 9",
+                  "createdAt": "2026-10-01T08:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 10",
+                  "createdAt": "2026-10-01T09:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 11",
+                  "createdAt": "2026-10-01T10:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 12",
+                  "createdAt": "2026-10-01T11:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 13",
+                  "createdAt": "2026-10-01T12:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 14",
+                  "createdAt": "2026-10-01T13:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 15",
+                  "createdAt": "2026-10-01T14:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 16",
+                  "createdAt": "2026-10-01T15:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 17",
+                  "createdAt": "2026-10-01T16:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 18",
+                  "createdAt": "2026-10-01T17:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 19",
+                  "createdAt": "2026-10-01T18:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 20",
+                  "createdAt": "2026-10-01T19:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 21",
+                  "createdAt": "2026-10-01T20:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 22",
+                  "createdAt": "2026-10-01T21:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 23",
+                  "createdAt": "2026-10-01T22:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 24",
+                  "createdAt": "2026-10-01T23:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 25",
+                  "createdAt": "2026-10-02T00:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 26",
+                  "createdAt": "2026-10-02T01:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 27",
+                  "createdAt": "2026-10-02T02:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 28",
+                  "createdAt": "2026-10-02T03:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "omar"
+                  },
+                  "body": "Comment 29",
+                  "createdAt": "2026-10-02T04:00:00Z"
+                },
+                {
+                  "author": {
+                    "login": "priya"
+                  },
+                  "body": "Comment 30",
+                  "createdAt": "2026-10-02T05:00:00Z"
+                }
+              ]
+            },
+            "files": {
+              "totalCount": 3,
+              "nodes": [
+                {
+                  "path": "apps/core/src/webhooks/retry.ts",
+                  "additions": 120,
+                  "deletions": 4
+                },
+                {
+                  "path": "apps/core/src/webhooks/retry.test.ts",
+                  "additions": 80,
+                  "deletions": 0
+                },
+                {
+                  "path": "packages/ui/src/status.tsx",
+                  "additions": 6,
+                  "deletions": 2
+                }
+              ]
+            }
+          },
+          null,
+          {
+            "__typename": "PullRequest",
+            "id": "PR_kwDOAcme9",
+            "body": "",
+            "closingIssuesReferences": {
+              "nodes": []
+            },
+            "reviews": {
+              "nodes": []
+            },
+            "reviewThreads": {
+              "nodes": []
+            },
+            "comments": {
+              "totalCount": 0,
+              "nodes": []
+            },
+            "files": {
+              "totalCount": 0,
+              "nodes": []
+            }
+          }
+        ],
+        "rateLimit": {
+          "cost": 1,
+          "limit": 5000,
+          "remaining": 4980,
+          "resetAt": "2026-10-04T16:00:00Z"
+        }
+      },
+      "errors": [
+        {
+          "type": "NOT_FOUND",
+          "path": ["nodes", 1],
+          "message": "Could not resolve to a node with the global id of 'PR_gone'"
+        }
+      ]
+    }
+  },
+  "unauthorised": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json; charset=utf-8"
+    },
+    "body": {
+      "message": "Bad credentials",
+      "documentation_url": "https://docs.github.com/graphql",
+      "status": "401"
+    }
+  }
+}

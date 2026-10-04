@@ -24,6 +24,8 @@ export interface GitHubWork {
   history(itemId: string): Promise<ActivityEntry[]>;
   /** Reverses what an activity entry changed (filing, say). */
   undo(entryId: number): Promise<ActivityEntry>;
+  /** Removes a Link from it, as the User (undone with Ctrl+Z). */
+  unlink(itemId: string, link: WorkLink): Promise<ActivityEntry>;
   /**
    * Its discussion (comments, reviews, review comments) and, for a pull request, its checks: kept by
    * the Core until the Item changes, else fetched from GitHub now.
@@ -69,6 +71,13 @@ export function githubWorkIn(itemStore: ItemStoreClient, bridge: DiscussionBridg
 
     undo(entryId) {
       return itemStore({ op: 'record', action: { type: 'undo', entryId } });
+    },
+
+    unlink(itemId, { type, other }) {
+      return itemStore({
+        op: 'record',
+        action: { type: 'unlink', from: itemId, linkType: type, to: other.id },
+      });
     },
 
     discussion(itemId) {
