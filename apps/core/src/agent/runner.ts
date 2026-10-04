@@ -6,13 +6,18 @@
 // stands and what it has looked at) through the Item store.
 //
 // - Triggers: a pause in the User's typing (debounced per job), a Source sync, Items arriving, the
-//   machine idle (catch-up work), and on request.
+//   machine idle (catch-up work), Todos changing (debounced per job), and on request.
 // - A queue with de-duplication: a job triggered again before it starts runs once, with every
 //   trigger merged; one triggered while running runs once more afterwards. At most `concurrency`
 //   jobs run at once, and never two runs of the same job.
 // - Quick-job contract: one call, no tools, output validated against the job's fixed zod schema (the
 //   model client retries once with the problem). A reply that still doesn't fit is discarded and
 //   logged, never acted on; so are proposals the job or the gate refuses.
+// - Batches: a job with more material than one call should carry splits its input (`batch`); each
+//   part is a prompt and a call of its own, and a failed part fails the run.
+// - A job whose result is a view rather than a change to Items (ranking the Dashboard) `apply`s
+//   every part's reply at once instead of proposing: no Item changes, so nothing goes to the gate,
+//   and it applies at any level above Off.
 // - Prompt-injection defences (#69, ADR 0004): every prompt is built by the prompt builder
 //   (prompt.ts), which refuses material holding a token or key the Core holds (nothing is sent).
 //   Every reply schema carries a `steering` flag: the outside Items the model says try to steer Ares
@@ -50,6 +55,8 @@ export type Trigger =
   | { kind: 'typing'; itemIds: string[] }
   | { kind: 'source-sync'; source: Source; account: string }
   | { kind: 'items-arrived'; itemIds: string[] }
+  // Todos changed (made, ticked, edited, suggested); a job hears of it once they stop changing.
+  | { kind: 'todos-changed'; itemIds: string[] }
   // The machine is idle: time for catch-up work.
   | { kind: 'idle' }
   | { kind: 'request' };
@@ -61,7 +68,11 @@ export type JobTriggers = {
   'source-sync'?: true;
   'items-arrived'?: true;
   idle?: true;
+  'todos-changed'?: { pauseMs: number };
 };
+
+// The triggers a job hears of only once they stop coming for its pause.
+type Debounced = 'typing' | 'todos-changed';
 
 // What a run looks at: each Item with a fingerprint of how it is now (a Block's text). Once the run
 // is done they are remembered, with the proposal each led to, so they are never looked at again
@@ -94,9 +105,15 @@ export type AgentJob<Input extends JobInput = JobInput, Output = unknown> = {
   prompt(input: Input): PromptParts;
   // The fixed schema the model's JSON reply must fit.
   output: ZodType<Output>;
-  // Turns the validated output into proposals; anything it can't use goes in `dropped`, in plain
-  // words, to be logged.
-  proposals(output: Output, input: Input): { proposals: JobProposal[]; dropped: string[] };
+  // Splits the input into the parts sent in separate calls (each part its own prompt); one call
+  // with the whole input when absent.
+  batch?(input: Input): Input[];
+  // Turns each part's validated output into proposals; anything it can't use goes in `dropped`, in
+  // plain words, to be logged.
+  proposals?(output: Output, input: Input): { proposals: JobProposal[]; dropped: string[] };
+  // For a job whose result is a view, not a change to Items (ranking the Dashboard): takes every
+  // part's validated output at once, in place of proposals.
+  apply?(answers: { output: Output; input: Input }[], input: Input): { dropped: string[] };
 };
 
 export type JobRunnerOptions = {
@@ -227,6 +244,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
   // Jobs waiting to run, each with every trigger since it was queued, in the order they were queued.
   const queued = new Map<string, Trigger[]>();
   const running = new Set<string>();
+  // Debounced triggers waiting for their pause, by job and trigger kind.
   const typing = new Map<string, { timer: ReturnType<typeof setTimeout>; itemIds: Set<string> }>();
   let waiters: (() => void)[] = [];
   let stopped = false;
@@ -322,13 +340,72 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       return;
     }
 
+    const parts = job.batch?.(input).filter((part) => part.items.length) ?? [input];
+    const answers: { output: unknown; input: JobInput; prompt: BuiltPrompt }[] = [];
+    for (const part of parts) {
+      const answer = await ask(job, part);
+      if (!answer) return;
+      answers.push({ ...answer, input: part });
+    }
+
+    const { action, actionKind, section } = job.action;
+    const proposalIds = new Map<string, number>();
+    if (job.apply) {
+      const { dropped } = job.apply(
+        answers.map(({ output, input: part }) => ({ output, input: part })),
+        input,
+      );
+      for (const reason of dropped) log(`Ares's job “${job.name}” left something out: ${reason}`);
+    }
+    for (const answer of job.apply ? [] : answers) {
+      const { proposals, dropped } = job.proposals?.(answer.output, answer.input) ?? {
+        proposals: [],
+        dropped: [],
+      };
+      for (const reason of dropped) log(`Ares's job “${job.name}” dropped a suggestion: ${reason}`);
+      for (const raw of proposals) {
+        const proposal = checked(raw, answer.prompt);
+        if (typeof proposal === 'string') {
+          log(`Ares's job “${job.name}” dropped a suggestion: ${proposal}`);
+          continue;
+        }
+        try {
+          const outcome = gate.propose({ ...proposal, action, actionKind, section });
+          if (outcome.decision === 'ask') proposalIds.set(proposal.itemId, outcome.suggestion.id);
+          if (outcome.decision === 'auto') proposalIds.set(proposal.itemId, outcome.done.id);
+        } catch (error) {
+          log(`Ares's job “${job.name}”: the gate refused a proposal: ${message(error)}`);
+        }
+      }
+    }
+    store.remember(
+      job.job,
+      input.items.map((item) => ({ ...item, proposalId: proposalIds.get(item.itemId) ?? null })),
+    );
+    store.saveJob(job.job, {
+      cursor: input.cursor ?? state.cursor,
+      lastRunAt: now(),
+      lastOutcome: 'ok',
+      lastProblem: null,
+      failures: 0,
+      retryAt: null,
+    });
+  }
+
+  // One call for one part of a run's input: the prompt built, the model asked, its steering flag
+  // heeded and its reply cleaned. Null when the call can't be made or its reply used (logged as the
+  // job's outcome).
+  async function ask(
+    job: AgentJob,
+    input: JobInput,
+  ): Promise<{ output: unknown; prompt: BuiltPrompt } | null> {
     let prompt: BuiltPrompt;
     try {
       prompt = buildPrompt(job.prompt(input), { secrets });
     } catch (error) {
       if (!(error instanceof PromptRefused)) throw error;
       failed(job, 'failed', error.message, false);
-      return;
+      return null;
     }
 
     let reply: unknown;
@@ -346,7 +423,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       const outcome =
         kind === 'over-cap' ? 'over-cap' : kind === 'invalid-reply' ? 'invalid-reply' : 'failed';
       failed(job, outcome, message(error), kind !== 'no-key' && kind !== 'over-cap');
-      return;
+      return null;
     }
 
     markSteering(job, prompt, reply);
@@ -360,43 +437,13 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
         'Its reply didn’t fit once Ares’s own wording and stray links were taken out',
         false,
       );
-      return;
+      return null;
     }
     if (cleaned.dropped)
       log(
         `Ares's job “${job.name}” dropped ${cleaned.dropped} part of its reply that didn’t fit once cleaned`,
       );
-
-    const { proposals, dropped } = job.proposals(cleaned.data, input);
-    for (const reason of dropped) log(`Ares's job “${job.name}” dropped a suggestion: ${reason}`);
-    const proposalIds = new Map<string, number>();
-    const { action, actionKind, section } = job.action;
-    for (const raw of proposals) {
-      const proposal = checked(raw, prompt);
-      if (typeof proposal === 'string') {
-        log(`Ares's job “${job.name}” dropped a suggestion: ${proposal}`);
-        continue;
-      }
-      try {
-        const outcome = gate.propose({ ...proposal, action, actionKind, section });
-        if (outcome.decision === 'ask') proposalIds.set(proposal.itemId, outcome.suggestion.id);
-        if (outcome.decision === 'auto') proposalIds.set(proposal.itemId, outcome.done.id);
-      } catch (error) {
-        log(`Ares's job “${job.name}”: the gate refused a proposal: ${message(error)}`);
-      }
-    }
-    store.remember(
-      job.job,
-      input.items.map((item) => ({ ...item, proposalId: proposalIds.get(item.itemId) ?? null })),
-    );
-    store.saveJob(job.job, {
-      cursor: input.cursor ?? state.cursor,
-      lastRunAt: now(),
-      lastOutcome: 'ok',
-      lastProblem: null,
-      failures: 0,
-      retryAt: null,
-    });
+    return { output: cleaned.data, prompt };
   }
 
   // The reply's steering flag: each outside Item it names (by its block's ref) gets the warning mark.
@@ -414,15 +461,16 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
     }
   }
 
-  function typed(job: AgentJob, pauseMs: number, itemIds: string[]) {
-    const waiting = typing.get(job.job);
+  function debounced(job: AgentJob, kind: Debounced, pauseMs: number, itemIds: string[]) {
+    const key = `${job.job}\u0000${kind}`;
+    const waiting = typing.get(key);
     if (waiting) clearTimeout(waiting.timer);
     const ids = new Set([...(waiting?.itemIds ?? []), ...itemIds]);
     const timer = setTimeout(() => {
-      typing.delete(job.job);
-      enqueue(job.job, { kind: 'typing', itemIds: [...ids] });
+      typing.delete(key);
+      enqueue(job.job, { kind, itemIds: [...ids] });
     }, pauseMs);
-    typing.set(job.job, { timer, itemIds: ids });
+    typing.set(key, { timer, itemIds: ids });
   }
 
   return {
@@ -432,7 +480,10 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
         if (trigger.kind === 'request') enqueue(job.job, trigger);
         else if (trigger.kind === 'typing') {
           const pause = job.triggers.typing;
-          if (pause) typed(job, options.typingPauseMs ?? pause.pauseMs, trigger.itemIds);
+          if (pause) debounced(job, 'typing', options.typingPauseMs ?? pause.pauseMs, trigger.itemIds);
+        } else if (trigger.kind === 'todos-changed') {
+          const pause = job.triggers['todos-changed'];
+          if (pause) debounced(job, 'todos-changed', pause.pauseMs, trigger.itemIds);
         } else if (job.triggers[trigger.kind]) enqueue(job.job, trigger);
       }
     },

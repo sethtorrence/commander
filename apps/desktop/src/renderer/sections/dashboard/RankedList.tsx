@@ -12,8 +12,9 @@ import { type FeedRow, rowMeta, sourceTag } from './feed';
 /*
   The ranked list, after the prototype's FEED (.band, .it): band headers with their counts, then the
   rows, each with its number, tick box or state mark, Badge and accent bar, title, Source stamp and
-  reason, and when it is selected the bar of what can be done with it. The Dashboard drives it from
-  the keyboard; a Project page shows it scoped to the Project.
+  reason (Ares's words, shown as AresText), and when it is selected the bar of what can be done with
+  it. A suggested Todo of Ares's is drawn as a suggestion (a dashed box and frame) with Add and
+  Dismiss. The Dashboard drives it from the keyboard; a Project page shows it scoped to the Project.
 */
 
 export const BANDS: Record<DashboardBand, { no: string; name: string; subtitle: string }> = {
@@ -24,6 +25,9 @@ export const BANDS: Record<DashboardBand, { no: string; name: string; subtitle: 
 };
 
 const SECTION_LABELS: Record<string, string> = { todos: 'Todos', linear: 'Linear' };
+
+/** The Item to show when a row is opened in its Section: a suggestion's Block, else the row's Item. */
+export const revealId = (row: FeedRow) => row.suggestion?.blockId ?? row.item.id;
 const HOW: Record<FiledBy, string> = {
   user: 'Set by you',
   rule: 'Filed by a Rule',
@@ -36,8 +40,9 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export const titleOf = ({ item }: FeedRow) =>
   item.detail?.kind === 'linear-issue' ? `${item.detail.identifier} ${item.title}` : item.title;
 
-/** Which Section an Item opens in, by its id, with its name: ["todos", "Todos"]. */
+/** Which Section an Item opens in, by its id, with its name: ["todos", "Todos"]. A suggestion opens its Block. */
 export function openIn(row: FeedRow): [string, string] | null {
+  if (row.suggestion) return ['notes', 'Notes'];
   const section = sectionFor(row.item.kind);
   return section ? [section, SECTION_LABELS[section] ?? section] : null;
 }
@@ -74,6 +79,8 @@ export interface RowActions {
   onOpen(row: FeedRow): void;
   onTick(row: FeedRow): void;
   onClear(row: FeedRow): void;
+  /** Adds a suggested Todo, or dismisses it. */
+  onSettle(row: FeedRow, op: 'accept' | 'dismiss'): void;
 }
 
 /**
@@ -189,10 +196,11 @@ function Row({
   onOpen,
   onTick,
   onClear,
+  onSettle,
 }: { row: FeedRow; number: number; selected: boolean; now: number } & RowActions) {
   const element = useRef<HTMLLIElement>(null);
-  const { item, done } = row;
-  const tag = sourceTag(item);
+  const { item, done, suggestion } = row;
+  const tag = sourceTag(item, !!suggestion);
   const [big, small] = rowMeta(row, now);
   const section = openIn(row);
   const title = titleOf(row);
@@ -208,6 +216,7 @@ function Row({
       aria-label={title}
       data-testid="dashboard-row"
       data-band={row.band}
+      data-suggestion={suggestion ? '' : undefined}
       onClick={() => onSelect(row)}
       onDoubleClick={(event) => {
         if (!(event.target as HTMLElement).closest('button')) onOpen(row);
@@ -217,6 +226,7 @@ function Row({
         selected
           ? 'bg-signal-focus shadow-[inset_3px_0_0_var(--signal)]'
           : 'hover:bg-[color-mix(in_srgb,var(--raise)_55%,transparent)]',
+        suggestion && 'outline-1 -outline-offset-4 outline-dashed outline-line',
       )}
     >
       <span
@@ -254,10 +264,43 @@ function Row({
             {tag.text}
           </span>
           <ItemWarning item={item} className="h-[19px]" />
-          {/* A reason may be Ares's words (once he ranks the Dashboard): shown as AresText. */}
+          {/* A reason may be Ares's words: shown as AresText, linking only what the Item holds. */}
           <span className="ml-1 text-note leading-[19px] text-muted" data-testid="row-reason">
-            <AresText inline text={row.reason} sources={wordsOf(item)} />
+            <AresText
+              inline
+              text={row.reason}
+              sources={suggestion ? [item.title, suggestion.source] : wordsOf(item)}
+            />
           </span>
+          {suggestion && (
+            <span className="ml-auto flex">
+              <button
+                type="button"
+                className={cn(
+                  barButton,
+                  'h-[22px] border-ink bg-ink text-sheet hover:bg-ink hover:opacity-90',
+                )}
+                title="Add it as a Todo (A)"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSettle(row, 'accept');
+                }}
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                className={cn(barButton, 'h-[22px]')}
+                title="Ares won’t offer it again for this Block’s text"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSettle(row, 'dismiss');
+                }}
+              >
+                Dismiss
+              </button>
+            </span>
+          )}
         </div>
       </div>
       <div className="pt-px text-right">
@@ -275,15 +318,22 @@ function Row({
           onOpen={() => onOpen(row)}
           onTick={() => onTick(row)}
           onClear={() => onClear(row)}
+          onAdd={() => onSettle(row, 'accept')}
         />
       )}
     </li>
   );
 }
 
-// A Todo's tick box (a button: it ticks), or a Linear issue's workflow state.
+// A Todo's tick box (a button: it ticks), a Linear issue's workflow state, or a suggestion's dashed box.
 function Marker({ row, onTick }: { row: FeedRow; onTick: () => void }) {
   const { item, done } = row;
+  if (row.suggestion)
+    return (
+      <span className="grid h-[22px] place-items-center" title="Suggested by Ares">
+        <span aria-hidden="true" className="size-3.5 border-[1.5px] border-dashed border-muted" />
+      </span>
+    );
   if (item.detail?.kind === 'linear-issue')
     return (
       <span className="grid h-[22px] place-items-center" title={item.detail.state.name}>
@@ -329,7 +379,7 @@ function RowBadge({ row, title }: { row: FeedRow; title: string }) {
           style={{ background: bar }}
         />
       )}
-      {pick ? (
+      {pick && !row.suggestion ? (
         <button
           type="button"
           data-item-id={item.id}
@@ -369,12 +419,14 @@ function ActionBar({
   onOpen,
   onTick,
   onClear,
+  onAdd,
 }: {
   row: FeedRow;
   section: [string, string] | null;
   onOpen: () => void;
   onTick: () => void;
   onClear: () => void;
+  onAdd: () => void;
 }) {
   const { projectOf } = useProjects();
   const project = projectOf(row.item.filing);
@@ -386,7 +438,13 @@ function ActionBar({
     // biome-ignore lint/a11y/useSemanticElements: a fieldset would bring a legend and form semantics
     <div role="group" aria-label="Actions" className="col-[3/5] mt-2.5 flex flex-wrap items-center">
       <ItemWarning item={row.item} variant="pane" className="mb-2.5 basis-full" />
-      {row.item.kind === 'todo' && (
+      {row.suggestion && (
+        <button type="button" className={barButton} onClick={stop(onAdd)}>
+          <Kbd>A</Kbd>
+          Add
+        </button>
+      )}
+      {row.item.kind === 'todo' && !row.suggestion && (
         <button type="button" className={barButton} onClick={stop(onTick)}>
           <Kbd>X</Kbd>
           {row.done ? 'Untick' : 'Tick'}
@@ -412,7 +470,13 @@ function ActionBar({
       <span className="mt-2.5 flex basis-full items-center gap-2 font-mono text-label leading-none font-medium uppercase tracking-label text-muted [&_kbd]:h-4 [&_kbd]:min-w-4 [&_kbd]:text-label">
         <ItemBadge filing={row.item.filing} size="sm" />
         <b className="font-semibold text-ink">{project ? project.name : 'Unfiled'}</b>
-        {row.item.filing && <> · {HOW[row.item.filing.filedBy]}</>} · <Kbd>B</Kbd> to change
+        {row.item.filing && <> · {HOW[row.item.filing.filedBy]}</>}
+        {!row.suggestion && (
+          <>
+            {' '}
+            · <Kbd>B</Kbd> to change
+          </>
+        )}
       </span>
     </div>
   );

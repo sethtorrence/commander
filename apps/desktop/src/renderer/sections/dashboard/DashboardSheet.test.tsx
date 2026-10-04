@@ -1,15 +1,27 @@
 // @vitest-environment jsdom
+import { type Gate, openGate } from '@commander/core/src/autonomy/gate';
+import { answerAutonomyRequest } from '@commander/core/src/autonomy/requests';
 import type { ItemStore } from '@commander/core/src/item-store';
-import { localDay } from '@commander/domain';
+import {
+  type AresRankingEntry,
+  type CoreMessage,
+  type Item,
+  localDay,
+  RANK_DASHBOARD,
+  rankingFingerprint,
+} from '@commander/domain';
 import type { AccountSummary } from '@commander/domain/ipc';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clockTime } from '../../frame/calendar';
 import { onReveal } from '../../frame/reveal';
+import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
 import { ShortcutProvider, ShortcutScope, useActiveScopes } from '../../shortcuts/react';
+import type { AutonomyClient } from '../ares/activity';
 import type { LinearAccountsClient } from '../linear/linear-issues';
 import { ACME, CURRENT_CYCLE, ENG, issue, NOW, PRIYA, SAM, STATES } from '../linear/test-issues';
 import { addDays } from '../notes/days';
@@ -28,6 +40,7 @@ const YESTERDAY = addDays(TODAY, -1);
 let store: ItemStore;
 let projects: ProjectsClient;
 let client: DashboardClient;
+let itemClient: ItemStoreClient;
 let accounts: ReturnType<typeof fakeAccounts>;
 let close: () => void;
 const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
@@ -99,6 +112,7 @@ beforeEach(() => {
   ({ store, close } = opened);
   projects = projectsIn(opened.client);
   accounts = fakeAccounts([acme()]);
+  itemClient = opened.client;
   client = dashboardIn(opened.client, accounts.client);
   localStorage.clear();
   for (const mock of Object.values(controls)) mock.mockReset();
@@ -423,5 +437,194 @@ describe('the Dashboard', () => {
     expect(controls.openSection).toHaveBeenLastCalledWith('notes');
     fireEvent.click(screen.getByRole('button', { name: /3 open Todos/ }));
     expect(controls.openSection).toHaveBeenLastCalledWith('todos');
+  });
+
+  it('keeps cleared rows in the Core, and moves ones kept in this window before', async () => {
+    const invoice = store.query({ titleContains: 'invoice' })[0]?.id as string;
+    localStorage.setItem(CLEARS_STORAGE_KEY, JSON.stringify({ [invoice]: { band: 'now', at: NOW } }));
+    renderSheet();
+    await waitFor(() => expect(titles('Now')).toEqual(['ENG-1 Fix the outage']));
+    await waitFor(() => expect(localStorage.getItem(CLEARS_STORAGE_KEY)).toBeNull());
+    expect(store.dashboard.state().clears).toEqual({ [invoice]: { band: 'now', at: NOW } });
+  });
+});
+
+const byTitle = (title: string) => store.query({ titleContains: title })[0] as Item;
+const entry = (item: Item, band: AresRankingEntry['band'], rank: number, reason: string) => ({
+  itemId: item.id,
+  band,
+  rank,
+  reason,
+  fingerprint: rankingFingerprint(item),
+});
+
+describe('Ares’s ranking', () => {
+  it('shows his bands, order and reasons as AresText, and says he ranked it, and when', async () => {
+    const cello = byTitle('cello');
+    store.dashboard.saveAresRanking(NOW, [
+      entry(byTitle('Write the runbook'), 'now', 1, 'Priya needs it for the 3pm incident review'),
+      entry(cello, 'today', 1, 'Your lesson is at 6 https://evil.test/x'),
+      entry(byTitle('Send the invoice'), 'fyi', 1, 'Acme pays on Monday anyway'),
+      entry(byTitle('Book the dentist'), 'none', 1, ''),
+    ]);
+    store.agent.saveJob(RANK_DASHBOARD, { lastRunAt: NOW, lastOutcome: 'ok' });
+    renderSheet();
+    await waitFor(() => expect(titles('Now')[0]).toBe('ENG-2 Write the runbook'));
+    // His Items first in each band, then the ones the rules placed that he hasn't ranked.
+    expect(titles('Now')).toEqual(['ENG-2 Write the runbook', 'ENG-1 Fix the outage']);
+    expect(titles('Today')).toEqual(['Someday: learn the cello']);
+    expect(titles('FYI')).toEqual(['Send the invoice', 'ENG-4 Audit log export']);
+    const lesson = within(band('Today')).getAllByTestId('dashboard-row')[0] as HTMLElement;
+    // AresText: a link no Item holds stays plain text.
+    expect(within(lesson).getByTestId('row-reason').textContent).toBe(
+      'Your lesson is at 6 https://evil.test/x',
+    );
+    expect(within(lesson).queryByRole('link')).toBeNull();
+    expect(screen.getByTestId('ranked-at').textContent).toBe(
+      `Ranked by Ares · ${clockTime(new Date(NOW)).slice(0, 5)}`,
+    );
+  });
+
+  it('says the rules ranked it, and why, when Ares is Off for ranking or couldn’t rank', async () => {
+    store.dashboard.saveAresRanking(NOW, [entry(byTitle('cello'), 'now', 1, 'Lesson')]);
+    store.agent.saveJob(RANK_DASHBOARD, {
+      lastRunAt: NOW,
+      lastOutcome: 'failed',
+      lastProblem: 'Z.ai is down',
+    });
+    renderSheet();
+    await loaded();
+    expect(titles('Now')).toEqual(['ENG-1 Fix the outage', 'Send the invoice']);
+    const header = screen.getByTestId('ranked-at');
+    expect(header.textContent).toMatch(/^Ranked by rules · /);
+    expect(header.getAttribute('title')).toBe('Ares couldn’t rank it: Z.ai is down');
+  });
+});
+
+describe('Ares’s suggested Todos', () => {
+  let gate: Gate;
+  let messages: Set<(message: CoreMessage) => void>;
+
+  function suggest(text: string, title: string): number {
+    const note = store.ensureDailyNote(TODAY, { by: { kind: 'user' } }).id;
+    const block = store.record(
+      {
+        type: 'create',
+        item: {
+          kind: 'block',
+          title: text,
+          detail: {
+            kind: 'block',
+            dailyNoteId: note,
+            parentId: null,
+            position: `a${text.length}`,
+            text,
+            folded: false,
+          },
+        },
+      },
+      { by: { kind: 'user' } },
+    ).itemId;
+    const outcome = gate.propose({
+      action: 'suggest-todos',
+      actionKind: 'organise',
+      section: 'notes',
+      itemId: block,
+      itemActions: [
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title,
+            detail: { kind: 'todo', origin: 'ares', dueOn: null, backedBy: null },
+          },
+        },
+        { type: 'link', from: { step: 0 }, linkType: 'made-from', to: block },
+      ],
+      confidence: 0.5,
+      reason: `You wrote “${text}” in your Daily Note.`,
+    });
+    if (outcome.decision !== 'ask') throw new Error('Expected a suggestion');
+    return outcome.suggestion.id;
+  }
+
+  beforeEach(() => {
+    gate = openGate({ itemStore: store });
+    gate.registerAction({ action: 'suggest-todos', actionKind: 'organise', name: 'Suggest Todos' });
+    messages = new Set();
+    let id = 0;
+    const autonomy: AutonomyClient = async (request) => {
+      id += 1;
+      const reply = answerAutonomyRequest(
+        gate,
+        { type: 'autonomy-request', id, request },
+        { testHooks: false },
+      );
+      if (!reply?.response.ok)
+        throw new Error(reply?.response.ok === false ? reply.response.error : 'No reply');
+      // biome-ignore lint/suspicious/noExplicitAny: unchecked here, as the main process would check it
+      return reply.response.result as any;
+    };
+    client = dashboardIn(itemClient, accounts.client, {
+      autonomy,
+      onCoreMessage(listener) {
+        messages.add(listener);
+        return () => messages.delete(listener);
+      },
+    });
+  });
+
+  it('shows each pending one where Ares ranked it, styled as a suggestion; Add makes the Todo, Dismiss is for good', async () => {
+    const flights = suggest('maybe book flights for the offsite', 'Book flights for the offsite');
+    const bank = suggest('call the bank?', 'Call the bank');
+    store.dashboard.saveAresRanking(NOW, [
+      {
+        itemId: `suggestion:${flights}`,
+        band: 'now',
+        rank: 1,
+        reason: 'Prices jump tonight',
+        fingerprint: 'f',
+      },
+    ]);
+    store.agent.saveJob(RANK_DASHBOARD, { lastRunAt: NOW, lastOutcome: 'ok' });
+    renderSheet();
+
+    // Ranked by Ares into Now; the one he hasn't ranked waits at the end of Today, saying why.
+    await waitFor(() => expect(titles('Now')).toContain('Book flights for the offsite'));
+    const row = screen.getByRole('listitem', { name: 'Book flights for the offsite' });
+    expect(row.hasAttribute('data-suggestion')).toBe(true);
+    expect(within(row).getByTestId('source-stamp').textContent).toBe('ARESSuggested Todo');
+    expect(titles('Today').at(-1)).toBe('Call the bank');
+    const waiting = screen.getByRole('listitem', { name: 'Call the bank' });
+    expect(within(waiting).getByTestId('row-reason').textContent).toBe(
+      'You wrote “call the bank?” in your Daily Note.',
+    );
+
+    // Add: the Todo is made, through the gate, and the suggestion row goes.
+    fireEvent.click(within(row).getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(store.query({ kinds: ['todo'], titleContains: 'flights' })).toHaveLength(1));
+    expect(gate.activity({ statuses: ['accepted'] })).toEqual([expect.objectContaining({ id: flights })]);
+    await waitFor(() =>
+      expect(screen.queryByRole('listitem', { name: 'Book flights for the offsite' })).toBeNull(),
+    );
+
+    // Dismiss: gone for good.
+    fireEvent.click(within(waiting).getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(screen.queryByRole('listitem', { name: 'Call the bank' })).toBeNull());
+    expect(gate.activity({ statuses: ['dismissed'] })).toEqual([expect.objectContaining({ id: bank })]);
+    expect(store.query({ titleContains: 'bank' }).filter((item) => item.kind === 'todo')).toEqual([]);
+  });
+
+  it('adds the selected suggestion with a, and reads again when Ares suggests something', async () => {
+    renderSheet();
+    await loaded();
+    suggest('need to renew passport', 'Renew passport');
+    act(() => {
+      for (const listener of messages) listener({ type: 'ares-activity', at: NOW });
+    });
+    await waitFor(() => expect(titles('Today')).toContain('Renew passport'));
+    fireEvent.click(screen.getByRole('listitem', { name: 'Renew passport' }));
+    await press('a');
+    await waitFor(() => expect(store.query({ kinds: ['todo'], titleContains: 'passport' })).toHaveLength(1));
   });
 });

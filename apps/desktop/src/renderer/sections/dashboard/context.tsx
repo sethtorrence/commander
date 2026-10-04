@@ -1,10 +1,12 @@
 import {
   type ActivityEntry,
+  aresRanker,
   type DashboardBand,
+  type DashboardState,
   type Item,
   type Ranker,
   type Ranking,
-  rankByBandRules,
+  rankingOrigin,
 } from '@commander/domain';
 import type { AccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
@@ -19,7 +21,7 @@ import {
   useState,
 } from 'react';
 import { useProjectFilter } from '../../projects/context';
-import { type DashboardClient, loadClears, saveClears, syncSignature, usersOf } from './dashboard';
+import { type DashboardClient, forgetClears, loadClears, syncSignature, usersOf } from './dashboard';
 import {
   type BandCounts,
   bandCounts,
@@ -29,14 +31,18 @@ import {
   feedRows,
   keepClears,
 } from './feed';
+import { type SuggestedTodo, withSuggestions } from './suggested-todos';
 
 /*
   "What needs you" for the whole window: the frame mounts one <DashboardProvider>, and the Dashboard
   Section, the header's band meter and a Project page read it through `useDashboard()`. It reads the
-  open Items and the Linear Accounts, ranks them with its Ranker (the band rules until Ares ranks in
-  M3), and keeps the cleared rows and the rows ticked here. It reads again after every sync, when
-  another Section or page is opened, when the window regains focus, after its own changes, and ranks
-  again every minute, as the time moves Items between bands.
+  open Items and the Linear Accounts, and from the Core Ares's ranking, the cleared rows and his
+  pending suggested Todos. It ranks with Ares's ranking, falling back to the band rules for what he
+  hasn't ranked and whenever his ranking can't be used (aresRanker), and keeps the cleared rows (in
+  the Core, so Ares leaves them out) and the rows ticked here. It reads again after every sync, when
+  Ares ranks again or suggests something, when another Section or page is opened, when the window
+  regains focus, after its own changes, and ranks again every minute, as the time moves Items between
+  bands.
 */
 
 export interface DashboardApi {
@@ -44,6 +50,8 @@ export interface DashboardApi {
   loaded: boolean;
   /** The time the list was last ranked at. */
   rankedAt: Date;
+  /** Who ranked it: Ares (and when he did), or the rules (and why, when Ares can't). */
+  rankedBy: { by: 'ares' | 'rules'; at: Date | null; why: string | null };
   /** Every row on the Dashboard, whatever the Project filter: ranked, not cleared, plus rows ticked here. */
   rows: readonly FeedRow[];
   /** The rows the Project filter lets through. */
@@ -60,6 +68,8 @@ export interface DashboardApi {
   clear(row: FeedRow): void;
   /** Brings back every row cleared under the Project filter. */
   bringBack(): void;
+  /** Adds a suggested Todo of Ares's (accepts it), or dismisses it for good. */
+  settleSuggestion(row: FeedRow, op: 'accept' | 'dismiss'): Promise<void>;
   /** Makes a change through another module (filing), so the list reads again and it can be undone. */
   apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
   /** Undoes a change made here: the given entry, or the latest not yet undone (ticks, clears, filing). */
@@ -85,7 +95,7 @@ const MINUTE = 60_000;
 export function DashboardProvider({
   client,
   open,
-  ranker = rankByBandRules,
+  ranker,
   storage = window.localStorage,
   clock = Date.now,
   children,
@@ -93,7 +103,7 @@ export function DashboardProvider({
   client: DashboardClient;
   /** What the frame has open (a Section's id, Settings, a Project page): a change reads everything again. */
   open?: string;
-  /** How the open Items are ranked. Ares's ranking (M3) is passed here, falling back to the band rules. */
+  /** How the open Items are ranked; Ares's ranking from the Core (falling back to the band rules) unless given. */
   ranker?: Ranker;
   storage?: Storage;
   clock?: () => number;
@@ -102,7 +112,9 @@ export function DashboardProvider({
   const { include } = useProjectFilter();
   const [items, setItems] = useState<Item[] | null>(null);
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(null);
-  const [clears, setClears] = useState<Clears>(() => loadClears(storage));
+  const [core, setCore] = useState<DashboardState | null>(null);
+  const [suggested, setSuggested] = useState<{ item: Item; suggestion: SuggestedTodo }[]>([]);
+  const [clears, setClears] = useState<Clears>({});
   const [tickedHere, setTickedHere] = useState<ReadonlyMap<string, FeedRow>>(new Map());
   const [now, setNow] = useState(clock);
   const [version, setVersion] = useState(0);
@@ -114,15 +126,35 @@ export function DashboardProvider({
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload
   useEffect(() => {
     let current = true;
-    client.items().then((next) => {
+    Promise.all([client.items(), client.state(), client.suggestions()]).then(([next, state, pending]) => {
       if (!current) return;
       setItems(next);
+      setCore(state);
+      setClears(state.clears);
+      setSuggested(pending);
       setNow(clock());
     }, report);
     return () => {
       current = false;
     };
   }, [client, version]);
+
+  // Rows cleared before the Core kept them move there, once.
+  useEffect(() => {
+    const legacy = loadClears(storage);
+    if (!Object.keys(legacy).length) return;
+    client.state().then(
+      (state) =>
+        client.saveClears({ ...legacy, ...state.clears }).then(() => {
+          forgetClears(storage);
+          reload();
+        }),
+      report,
+    );
+  }, [client, storage, reload]);
+
+  // Ares ranked again, or suggested something.
+  useEffect(() => client.onAresChange(reload), [client, reload]);
 
   // The Accounts, kept current; the Items are read again whenever a sync finishes.
   const synced = useRef<string | null>(null);
@@ -159,29 +191,47 @@ export function DashboardProvider({
     return () => clearInterval(timer);
   }, [clock]);
 
-  const loaded = items !== null && accounts !== null;
+  const loaded = items !== null && accounts !== null && core !== null;
   const users = useMemo(() => usersOf(accounts ?? []), [accounts]);
-  const rankings = useMemo<Ranking[]>(
-    () => (items && accounts ? ranker(items, { now, users }) : []),
-    [items, accounts, ranker, now, users],
+  const rank = useMemo(() => ranker ?? aresRanker(core?.ranking ?? null), [ranker, core]);
+  const origin = rankingOrigin(ranker ? null : (core?.ranking ?? null), now);
+  // The open Items, with Ares's suggested Todos as the Todos they would add.
+  const ranked = useMemo(() => [...(items ?? []), ...suggested.map(({ item }) => item)], [items, suggested]);
+  const rankings = useMemo<Ranking[]>(() => {
+    if (!loaded) return [];
+    // The suggestions Ares has ranked (into a band or none) stay where he put them.
+    const decided = new Set(
+      origin.by === 'ares' ? (core?.ranking.entries.map((entry) => entry.itemId) ?? []) : [],
+    );
+    return withSuggestions(rank(ranked, { now, users }), suggested, decided);
+  }, [loaded, rank, ranked, now, users, suggested, origin.by, core]);
+  const suggestions = useMemo(
+    () => new Map(suggested.map(({ item, suggestion }) => [item.id, suggestion])),
+    [suggested],
+  );
+
+  const changeClears = useCallback(
+    (next: Clears) => {
+      setClears(next);
+      client.saveClears(next).catch(report);
+    },
+    [client],
   );
 
   // Clears whose Item moved to another band are forgotten, so the row is back.
   useEffect(() => {
     if (!loaded) return;
     const kept = keepClears(clears, rankings, now);
-    if (kept === clears) return;
-    setClears(kept);
-    saveClears(storage, kept);
-  }, [loaded, clears, rankings, now, storage]);
+    if (kept !== clears) changeClears(kept);
+  }, [loaded, clears, rankings, now, changeClears]);
 
   const rows = useMemo(
-    () => feedRows(rankings, items ?? [], clears, tickedHere),
-    [rankings, items, clears, tickedHere],
+    () => feedRows(rankings, ranked, clears, tickedHere, suggestions),
+    [rankings, ranked, clears, tickedHere, suggestions],
   );
   const shown = useMemo(() => rows.filter((row) => include(row.item)), [rows, include]);
   const counts = useMemo(() => bandCounts(shown), [shown]);
-  const byId = useMemo(() => new Map((items ?? []).map((item) => [item.id, item])), [items]);
+  const byId = useMemo(() => new Map(ranked.map((item) => [item.id, item])), [ranked]);
   const hidden = useMemo(
     () =>
       rankings.filter((ranking) => {
@@ -193,14 +243,6 @@ export function DashboardProvider({
   const openTodos = useMemo(
     () => (items ?? []).filter((item) => item.kind === 'todo' && include(item)).length,
     [items, include],
-  );
-
-  const changeClears = useCallback(
-    (next: Clears) => {
-      setClears(next);
-      saveClears(storage, next);
-    },
-    [storage],
   );
 
   const clearsNow = useRef(clears);
@@ -244,6 +286,10 @@ export function DashboardProvider({
   const tick = useCallback(
     async (row: FeedRow) => {
       const { item } = row;
+      if (row.suggestion) {
+        toast(`Ares only suggested this: Add it (A) to make it a Todo`);
+        return;
+      }
       // A Linear row is a Linear Todo's issue: ticking ticks that Todo, which moves the issue.
       const todoId =
         item.kind === 'todo'
@@ -335,6 +381,23 @@ export function DashboardProvider({
     [reload],
   );
 
+  const settleSuggestion = useCallback(
+    async (row: FeedRow, op: 'accept' | 'dismiss') => {
+      const { suggestion } = row;
+      if (!suggestion) return;
+      // The row goes at once; a failure brings it back with the reason.
+      setSuggested((was) => was.filter((each) => each.suggestion.proposalId !== suggestion.proposalId));
+      try {
+        await client.settle(suggestion.proposalId, op);
+        toast(op === 'accept' ? `Todo added: ${row.item.title}` : `Dismissed: ${row.item.title}`);
+      } catch (error) {
+        report(error);
+      }
+      reload();
+    },
+    [client, reload],
+  );
+
   const leave = useCallback(() => setTickedHere((now) => (now.size ? new Map() : now)), []);
   const jumpToBand = useCallback((band: DashboardBand) => setJump({ band }), []);
 
@@ -342,6 +405,7 @@ export function DashboardProvider({
     () => ({
       loaded,
       rankedAt: new Date(now),
+      rankedBy: { by: origin.by, at: origin.at === null ? null : new Date(origin.at), why: origin.why },
       rows,
       shown,
       counts,
@@ -350,6 +414,7 @@ export function DashboardProvider({
       tick,
       clear,
       bringBack,
+      settleSuggestion,
       apply,
       undo,
       leave,
@@ -362,6 +427,9 @@ export function DashboardProvider({
       client,
       loaded,
       now,
+      origin.by,
+      origin.at,
+      origin.why,
       rows,
       shown,
       counts,
@@ -370,6 +438,7 @@ export function DashboardProvider({
       tick,
       clear,
       bringBack,
+      settleSuggestion,
       apply,
       undo,
       leave,

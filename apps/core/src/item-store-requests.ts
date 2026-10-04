@@ -83,6 +83,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         };
       case 'block-issues':
         return { ok: true, result: store.blockIssues(request.dailyNoteIds) };
+      case 'dashboard':
+        return { ok: true, result: store.dashboard.state() };
+      case 'save-dashboard-clears':
+        return { ok: true, result: store.dashboard.saveClears(request.clears) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

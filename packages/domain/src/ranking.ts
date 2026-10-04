@@ -10,7 +10,8 @@ import { isLinearTodo } from './linear-todos';
   Items it leaves out stay in their Sections. The ranked list is a view over Items, never a copy.
 
   `rankByBandRules` is the M2 ranker: plain, predictable band rules (not to be confused with the
-  User's filing Rules). Ares's ranking job (M3) implements the same interface and falls back to it.
+  User's filing Rules). Ares's ranking (ares-ranking.ts) implements the same interface and falls
+  back to it.
   It is pure and takes its clock from the context, so the window and the Core can both run it.
 */
 
@@ -176,6 +177,18 @@ function inBandOrder(a: Placed, b: Placed): number {
 }
 
 /**
+ * The Items any ranker may place: the open ones (not deleted, not a closed issue), less the Todos
+ * backed by another of them, which are shown once, by that Item.
+ */
+export function dashboardCandidates(items: readonly Item[]): Item[] {
+  const open = items.filter(isOpen);
+  const present = new Set(open.map((item) => item.id));
+  return open.filter(
+    (item) => !(item.detail?.kind === 'todo' && item.detail.backedBy && present.has(item.detail.backedBy)),
+  );
+}
+
+/**
  * The M2 band rules.
  *
  * - **Now:** overdue Todos, and Linear Todos with Urgent priority.
@@ -190,12 +203,7 @@ function inBandOrder(a: Placed, b: Placed): number {
  */
 export const rankByBandRules: Ranker = (items, context) => {
   const today = localDay(context.now);
-  const open = items.filter(isOpen);
-  const present = new Set(open.map((item) => item.id));
-  const placed = open
-    .filter(
-      (item) => !(item.detail?.kind === 'todo' && item.detail.backedBy && present.has(item.detail.backedBy)),
-    )
+  const placed = dashboardCandidates(items)
     .map((item) => place(item, context, today))
     .filter((found): found is Placed => found !== null);
   return dashboardBands.flatMap((band) =>

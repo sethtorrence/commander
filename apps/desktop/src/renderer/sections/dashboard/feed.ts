@@ -1,5 +1,7 @@
 import {
+  type ClearMark,
   type DashboardBand,
+  type DashboardClears,
   dashboardBands,
   daysBetween,
   type Item,
@@ -9,6 +11,7 @@ import {
 } from '@commander/domain';
 import { dateOf } from '../notes/days';
 import { originLabel } from '../todos/origin';
+import type { SuggestedTodo } from './suggested-todos';
 
 /*
   The Dashboard's list, worked out from the rankings (a Ranker's answer) and the Items they rank:
@@ -17,22 +20,22 @@ import { originLabel } from '../todos/origin';
   tests share them. The Project filter is applied beside these (projects/filter.ts).
 */
 
-/** A row on the Dashboard: a ranked Item. `done` when it was ticked here and is kept, struck through. */
+/**
+ * A row on the Dashboard: a ranked Item. `done` when it was ticked here and is kept, struck through.
+ * A suggested Todo of Ares's (not an Item yet) carries its `suggestion`.
+ */
 export interface FeedRow {
   item: Item;
   band: DashboardBand;
   reason: string;
   rank: number;
   done: boolean;
+  suggestion?: SuggestedTodo;
 }
 
-/** A row cleared from the Dashboard: the band it was in, and when. */
-export interface ClearMark {
-  band: DashboardBand;
-  at: number;
-}
-/** The cleared rows, by Item id. */
-export type Clears = Readonly<Record<string, ClearMark>>;
+export type { ClearMark };
+/** The cleared rows, by Item id (kept by the Core). */
+export type Clears = DashboardClears;
 
 const DAY = 86_400_000;
 // A clear whose Item has been off the Dashboard this long is forgotten.
@@ -48,6 +51,7 @@ export function feedRows(
   items: readonly Item[],
   clears: Clears,
   tickedHere: ReadonlyMap<string, FeedRow>,
+  suggestions: ReadonlyMap<string, SuggestedTodo> = new Map(),
 ): FeedRow[] {
   const byId = new Map(items.map((item) => [item.id, item]));
   const ranked = new Set(rankings.map((ranking) => ranking.itemId));
@@ -55,7 +59,8 @@ export function feedRows(
   for (const { itemId, band, reason, rank } of rankings) {
     const item = byId.get(itemId);
     if (!item || clears[itemId]?.band === band) continue;
-    rows.push({ item, band, reason, rank, done: false });
+    const suggestion = suggestions.get(itemId);
+    rows.push({ item, band, reason, rank, done: false, ...(suggestion && { suggestion }) });
   }
   for (const [itemId, row] of tickedHere) if (!ranked.has(itemId)) rows.push(row);
   const bandIndex = (band: DashboardBand) => dashboardBands.indexOf(band);
@@ -109,8 +114,9 @@ const dueOf = (item: Item) =>
       ? item.detail.dueDate
       : null;
 
-/** The row's Source stamp and what follows it: `TODO` Manual · due Fri, `LIN` In Progress. */
-export function sourceTag(item: Item): { stamp: string; text: string } {
+/** The row's Source stamp and what follows it: `TODO` Manual · due Fri, `LIN` In Progress, `ARES` Suggested Todo. */
+export function sourceTag(item: Item, suggested = false): { stamp: string; text: string } {
+  if (suggested) return { stamp: 'ARES', text: 'Suggested Todo' };
   if (item.detail?.kind === 'linear-issue') return { stamp: 'LIN', text: item.detail.state.name };
   const due = dueOf(item);
   const origin = originLabel(item);
@@ -120,6 +126,7 @@ export function sourceTag(item: Item): { stamp: string; text: string } {
 /** The row's right-hand column, big then small: ["3D", "Overdue"], ["Today", "Due"], ["ENG", "Cycle 41"]. */
 export function rowMeta(row: FeedRow, now: number): [string, string] {
   const { item, band } = row;
+  if (row.suggestion) return ['New', 'Suggested'];
   const today = localDay(now);
   const due = dueOf(item);
   if (due && due < today) return [`${daysBetween(due, today)}D`, 'Overdue'];

@@ -1,5 +1,6 @@
 // The Agent in the Core: Ares's jobs, run by the job runner on what the Core hears of. The Core tells
-// it when the User changes Items (typing in a Daily Note becomes a pause trigger once it stops) and
+// it when the User changes Items (typing in a Daily Note becomes a pause trigger once it stops, and a
+// change to Todos or Linear issues a Todos-changed one), when Ares did or suggested something, and
 // when a Source has synced; it works out for itself when the machine has been idle long enough for
 // catch-up work. The main process's idle and lock reports (Updates, #70) can call `idle()` too.
 import type { CoreMessage } from '@commander/domain';
@@ -8,6 +9,7 @@ import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import type { SyncedEvent } from '../sync';
+import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
 import { suggestTodosJob } from './suggest-todos';
 
@@ -16,7 +18,7 @@ export type { JobRunner } from './runner';
 export type AgentOptions = {
   gate: Gate;
   client: ModelClient;
-  send: (message: Extract<CoreMessage, { type: 'ares-status' }>) => void;
+  send: (message: Extract<CoreMessage, { type: 'ares-status' | 'dashboard-ranked' }>) => void;
   now?: () => number;
   // How long the User must change nothing before the catch-up runs.
   idleAfterMs?: number;
@@ -34,19 +36,25 @@ export type Agent = {
   // The User changed these Items (through the window).
   userChanged(itemIds: string[]): void;
   synced(event: SyncedEvent): void;
+  // Ares did or suggested something through the gate (a suggested Todo, say).
+  aresChanged(): void;
   // The machine is idle: catch-up work.
   idle(): void;
   stop(): void;
 };
 
 const IDLE_AFTER_MS = 5 * 60_000;
+const RANK_DASHBOARD_NAME = 'Rank the Dashboard';
+// The Items whose changes may move the Dashboard: Todos, and the Linear issues behind them.
+const RANKED_KINDS = new Set(['todo', 'linear-issue']);
 const IDLE_CHECK_MS = 30_000;
 
 export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   const now = options.now ?? Date.now;
   const idleAfterMs = options.idleAfterMs ?? IDLE_AFTER_MS;
+  let wasRanking = false;
   const runner = createJobRunner({
-    jobs: [suggestTodosJob(itemStore, { now })],
+    jobs: [suggestTodosJob(itemStore, { now }), rankDashboardJob(itemStore, { now })],
     client: options.client,
     gate: options.gate,
     store: itemStore.agent,
@@ -56,7 +64,13 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     now,
     typingPauseMs: options.typingPauseMs,
     log: options.log,
-    onStatus: (status) => options.send({ type: 'ares-status', ...status }),
+    onStatus: (status) => {
+      options.send({ type: 'ares-status', ...status });
+      // Each finished ranking run: the Dashboard reads its ranking again.
+      const ranking = status.running.includes(RANK_DASHBOARD_NAME);
+      if (wasRanking && !ranking) options.send({ type: 'dashboard-ranked', at: now() });
+      wasRanking = ranking;
+    },
   });
 
   let lastChange = now();
@@ -83,6 +97,12 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       caughtUp = false;
       const blocks = itemIds.filter((id) => itemStore.get(id)?.item.kind === 'block');
       if (blocks.length) runner.trigger({ kind: 'typing', itemIds: blocks });
+      const ranked = itemIds.filter((id) => RANKED_KINDS.has(itemStore.get(id)?.item.kind ?? ''));
+      if (ranked.length) runner.trigger({ kind: 'todos-changed', itemIds: ranked });
+    },
+
+    aresChanged() {
+      runner.trigger({ kind: 'todos-changed', itemIds: [] });
     },
 
     synced({ source, account }) {

@@ -1,14 +1,17 @@
-import type { ActivityEntry, Item } from '@commander/domain';
+import type { ActivityEntry, CoreMessage, DashboardState, Item } from '@commander/domain';
 import type { AccountSummary } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
+import type { AutonomyClient } from '../ares/activity';
 import type { LinearAccountsClient } from '../linear/linear-issues';
 import type { Clears } from './feed';
+import { type SuggestedTodo, suggestedTodoOf } from './suggested-todos';
 
 /*
   The Dashboard's view of the app: everything it reads or changes goes through here, so components
-  never build requests themselves. It reads the open Items a Ranker looks at from the Item store, and
-  who the User is in each Linear Account from the Accounts; it ticks Todos and undoes. Reached only
-  through the window's bridge, so every change is the User's.
+  never build requests themselves. It reads the open Items a Ranker looks at from the Item store, who
+  the User is in each Linear Account from the Accounts, and Ares's ranking, the cleared rows and his
+  pending suggested Todos from the Core; it ticks Todos, clears rows, adds or dismisses suggestions
+  and undoes. Reached only through the window's bridge, so every change is the User's.
 */
 
 export interface DashboardClient {
@@ -22,13 +25,58 @@ export interface DashboardClient {
   undo(entryId: number): Promise<ActivityEntry>;
   /** What today's Daily Note holds so far: its top Blocks' text, in order, or null with none yet. */
   dailyNote(day: string): Promise<string[] | null>;
+  /** Ares's ranking (or why the rules rank the Dashboard) and the cleared rows, as the Core keeps them. */
+  state(): Promise<DashboardState>;
+  /** Replaces the cleared rows. */
+  saveClears(clears: Clears): Promise<Clears>;
+  /** Ares's pending suggested Todos, each as the Todo it would add. */
+  suggestions(): Promise<{ item: Item; suggestion: SuggestedTodo }[]>;
+  /** Adds a suggested Todo (accepts it, through the gate) or dismisses it. */
+  settle(proposalId: number, op: 'accept' | 'dismiss'): Promise<void>;
+  /** Hears when Ares ranked again, or did or suggested something. Returns the function that stops it. */
+  onAresChange(listener: () => void): () => void;
+}
+
+/** Ares's side of the bridge: the gate, and word from the Core. Absent, the Dashboard has no suggestions. */
+export interface DashboardAres {
+  autonomy: AutonomyClient;
+  onCoreMessage(listener: (message: CoreMessage) => void): () => void;
 }
 
 // The Item store answers at most 1000 Items a query.
 const MOST = 1000;
 
-export function dashboardIn(itemStore: ItemStoreClient, accounts: LinearAccountsClient): DashboardClient {
+export function dashboardIn(
+  itemStore: ItemStoreClient,
+  accounts: LinearAccountsClient,
+  ares?: DashboardAres,
+): DashboardClient {
   return {
+    state: () => itemStore({ op: 'dashboard' }),
+
+    saveClears: (clears) => itemStore({ op: 'save-dashboard-clears', clears }),
+
+    async suggestions() {
+      if (!ares) return [];
+      const pending = await ares.autonomy({
+        op: 'activity',
+        query: { section: 'notes', statuses: ['pending'], limit: 500 },
+      });
+      return pending.flatMap((row) => suggestedTodoOf(row) ?? []).reverse();
+    },
+
+    async settle(proposalId, op) {
+      if (!ares) throw new Error('Ares isn’t running');
+      await ares.autonomy({ op, proposalId });
+    },
+
+    onAresChange(listener) {
+      if (!ares) return () => {};
+      return ares.onCoreMessage((message) => {
+        if (message.type === 'dashboard-ranked' || message.type === 'ares-activity') listener();
+      });
+    },
+
     async items() {
       const [todos, issues] = await Promise.all([
         itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
@@ -78,8 +126,8 @@ export const syncSignature = (accounts: readonly AccountSummary[]) =>
   accounts.map((account) => `${account.id}:${account.sync?.lastSyncedAt ?? ''}`).join('|');
 
 // ---------------------------------------------------------------------------------------------
-// Cleared rows, remembered across restarts in localStorage, like the Project filter, until the Core
-// keeps the User's settings. Clearing changes no Item: it is the Dashboard's own view.
+// Cleared rows were kept in localStorage before the Core kept them (so Ares can leave them out): those
+// are moved to the Core once, then forgotten here. Clearing changes no Item: it is the Dashboard's own view.
 
 export const CLEARS_STORAGE_KEY = 'commander.dashboard.cleared';
 
@@ -99,10 +147,10 @@ export function loadClears(storage: Storage): Clears {
   }
 }
 
-export function saveClears(storage: Storage, clears: Clears): void {
+export function forgetClears(storage: Storage): void {
   try {
-    storage.setItem(CLEARS_STORAGE_KEY, JSON.stringify(clears));
+    storage.removeItem(CLEARS_STORAGE_KEY);
   } catch {
-    // Storage unavailable: the clears still hold for this session.
+    // Storage unavailable: nothing to forget.
   }
 }

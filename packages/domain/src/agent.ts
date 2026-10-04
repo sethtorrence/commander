@@ -50,6 +50,7 @@ export type AgentJobsState = z.infer<typeof agentJobsState>;
 // How the Usage page names the jobs it lists; an id it doesn't know shows as it is.
 export const AGENT_JOB_NAMES: Record<string, string> = {
   'suggest-todos': 'Suggest Todos',
+  'rank-dashboard': 'Rank the Dashboard',
 };
 
 export const jobDisplayName = (job: string): string => AGENT_JOB_NAMES[job] ?? job;

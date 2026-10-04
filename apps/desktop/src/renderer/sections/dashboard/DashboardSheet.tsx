@@ -1,5 +1,5 @@
 import { localDay } from '@commander/domain';
-import { Kbd, SheetStripCell } from '@commander/ui';
+import { Kbd, SheetStripCell, toast } from '@commander/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { clockTime } from '../../frame/calendar';
 import { requestReveal } from '../../frame/reveal';
@@ -12,7 +12,7 @@ import { longDate, notePartNumber, weekday } from '../notes/days';
 import { SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { useDashboard } from './context';
 import { type FeedRow, tabCount } from './feed';
-import { openIn, RankedList, titleOf, useFeedSelection } from './RankedList';
+import { openIn, RankedList, revealId, titleOf, useFeedSelection } from './RankedList';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -75,8 +75,9 @@ export function DashboardSheet() {
     const section = openIn(row);
     if (!section) return;
     openSection(section[0]);
-    requestReveal(section[0], row.item.id);
+    requestReveal(section[0], revealId(row));
   };
+  const settle = (row: FeedRow, op: 'accept' | 'dismiss') => void dashboard.settleSuggestion(row, op);
   useShortcuts([
     { keys: 'j', label: 'Next row', run: () => selection.move(1) },
     { keys: 'k', label: 'Previous row', run: () => selection.move(-1) },
@@ -89,16 +90,27 @@ export function DashboardSheet() {
     { keys: 'x', label: 'Tick or untick the Todo', run: () => selected && void dashboard.tick(selected) },
     { keys: 'e', label: 'Clear it from the Dashboard', run: () => selected && dashboard.clear(selected) },
     {
+      keys: 'a',
+      label: 'Add Ares’s suggested Todo',
+      run: () => selected?.suggestion && settle(selected, 'accept'),
+    },
+    {
       keys: 'b',
       label: 'File under a Project',
-      run: () =>
-        selected &&
-        badges.open({ id: selected.item.id, title: titleOf(selected), filing: selected.item.filing }),
+      run: () => {
+        if (!selected) return;
+        if (selected.suggestion) {
+          toast('Add it first: a suggestion takes the Project of its Block');
+          return;
+        }
+        badges.open({ id: selected.item.id, title: titleOf(selected), filing: selected.item.filing });
+      },
     },
     { keys: 'Ctrl+z', label: 'Undo', run: () => void dashboard.undo() },
   ]);
 
   const project = projectById(filter);
+  const { rankedBy } = dashboard;
   const total = shown.filter((row) => !row.done).length;
   const today = localDay(now.getTime());
   return (
@@ -108,8 +120,10 @@ export function DashboardSheet() {
         title="What needs you"
         size="dashboard"
         status={
-          <SheetStripCell data-testid="ranked-at">
-            Ranked by rules · {clockTime(now).slice(0, 5)}
+          <SheetStripCell data-testid="ranked-at" title={rankedBy.why ?? undefined}>
+            {rankedBy.by === 'ares' && rankedBy.at
+              ? `Ranked by Ares · ${clockTime(rankedBy.at).slice(0, 5)}`
+              : `Ranked by rules · ${clockTime(now).slice(0, 5)}`}
           </SheetStripCell>
         }
         meta={<SheetStripCell>Todos and Linear merged</SheetStripCell>}
@@ -138,6 +152,7 @@ export function DashboardSheet() {
               onOpen={open}
               onTick={(row) => void dashboard.tick(row)}
               onClear={dashboard.clear}
+              onSettle={settle}
             />
             <FeedEnd ranked={shown.length} cleared={dashboard.cleared} onBringBack={dashboard.bringBack} />
           </div>
@@ -265,6 +280,7 @@ const KEYS: [ReactNode, string][] = [
   ],
   [<Kbd key="x">X</Kbd>, 'Tick'],
   [<Kbd key="e">E</Kbd>, 'Clear'],
+  [<Kbd key="a">A</Kbd>, 'Add'],
   [
     <>
       <Kbd>P</Kbd>
