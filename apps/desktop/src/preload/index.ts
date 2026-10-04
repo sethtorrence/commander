@@ -20,6 +20,8 @@ import {
   type ModelKeyStatus,
   type SaveModelKeyResult,
   type SecretStorageStatus,
+  type WindowControl,
+  type WindowFrame,
 } from '@commander/domain/ipc';
 import { contextBridge, ipcRenderer } from 'electron';
 
@@ -86,6 +88,16 @@ const commander = {
   },
   // Tells the app the first frame is on screen (in the saved theme), so the window can be shown.
   framePainted: (): void => ipcRenderer.send(ipc.framePainted),
+  // The header is the title bar: how the frame behaves here, and its minimise, maximise and close.
+  windowFrame: (): Promise<WindowFrame> => ipcRenderer.invoke(ipc.windowFrame),
+  windowControl: (control: WindowControl): Promise<void> => ipcRenderer.invoke(ipc.windowControl, control),
+  onWindowFrame(listener: (frame: WindowFrame) => void) {
+    const handler = (_event: unknown, frame: WindowFrame) => listener(frame);
+    ipcRenderer.on(ipc.windowFrameChanged, handler);
+    return () => {
+      ipcRenderer.off(ipc.windowFrameChanged, handler);
+    };
+  },
 };
 
 export type CommanderBridge = typeof commander;

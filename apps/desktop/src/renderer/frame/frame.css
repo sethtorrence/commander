@@ -1,6 +1,6 @@
 /*
-  The app frame: the Industrial header (identity, date, band meter, Ares status module) and the
-  numbered notebook tabs along the sheet edge. Ported from the locked prototype
+  The app frame: the Industrial header (identity, date, band meter, Ares status module, window
+  controls) and the numbered notebook tabs along the sheet edge. Ported from the locked prototype
   (prototype/dashboard-section-layout, variants/feed.html: .hdr, .meter, .ttn, .tabs, .tab, .tbx),
   on the design system's tokens. The rulers and grid come from @commander/ui (Drawing).
 */
@@ -340,6 +340,98 @@
     color: var(--muted);
   }
 
+  /* ================= Title bar ================= */
+  /* The window has no other frame: the header, and the empty part of the tabs strip under it, move
+     the window. Everything that takes a click inside them must not. */
+  .f-hdr,
+  .f-tabs {
+    -webkit-app-region: drag;
+  }
+  :is(.f-hdr, .f-tabs)
+    :is(
+      button,
+      a,
+      input,
+      select,
+      textarea,
+      label,
+      summary,
+      [role="button"],
+      [tabindex],
+      [contenteditable],
+      .f-tab
+    ) {
+    -webkit-app-region: no-drag;
+  }
+
+  /* Minimise, maximise / restore and close, at the header's right edge, over the end of Ares's
+     columns (the header keeps the drawing's eight columns). */
+  .f-hdr {
+    --wc: 40px;
+  }
+  .f-hdr:has(> .f-win) > .f-ares {
+    margin-right: calc(3 * var(--wc));
+  }
+  .f-hdr > :is(.f-ares, .f-win) {
+    grid-row: 1;
+  }
+  .f-win {
+    grid-column: 9 / 10;
+    justify-self: end;
+    width: calc(3 * var(--wc));
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .f-wc {
+    border: 0;
+    border-left: 1px solid var(--line2);
+    border-radius: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    color: var(--muted);
+    font: 500 8px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .f-wc:first-child {
+    border-left: 0;
+  }
+  .f-wc svg {
+    width: 12px;
+    height: 12px;
+    flex: none;
+  }
+  .f-wc:hover {
+    background: var(--raise);
+    color: var(--ink);
+  }
+  .f-wc:active {
+    background: var(--ink);
+    color: var(--bg);
+  }
+  /* Close takes the signal colour, as the Ask button does: it is the one that changes the most. */
+  .f-wc[data-control="close"]:is(:hover, :active) {
+    background: var(--signal);
+    color: var(--on-signal);
+  }
+  .f-wc:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: -2px;
+  }
+  .f-wc[data-control="close"]:focus-visible {
+    outline-color: var(--ink);
+  }
+  /* macOS keeps its traffic lights, inset at the header's left edge (window-frame.ts places them). */
+  .f-hdr[data-window-controls="native"] .f-id {
+    padding-left: 76px;
+  }
+
   /* ================= Notebook index tabs ================= */
   .f-tabs {
     position: fixed;
@@ -500,6 +592,17 @@
     .f-ares-l2 {
       font-size: 13px;
     }
+    /* The window controls keep only their glyphs, leaving Ares's lines room. */
+    .f-hdr {
+      --wc: 34px;
+    }
+    .f-wc .l {
+      display: none;
+    }
+    .f-ask {
+      padding: 0 12px;
+      gap: 10px;
+    }
   }
   /* Narrower than the prototypes go (a tiled window): tabs shrink and cut their labels short, so the
      tools on the right always stay in reach. */
@@ -510,6 +613,13 @@
       padding: 0 10px 0 7px;
     }
     .f-tabs .tools .f-tool-label {
+      display: none;
+    }
+    /* A tiled window: the Ask button keeps only its key too. */
+    .f-hdr {
+      --wc: 32px;
+    }
+    .f-ask > span {
       display: none;
     }
   }

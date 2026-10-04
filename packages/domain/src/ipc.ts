@@ -24,7 +24,27 @@ export const ipc = {
   // the window answers on savedBeforeQuit with that id once they are saved.
   saveBeforeQuit: 'save-before-quit',
   savedBeforeQuit: 'saved-before-quit',
+  // The window draws its own title bar (the header): it reads how the frame behaves here
+  // (windowFrame), asks main to minimise, maximise or close (windowControl, with a WindowControl),
+  // and main pushes the frame again whenever the window is maximised or restored (windowFrameChanged).
+  windowFrame: 'window-frame',
+  windowControl: 'window-control',
+  windowFrameChanged: 'window-frame-changed',
 } as const;
+
+// What the header's window controls ask for.
+export const WINDOW_CONTROLS = ['minimise', 'toggle-maximise', 'close'] as const;
+export type WindowControl = (typeof WINDOW_CONTROLS)[number];
+
+export type WindowFrame = {
+  // 'header': Commander draws minimise, maximise and close at the header's right edge.
+  // 'native': the platform draws them (macOS traffic lights, inset at the header's left edge).
+  controls: 'header' | 'native';
+  // What minimise does: minimise to the taskbar, or hide to the tray where the platform has no
+  // minimised state (Wayland, Hyprland).
+  minimise: 'minimise' | 'hide';
+  maximised: boolean;
+};
 
 // Whether a model provider's API key is in the keyring. The key itself never reaches the window.
 export type ModelKeyStatus = { saved: boolean };
