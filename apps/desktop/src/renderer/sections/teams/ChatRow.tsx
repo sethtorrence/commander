@@ -5,7 +5,7 @@ import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { whenShort } from '../todos/when';
-import { type Chat, isUnread, latestLine, mentionsUser } from './chats';
+import { type Chat, isUnread, isWaiting, latestLine, mentionsUser } from './chats';
 
 const pad = (n: number, width = 3) => String(n).padStart(width, '0');
 
@@ -100,7 +100,8 @@ function ChatBadge({ chat }: { chat: Chat }) {
 
 /**
  * A Chat's row, after the prototype's message rows: number, Badge, name, its marks (`@` for an
- * unread mention of the User, Muted, the warning mark) and the latest message's time; then the
+ * unread mention of the User, Waiting when Ares judges someone is waiting on them, Muted, the
+ * warning mark) and the latest message's time; then the
  * Chat-type glyph, the latest message as one line with its sender, and the unread count.
  */
 export function ChatRow({
@@ -164,6 +165,11 @@ export function ChatRow({
           {mentionsUser(chat) && (
             <Mark title="An unread message mentions you" strong>
               @
+            </Mark>
+          )}
+          {isWaiting(chat) && (
+            <Mark title="Ares: someone here is waiting on you" strong>
+              Waiting
             </Mark>
           )}
           {chat.muted && <Mark title="Muted">Muted</Mark>}

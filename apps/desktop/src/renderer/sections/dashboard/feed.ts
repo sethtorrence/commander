@@ -41,8 +41,9 @@ export interface FeedRow {
 }
 
 /**
- * The message a Chat's row is about: what put it on the Dashboard (an unread mention of the User,
- * the one-to-one message they haven't answered), else, for a Chat Ares placed, its latest message.
+ * The message a Chat's row is about: what put it on the Dashboard (the message Ares judged is
+ * waiting on the User, an unread mention of the User, the one-to-one message they haven't answered),
+ * else, for a Chat Ares placed, its latest message.
  */
 export type ChatFocus = { messageId: string; at: number; why: ChatAttention['why'] | 'latest' };
 
@@ -174,6 +175,7 @@ const CHAT_TYPES: Record<ChatType, string> = {
   meeting: 'Meeting',
 };
 const CHAT_WHY: Record<ChatFocus['why'], string> = {
+  waiting: 'Waiting',
   mention: 'Mention',
   unanswered: 'Unanswered',
   latest: 'Teams',

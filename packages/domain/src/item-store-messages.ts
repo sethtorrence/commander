@@ -139,6 +139,9 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // its Item (in the activity log, by the User).
   z.object({ op: z.literal('chat-settings'), account: z.string().min(1).optional() }),
   z.object({ op: z.literal('change-chat-setting'), action: chatSettingAction }),
+  // "Not waiting on you" (#109): the User clears Ares's waiting flag on a Chat by hand. A correction
+  // in the activity log (kept as an example for Memory), undone like any change.
+  z.object({ op: z.literal('clear-chat-waiting'), itemId: z.string().min(1) }),
   // The Calendar Section: live events overlapping a time range, earliest first; every Account's
   // calendars and whether each is on; and switching one on or off (off hides its events at once and
   // stops syncing it; on syncs it again).
@@ -206,6 +209,7 @@ export type ItemStoreResults = {
   'save-dashboard-clears': DashboardClears;
   'chat-settings': ChatSetting[];
   'change-chat-setting': ChatSettingChange;
+  'clear-chat-waiting': ActivityEntry;
   events: Item[];
   calendars: CalendarSummary[];
   'set-calendar-enabled': CalendarSummary[];
@@ -250,6 +254,7 @@ export const itemStoreResult = {
   'save-dashboard-clears': dashboardClears,
   'chat-settings': z.array(chatSetting),
   'change-chat-setting': chatSettingChange,
+  'clear-chat-waiting': activityEntry,
   events: z.array(item),
   calendars: z.array(calendarSummary),
   'set-calendar-enabled': z.array(calendarSummary),

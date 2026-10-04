@@ -15,9 +15,10 @@ import type { MessageFocus } from './use-teams';
 
 /*
   The Chat view beside the list, after the prototype's reader: the Chat's actions along the top
-  (Open in Teams, Project, Mute, Exclude), its name, the people in it and its marks (with Ares's
-  dashed Badge, Confirm and Change while his filing suggestion waits, #108), then its
-  messages by day, newest at the bottom, and a side panel with its Project, Links both ways and
+  (Open in Teams, Project, Mute, Exclude, Summarise), its name, the people in it and its marks (with
+  Ares's dashed Badge, Confirm and Change while his filing suggestion waits, #108), what Ares says
+  about it (waiting on you, a summary; #109), then its messages by day, newest at the bottom, and a
+  side panel with its Project, Links both ways and
   activity log, as in the other detail panes. Message text is untrusted Source content, shown by
   MessageText (text only, no images, web and mail links only).
 
@@ -232,6 +233,8 @@ export function ChatView({
   onRetry = () => {},
   onToggleRead,
   reply,
+  actions,
+  ares,
 }: {
   chat: Chat | null;
   /** The User's Teams user id in the Chat's Account. */
@@ -259,6 +262,10 @@ export function ChatView({
   onToggleRead?: (() => void) | null;
   /** The reply box. */
   reply?: ReactNode;
+  /** More actions along the top, after Exclude (Summarise, #109). */
+  actions?: ReactNode;
+  /** What Ares says about the Chat, above its messages (waiting on you, a summary; #109). */
+  ares?: ReactNode;
 }) {
   const { projects, archived, projectOf } = useProjects();
   const project = chat ? projectOf(chat.filing) : undefined;
@@ -298,6 +305,7 @@ export function ChatView({
               <button type="button" onClick={onExclude} className={action}>
                 Exclude…
               </button>
+              {actions}
             </>
           )}
           <span className="flex-1" />
@@ -328,6 +336,7 @@ export function ChatView({
                 <ItemWarning item={chat} variant="pane" />
               </div>
               {readFailed && <CouldntSync change={readFailed} onRetry={onRetry} />}
+              {ares}
               {chat.detail.messages.length ? (
                 messagesByDay(chat.detail.messages, now).map((day) => (
                   <section key={day.key} aria-label={day.label} className="mt-[18px]">

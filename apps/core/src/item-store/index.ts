@@ -91,6 +91,7 @@ import { blockFilingIn } from './block-filing';
 import { type CalendarSettingsStore, calendarSettingsIn } from './calendar-settings';
 import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRows } from './calendars';
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
+import { ChatWaitingError, type ChatWaitingStore, chatWaitingIn } from './chat-waiting';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
 import { emailsIn } from './emails';
@@ -319,6 +320,9 @@ export type ItemStore = {
   // Teams Chats the User muted or excluded (chat-settings.ts), in the same database. Excluding one
   // deletes its Item; the sync engine passes an Account's excluded Chats to its sync, to skip.
   chatSettings: ChatSettingsStore;
+  // Ares's waiting flags on Chats (chat-waiting.ts), in the same database: each decorates its Chat
+  // (`waiting`); the User clearing one by hand is a correction, undone like any change.
+  chatWaiting: ChatWaitingStore;
   // Ares's filing (filing-feedback.ts): his record, and the User's corrections and confirmations,
   // which the Item store records whenever the User files an Item he filed or suggested a Project for.
   filing: FilingFeedbackStore & {
@@ -419,6 +423,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       ),
     toEntry,
   });
+  // Ares's waiting flags on Teams Chats; clearing one by hand is logged as the User's correction.
+  const waiting = chatWaitingIn(db, { now, log: (entry, at) => log(entry, at) });
   // Project changes come only from the User (the window); a merge's Item moves are recorded as theirs.
   const byUser: Actor = { kind: 'user' };
   const projects = projectsIn(
@@ -663,14 +669,18 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         return behind ? [row.id, behind] : [row.id];
       }),
     );
+    // Ares's waiting flag on a Chat.
+    const flags = waiting.standing(rows.filter((row) => row.kind === 'chat').map((row) => row.id));
     return rows.map((row) => {
       const item = toItem(row, details.get(row.id) ?? null);
       const at = marked.get(row.id) ?? marked.get(backedBy(row.id) ?? '');
       const suggestion = suggested.get(row.id) ?? suggested.get(backedBy(row.id) ?? '');
+      const flag = flags.get(row.id);
       return {
         ...item,
         ...(at !== undefined && { injectionWarning: { at } }),
         ...(suggestion && { filingSuggestion: suggestion }),
+        ...(flag && { waiting: flag }),
       };
     });
   }
@@ -1201,6 +1211,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const { activity } = schema;
     const target = db.select().from(activity).where(eq(activity.id, entryId)).get();
     if (!target) throw new ItemStoreError('not-found', `No activity entry ${entryId}`);
+    // The User's "Not waiting on you" (or its undo): the flag comes back, or goes again.
+    if (
+      (target.action === 'correction' || target.action === 'undo') &&
+      target.actor === 'user' &&
+      waiting.isWaitingEntry(target)
+    ) {
+      if (db.select().from(activity).where(eq(activity.undoes, entryId)).get()) {
+        throw new ItemStoreError('already-undone', `Activity entry ${entryId} is already undone`);
+      }
+      return waiting.undo(target, entry, at);
+    }
     if (target.action === 'injection-warning') {
       throw new ItemStoreError('invalid', 'An injection warning records what Ares found; it can’t be undone');
     }
@@ -2102,6 +2123,23 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
     githubWatch,
     githubDiscussions: githubDiscussionsIn(db),
+
+    chatWaiting: {
+      judgedThrough: (itemId) => waiting.judgedThrough(itemId),
+      judged: (itemId, through) => waiting.judged(itemId, through),
+      flagged: () => waiting.flagged(),
+      flag: (itemId, flag, at) => waiting.flag(itemId, flag, at),
+      clear: (itemId, by, at) => waiting.clear(itemId, by, at),
+      clearByUser: sqlite.transaction((itemId: string, rawContext: ActionContext) => {
+        requireItem(itemId);
+        try {
+          return waiting.clearByUser(itemId, actionContext.parse(rawContext));
+        } catch (error) {
+          if (error instanceof ChatWaitingError) throw new ItemStoreError('invalid', error.message);
+          throw error;
+        }
+      }),
+    },
 
     close() {
       sqlite.close();

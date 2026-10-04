@@ -56,6 +56,9 @@ export const modelSettings = z.object({
   monthlyCapUsd: z.number().positive().max(100_000).nullable(),
   // Where Deep-tier calls go once the month's spend reaches the cap; null means they stop instead.
   deepFallback: tierSetting.nullable(),
+  // How many messages from others since the last Update make a Chat busy enough for Ares to
+  // summarise it in the Update (#109); 20 when not set (teams-ares.ts).
+  busyChatMessages: z.number().int().min(2).max(1000).optional(),
 });
 export type ModelSettings = z.infer<typeof modelSettings>;
 

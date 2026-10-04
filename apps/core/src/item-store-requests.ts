@@ -96,6 +96,8 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.chatSettings.list(request.account) };
       case 'change-chat-setting':
         return { ok: true, result: store.chatSettings.change(request.action, { by: { kind: 'user' } }) };
+      case 'clear-chat-waiting':
+        return { ok: true, result: store.chatWaiting.clearByUser(request.itemId, { by: { kind: 'user' } }) };
       case 'events':
         return { ok: true, result: store.events(request.query) };
       case 'calendars':
@@ -153,6 +155,7 @@ const CHANGES = new Set([
   'record-all',
   'send-to-linear',
   'change-chat-setting',
+  'clear-chat-waiting',
   'refile',
   'undo-refile',
 ]);

@@ -13,6 +13,7 @@
 //
 // - Linear (linear.ts): issues taken off the User's list, stuck issues that changed, and Accounts
 //   needing reconnecting.
+// - Teams (teams.ts): busy Chats, summarised when the Update is put together.
 // - Rule suggestions (rule-suggestions.ts): "Always file Linear team OPS under TX?", once the User's
 //   answers to Ares's filing point one Source field value at one Project often enough.
 //
@@ -33,6 +34,7 @@ import type { ItemStore } from '../item-store';
 import { createLinearWatch, type WatchedAccount } from './linear';
 import type { UpdateQueue } from './queue';
 import { createRuleSuggestions } from './rule-suggestions';
+import { createTeamsWatch } from './teams';
 
 // How many accepted suggestions in a row make Ares ask to just do them.
 export const STREAK = 20;
@@ -76,6 +78,7 @@ export function createProducers({
   queue,
   now,
   accounts,
+  me,
 }: {
   itemStore: ItemStore;
   gate: Pick<Gate, 'actions' | 'settings'>;
@@ -83,9 +86,12 @@ export function createProducers({
   now: () => number;
   // Every Account, for Reconnect.
   accounts?: () => readonly WatchedAccount[];
+  // Who the User is in a Teams Account, for counting a busy Chat's messages from others.
+  me?: (account: string) => string | null;
 }) {
   const store = itemStore.updates;
   const linear = createLinearWatch({ itemStore, queue, now, accounts });
+  const teams = createTeamsWatch({ itemStore, queue, now, me });
   const nameOf = (action: string) => gate.actions().find((each) => each.action === action)?.name ?? action;
   const sectionOfItem = (itemId: string | undefined): UpdateSection => {
     const kind = itemId ? itemStore.get(itemId)?.item.kind : undefined;
@@ -258,6 +264,7 @@ export function createProducers({
       capWarning();
       autonomyChanges();
       linear.sweep();
+      teams.sweep();
       ruleSuggestions.sweep();
     },
   };

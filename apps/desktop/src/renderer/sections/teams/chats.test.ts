@@ -4,6 +4,7 @@ import {
   type Chat,
   chatCounts,
   inFilters,
+  isWaiting,
   latestLine,
   messageParts,
   messagesByDay,
@@ -105,8 +106,8 @@ describe('filtering Chats', () => {
   it('narrows by Chat type and Unread only, together', () => {
     const titles = (filters: Parameters<typeof inFilters>[1]) =>
       chats.filter((each) => inFilters(each, filters)).map((each) => each.title);
-    expect(titles({ type: 'group', unreadOnly: false })).toEqual(['Newer', 'Noisy']);
-    expect(titles({ type: 'group', unreadOnly: true })).toEqual(['Newer']);
+    expect(titles({ ...NO_FILTERS, type: 'group' })).toEqual(['Newer', 'Noisy']);
+    expect(titles({ ...NO_FILTERS, type: 'group', unreadOnly: true })).toEqual(['Newer']);
     expect(titles({ ...NO_FILTERS, unreadOnly: true })).toEqual(['Unread', 'Newer', 'Mention']);
   });
 
@@ -114,10 +115,37 @@ describe('filtering Chats', () => {
     expect(chatCounts(chats, NO_FILTERS)).toEqual({
       types: { all: 5, 'one-on-one': 2, group: 2, meeting: 1 },
       unread: 3,
+      waiting: 0,
     });
-    expect(chatCounts(chats, { type: 'group', unreadOnly: true })).toEqual({
+    expect(chatCounts(chats, { ...NO_FILTERS, type: 'group', unreadOnly: true })).toEqual({
       types: { all: 3, 'one-on-one': 1, group: 1, meeting: 1 },
       unread: 1,
+      waiting: 0,
+    });
+  });
+
+  it('has a Waiting on you filter: the Chats Ares flagged, never a muted one, counted under the others (#109)', () => {
+    const flag = { messageId: 'm', reason: 'Priya asked for the rollout plan', at: NOW };
+    const flagged = toChats(
+      [
+        quiet,
+        { ...unread, waiting: flag },
+        { ...newer, waiting: flag },
+        mention,
+        { ...noisy, waiting: flag },
+      ],
+      [muted('noisy')],
+    );
+    const titles = (filters: Parameters<typeof inFilters>[1]) =>
+      flagged.filter((each) => inFilters(each, filters)).map((each) => each.title);
+    expect(flagged.filter(isWaiting).map((each) => each.title)).toEqual(['Unread', 'Newer']);
+    expect(titles({ ...NO_FILTERS, waitingOnly: true })).toEqual(['Unread', 'Newer']);
+    expect(titles({ ...NO_FILTERS, type: 'group', waitingOnly: true })).toEqual(['Newer']);
+    expect(chatCounts(flagged, NO_FILTERS).waiting).toBe(2);
+    expect(chatCounts(flagged, { ...NO_FILTERS, type: 'one-on-one' }).waiting).toBe(1);
+    expect(chatCounts(flagged, { ...NO_FILTERS, waitingOnly: true })).toMatchObject({
+      types: { all: 2, 'one-on-one': 1, group: 1, meeting: 0 },
+      unread: 2,
     });
   });
 });

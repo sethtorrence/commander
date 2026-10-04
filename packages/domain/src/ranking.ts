@@ -3,6 +3,7 @@ import type { LinearIssueDetail } from './linear';
 import { isLinearTodo } from './linear-todos';
 import { clockOf, isChipWorthy } from './meetings';
 import { type ChatDetail, type ChatMessage, chatFlags } from './teams';
+import { stillWaiting } from './teams-ares';
 
 /*
   Ranking the Dashboard: which open Items need the User, in which band, why, and in what order.
@@ -212,7 +213,7 @@ function placeMeeting(item: Item, now: number): Placed | null {
 export const UNANSWERED_FOR_MS = 7 * DAY;
 
 /** Why a Chat needs the User, and the message that says so (the one Enter opens the Chat at). */
-export type ChatAttention = { why: 'mention' | 'unanswered'; message: ChatMessage };
+export type ChatAttention = { why: 'waiting' | 'mention' | 'unanswered'; message: ChatMessage };
 
 const spoken = (message: ChatMessage) => message.from !== null && !message.deleted;
 const latestOf = (messages: readonly ChatMessage[]) =>
@@ -224,6 +225,8 @@ const latestOf = (messages: readonly ChatMessage[]) =>
 /**
  * What puts a Chat on the Dashboard by the band rules, if anything:
  *
+ * - **waiting:** Ares flagged someone in it as waiting on the User (#109), and the User hasn't said
+ *   anything since the message (that message);
  * - **mention:** an unread message from someone else mentions the User (the latest such message);
  * - **unanswered:** a one-to-one Chat whose latest message is the other person's, sent in the last
  *   week, read or not, with no reply from the User after it (that message).
@@ -233,13 +236,17 @@ const latestOf = (messages: readonly ChatMessage[]) =>
  * derived decide, and any unread message with a mention stands for the User's.
  */
 export function chatAttention(
-  chat: Pick<Item, 'kind' | 'detail'>,
+  chat: Pick<Item, 'kind' | 'detail' | 'waiting'>,
   me: string | null,
   now: number,
 ): ChatAttention | null {
   if (chat.kind !== 'chat' || chat.detail?.kind !== 'chat') return null;
-  const { detail } = chat;
+  const { detail, waiting } = chat;
   const flags = me ? chatFlags(detail, me) : detail;
+  if (waiting && stillWaiting(me ? { ...detail, ...flags } : detail, waiting, me)) {
+    const flagged = detail.messages.find((message) => message.id === waiting.messageId);
+    if (flagged) return { why: 'waiting', message: flagged };
+  }
   if (flags.mentionsMe) {
     const mention = latestOf(
       detail.messages.filter(
@@ -269,9 +276,11 @@ function placeChat(chat: Chat, context: RankingContext): Placed | null {
   const at = message.createdAt;
   const where = chat.detail.chatType === 'one-on-one' ? '' : ` in ${chat.title}`;
   const reason =
-    attention.why === 'mention'
-      ? `${who} mentioned you${where} · ${sentAt(at, context.now)}`
-      : `${who} messaged you ${sentAgo(at, context.now)}`;
+    attention.why === 'waiting' && chat.waiting
+      ? chat.waiting.reason
+      : attention.why === 'mention'
+        ? `${who} mentioned you${where} · ${sentAt(at, context.now)}`
+        : `${who} messaged you ${sentAgo(at, context.now)}`;
   return { item: chat, band: 'today', reason, at };
 }
 
@@ -336,8 +345,9 @@ export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<
  * - **Waiting on others:** Linear Todos in a review state.
  * - **Today:** Todos due today, and Linear Todos in progress or in their team's current cycle.
  * - **FYI:** Linear issues the User created, assigned to someone else, that changed in the last day.
- * - **Today**, too: Chats with an unread message mentioning the User, and one-to-one Chats the User
- *   hasn't answered (chatAttention), one row per Chat. Muted Chats never; busy group Chats only
+ * - **Today**, too: Chats Ares flagged as waiting on the User (with his reason), Chats with an unread
+ *   message mentioning the User, and one-to-one Chats the User hasn't answered (chatAttention), one
+ *   row per Chat. Muted Chats never; busy group Chats only
  *   when they mention the User.
  *
  * A Linear Todo is an open Linear issue assigned to the User in a Todo state (unstarted or started, or

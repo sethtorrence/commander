@@ -10,10 +10,46 @@ const TYPES: { type: ChatType | null; label: string }[] = [
   ...chatTypes.map((type) => ({ type, label: CHAT_TYPE_NAMES[type] })),
 ];
 
+// An on/off filter with its count: Unread only, Waiting on you.
+function FilterSwitch({
+  on,
+  count,
+  onToggle,
+  children,
+}: {
+  on: boolean;
+  count: number;
+  onToggle: () => void;
+  children: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      onClick={onToggle}
+      className={cn(
+        'flex cursor-pointer items-center gap-2.5 border-0 border-r border-line2 px-4 font-mono text-label-lg leading-none font-semibold uppercase tracking-label whitespace-nowrap',
+        on ? 'bg-ink text-sheet' : 'bg-transparent text-ink hover:bg-raise',
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn('relative h-4 w-[30px] border-[1.5px]', on ? 'border-sheet' : 'border-ink')}
+      >
+        <i className={cn('absolute top-0.5 size-[9px]', on ? 'right-0.5 bg-sheet' : 'left-0.5 bg-muted')} />
+      </span>
+      {children}
+      <span className="tabular-nums">{pad(count)}</span>
+    </button>
+  );
+}
+
 /**
  * The Teams filters under the Project filter, after the prototype's Bucket tabs (.bkts): the Chat
- * types with their counts, Unread only with its count, and the thin status line on the right ("Checked
- * 14:02", or the Account's problem). They narrow the list together with the Project filter.
+ * types with their counts, Unread only and Waiting on you (the Chats Ares flagged, #109) with their
+ * counts, and the thin status line on the right ("Checked 14:02", or the Account's problem). They
+ * narrow the list together with the Project filter.
  */
 export function ChatFilterBar({
   filters,
@@ -68,33 +104,20 @@ export function ChatFilterBar({
           );
         })}
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={filters.unreadOnly}
-        onClick={() => onFilters({ unreadOnly: !filters.unreadOnly })}
-        className={cn(
-          'flex cursor-pointer items-center gap-2.5 border-0 border-r border-line2 px-4 font-mono text-label-lg leading-none font-semibold uppercase tracking-label whitespace-nowrap',
-          filters.unreadOnly ? 'bg-ink text-sheet' : 'bg-transparent text-ink hover:bg-raise',
-        )}
+      <FilterSwitch
+        on={filters.unreadOnly}
+        count={counts.unread}
+        onToggle={() => onFilters({ unreadOnly: !filters.unreadOnly })}
       >
-        <span
-          aria-hidden="true"
-          className={cn(
-            'relative h-4 w-[30px] border-[1.5px]',
-            filters.unreadOnly ? 'border-sheet' : 'border-ink',
-          )}
-        >
-          <i
-            className={cn(
-              'absolute top-0.5 size-[9px]',
-              filters.unreadOnly ? 'right-0.5 bg-sheet' : 'left-0.5 bg-muted',
-            )}
-          />
-        </span>
         Unread only
-        <span className="tabular-nums">{pad(counts.unread)}</span>
-      </button>
+      </FilterSwitch>
+      <FilterSwitch
+        on={filters.waitingOnly}
+        count={counts.waiting}
+        onToggle={() => onFilters({ waitingOnly: !filters.waitingOnly })}
+      >
+        Waiting on you
+      </FilterSwitch>
       <p
         data-testid="teams-check-status"
         role="status"

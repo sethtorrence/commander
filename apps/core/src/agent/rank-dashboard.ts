@@ -5,11 +5,11 @@
 //
 // - Looks at the open Todos (a Todo backed by a Linear issue is that issue), the Linear issues
 //   involving the User (their Linear Todos, and issues they created or have that changed in the last
-//   two days), the Teams Chats that may need them (a mention, an unanswered one-to-one Chat, or
-//   unread messages from the last two days; never a muted Chat), and the pending "Suggest Todos"
-//   suggestions; at most 200 Items, the most pressing by
-//   the rules first. Cleared rows are left out until their Item changes; how he last ranked them
-//   stands. Nothing changed since his last ranking today: no call.
+//   two days), the Teams Chats that may need them (flagged as waiting on the User, a mention, an
+//   unanswered one-to-one Chat, or unread messages from the last two days; never a muted Chat), and
+//   the pending "Suggest Todos" suggestions; at most 200 Items, the most pressing by the rules
+//   first. Cleared rows are left out until their Item changes; how he last ranked them stands.
+//   Nothing changed since his last ranking today: no call.
 // - Every Item goes in a data block of its own through the prompt builder (ADR 0004), labelled with
 //   a short reference (I1, I2…) that the reply names it by; Linear issues, Chats and suggestions are
 //   outside material. A Chat goes with its name and type, the people in it, why it may need the User
@@ -152,7 +152,7 @@ Reply with only this JSON object: {"ranking":[{"ref":"I1","band":"now","rank":1,
 - rank: the Item's place in its band, from 1 at the top, the most pressing first. Number each band on its own.
 - reason: why it is there, in a few plain words of your own (fewer than 12), as you would say it to the User: "Dana's waiting on this before Friday's review", "Overdue since Tuesday", "Priya has it now". No full stop. For band none it may be empty.
 - A Suggested Todo is one you suggested from the User's Daily Note that they haven't added yet: rank it like any other Todo.
-- A Teams chat is a conversation in Microsoft Teams, with its last few messages. Place it when someone is waiting on the User (a question or mention aimed at them, a one-to-one message they haven't answered); chatter that asks nothing of them is none.
+- A Teams chat is a conversation in Microsoft Teams, with its last few messages. Place it when someone is waiting on the User (a question or mention aimed at them, a one-to-one message they haven't answered); chatter that asks nothing of them is none. When it says you judged that someone is waiting on the User, place it (usually today), and let your reason say who is waiting and on what.
 - Blocks labelled "Meeting at …" or "Prep for the meeting at …" are not Items to rank: they are the User's meetings in the next few hours and your preparation for them. A Todo a meeting needs done first (something to read, send or decide before it) should rise before the meeting.`;
 
 // A reason as the Dashboard shows it: one line, no closing full stop, a few words.
@@ -261,6 +261,9 @@ export function rankDashboardJob(
     return [
       `Title: ${item.title}`,
       `A Teams ${CHAT_TYPES[detail.chatType]} chat with ${withWhom}`,
+      ...(attention?.why === 'waiting' && item.waiting
+        ? [`Ares judged that someone is waiting on the User: ${item.waiting.reason}`]
+        : []),
       ...(attention?.why === 'mention' ? ['An unread message mentions the User'] : []),
       ...(attention?.why === 'unanswered'
         ? [`The latest message is ${who(attention.message.from)}’s, and the User hasn’t replied`]

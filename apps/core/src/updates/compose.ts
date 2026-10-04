@@ -9,7 +9,8 @@
 // no block ever mixes outside Items. The reply is checked like any job's: it must fit the schema,
 // loses the builder's wording and any URL the model wasn't shown, and its steering flag marks the
 // outside Items it names. The model only ever chooses words: what each line is about, and what
-// accepting or dismissing it does, stays with the queue. What it wrote is shown with AresText.
+// accepting or dismissing it does, stays with the queue. What it wrote is shown with AresText. A busy
+// Chat's line is left out here: "Summarise Chat" words it alongside, from the Chat itself (teams.ts).
 import type { Item, QueuedLine } from '@commander/domain';
 import { prepReadyText, ruleSuggestionText, UPDATE_GROUP_NAMES } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
@@ -120,6 +121,11 @@ export function templateText(
     // The meeting's title is outside words: only when quoting.
     case 'meeting-prep':
       return prepReadyText(about, { quote });
+    // A busy Chat's name only when quoting; Ares's summary replaces this when he can make one.
+    case 'chat-summary': {
+      const name = quote ? titleOf(about.itemId)?.replace(/\s+/g, ' ').trim() : null;
+      return `${name || 'A Teams Chat'}: ${plural(about.count, 'message')} since your last Update.`;
+    }
   }
 }
 
@@ -138,6 +144,9 @@ export type ComposeOptions = {
   onItemsChanged?: (itemIds: string[]) => void;
   log?: (message: string) => void;
   timeoutMs?: number;
+  // Lines worded elsewhere (a busy Chat's summary, made alongside): left out of the prompt, with
+  // their plain sentence here.
+  apart?: ReadonlySet<number>;
 };
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -147,7 +156,7 @@ export async function compose(lines: readonly QueuedLine[], options: ComposeOpti
   const log = options.log ?? ((line: string) => console.warn(line));
   const titleOf = (itemId: string) => options.item(itemId)?.title ?? null;
   const texts = new Map(lines.map((line) => [line.id, templateText(line, titleOf)]));
-  const sent = lines.slice(0, MAX_LINES);
+  const sent = lines.filter((line) => !options.apart?.has(line.id)).slice(0, MAX_LINES);
   if (!sent.length) return { texts, voice: 'template' };
 
   const data: PromptData[] = sent.map((line, index) => {
@@ -192,7 +201,7 @@ export async function compose(lines: readonly QueuedLine[], options: ComposeOpti
 
   markSteering(reply.steering ?? [], prompt, options);
   const cleaned = cleanOutput(reply.lines, prompt.material);
-  let written = 0;
+  let wrote = 0;
   const used = new Set<string>();
   for (const { ref, text } of cleaned) {
     const index = /^E(\d+)$/.exec(ref.trim())?.[1];
@@ -201,12 +210,12 @@ export async function compose(lines: readonly QueuedLine[], options: ComposeOpti
     if (!line || used.has(ref) || !words) continue;
     used.add(ref);
     texts.set(line.id, words.length > MAX_TEXT ? `${words.slice(0, MAX_TEXT - 1).trimEnd()}…` : words);
-    written += 1;
+    wrote += 1;
   }
-  if (written < sent.length) {
-    log(`Put Updates together: ${sent.length - written} line(s) kept their plain sentence`);
+  if (wrote < sent.length) {
+    log(`Put Updates together: ${sent.length - wrote} line(s) kept their plain sentence`);
   }
-  return { texts, voice: written ? 'ares' : 'template' };
+  return { texts, voice: wrote ? 'ares' : 'template' };
 }
 
 // The reply's steering flag: each outside Item it names (by its block's ref) gets the warning mark.

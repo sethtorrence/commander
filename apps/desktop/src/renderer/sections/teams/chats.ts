@@ -49,28 +49,36 @@ export function unreadChats(chats: readonly Chat[]): number {
   return chats.filter(isUnread).length;
 }
 
-export type ChatFilters = { type: ChatType | null; unreadOnly: boolean };
-export const NO_FILTERS: ChatFilters = { type: null, unreadOnly: false };
+/**
+ * Whether Ares judges someone in the Chat is waiting on the User (#109): his flag, which goes once
+ * the User replies. A muted Chat never counts here.
+ */
+export const isWaiting = (chat: Chat) => !chat.muted && chat.waiting !== undefined;
+
+export type ChatFilters = { type: ChatType | null; unreadOnly: boolean; waitingOnly: boolean };
+export const NO_FILTERS: ChatFilters = { type: null, unreadOnly: false, waitingOnly: false };
 
 export function inFilters(chat: Chat, filters: ChatFilters): boolean {
   if (filters.type && chat.detail.chatType !== filters.type) return false;
+  if (filters.waitingOnly && !isWaiting(chat)) return false;
   return !filters.unreadOnly || isUnread(chat);
 }
 
-export type ChatCounts = { types: Record<ChatType | 'all', number>; unread: number };
+export type ChatCounts = { types: Record<ChatType | 'all', number>; unread: number; waiting: number };
 
-/** Each filter's counts under the other filter (and whatever narrowed `chats`, the Project filter). */
+/** Each filter's counts under the other filters (and whatever narrowed `chats`, the Project filter). */
 export function chatCounts(chats: readonly Chat[], filters: ChatFilters): ChatCounts {
-  const underUnread = chats.filter((chat) => inFilters(chat, { type: null, unreadOnly: filters.unreadOnly }));
-  const ofType = (type: ChatType) => underUnread.filter((chat) => chat.detail.chatType === type).length;
+  const underOthers = chats.filter((chat) => inFilters(chat, { ...filters, type: null }));
+  const ofType = (type: ChatType) => underOthers.filter((chat) => chat.detail.chatType === type).length;
   return {
     types: {
-      all: underUnread.length,
+      all: underOthers.length,
       'one-on-one': ofType('one-on-one'),
       group: ofType('group'),
       meeting: ofType('meeting'),
     },
-    unread: chats.filter((chat) => inFilters(chat, { type: filters.type, unreadOnly: true })).length,
+    unread: chats.filter((chat) => inFilters(chat, { ...filters, unreadOnly: true })).length,
+    waiting: chats.filter((chat) => inFilters(chat, { ...filters, waitingOnly: true })).length,
   };
 }
 
