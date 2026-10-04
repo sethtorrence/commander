@@ -1,6 +1,6 @@
 // Answers Settings → Accounts. Requests are validated here; answers carry Account summaries and
 // User-facing explanations only, never a token or a key (not even the one the User just pasted).
-import { accountsRequest } from '@commander/domain';
+import { accountsRequest, type Source } from '@commander/domain';
 import type {
   AccountSource,
   AccountSyncStatus,
@@ -12,8 +12,10 @@ import type { Accounts } from './accounts';
 
 // Each Account's syncing, which runs in the Core (see sync/core-sync-channel.ts).
 export type AccountsSync = {
-  status(accountId: string): AccountSyncStatus | null;
-  refresh(accountId: string): void;
+  // The Account's sync (of `source`, or of its first Source).
+  status(accountId: string, source?: Source): AccountSyncStatus | null;
+  // Every Source the Account carries, or just `source`.
+  refresh(accountId: string, source?: Source): void;
   setCadence(accountId: string, minutes: number): void;
   setAlsoAfterOtherSources(accountId: string, enabled: boolean): void;
 };
@@ -26,7 +28,18 @@ const noSync: AccountsSync = {
 };
 
 export async function accountsState(accounts: Accounts, sync: AccountsSync = noSync): Promise<AccountsState> {
-  const listed = (await accounts.list()).map((account) => ({ ...account, sync: sync.status(account.id) }));
+  const listed = (await accounts.list()).map((account) => {
+    const withSync = { ...account, sync: sync.status(account.id) };
+    // An Account carrying several Sources shows each one's sync too (the Calendar Section's status line).
+    if (withSync.source !== 'google' && withSync.source !== 'outlook') return withSync;
+    return {
+      ...withSync,
+      sources: withSync.sources.map((carried) => ({
+        ...carried,
+        sync: sync.status(account.id, carried.source),
+      })),
+    };
+  });
   return { accounts: listed, sources: accounts.signIns(), deviceCode: accounts.deviceCode() };
 }
 
@@ -77,7 +90,7 @@ export async function answerAccountsRequest(
         await accounts.setSourceEnabled(request.accountId, request.source, request.enabled);
         break;
       case 'sync-now':
-        sync.refresh(request.accountId);
+        sync.refresh(request.accountId, request.source);
         break;
       case 'set-sync-cadence':
         sync.setCadence(request.accountId, request.minutes);

@@ -10,9 +10,28 @@ import type { AddressInfo } from 'node:net';
 // screen (the token's `scope` says what was granted, with `email` and `profile` written as
 // Google writes them), refresh tokens that don't rotate (a refresh brings no new one), an ID token
 // carrying `sub` and `email`, and the errors of a Workspace whose admin has blocked the app.
-// Nothing here talks to the real Google.
+//
+// It also serves the Google Calendar API v3 as far as calendar sync reads it: each user's
+// `calendarList`, and `events.list` per calendar (instances already expanded, as with
+// `singleEvents=true`), paged by `maxResults`, with `timeMin`/`timeMax` on a full read and a
+// `nextSyncToken` on the last page; a request with a sync token answers what changed since
+// (cancelled events included). Tokens can be expired (410 Gone) and requests rate limited (403
+// rateLimitExceeded). Nothing here talks to the real Google.
 
 export type FakeGoogleUser = { sub: string; email: string; name: string };
+
+// An event as the Calendar API returns it (an instance, for a recurring one). `id` is required; the
+// rest is passed through as given.
+export type FakeCalendarEvent = { id: string; [field: string]: unknown };
+
+export type FakeCalendar = {
+  id: string;
+  summary: string;
+  accessRole: 'owner' | 'writer' | 'reader' | 'freeBusyReader';
+  backgroundColor: string;
+  primary?: boolean;
+  timeZone?: string;
+};
 
 export type FakeGoogle = {
   // Like https://accounts.google.com/o/oauth2/v2/auth, https://oauth2.googleapis.com/token and
@@ -42,6 +61,20 @@ export type FakeGoogle = {
   failRefreshesTemporarily(failing: boolean): void;
   // The tokens Google issued, newest last (for asserting what reached disk, logs or the window).
   issuedTokens(): string[];
+  // Like https://www.googleapis.com/calendar/v3.
+  calendarUrl: string;
+  // Every Calendar API request, as its path and query (decoded), oldest first.
+  calendarRequests: string[];
+  // Gives a user these calendars (replacing any), each with these events.
+  setCalendars(sub: string, calendars: { calendar: FakeCalendar; events: FakeCalendarEvent[] }[]): void;
+  // Adds or changes an event on one of a user's calendars.
+  putEvent(sub: string, calendarId: string, event: FakeCalendarEvent): void;
+  // Cancels (deletes) an event: incremental reads report it as cancelled.
+  cancelEvent(sub: string, calendarId: string, eventId: string): void;
+  // Every sync token issued so far answers 410 Gone from now on.
+  expireSyncTokens(): void;
+  // The next `count` events requests answer 403 rateLimitExceeded.
+  rateLimitCalendar(count: number): void;
   close(): Promise<void>;
 };
 
@@ -98,6 +131,18 @@ export async function startFakeGoogle(
   const refreshTokens = new Map<string, { user: FakeGoogleUser; scopes: string[] }>();
   const accessTokens = new Map<string, FakeGoogleUser>();
   const issued: string[] = [];
+  // Calendar API: each user's calendars, and each calendar's events with the change they were last
+  // changed in (a counter per server). Sync tokens name the change they were issued at.
+  type StoredEvent = { event: FakeCalendarEvent; changed: number; cancelled: boolean };
+  const userCalendars = new Map<string, { calendar: FakeCalendar; events: Map<string, StoredEvent> }[]>();
+  let changes = 0;
+  let expiredBefore = 0;
+  let rateLimited = 0;
+  const calendarOf = (sub: string, calendarId: string) => {
+    const found = userCalendars.get(sub)?.find((each) => each.calendar.id === calendarId);
+    if (!found) throw new Error(`The fake Google has no calendar ${calendarId} for ${sub}`);
+    return found;
+  };
 
   const fake: FakeGoogle = {
     authorizeUrl: '',
@@ -129,6 +174,34 @@ export async function startFakeGoogle(
       refreshFailing = failing;
     },
     issuedTokens: () => [...issued],
+    calendarUrl: '',
+    calendarRequests: [],
+    setCalendars: (sub, calendars) => {
+      changes += 1;
+      userCalendars.set(
+        sub,
+        calendars.map(({ calendar, events }) => ({
+          calendar,
+          events: new Map(events.map((event) => [event.id, { event, changed: changes, cancelled: false }])),
+        })),
+      );
+    },
+    putEvent: (sub, calendarId, event) => {
+      changes += 1;
+      calendarOf(sub, calendarId).events.set(event.id, { event, changed: changes, cancelled: false });
+    },
+    cancelEvent: (sub, calendarId, eventId) => {
+      changes += 1;
+      const stored = calendarOf(sub, calendarId).events.get(eventId);
+      if (stored) Object.assign(stored, { changed: changes, cancelled: true });
+    },
+    expireSyncTokens: () => {
+      changes += 1;
+      expiredBefore = changes;
+    },
+    rateLimitCalendar: (count) => {
+      rateLimited = count;
+    },
     close: () =>
       new Promise((resolve) => {
         server.close(() => resolve());
@@ -264,8 +337,95 @@ export async function startFakeGoogle(
     return json(response, 200, { sub: user.sub, email: user.email, email_verified: true, name: user.name });
   }
 
+  // When an event happens, for the window: [start, end) in epoch ms (all-day events by UTC days).
+  function spanOf(event: FakeCalendarEvent): [number, number] {
+    const at = (value: unknown) => {
+      const time = value as { dateTime?: string; date?: string } | undefined;
+      return Date.parse(time?.dateTime ?? `${time?.date}T00:00:00Z`);
+    };
+    return [at(event.start), at(event.end)];
+  }
+
+  function calendarApi(request: IncomingMessage, url: URL, response: ServerResponse) {
+    fake.calendarRequests.push(decodeURIComponent(`${url.pathname}${url.search}`));
+    const authorization = request.headers.authorization ?? '';
+    const user = authorization.startsWith('Bearer ')
+      ? accessTokens.get(authorization.slice('Bearer '.length))
+      : undefined;
+    if (!user) return json(response, 401, { error: { code: 401, message: 'Invalid Credentials' } });
+    const calendars = userCalendars.get(user.sub) ?? [];
+    const path = url.pathname.slice('/calendar/v3'.length);
+    const max = Number(url.searchParams.get('maxResults') ?? 250);
+    const offset = Number(url.searchParams.get('pageToken') ?? 0);
+    const page = <T>(all: T[]) => ({
+      items: all.slice(offset, offset + max),
+      next: offset + max < all.length ? String(offset + max) : null,
+    });
+    if (path === '/users/me/calendarList') {
+      const { items, next } = page(
+        calendars.map(({ calendar }) => ({ kind: 'calendar#calendarListEntry', ...calendar })),
+      );
+      return json(response, 200, {
+        kind: 'calendar#calendarList',
+        items,
+        ...(next ? { nextPageToken: next } : { nextSyncToken: `fake-list-${changes}` }),
+      });
+    }
+    const match = /^\/calendars\/([^/]+)\/events$/.exec(path);
+    const found = match && calendars.find((each) => each.calendar.id === decodeURIComponent(match[1] ?? ''));
+    if (!found) return json(response, 404, { error: { code: 404, message: 'Not Found' } });
+    if (rateLimited > 0) {
+      rateLimited -= 1;
+      return json(response, 403, {
+        error: {
+          code: 403,
+          message: 'Rate Limit Exceeded',
+          errors: [{ domain: 'usageLimits', reason: 'rateLimitExceeded' }],
+        },
+      });
+    }
+    const syncToken = url.searchParams.get('syncToken');
+    let events: StoredEvent[] = [...found.events.values()];
+    if (syncToken) {
+      const since = Number(/^fake-sync-(\d+)$/.exec(syncToken)?.[1] ?? Number.NaN);
+      if (!Number.isFinite(since) || since < expiredBefore) {
+        return json(response, 410, {
+          error: {
+            code: 410,
+            message: 'Sync token is no longer valid, a full sync is required.',
+            errors: [{ domain: 'calendar', reason: 'fullSyncRequired' }],
+          },
+        });
+      }
+      events = events.filter((each) => each.changed > since);
+    } else {
+      const min = Date.parse(url.searchParams.get('timeMin') ?? '');
+      const max = Date.parse(url.searchParams.get('timeMax') ?? '');
+      events = events.filter((each) => {
+        if (each.cancelled) return false;
+        const [start, end] = spanOf(each.event);
+        return (Number.isNaN(min) || end > min) && (Number.isNaN(max) || start < max);
+      });
+    }
+    const listed = events.map((each) =>
+      each.cancelled
+        ? { kind: 'calendar#event', id: each.event.id, status: 'cancelled' }
+        : { kind: 'calendar#event', status: 'confirmed', ...each.event },
+    );
+    const { items, next } = page(listed);
+    return json(response, 200, {
+      kind: 'calendar#events',
+      summary: found.calendar.summary,
+      timeZone: found.calendar.timeZone ?? 'UTC',
+      items,
+      ...(next ? { nextPageToken: next } : { nextSyncToken: `fake-sync-${changes}` }),
+    });
+  }
+
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
+    if (request.method === 'GET' && url.pathname.startsWith('/calendar/v3/'))
+      return calendarApi(request, url, response);
     if (request.method === 'GET' && url.pathname === '/o/oauth2/v2/auth') return authorize(url, response);
     if (request.method === 'POST' && url.pathname === '/token') return void tokenEndpoint(request, response);
     if (request.method === 'GET' && url.pathname === '/v1/userinfo') return userinfo(request, response);
@@ -277,5 +437,6 @@ export async function startFakeGoogle(
   fake.authorizeUrl = `${base}/o/oauth2/v2/auth`;
   fake.tokenUrl = `${base}/token`;
   fake.userinfoUrl = `${base}/v1/userinfo`;
+  fake.calendarUrl = `${base}/calendar/v3`;
   return fake;
 }

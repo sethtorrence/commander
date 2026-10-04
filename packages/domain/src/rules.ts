@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { eventRuleFields } from './calendar';
 import { filing, type Item, itemRef } from './items';
 
 // Rules: conditions the User sets that file matching Items into a Project. They sit in one list the
@@ -17,7 +18,7 @@ export type RuleOperator = z.infer<typeof ruleOperator>;
 
 export const ruleCondition = z.object({
   // A field from the registry, namespaced by its Source: `linear.team`.
-  field: z.string().regex(/^[a-z]+\.[a-z-]+$/, 'A Rule condition needs a field'),
+  field: z.string().regex(/^[a-z][a-z-]*\.[a-z-]+$/, 'A Rule condition needs a field'),
   op: ruleOperator,
   // For `is` and `is-not`, the value's stable id (a team's id); for `contains`, the text.
   value: z.string().trim().min(1, 'A Rule condition needs a value'),
@@ -214,13 +215,17 @@ export const linearRuleFields: readonly RuleField[] = [
 
 // Every Source's fields, by id. A Source adds its fields here (email: sender, domain; GitHub: org,
 // repo); matching and describing need nothing more.
+// Google Calendar's fields: the shared calendar readers (calendar.ts), which Outlook Calendar registers too.
+export const googleCalendarRuleFields: readonly RuleField[] = eventRuleFields('google-calendar');
+
 export const RULE_FIELDS: ReadonlyMap<string, RuleField> = new Map(
-  [...linearRuleFields].map((field) => [field.id, field]),
+  [...linearRuleFields, ...googleCalendarRuleFields].map((field) => [field.id, field]),
 );
 
 // The Sources whose fields Rules can use, with their fields in the editor's order.
 export const RULE_SOURCES: readonly { source: string; name: string; fields: readonly RuleField[] }[] = [
   { source: 'linear', name: 'Linear', fields: linearRuleFields },
+  { source: 'google-calendar', name: 'Google Calendar', fields: googleCalendarRuleFields },
 ];
 
 // ---------------------------------------------------------------------------------------------

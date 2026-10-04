@@ -34,7 +34,7 @@ export interface RulesClient {
   refile(itemIds: string[]): Promise<ActivityEntry[]>;
   /** Undoes a re-filing, all at once. */
   undoRefile(entryIds: number[]): Promise<ActivityEntry[]>;
-  /** The Items whose values the editor offers (every Linear issue held). */
+  /** The Items whose values the editor offers (every Linear issue and calendar event held). */
   items(): Promise<Item[]>;
 }
 
@@ -45,7 +45,7 @@ export function rulesIn(itemStore: ItemStoreClient): RulesClient {
     preview: (rule, ruleId) => itemStore({ op: 'preview-rule', request: { rule, ruleId, sampleSize: 6 } }),
     refile: (itemIds) => itemStore({ op: 'refile', itemIds }),
     undoRefile: (entryIds) => itemStore({ op: 'undo-refile', entryIds }),
-    items: () => itemStore({ op: 'query', query: { kinds: ['linear-issue'], limit: 1000 } }),
+    items: () => itemStore({ op: 'query', query: { kinds: ['linear-issue', 'event'], limit: 1000 } }),
   };
 }
 

@@ -57,7 +57,7 @@ export const accountsRequest = z.union([
     source,
     enabled: z.boolean(),
   }),
-  z.object({ op: z.literal('sync-now'), accountId: z.string().min(1) }),
+  z.object({ op: z.literal('sync-now'), accountId: z.string().min(1), source: source.optional() }),
   z.object({
     op: z.literal('set-sync-cadence'),
     accountId: z.string().min(1),

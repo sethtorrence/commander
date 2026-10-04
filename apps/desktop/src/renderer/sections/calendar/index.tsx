@@ -1,12 +1,16 @@
-import { EmptySheet, type SectionDefinition, SectionSheet } from '../section';
+import { useMemo } from 'react';
+import type { SectionDefinition } from '../section';
+import { CalendarSheet } from './CalendarSheet';
+import { calendarAccountsIn, calendarEventsIn } from './calendar-events';
 
-// The Calendar Section: an empty sheet until its own ticket fills it in.
+// The Calendar Section: the events of every calendar switched on in every connected Google Account,
+// as an Agenda, opened into a detail pane and filed into Projects. Making and changing events is
+// Google Calendar's: Edit and New event hand over to it in the browser. It reaches the app only
+// through calendar-events.ts, via the window's bridge.
 function CalendarSection() {
-  return (
-    <SectionSheet span="full" subtitle="Today's schedule and what comes next">
-      <EmptySheet>No calendar Accounts connected yet.</EmptySheet>
-    </SectionSheet>
-  );
+  const events = useMemo(() => calendarEventsIn(window.commander.itemStore), []);
+  const accounts = useMemo(() => calendarAccountsIn(window.commander), []);
+  return <CalendarSheet events={events} accounts={accounts} />;
 }
 
 export const calendar: SectionDefinition = {

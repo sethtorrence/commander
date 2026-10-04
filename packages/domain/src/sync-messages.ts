@@ -81,8 +81,12 @@ export const coreSyncAccounts = z.object({
     ]),
   ),
   // Where to reach each Source (the end-to-end tests point Linear and Graph at fakes on this machine).
-  // `graph`: Microsoft Graph's base, for Teams.
-  endpoints: z.object({ linear: z.string().url(), graph: z.string().url().optional() }),
+  // `graph`: Microsoft Graph's base, for Teams. `googleCalendar`: the Google Calendar API's base.
+  endpoints: z.object({
+    linear: z.string().url(),
+    graph: z.string().url().optional(),
+    googleCalendar: z.string().url().optional(),
+  }),
 });
 export type CoreSyncAccounts = z.infer<typeof coreSyncAccounts>;
 

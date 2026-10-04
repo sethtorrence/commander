@@ -120,12 +120,14 @@ describe('the Core sync channel', () => {
   it('relays Sync now, cadence changes and the machine’s state', () => {
     const { sync, sent } = channel();
     sync.refresh('linear:org-acme');
+    sync.refresh('google:1045', 'google-calendar');
     sync.setCadence('linear:org-acme', 30);
     sync.setAlsoAfterOtherSources('teams:tenant-1:u-sam', false);
     sync.systemState({ awake: false, online: true });
 
     expect(sent).toEqual([
       { type: 'sync-command', command: { op: 'refresh', account: 'linear:org-acme' } },
+      { type: 'sync-command', command: { op: 'refresh', account: 'google:1045', source: 'google-calendar' } },
       { type: 'sync-command', command: { op: 'set-cadence', account: 'linear:org-acme', minutes: 30 } },
       {
         type: 'sync-command',

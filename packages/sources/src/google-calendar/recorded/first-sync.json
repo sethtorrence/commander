@@ -1,0 +1,460 @@
+[
+  {
+    "request": {
+      "path": "/users/me/calendarList?maxResults=250"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#calendarList",
+        "etag": "\"p33c9pc2v6qvtg0o\"",
+        "items": [
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000000\"",
+            "id": "alex@gmail.test",
+            "summary": "alex@gmail.test",
+            "timeZone": "Europe/London",
+            "colorId": "14",
+            "backgroundColor": "#9fe1e7",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            },
+            "primary": true
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000001\"",
+            "id": "c_tl_standups@group.calendar.google.com",
+            "summary": "Titanlink Standups",
+            "timeZone": "Europe/London",
+            "colorId": "2",
+            "backgroundColor": "#33b679",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          }
+        ],
+        "nextPageToken": "cl-page-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/users/me/calendarList?maxResults=250&pageToken=cl-page-2"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#calendarList",
+        "etag": "\"p33c9pc2v6qvtg0o\"",
+        "items": [
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000002\"",
+            "id": "en.uk#holiday@group.v.calendar.google.com",
+            "summary": "Holidays in United Kingdom",
+            "timeZone": "Europe/London",
+            "colorId": "8",
+            "backgroundColor": "#16a765",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "reader",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          }
+        ],
+        "nextSyncToken": "calendar-list-sync-1"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/calendars/alex@gmail.test/events?singleEvents=true&maxResults=250&timeMin=2026-09-03T12:00:00.000Z&timeMax=2027-10-03T12:00:00.000Z"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#events",
+        "etag": "\"p33k9b5ub5uqvo0o\"",
+        "summary": "alex@gmail.test",
+        "description": "",
+        "updated": "2026-10-03T11:58:00.000Z",
+        "timeZone": "Europe/London",
+        "accessRole": "owner",
+        "defaultReminders": [
+          {
+            "method": "popup",
+            "minutes": 10
+          }
+        ],
+        "items": [
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000000\"",
+            "id": "dentist2026",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=ZGVudGlzdDIwMjYgYWxleEBnbWFpbC50ZXN0",
+            "created": "2026-09-20T08:00:00.000Z",
+            "updated": "2026-09-20T08:00:00.000Z",
+            "summary": "Dentist",
+            "description": "<p>Bring the <b>form</b>.</p><p><a href=\"https://example.test/form\">Form</a></p><img src=\"https://tracker.test/pixel.png\"><script>alert(1)</script>",
+            "location": "12 High St, London",
+            "creator": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "organizer": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "start": {
+              "dateTime": "2026-10-05T10:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "end": {
+              "dateTime": "2026-10-05T10:45:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "visibility": "private",
+            "iCalUID": "dentist2026@google.com",
+            "sequence": 0,
+            "reminders": {
+              "useDefault": true
+            },
+            "eventType": "default"
+          },
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000001\"",
+            "id": "designreview1",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=ZGVzaWducmV2aWV3MSBhbGV4QGdtYWlsLnRlc3Q",
+            "created": "2026-09-28T15:00:00.000Z",
+            "updated": "2026-09-29T09:12:00.000Z",
+            "summary": "Design review: onboarding",
+            "description": "Walk through the new onboarding flow.\nNotes: https://docs.example.test/onboarding",
+            "location": "Room 4",
+            "creator": {
+              "email": "dana@titanlink.test",
+              "displayName": "Dana Ruiz"
+            },
+            "organizer": {
+              "email": "dana@titanlink.test",
+              "displayName": "Dana Ruiz"
+            },
+            "start": {
+              "dateTime": "2026-10-06T10:00:00-04:00",
+              "timeZone": "America/New_York"
+            },
+            "end": {
+              "dateTime": "2026-10-06T11:00:00-04:00",
+              "timeZone": "America/New_York"
+            },
+            "iCalUID": "designreview1@google.com",
+            "sequence": 1,
+            "attendees": [
+              {
+                "email": "dana@titanlink.test",
+                "displayName": "Dana Ruiz",
+                "organizer": true,
+                "responseStatus": "accepted"
+              },
+              {
+                "email": "alex@gmail.test",
+                "self": true,
+                "responseStatus": "needsAction"
+              },
+              {
+                "email": "leo@titanlink.test",
+                "displayName": "Leo Park",
+                "optional": true,
+                "responseStatus": "tentative"
+              },
+              {
+                "email": "c_room4@resource.calendar.google.com",
+                "displayName": "Room 4",
+                "resource": true,
+                "responseStatus": "accepted"
+              }
+            ],
+            "hangoutLink": "https://meet.google.com/abc-defg-hij",
+            "conferenceData": {
+              "entryPoints": [
+                {
+                  "entryPointType": "video",
+                  "uri": "https://meet.google.com/abc-defg-hij",
+                  "label": "meet.google.com/abc-defg-hij"
+                },
+                {
+                  "entryPointType": "phone",
+                  "uri": "tel:+44-20-1234-5678"
+                }
+              ],
+              "conferenceSolution": {
+                "key": {
+                  "type": "hangoutsMeet"
+                },
+                "name": "Google Meet"
+              },
+              "conferenceId": "abc-defg-hij"
+            },
+            "reminders": {
+              "useDefault": true
+            },
+            "eventType": "default"
+          }
+        ],
+        "nextPageToken": "primary-page-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/calendars/alex@gmail.test/events?singleEvents=true&maxResults=250&timeMin=2026-09-03T12:00:00.000Z&timeMax=2027-10-03T12:00:00.000Z&pageToken=primary-page-2"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#events",
+        "etag": "\"p33k9b5ub5uqvo0o\"",
+        "summary": "alex@gmail.test",
+        "description": "",
+        "updated": "2026-10-03T11:58:00.000Z",
+        "timeZone": "Europe/London",
+        "accessRole": "owner",
+        "defaultReminders": [
+          {
+            "method": "popup",
+            "minutes": 10
+          }
+        ],
+        "items": [
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000002\"",
+            "id": "localfirstconf",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=bG9jYWxmaXJzdGNvbmYgYWxleEBnbWFpbC50ZXN0",
+            "created": "2026-08-01T10:00:00.000Z",
+            "updated": "2026-08-01T10:00:00.000Z",
+            "summary": "Local-first conference",
+            "creator": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "organizer": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "start": {
+              "date": "2026-10-12"
+            },
+            "end": {
+              "date": "2026-10-14"
+            },
+            "transparency": "transparent",
+            "iCalUID": "localfirstconf@google.com",
+            "sequence": 0,
+            "reminders": {
+              "useDefault": false
+            },
+            "eventType": "default"
+          },
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000003\"",
+            "id": "commanderfocus412",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=Y29tbWFuZGVyZm9jdXM0MTIgYWxleEBnbWFpbC50ZXN0",
+            "created": "2026-10-02T17:00:00.000Z",
+            "updated": "2026-10-02T17:00:00.000Z",
+            "summary": "Focus: ENG-412",
+            "creator": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "organizer": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "start": {
+              "dateTime": "2026-10-07T09:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "end": {
+              "dateTime": "2026-10-07T11:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "visibility": "private",
+            "iCalUID": "commanderfocus412@google.com",
+            "sequence": 0,
+            "extendedProperties": {
+              "private": {
+                "commander": "focus-block"
+              }
+            },
+            "reminders": {
+              "useDefault": false
+            },
+            "eventType": "default"
+          }
+        ],
+        "nextSyncToken": "sync-primary-1"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/calendars/c_tl_standups@group.calendar.google.com/events?singleEvents=true&maxResults=250&timeMin=2026-09-03T12:00:00.000Z&timeMax=2027-10-03T12:00:00.000Z"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#events",
+        "etag": "\"p33k9b5ub5uqvo0o\"",
+        "summary": "Titanlink Standups",
+        "description": "",
+        "updated": "2026-10-03T11:58:00.000Z",
+        "timeZone": "Europe/London",
+        "accessRole": "owner",
+        "defaultReminders": [
+          {
+            "method": "popup",
+            "minutes": 10
+          }
+        ],
+        "items": [
+          {
+            "kind": "calendar#event",
+            "etag": "\"3520000000000005\"",
+            "id": "standup_20261005T080000Z",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=c3RhbmR1cF8yMDI2MTA05",
+            "created": "2026-06-01T09:00:00.000Z",
+            "updated": "2026-06-01T09:00:00.000Z",
+            "summary": "TL standup",
+            "creator": {
+              "email": "dana@titanlink.test",
+              "displayName": "Dana Ruiz"
+            },
+            "organizer": {
+              "email": "c_tl_standups@group.calendar.google.com",
+              "displayName": "Titanlink Standups",
+              "self": true
+            },
+            "start": {
+              "dateTime": "2026-10-05T09:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "end": {
+              "dateTime": "2026-10-05T09:15:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "recurringEventId": "standup",
+            "originalStartTime": {
+              "dateTime": "2026-10-05T09:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "iCalUID": "standup@google.com",
+            "sequence": 0,
+            "attendees": [
+              {
+                "email": "alex@gmail.test",
+                "self": true,
+                "responseStatus": "accepted"
+              },
+              {
+                "email": "dana@titanlink.test",
+                "displayName": "Dana Ruiz",
+                "responseStatus": "accepted"
+              }
+            ],
+            "hangoutLink": "https://meet.google.com/tls-stan-dup",
+            "reminders": {
+              "useDefault": true
+            },
+            "eventType": "default"
+          },
+          {
+            "kind": "calendar#event",
+            "etag": "\"3520000000000006\"",
+            "id": "standup_20261006T080000Z",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=c3RhbmR1cF8yMDI2MTA06",
+            "created": "2026-06-01T09:00:00.000Z",
+            "updated": "2026-06-01T09:00:00.000Z",
+            "summary": "TL standup",
+            "creator": {
+              "email": "dana@titanlink.test",
+              "displayName": "Dana Ruiz"
+            },
+            "organizer": {
+              "email": "c_tl_standups@group.calendar.google.com",
+              "displayName": "Titanlink Standups",
+              "self": true
+            },
+            "start": {
+              "dateTime": "2026-10-06T09:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "end": {
+              "dateTime": "2026-10-06T09:15:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "recurringEventId": "standup",
+            "originalStartTime": {
+              "dateTime": "2026-10-06T09:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "iCalUID": "standup@google.com",
+            "sequence": 0,
+            "attendees": [
+              {
+                "email": "alex@gmail.test",
+                "self": true,
+                "responseStatus": "accepted"
+              },
+              {
+                "email": "dana@titanlink.test",
+                "displayName": "Dana Ruiz",
+                "responseStatus": "accepted"
+              }
+            ],
+            "hangoutLink": "https://meet.google.com/tls-stan-dup",
+            "reminders": {
+              "useDefault": true
+            },
+            "eventType": "default"
+          }
+        ],
+        "nextSyncToken": "sync-standups-1"
+      }
+    }
+  }
+]

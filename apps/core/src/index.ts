@@ -145,6 +145,11 @@ port.on('message', ({ data }) => {
     }) ??
     answerAutonomyRequest(gate, data, { testHooks, jobs: agent.runner });
   if (reply) port.postMessage(reply);
+  // A calendar switched on is synced at once (one switched off is hidden by the change itself).
+  const request = (data as { request?: { op?: string; account?: string; on?: boolean } }).request;
+  if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'set-calendar-enabled') {
+    if (request.on && request.account) void sync.engine.refresh(request.account, 'google-calendar');
+  }
   // After the reply, so the window that made the change has its answer first.
   if (changed) port.postMessage(changed);
   // The Markdown copy writes the days the change touched, a moment later.

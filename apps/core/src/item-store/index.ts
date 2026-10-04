@@ -15,6 +15,7 @@ import {
   type BlockTodoQuery,
   blockLinksIn,
   blockTodoQuery,
+  type CalendarSummary,
   type CausedBy,
   type ChatSettingAction,
   compactForLog,
@@ -25,6 +26,7 @@ import {
   DELETE_FIELD,
   dailyNoteQuery,
   describeRule,
+  type EventQuery,
   type FieldSummary,
   type Filing,
   firstMatch,
@@ -80,6 +82,7 @@ import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
+import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRows } from './calendars';
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
@@ -97,6 +100,7 @@ import {
   changesBetween,
   chatDetailOf,
   dailyNoteDetailOf,
+  eventDetailOf,
   type ItemRow,
   type ItemState,
   itemColumns,
@@ -116,6 +120,7 @@ import { openUpdateStore, type UpdateStore } from './updates';
 export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
+export type { CalendarStore, ListedCalendar } from './calendars';
 export type { ChatSettingsStore } from './chat-settings';
 export type { DashboardStore, StoredClear } from './dashboard';
 export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
@@ -223,6 +228,19 @@ export type ItemStore = {
   // The Account's live Items with these external ids, as last saved: for adapters that fetch only
   // part of an Item when it changes (a Chat's new messages).
   fromSource(account: { source: Source; account: string }, externalIds: string[]): Item[];
+  // The Calendar Section: live events overlapping a time range, earliest first (calendars.ts).
+  events(query: EventQuery): Item[];
+  // Each calendar Account's calendars and the User's switch for each, in the same database.
+  calendars: CalendarStore;
+  // The Account's live events on one calendar.
+  calendarEvents(account: { source: Source; account: string }, calendarId: string): Item[];
+  // Switches a calendar on or off, as the User. Off hides its events at once (they stay as
+  // tombstones, filed and linked as they were, until the calendar is on and synced again). Returns
+  // every calendar, as they are now.
+  setCalendarOn(
+    calendar: { account: string; calendarId: string; on: boolean },
+    context: ActionContext,
+  ): CalendarSummary[];
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
   // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
@@ -331,6 +349,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const template = dailyTemplateIn(db, now);
   const outgoing = openOutgoingQueue(db);
   const syncState = openSyncStateStore(db);
+  const calendars = calendarsIn(db);
   const warnings = injectionWarningsIn(db, {
     now,
     readItem: (itemId) => readItem(itemId),
@@ -503,7 +522,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   function withDetails(rows: ItemRow[]): Item[] {
     const idsOf = (kind: ItemKind) => rows.filter((row) => row.kind === kind).map((row) => row.id);
     const details = new Map<string, ItemDetail>();
-    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails, chatDetails } = schema;
+    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails, chatDetails, eventDetails } =
+      schema;
     const todoIds = idsOf('todo');
     if (todoIds.length) {
       const found = db.select().from(todoDetails).where(inArray(todoDetails.itemId, todoIds)).all();
@@ -532,6 +552,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (chatIds.length) {
       const found = db.select().from(chatDetails).where(inArray(chatDetails.itemId, chatIds)).all();
       for (const row of found) details.set(row.itemId, chatDetailOf(row));
+    }
+    const eventIds = idsOf('event');
+    if (eventIds.length) {
+      const found = db.select().from(eventDetails).where(inArray(eventDetails.itemId, eventIds)).all();
+      for (const row of found) details.set(row.itemId, eventDetailOf(row));
     }
     // The warning mark: an Item's own, or (for a Todo) the Item's behind it.
     const backedBy = (id: string) => {
@@ -588,7 +613,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   function writeDetail(id: string, detail: ItemDetail | null) {
-    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails, chatDetails } = schema;
+    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails, chatDetails, eventDetails } =
+      schema;
+    if (detail?.kind !== 'event') db.delete(eventDetails).where(eq(eventDetails.itemId, id)).run();
     if (detail?.kind !== 'chat') db.delete(chatDetails).where(eq(chatDetails.itemId, id)).run();
     if (detail?.kind !== 'todo') db.delete(todoDetails).where(eq(todoDetails.itemId, id)).run();
     if (detail?.kind !== 'daily-note')
@@ -619,6 +646,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         db.insert(linearIssueDetails)
           .values({ itemId: id, ...values })
           .onConflictDoUpdate({ target: linearIssueDetails.itemId, set: values })
+          .run();
+        return;
+      }
+      case 'event': {
+        const { kind: _kind, ...data } = detail;
+        const values = { calendarId: detail.calendar.id, ...eventRange(detail), data };
+        db.insert(eventDetails)
+          .values({ itemId: id, ...values })
+          .onConflictDoUpdate({ target: eventDetails.itemId, set: values })
           .run();
         return;
       }
@@ -1659,6 +1695,37 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       }
       return found;
     },
+
+    events: (query) => withDetails(eventRows(db, query)),
+
+    calendars,
+
+    calendarEvents: (account, calendarId) => withDetails(calendarEventRows(db, { ...account, calendarId })),
+
+    setCalendarOn: sqlite.transaction(
+      (
+        { account, calendarId, on }: { account: string; calendarId: string; on: boolean },
+        rawContext: ActionContext,
+      ): CalendarSummary[] => {
+        const context = actionContext.parse(rawContext);
+        const calendar = calendars.get(account, calendarId);
+        if (!calendar || !calendars.setOn(account, calendarId, on)) {
+          throw new ItemStoreError('not-found', `No calendar ${calendarId} in ${account}`);
+        }
+        if (!on) {
+          const why = `Calendar “${calendar.name}” switched off`;
+          const rows = calendarEventRows(db, { source: calendar.source, account, calendarId });
+          for (const item of withDetails(rows)) {
+            const at = now();
+            const before = stateOf(item);
+            const after: ItemState = { ...before, deletedAt: at };
+            writeState(item, after, at);
+            log({ ...context, why, action: 'delete', itemId: item.id, before, after }, at);
+          }
+        }
+        return calendars.list();
+      },
+    ),
 
     activity(input = {}) {
       const query = activityQuery.parse(input);

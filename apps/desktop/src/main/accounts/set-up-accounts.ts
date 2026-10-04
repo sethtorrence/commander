@@ -56,6 +56,7 @@ export function setUpAccounts({
   const linearSettings = linearConfig(build, process.env);
   const microsoftSettings = microsoftConfig(build, process.env);
   const githubSettings = githubConfig(build, process.env);
+  const googleSettings = googleConfig(build, process.env);
   const core = createCoreAccountChannel({
     send: sendToCore,
     accessToken: (account) => accounts.accessToken(account),
@@ -88,7 +89,7 @@ export function setUpAccounts({
     // One sign-in for both Google Sources: removing the Account removes the Items of each.
     createGoogleAccounts({
       ...shared,
-      config: googleConfig(build, process.env),
+      config: googleSettings,
       removeItems: async ({ id, name }) => {
         await core.removeItems({ source: 'gmail', account: id, name });
         await core.removeItems({ source: 'google-calendar', account: id, name });
@@ -107,11 +108,15 @@ export function setUpAccounts({
 
   // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
   // reports a sign-in a Source refused, which may mean the Account needs reconnecting. Sources the
-  // Core can't sync yet (GitHub, Gmail, Google Calendar, Outlook and Outlook Calendar, for now) are
-  // passed on and left alone there.
+  // Core can't sync yet (GitHub, Gmail, Outlook and Outlook Calendar, for now) are passed on and
+  // left alone there.
   const sync = createCoreSyncChannel({
     send: sendToCore,
-    endpoints: { linear: linearSettings.apiUrl, graph: microsoftSettings.graphUrl },
+    endpoints: {
+      linear: linearSettings.apiUrl,
+      graph: microsoftSettings.graphUrl,
+      googleCalendar: googleSettings.calendarUrl,
+    },
     onRefused: (account) => void accounts.reportRefused(account),
   });
   const syncAccounts = async () => sync.setAccounts(await accounts.list());
