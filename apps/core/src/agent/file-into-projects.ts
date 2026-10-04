@@ -19,7 +19,9 @@
 //   - A Chat by its name and type, the people in it (with the Projects the User or a Rule filed
 //     their other Chats under: where People appear is what links them to Projects), and its last
 //     few messages, each trimmed: all untrusted Teams text, inside the Chat's own block.
-//   - Both with their linked Items' Projects (codes only, never their words).
+//   - A calendar event (#127) by its title, calendar, organiser, attendees (people, not rooms) and a
+//     trimmed slice of its description, inside the event's own block.
+//   - All with their linked Items' Projects (codes only, never their words).
 // - The reply names the Item by the reference its block was given and a Project by its code (or
 //   "unfiled"), with a confidence; codes are checked against the active Projects here, and anything
 //   else is dropped. Each filing is a proposal (Organise / "File into Projects", in the Item's own
@@ -29,13 +31,19 @@
 //   Unfiled, or whose suggestion was dismissed, isn't sent again until that changes: an issue's
 //   title and Source fields; a Chat's name, type and people, and whether it has grown past a few
 //   messages and then a full window of them (not every new message, so a busy Chat costs a few
-//   calls, not one per message).
+//   calls, not one per message); an event's title, calendar and organiser.
+// - Calendar events (#127): live events from yesterday to EVENT_DAYS_AHEAD days ahead, Unfiled, that
+//   no Rule matches, the User hasn't declined and Commander didn't put in the calendar itself. A
+//   recurring series is asked about once, by its next instance (each instance is its own Item): its
+//   other instances follow that one's filing (series-filing.ts). Filed in the Calendar Section.
 import {
   type AutonomySection,
   type ChatDetail,
   chatPeople,
   decide,
   describeRule,
+  type EventDetail,
+  type EventPerson,
   FILE_INTO_PROJECTS,
   firstMatch,
   type Item,
@@ -47,6 +55,7 @@ import { z } from 'zod';
 import type { ItemStore } from '../item-store';
 import type { PromptData } from './prompt';
 import type { AgentJob, JobInput } from './runner';
+import { bySeries, seriesFiling, seriesKey } from './series-filing';
 
 // At most this many Items a run, one call each; the rest wait for the next trigger.
 export const MAX_ITEMS = 20;
@@ -65,6 +74,10 @@ const CHAT_TYPES: Record<ChatDetail['chatType'], string> = {
   group: 'group chat',
   meeting: 'meeting chat',
 };
+// The events Ares looks at: from a day ago to this many days ahead.
+export const EVENT_DAYS_AHEAD = 30;
+const DAY_MS = 24 * 60 * 60_000;
+const MAX_ATTENDEES = 10;
 
 export const OUTPUT = z.object({
   filings: z
@@ -90,9 +103,10 @@ const INSTRUCTIONS = `You are Ares. You file the User's incoming Items into thei
 The data holds the User's Projects (each with its two-letter code and name, and the Rules that already file Items into it), then the Item to file, labelled with its reference (I1) and what it is, with its facts:
 - a Linear issue: title, people, where it comes from in its Source (workspace, team, Linear project, labels), and some of its content;
 - a Teams Chat: its name and type, the people in it (with where the User filed other Chats with them), and its latest messages;
+- a calendar event: its title, the calendar it is on, its organiser and attendees, and some of its description;
 and the Projects of Items linked to it.
 
-Decide which one Project the Item belongs to, judging by its team, Linear project, labels, people (and the Projects they work on), subject and content, and its linked Items' Projects, the way the User's Rules file similar Items. If none fits, or you can't tell, say "unfiled".
+Decide which one Project the Item belongs to, judging by its team, Linear project, labels, calendar, people (and the Projects they work on), subject and content, and its linked Items' Projects, the way the User's Rules file similar Items. If none fits, or you can't tell, say "unfiled".
 
 Reply with only this JSON object: {"filings":[{"itemId":"I1","projectCode":"TL","confidence":0.9,"reason":"…"}]}
 - itemId: the Item's reference, exactly as labelled.
@@ -132,8 +146,15 @@ const issueOf = (item: Item): LinearIssueDetail | null =>
 const chatOf = (item: Item): ChatDetail | null =>
   item.source === 'teams' && item.detail?.kind === 'chat' ? item.detail : null;
 
+const eventOf = (item: Item): EventDetail | null => (item.detail?.kind === 'event' ? item.detail : null);
+
+// "Dana Ruiz (dana@titanlink.test)", "you (alex@gmail.test)".
+const personText = (person: EventPerson) =>
+  `${person.self ? 'you' : person.name?.trim() || person.email} (${person.email})`;
+
 // The Autonomy Section an Item is filed in.
-const sectionOf = (item: Item): AutonomySection => (chatOf(item) ? 'teams' : 'linear');
+const sectionOf = (item: Item): AutonomySection =>
+  chatOf(item) ? 'teams' : eventOf(item) ? 'calendar' : 'linear';
 
 // A Chat's messages that say something: no system events, nothing deleted.
 const spoken = (chat: ChatDetail) => chat.messages.filter((message) => message.from && !message.deleted);
@@ -153,6 +174,15 @@ export function filingFingerprint(item: Item): string {
   if (chat) {
     const people = chatPeople(item).map((person) => person.value);
     return JSON.stringify([title, item.account, chat.chatType, people.sort(), chatGrowth(chat)]);
+  }
+  const event = eventOf(item);
+  if (event) {
+    return JSON.stringify([
+      title,
+      item.account,
+      event.calendar.id,
+      event.organiser?.email.toLowerCase() ?? null,
+    ]);
   }
   const issue = issueOf(item);
   return JSON.stringify([
@@ -182,9 +212,28 @@ export function staleFilingSuggestions(itemStore: ItemStore): number[] {
 
 export function fileIntoProjectsJob(
   itemStore: ItemStore,
-  { maxItems = MAX_ITEMS }: { maxItems?: number } = {},
+  { maxItems = MAX_ITEMS, now = Date.now }: { maxItems?: number; now?: () => number } = {},
 ): AgentJob<Input, Output> {
   const waiting = () => new Set(pendingFilings(itemStore).map((proposal) => proposal.itemId));
+
+  // The days of events Ares looks at: from a day ago to EVENT_DAYS_AHEAD days ahead.
+  const eventWindow = () => {
+    const at = now();
+    return { from: at - DAY_MS, to: at + EVENT_DAYS_AHEAD * DAY_MS };
+  };
+  // An event Ares may look at (besides being Unfiled and unmatched): in the window, not declined, and
+  // not one Commander put in the calendar itself.
+  function eventInScope(item: Item): boolean {
+    const event = eventOf(item);
+    if (!event) return false;
+    const { from, to } = eventWindow();
+    return (
+      event.end.at > from &&
+      event.start.at < to &&
+      event.myResponse !== 'declined' &&
+      event.createdByCommander === null
+    );
+  }
 
   // Whether the User's Autonomy settings have filing Off in the Item's Section.
   const off = (item: Item) =>
@@ -199,12 +248,12 @@ export function fileIntoProjectsJob(
       itemStore.autonomy.settings(),
     ) === 'off';
 
-  // An Item Ares may file: a live, open Linear issue or Teams Chat, Unfiled, that no Rule matches
-  // and that has no suggestion of his waiting.
+  // An Item Ares may file: a live, open Linear issue, Teams Chat or calendar event in scope, Unfiled,
+  // that no Rule matches and that has no suggestion of his waiting.
   function candidate(item: Item | undefined, rules = itemStore.rules(), pending = waiting()): item is Item {
     return (
       !!item &&
-      (item.kind === 'linear-issue' || !!chatOf(item)) &&
+      (item.kind === 'linear-issue' || !!chatOf(item) || eventInScope(item)) &&
       item.deletedAt === null &&
       item.status === 'open' &&
       item.filing === null &&
@@ -284,9 +333,29 @@ export function fileIntoProjectsJob(
     ].join('\n');
   }
 
+  function eventFacts(item: Item, event: EventDetail): string {
+    const people = event.attendees.filter((attendee) => !attendee.resource);
+    const shown = people.slice(0, MAX_ATTENDEES).map(personText);
+    const more = people.length - shown.length;
+    const linked = linkedProjects(item);
+    return [
+      `Title: ${item.title}`,
+      `Calendar: ${event.calendar.name}`,
+      ...(event.accountEmail && event.accountEmail !== event.calendar.name
+        ? [`Account: ${event.accountEmail}`]
+        : []),
+      ...(event.organiser ? [`Organiser: ${personText(event.organiser)}`] : []),
+      ...(shown.length ? [`Attendees: ${shown.join(', ')}${more > 0 ? ` and ${more} more` : ''}`] : []),
+      ...(event.description?.trim() ? [`Description: ${cut(event.description, MAX_DESCRIPTION)}`] : []),
+      ...(linked.length ? [`Linked Items' Projects: ${linked.join(', ')}`] : []),
+    ].join('\n');
+  }
+
   function factsOf(item: Item): string {
     const chat = chatOf(item);
     if (chat) return chatFacts(item, chat);
+    const event = eventOf(item);
+    if (event) return eventFacts(item, event);
     const issue = issueOf(item);
     if (!issue) return `Title: ${item.title}`;
     const people = [
@@ -329,12 +398,12 @@ export function fileIntoProjectsJob(
     name: 'File into Projects',
     tier: 'quick',
     reasoningEffort: 'low',
-    // Each filing follows its own Item's Section (Linear or Teams): see `sectionOf`.
+    // Each filing follows its own Item's Section (Linear, Teams or Calendar): see `sectionOf`.
     action: {
       action: FILE_INTO_PROJECTS,
       actionKind: 'organise',
       section: null,
-      hint: 'Linear issues and Teams Chats no Rule files, into the Project they belong to',
+      hint: 'Linear issues, Teams Chats and calendar events no Rule files, into the Project they belong to',
     },
     triggers: { 'items-arrived': true, idle: true },
 
@@ -343,12 +412,30 @@ export function fileIntoProjectsJob(
       const pending = waiting();
       // The Items that just arrived first, then the newest of the rest.
       const arrived = new Set(triggers.flatMap((trigger) => ('itemIds' in trigger ? trigger.itemIds : [])));
-      const unfiled = itemStore.query({
+      const issuesAndChats = itemStore.query({
         kinds: [...KINDS],
         projectId: null,
         statuses: ['open'],
         limit: 1000,
       });
+      // Events in the window, Unfiled. A recurring series is asked about once, by its next instance:
+      // not at all once it is filed (the other instances follow, series-filing.ts) or has a
+      // suggestion waiting, nor when Ares has already looked at one of its instances as it is now.
+      const inWindow = itemStore.events({ ...eventWindow(), limit: 1000 });
+      const groups = bySeries(inWindow);
+      const asked = new Set<string>();
+      const events = inWindow
+        .filter((item) => item.filing === null && eventInScope(item))
+        .filter((item) => {
+          const key = seriesKey(item);
+          if (!key) return true;
+          const instances = groups.get(key) ?? [];
+          if (asked.has(key) || seriesFiling(instances) !== null) return false;
+          if (instances.some((each) => seen(each.id, filingFingerprint(each)))) return false;
+          asked.add(key);
+          return true;
+        });
+      const unfiled = [...issuesAndChats, ...events];
       const ordered = [
         ...unfiled.filter((item) => arrived.has(item.id)),
         ...unfiled.filter((item) => !arrived.has(item.id)),
@@ -360,8 +447,19 @@ export function fileIntoProjectsJob(
         if (!candidate(item, rules, pending) || off(item) || seen(item.id, fingerprint)) continue;
         candidates.push({ ref: 'I1', item, fingerprint });
       }
+      // A series' other Unfiled instances are remembered with the one asked about, so his answer
+      // stands for the series and none of them is sent again until it changes.
+      const siblings = candidates.flatMap(({ item }) => {
+        const key = seriesKey(item);
+        return (key ? (groups.get(key) ?? []) : [])
+          .filter((each) => each.id !== item.id && each.filing === null)
+          .map((each) => ({ itemId: each.id, fingerprint: filingFingerprint(each) }));
+      });
       return {
-        items: candidates.map(({ item, fingerprint }) => ({ itemId: item.id, fingerprint })),
+        items: [
+          ...candidates.map(({ item, fingerprint }) => ({ itemId: item.id, fingerprint })),
+          ...siblings,
+        ],
         candidates,
       };
     },
@@ -379,7 +477,9 @@ export function fileIntoProjectsJob(
         ...input.candidates.map(({ ref, item }) => ({
           label: chatOf(item)
             ? `${ref} · Teams Chat`
-            : `${ref} · Linear issue ${issueOf(item)?.identifier ?? ''}`.trim(),
+            : eventOf(item)
+              ? `${ref} · Calendar event`
+              : `${ref} · Linear issue ${issueOf(item)?.identifier ?? ''}`.trim(),
           from: item,
           text: factsOf(item),
         })),

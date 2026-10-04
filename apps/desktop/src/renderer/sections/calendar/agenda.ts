@@ -61,7 +61,7 @@ export function addDays(day: string, count: number): string {
 const offsetFormats = new Map<string, Intl.DateTimeFormat>();
 
 // How far a time zone's clocks are ahead of UTC at an instant, in ms.
-function zoneOffset(at: number, timeZone: string): number {
+export function zoneOffset(at: number, timeZone: string): number {
   const parts = formatOf(offsetFormats, timeZone, {
     year: 'numeric',
     month: '2-digit',
@@ -158,7 +158,7 @@ export type AgendaEntry = {
 
 export type AgendaDay = { day: string; title: string; entries: AgendaEntry[] };
 
-function entryFor(event: CalendarEvent, day: string, timeZone: string): AgendaEntry {
+export function entryFor(event: CalendarEvent, day: string, timeZone: string): AgendaEntry {
   const { detail } = event;
   if (detail.allDay) return { event, day, time: 'All day', until: null };
   const startDay = dayKey(detail.start.at, timeZone);
@@ -171,7 +171,7 @@ function entryFor(event: CalendarEvent, day: string, timeZone: string): AgendaEn
 }
 
 // All-day events first, then by start, then by title.
-function inDayOrder(a: AgendaEntry, b: AgendaEntry): number {
+export function inDayOrder(a: AgendaEntry, b: AgendaEntry): number {
   const allDay = Number(b.event.detail.allDay) - Number(a.event.detail.allDay);
   if (allDay) return allDay;
   const continuing = Number(b.time === 'Continues') - Number(a.time === 'Continues');
@@ -180,18 +180,18 @@ function inDayOrder(a: AgendaEntry, b: AgendaEntry): number {
 }
 
 /**
- * The Agenda: from `today` for `days` days, each day with events and its events in order. Today is
- * always there, even with nothing on it.
+ * The Agenda: from `from` (today, unless `[` and `]` moved it) for `days` days, each day with events
+ * and its events in order. Its first day is always there, even with nothing on it.
  */
 export function agendaDays(
   events: readonly CalendarEvent[],
-  { today, days, timeZone }: { today: string; days: number; timeZone: string },
+  { today, days, timeZone, from = today }: { today: string; days: number; timeZone: string; from?: string },
 ): AgendaDay[] {
-  const last = addDays(today, days - 1);
-  const byDay = new Map<string, AgendaEntry[]>([[today, []]]);
+  const last = addDays(from, days - 1);
+  const byDay = new Map<string, AgendaEntry[]>([[from, []]]);
   for (const event of events) {
     for (const day of daysOf(event, timeZone)) {
-      if (day < today || day > last) continue;
+      if (day < from || day > last) continue;
       byDay.set(day, [...(byDay.get(day) ?? []), entryFor(event, day, timeZone)]);
     }
   }

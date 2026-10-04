@@ -2,7 +2,7 @@
 // in the next Update. A producer for his queue, looking whenever the others do.
 //
 // - Counts each Item once, by the User's latest correction or confirmation of it, and the Item's
-//   Source field values as they are now (team, Linear project, label, workspace; a Chat's people).
+//   Source field values as they are now (team, Linear project, label, workspace; a Chat's people; an event's calendar).
 // - A value is suggested for a Project when at least RULE_SUGGESTION_AT Items with it went there and
 //   every answer for that value chose it (one that went elsewhere, or Unfiled, means the pattern
 //   isn't clear yet). When a more specific field points at the same Items (team over workspace), only

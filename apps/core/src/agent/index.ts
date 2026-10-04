@@ -13,6 +13,7 @@ import { fileIntoProjectsJob } from './file-into-projects';
 import { createFiling, type Filing } from './filing';
 import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
+import { createSeriesFiling } from './series-filing';
 import { spotStuckLinearJob } from './spot-stuck-linear';
 import { suggestTodosJob } from './suggest-todos';
 
@@ -67,7 +68,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       suggestTodosJob(itemStore, { now }),
       rankDashboardJob(itemStore, { now }),
       spotStuckLinearJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}), me: options.me }),
-      fileIntoProjectsJob(itemStore),
+      fileIntoProjectsJob(itemStore, { now }),
     ],
     client: options.client,
     gate: options.gate,
@@ -97,6 +98,17 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     }
   };
 
+  // A recurring series filed once: its other instances follow the one Ares or the User filed.
+  const series = createSeriesFiling({ itemStore, gate: options.gate, now });
+  const fileSeries = () => {
+    try {
+      const filed = series.run();
+      if (filed.length) options.onItemsChanged?.(filed);
+    } catch (error) {
+      options.log?.(`Couldn’t file a recurring series’ other instances: ${error}`);
+    }
+  };
+
   let lastChange = now();
   let caughtUp = false;
   const idle = () => runner.trigger({ kind: 'idle' });
@@ -121,6 +133,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       lastChange = now();
       caughtUp = false;
       dismissStale();
+      fileSeries();
       const blocks = itemIds.filter((id) => itemStore.get(id)?.item.kind === 'block');
       if (blocks.length) runner.trigger({ kind: 'typing', itemIds: blocks });
       const ranked = itemIds.filter((id) => RANKED_KINDS.has(itemStore.get(id)?.item.kind ?? ''));
@@ -136,6 +149,8 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       runner.trigger({ kind: 'source-sync', source, account });
       // What a sync brought (new and changed Items) is for Ares to file.
       if (itemIds.length) runner.trigger({ kind: 'items-arrived', itemIds });
+      // Once Ares has looked, a series he filed brings its other instances along.
+      void runner.settled().then(fileSeries);
     },
 
     idle,

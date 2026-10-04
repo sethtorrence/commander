@@ -10,7 +10,7 @@ import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
 import { TodoGroup } from '../todos/TodoGroup';
-import { editUrl, newEventUrl, newOutlookEventUrl } from './agenda';
+import { type AgendaEntry, editUrl, newEventUrl, newOutlookEventUrl } from './agenda';
 import {
   addressOf,
   type CalendarAccount,
@@ -20,14 +20,26 @@ import {
   calendarSyncOf,
   type EventLink,
 } from './calendar-events';
+import { type CalendarSettingsClient, useSecondTimeZone } from './calendar-settings';
 import { EventDetail } from './EventDetail';
 import { CalendarSwatch, EventRow } from './EventRow';
+import { MonthGrid } from './MonthGrid';
+import { TimeGrid } from './TimeGrid';
 import { keyOfCalendar, useCalendar } from './use-calendar';
+import { CALENDAR_VIEWS, type CalendarView, rangeTitle, VIEW_NAMES } from './views';
 
 // Enter opens the selected event, except on a control that Enter presses (a button, a link).
 const onPressable = () => !!document.activeElement?.closest('button, a[href], summary, [role="button"]');
 
 const KEYS: [ReactNode, string][] = [
+  [
+    <>
+      <Kbd>[</Kbd>
+      <Kbd>T</Kbd>
+      <Kbd>]</Kbd>
+    </>,
+    'Back · Today · On',
+  ],
   [
     <>
       <Kbd>J</Kbd>
@@ -53,6 +65,37 @@ function Keys() {
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
+
+// Each view's key: `l` for the Agenda list, since `a` is Ares's.
+const VIEW_KEYS: Record<CalendarView, string> = { day: 'd', week: 'w', month: 'm', agenda: 'l' };
+
+/** The view switch in the sheet header: Day, Week, Month and Agenda, each with its key. */
+function ViewSwitch({ view, onView }: { view: CalendarView; onView: (view: CalendarView) => void }) {
+  return (
+    <ButtonGroup role="radiogroup" aria-label="Calendar view">
+      {CALENDAR_VIEWS.map((each) => (
+        <Button
+          key={each}
+          role="radio"
+          aria-checked={each === view}
+          variant={each === view ? 'primary' : 'default'}
+          onClick={() => onView(each)}
+        >
+          {VIEW_NAMES[each]} <Kbd>{VIEW_KEYS[each].toUpperCase()}</Kbd>
+        </Button>
+      ))}
+    </ButtonGroup>
+  );
+}
+
+// How the subtitle names the days a view shows.
+const SPAN_NAMES = { day: 'this day', week: 'this week', month: 'this month' } as const;
+
+// Where events outside the synced days live: each connected provider's calendar on the web.
+const PROVIDER_LINKS = {
+  google: { name: 'Google Calendar', url: 'https://calendar.google.com/calendar/r' },
+  outlook: { name: 'Outlook', url: 'https://outlook.office.com/calendar/view/month' },
+} as const;
 
 // Where New event opens for an Account: Google Calendar, or Outlook on the web.
 const newEventFor = (account: CalendarAccount) =>
@@ -80,12 +123,15 @@ export function CalendarSheet({
   events,
   accounts,
   timeZone = systemTimeZone(),
+  settings,
   open = openInBrowser,
 }: {
   events: CalendarEvents;
   accounts: CalendarAccountsClient;
   /** The User's time zone (the machine's), which the Agenda's days follow. */
   timeZone?: string;
+  /** Settings → Calendar: the second time zone. */
+  settings?: CalendarSettingsClient;
   /** Opens an address in the system browser. */
   open?: (url: string) => void;
 }) {
@@ -99,6 +145,7 @@ export function CalendarSheet({
   const openSection = useOpenSection();
   const several = state.accounts.length > 1;
   const { active } = useSection();
+  const secondTimeZone = useSecondTimeZone(settings);
 
   useTabCount(state.loaded ? state.toCome : null);
 
@@ -132,7 +179,17 @@ export function CalendarSheet({
   };
 
   const file = () =>
-    selected && badges.open({ id: selected.id, title: selected.title, filing: selected.filing });
+    selected &&
+    badges.open({
+      id: selected.id,
+      title: selected.title,
+      filing: selected.filing,
+      filingSuggestion: selected.filingSuggestion,
+    });
+  const openEntry = (entry: AgendaEntry) => {
+    state.select(entry);
+    setDetailOpen(true);
+  };
 
   const openLink = ({ other }: EventLink) => {
     if (other.kind === 'project') return openPage?.(other.id);
@@ -149,6 +206,13 @@ export function CalendarSheet({
     { keys: 'Escape', label: 'Close the event', when: () => detailOpen, run: () => setDetailOpen(false) },
     { keys: 'b', label: 'File under a Project', run: () => file() },
     { keys: 'Ctrl+z', label: 'Undo', run: () => void state.undo() },
+    { keys: 'd', label: 'Day view', run: () => state.setView('day') },
+    { keys: 'w', label: 'Week view', run: () => state.setView('week') },
+    { keys: 'm', label: 'Month view', run: () => state.setView('month') },
+    { keys: 'l', label: 'Agenda', run: () => state.setView('agenda') },
+    { keys: 't', label: 'Today', run: () => state.goToday() },
+    { keys: '[', label: 'Back', run: () => state.step(-1) },
+    { keys: ']', label: 'Forward', run: () => state.step(1) },
   ]);
   // From the palette: open an event it found.
   useReveal('calendar', (itemId) => void state.reveal(itemId));
@@ -157,6 +221,20 @@ export function CalendarSheet({
   const syncing = state.accounts.some((account) => calendarSyncOf(account)?.activity === 'syncing');
   const emailOf = new Map(state.accounts.map((account) => [account.id, addressOf(account)]));
   const total = state.entries.length;
+  const { view } = state;
+  const selectedId = selectedEntry?.event.id ?? (detailOpen ? (selected?.id ?? null) : null);
+  // How many events the days shown hold: "in the next 30 days", "this week".
+  const inRange = new Set(state.entries.map((entry) => entry.event.id)).size;
+  const range = rangeTitle(view, state.anchor, state.days);
+  const counted =
+    view === 'agenda'
+      ? `${total} in ${state.anchor === state.today ? 'the next' : 'these'} ${state.days} days`
+      : `${inRange} ${SPAN_NAMES[view]}`;
+  // Which providers to point to for days outside the synced window.
+  const providers = [...new Set(state.accounts.map((account) => account.source))].map(
+    (source) => PROVIDER_LINKS[source],
+  );
+  const outside = state.outside.before || state.outside.after;
   // The side column's calendars, grouped by Account in the Accounts' order.
   const calendarGroups = state.accounts
     .map((account) => ({
@@ -173,11 +251,12 @@ export function CalendarSheet({
           <>
             <b>{state.toCome} still to come today</b>
             {filter !== 'everything' && ` ${filtered ? `in ${filtered.name}` : 'Unfiled'}`}
-            {` · ${total} in the next ${state.days} days`}
+            {` · ${counted}`}
           </>
         }
         aside={
-          <div className="flex items-end gap-5">
+          <div className="flex max-w-[680px] flex-wrap items-end justify-end gap-x-5 gap-y-3">
+            <ViewSwitch view={view} onView={state.setView} />
             {state.accounts.length > 0 && (
               <ButtonGroup>
                 {state.accounts.map((account) => {
@@ -201,10 +280,26 @@ export function CalendarSheet({
         className="flex flex-col"
       >
         <SectionProjectFilter items={state.forProjectFilter} />
-        <div className="flex h-9 items-center border-b border-line">
-          <span className="px-13 font-mono text-label leading-none font-semibold uppercase tracking-caps text-ink">
-            Agenda
-          </span>
+        <div className="flex h-11 items-center border-b border-line">
+          <div className="ml-[41px] flex items-center gap-3">
+            <ButtonGroup>
+              <Button size="icon" aria-label="Back ([)" title="Back ([)" onClick={() => state.step(-1)}>
+                <span aria-hidden="true">‹</span>
+              </Button>
+              <Button onClick={state.goToday} title="Today (T)">
+                Today
+              </Button>
+              <Button size="icon" aria-label="Forward (])" title="Forward (])" onClick={() => state.step(1)}>
+                <span aria-hidden="true">›</span>
+              </Button>
+            </ButtonGroup>
+            <h3
+              data-testid="calendar-range"
+              className="m-0 font-mono text-label-lg leading-none font-semibold uppercase tracking-caps whitespace-nowrap text-ink"
+            >
+              {range}
+            </h3>
+          </div>
           <p
             data-testid="calendar-sync-status"
             role="status"
@@ -217,59 +312,126 @@ export function CalendarSheet({
             <span className="truncate">{status.text}</span>
           </p>
         </div>
-        {state.loaded && state.accounts.length === 0 && total === 0 ? (
+        {outside && (
+          <p
+            data-testid="calendar-outside"
+            className="hatch m-0 border-b border-line2 py-2 pr-5 pl-13 text-note text-muted"
+          >
+            {state.outside.before && state.outside.after
+              ? 'Events this far back or ahead aren’t kept in Commander'
+              : state.outside.before
+                ? 'Older events aren’t kept in Commander'
+                : 'Events this far ahead aren’t kept in Commander'}
+            {providers.length > 0 && (
+              <>
+                {'. They live in '}
+                {providers.map((provider, index) => (
+                  <span key={provider.name}>
+                    {index > 0 && ' and '}
+                    <a
+                      href={provider.url}
+                      onClick={(click) => {
+                        click.preventDefault();
+                        open(provider.url);
+                      }}
+                      className="text-ink underline decoration-line underline-offset-2 hover:decoration-ink"
+                    >
+                      {provider.name} ↗
+                    </a>
+                  </span>
+                ))}
+              </>
+            )}
+            .
+          </p>
+        )}
+        {state.loaded && state.accounts.length === 0 && total === 0 && view === 'agenda' ? (
           <EmptySheet>
             No calendar connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).
           </EmptySheet>
         ) : (
           <PickBadgeProvider value={badges.open}>
-            <div className={cn('flex-1', detailOpen && 'grid grid-cols-[minmax(0,9fr)_minmax(0,7fr)]')}>
-              <div className="min-w-0 pb-30" data-testid="agenda">
-                {state.agenda.map((day, index) => (
-                  <TodoGroup
-                    key={day.day}
-                    no={`D${pad(index + 1)}`}
-                    title={day.title}
-                    count={day.entries.length}
-                  >
-                    {day.entries.length ? (
-                      <ul className="m-0 list-none p-0">
-                        {day.entries.map((entry) => (
-                          <EventRow
-                            key={`${entry.day}/${entry.event.id}`}
-                            entry={entry}
-                            selected={entry === selectedEntry}
-                            account={
-                              several && entry.event.account
-                                ? (emailOf.get(entry.event.account) ?? null)
-                                : null
-                            }
-                            compact={detailOpen}
-                            onOpen={() => {
-                              state.select(entry);
-                              setDetailOpen(true);
-                            }}
-                          />
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="hatch m-0 border-b border-line2 py-2.5 pr-5 pl-13 text-note text-faint">
-                        Nothing on today.
-                      </p>
-                    )}
-                  </TodoGroup>
-                ))}
-                {state.canShowMore && (
-                  <div className="mt-6 mr-5 ml-13">
-                    <Button onClick={state.showMore}>Show more days</Button>
-                  </div>
-                )}
-              </div>
+            <div
+              className={cn(
+                'flex-1',
+                detailOpen &&
+                  (view === 'agenda'
+                    ? 'grid grid-cols-[minmax(0,9fr)_minmax(0,7fr)]'
+                    : 'grid grid-cols-[minmax(0,5fr)_minmax(0,3fr)]'),
+              )}
+            >
+              {view === 'week' || view === 'day' ? (
+                <TimeGrid
+                  days={state.shownDays}
+                  events={state.filtered}
+                  timeZone={timeZone}
+                  secondTimeZone={secondTimeZone}
+                  now={now.getTime()}
+                  today={state.today}
+                  clashes={state.clashes}
+                  selectedId={selectedId}
+                  onOpen={openEntry}
+                />
+              ) : view === 'month' ? (
+                <MonthGrid
+                  days={state.shownDays}
+                  anchor={state.anchor}
+                  today={state.today}
+                  events={state.filtered}
+                  timeZone={timeZone}
+                  clashes={state.clashes}
+                  selectedId={selectedId}
+                  onOpen={openEntry}
+                  onShowDay={state.showDay}
+                />
+              ) : (
+                <div className="min-w-0 pb-30" data-testid="agenda">
+                  {state.agenda.map((day, index) => (
+                    <TodoGroup
+                      key={day.day}
+                      no={`D${pad(index + 1)}`}
+                      title={day.title}
+                      count={day.entries.length}
+                    >
+                      {day.entries.length ? (
+                        <ul className="m-0 list-none p-0">
+                          {day.entries.map((entry) => (
+                            <EventRow
+                              key={`${entry.day}/${entry.event.id}`}
+                              entry={entry}
+                              selected={entry === selectedEntry}
+                              account={
+                                several && entry.event.account
+                                  ? (emailOf.get(entry.event.account) ?? null)
+                                  : null
+                              }
+                              compact={detailOpen}
+                              clashes={state.clashes.get(entry.event.id) ?? []}
+                              onOpen={() => openEntry(entry)}
+                            />
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="hatch m-0 border-b border-line2 py-2.5 pr-5 pl-13 text-note text-faint">
+                          {day.day === state.today ? 'Nothing on today.' : 'Nothing on this day.'}
+                        </p>
+                      )}
+                    </TodoGroup>
+                  ))}
+                  {state.canShowMore && (
+                    <div className="mt-6 mr-5 ml-13">
+                      <Button onClick={state.showMore}>Show more days</Button>
+                    </div>
+                  )}
+                </div>
+              )}
               {detailOpen && (
                 <EventDetail
                   event={selected}
                   editUrl={selected ? editUrl(selected) : null}
                   timeZone={timeZone}
+                  secondTimeZone={secondTimeZone}
+                  clashes={selected ? (state.clashes.get(selected.id) ?? []) : []}
                   links={state.links}
                   history={state.history}
                   onEdit={(url) => handOff(url, selected?.account ?? null)}
