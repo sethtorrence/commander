@@ -218,6 +218,16 @@ describe('answering Item store requests from the window', () => {
     });
   });
 
+  it('searches, and refuses a malformed search', () => {
+    ask(1, { op: 'record', action: { type: 'create', item: { kind: 'todo', title: 'Renew the passport' } } });
+    expect(ask(2, { op: 'search', query: { text: 'pass' } })).toMatchObject({
+      response: { ok: true, result: { hits: [{ item: { title: 'Renew the passport' }, exact: false }] } },
+    });
+    expect(ask(3, { op: 'search', query: { text: 'pass', kinds: ['nonsense'] } })).toMatchObject({
+      response: { ok: false },
+    });
+  });
+
   it('ignores messages that are not Item store requests', () => {
     expect(answerItemStoreRequest(store, { type: 'heartbeat' })).toBeNull();
     expect(answerItemStoreRequest(store, 'hello')).toBeNull();

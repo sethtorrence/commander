@@ -81,7 +81,7 @@ test('? opens the cheat sheet listing every shortcut registered', async () => {
   }
   const general = sheet.getByRole('region', { name: 'General' });
   await expect(general.getByText('Keyboard shortcuts', { exact: true })).toBeVisible();
-  await expect(general.getByText('Settings', { exact: true })).toBeVisible();
+  await expect(general.getByText('Open Settings', { exact: true })).toBeVisible();
   await expect(sheet.getByRole('region', { name: 'Settings' }).getByText('Close Settings')).toBeVisible();
 
   // Number keys stay with the open sheet (the page behind it is out of the accessibility tree,

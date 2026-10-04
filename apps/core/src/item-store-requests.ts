@@ -60,6 +60,8 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.refile(request.itemIds) };
       case 'undo-refile':
         return { ok: true, result: store.undoRefile(request.entryIds) };
+      case 'search':
+        return { ok: true, result: store.search.query(request.query) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

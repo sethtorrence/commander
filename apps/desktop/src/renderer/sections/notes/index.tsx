@@ -193,11 +193,15 @@ function NotesSection() {
       }),
     [notebook],
   );
-  // A Block opened from elsewhere (a Todo's made-from Link): its day comes on screen, and it is
-  // scrolled to and highlighted.
-  useReveal('notes', async (blockId) => {
+  // A Block opened from elsewhere (a Todo's made-from Link, the palette): its day comes on screen,
+  // and it is scrolled to and highlighted. A Daily Note opened from the palette scrolls to its day.
+  useReveal('notes', async (itemId) => {
     await notebook.start();
-    if (await notebook.reveal(blockId)) highlightBlock(withParents(notebook.snapshot(), blockId));
+    const day = await notebook.reveal(itemId);
+    if (!day) return;
+    if (notebook.snapshot().days.some((d) => d.outline.has(itemId)))
+      highlightBlock(withParents(notebook.snapshot(), itemId));
+    else requestAnimationFrame(() => scrollToDay(day));
   });
   // Typing held back for a pause is saved before Commander quits.
   useEffect(() => window.commander.onSaveBeforeQuit?.(() => notebook.flush()), [notebook]);

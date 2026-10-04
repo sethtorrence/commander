@@ -4,6 +4,7 @@ import { StrictMode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Frame } from './frame/Frame';
 import { DesignGallery } from './gallery/DesignGallery';
+import { CommandProvider } from './palette/commands';
 import { ShortcutProvider } from './shortcuts/react';
 import { useHashRoute } from './use-hash-route';
 
@@ -26,7 +27,9 @@ function Root() {
     <AppearanceProvider>
       <TooltipProvider>
         <ShortcutProvider>
-          <Screen />
+          <CommandProvider>
+            <Screen />
+          </CommandProvider>
         </ShortcutProvider>
         <Toaster />
       </TooltipProvider>

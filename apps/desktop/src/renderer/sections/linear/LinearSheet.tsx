@@ -1,5 +1,6 @@
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
@@ -94,8 +95,9 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
     { keys: 'Escape', label: 'Close the issue', when: () => detailOpen, run: () => setDetailOpen(false) },
     { keys: 'b', label: 'File under a Project', run: () => file() },
     { keys: 'Ctrl+z', label: 'Undo', run: () => state.undo() },
-    // `/` is kept for searching this Section, which arrives with the command palette.
   ]);
+  // From the palette: open an issue it found, whatever the view and filters were hiding.
+  useReveal('linear', (itemId) => state.reveal(itemId));
 
   const workspaces = state.accounts.map((account) => account.name);
   const status = syncLine(state.accounts, now);

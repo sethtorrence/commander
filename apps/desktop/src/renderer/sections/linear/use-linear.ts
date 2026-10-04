@@ -61,6 +61,8 @@ export interface LinearState {
   /** The selected issue: always one that is shown. */
   selected: Issue | null;
   select(itemId: string): void;
+  /** Selects and opens an issue, switching to All tickets, clearing the filters or showing Closed if they hide it. */
+  reveal(itemId: string): void;
   moveSelection(step: 1 | -1): void;
   detailOpen: boolean;
   setDetailOpen(open: boolean): void;
@@ -240,6 +242,20 @@ export function useLinear({
 
   const showClosed = useCallback((value?: boolean) => setClosedShown((now) => value ?? !now), []);
 
+  const reveal = useCallback(
+    (itemId: string) => {
+      const issue = all.find((one) => one.id === itemId);
+      // Not read yet (it synced since): read again, and let nothing hide it meanwhile.
+      if (!issue) reload();
+      if (!issue || !inView(issue, view, accountsById)) setViewState('all');
+      if (!issue || !inFilters(issue, filters, now)) setFilters(NO_FILTERS);
+      if (!issue || !isOpen(issue)) setClosedShown(true);
+      setSelectedId(itemId);
+      setDetailOpen(true);
+    },
+    [all, view, accountsById, filters, now, reload],
+  );
+
   const apply = useCallback(
     async (change: () => Promise<ActivityEntry>) => {
       try {
@@ -301,6 +317,7 @@ export function useLinear({
     showClosed,
     selected,
     select: setSelectedId,
+    reveal,
     moveSelection,
     detailOpen,
     setDetailOpen,

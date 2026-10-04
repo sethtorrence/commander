@@ -55,6 +55,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
+import { openSearch, type Search } from '../search';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
@@ -79,6 +80,7 @@ import * as schema from './schema';
 import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
 
+export type { Search } from '../search';
 export type { NewProposal } from './autonomy';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
@@ -161,6 +163,8 @@ export type ItemStore = {
   syncState: SyncStateStore;
   // The Autonomy settings and the gate's proposals, in the same database.
   autonomy: AutonomyStore;
+  // Global search over the live Items, kept current by every write here.
+  search: Search;
   close(): void;
 };
 
@@ -330,6 +334,30 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return candidates;
   }
 
+  // The search index follows every Item written below (insertItem and writeState).
+  const search = openSearch(sqlite, {
+    *allItems() {
+      const { items } = schema;
+      for (let after = ''; ; ) {
+        const rows = db
+          .select()
+          .from(items)
+          .where(and(isNull(items.deletedAt), sql`${items.id} > ${after}`))
+          .orderBy(asc(items.id))
+          .limit(500)
+          .all();
+        if (!rows.length) return;
+        yield withDetails(rows);
+        after = rows.at(-1)?.id ?? '';
+      }
+    },
+    load(itemIds) {
+      if (!itemIds.length) return [];
+      return withDetails(db.select().from(schema.items).where(inArray(schema.items.id, itemIds)).all());
+    },
+    projects: () => projects.list(),
+  });
+
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
     const { items } = schema;
     const row = db
@@ -478,6 +506,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       .values({ id, ...identity, ...itemColumns(state), createdAt: at, updatedAt: at })
       .run();
     writeDetail(id, state.detail);
+    search.put({ id, kind: identity.kind, account: identity.account, updatedAt: at, ...state });
     return { id, state };
   }
 
@@ -489,6 +518,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       .where(eq(schema.items.id, item.id))
       .run();
     writeDetail(item.id, state.detail);
+    search.put({ id: item.id, kind: item.kind, account: item.account, updatedAt: at, ...state });
     return state;
   }
 
@@ -886,6 +916,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     models: openModelStore(db, now),
     syncState: openSyncStateStore(db),
     autonomy: openAutonomyStore(db, now),
+    search: { query: (query) => search.query(query) },
 
     saveFromSource,
     removeAccountItems,

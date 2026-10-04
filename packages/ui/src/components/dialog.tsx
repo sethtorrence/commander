@@ -10,14 +10,18 @@ export const DialogClose = DialogPrimitive.Close;
 // A dialog is a sheet laid over the drawing: hard ink border, title strip, no shadow, no rounding.
 export function DialogContent({
   className,
+  overlayClassName,
   children,
   ...props
-}: ComponentProps<typeof DialogPrimitive.Content>) {
+}: ComponentProps<typeof DialogPrimitive.Content> & { overlayClassName?: string }) {
   return (
     <DialogPrimitive.Portal container={usePortalContainer()}>
       <DialogPrimitive.Overlay
         data-slot="dialog-overlay"
-        className="fixed inset-0 z-50 bg-[color-mix(in_srgb,var(--bg)_72%,transparent)]"
+        className={cn(
+          'fixed inset-0 z-50 bg-[color-mix(in_srgb,var(--bg)_72%,transparent)]',
+          overlayClassName,
+        )}
       />
       <DialogPrimitive.Content
         data-slot="dialog-content"

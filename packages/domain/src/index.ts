@@ -13,4 +13,5 @@ export * from './model-messages';
 export * from './models';
 export * from './projects';
 export * from './rules';
+export * from './search';
 export * from './sync-messages';

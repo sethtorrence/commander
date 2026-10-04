@@ -36,6 +36,7 @@ import {
   rulePreview,
   rulePreviewRequest,
 } from './rules';
+import { type SearchResult, searchQuery, searchResult } from './search';
 
 // What the window may ask of the Item store. It reaches the store only through these requests,
 // validated in the main process and again in the Core. Actions from the window are always the User's.
@@ -76,6 +77,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('preview-rule'), request: rulePreviewRequest }),
   z.object({ op: z.literal('refile'), itemIds: z.array(z.string().min(1)).min(1).max(1000) }),
   z.object({ op: z.literal('undo-refile'), entryIds: z.array(z.number().int().positive()).min(1).max(1000) }),
+  // Global search (the Ctrl+K palette): local, ranked, never waiting on a model.
+  z.object({ op: z.literal('search'), query: searchQuery }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -100,6 +103,7 @@ export type ItemStoreResults = {
   'preview-rule': RulePreview;
   refile: ActivityEntry[];
   'undo-refile': ActivityEntry[];
+  search: SearchResult;
 };
 
 export const itemStoreResult = {
@@ -122,6 +126,7 @@ export const itemStoreResult = {
   'preview-rule': rulePreview,
   refile: z.array(activityEntry),
   'undo-refile': z.array(activityEntry),
+  search: searchResult,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =
