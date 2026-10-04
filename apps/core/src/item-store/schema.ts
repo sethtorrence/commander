@@ -17,6 +17,7 @@ import type {
   GitHubItemDetail,
   GitHubRepoRef,
   GitHubWatch,
+  GitHubWriterDetail,
   ItemKind,
   ItemStatus,
   JobOutcome,
@@ -292,6 +293,10 @@ export const githubDetails = sqliteTable('github_details', {
   // Section opens it (#115): kept for the detail's `updatedAt` it was fetched for, and fetched again
   // once the Item changes. Not part of the Item: never in the activity log.
   discussion: text('discussion', { mode: 'json' }).$type<GitHubDiscussion>(),
+  // What the oversight summary's writer reads about a pull request (#119): fetched after GitHub syncs
+  // for the pull requests in a summary, kept for the detail's `updatedAt` it was fetched for. Not part
+  // of the Item: never in the activity log.
+  writerDetail: text('writer_detail', { mode: 'json' }).$type<GitHubWriterDetail>(),
 });
 
 // Kind-specific detail for emails, one row per message (see EmailDetail), with what the Email
@@ -867,3 +872,13 @@ export const busyCopies = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.eventId, t.targetAccount] }), index('busy_copies_copy').on(t.copyId)],
 );
+
+// Settings → GitHub → Oversight summary (#119), in a single row: the two Stuck settings and the bots
+// left out of Started.
+export const githubOversightSettings = sqliteTable('github_oversight_settings', {
+  id: integer('id').primaryKey(),
+  longRunningDays: integer('long_running_days').notNull(),
+  idleDays: integer('idle_days').notNull(),
+  bots: text('bots', { mode: 'json' }).$type<string[]>().notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});

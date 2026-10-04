@@ -184,6 +184,10 @@ _Avoid_: Knowledge base, context, history, profile
 Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it.
 _Avoid_: Notification, alert, briefing, digest
 
+**Oversight summary**:
+What Shipped, Started, is Stuck and is On fire in the watched GitHub repos over a range of days, grouped by Project then repo and ending "Nothing on fire" when that's true; shown at the top of the GitHub Section. Commander works out its facts from what it holds; Ares writes it from them.
+_Avoid_: Report, changelog, commit list
+
 **Suggestion**:
 Something Ares has prepared and left on its Item for the User to accept or dismiss (what Ask means); nothing happens until it is accepted, and one suggested because of another Item says what caused it.
 _Avoid_: Recommendation, proposal (that's what Ares's jobs hand the gate), prompt, nudge

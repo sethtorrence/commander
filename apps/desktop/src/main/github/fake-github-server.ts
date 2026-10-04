@@ -54,6 +54,8 @@ export type FakeGitHubRepo = {
   // ISO time of the last push; null for an empty repo.
   pushedAt?: string | null;
   collaborators?: number[];
+  // The default branch head's check rollup (the oversight summary's On fire); SUCCESS unless given.
+  headChecks?: 'SUCCESS' | 'FAILURE' | 'ERROR' | 'PENDING';
 };
 
 // A comment on a pull request or issue, by a user (login); with a `path` (and line), a review
@@ -826,7 +828,7 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
         target: {
           oid: head ? createHash('sha1').update(head.message).digest('hex') : `head-${repo.name}`,
           committedDate: head?.committedAt ?? repo.pushedAt ?? '2026-10-01T12:00:00Z',
-          statusCheckRollup: { state: 'SUCCESS' },
+          statusCheckRollup: { state: repo.headChecks ?? 'SUCCESS' },
           history: {
             nodes: theirs
               .filter((commit) => Date.parse(commit.committedAt) >= Date.parse(since))
@@ -923,6 +925,41 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
             work && repo && reaches(who, repo) ? discussionNode(work, Number(variables.latest ?? 50)) : null,
         };
       }
+      // What the oversight summary's writer reads about pull requests (#119).
+      case 'CommanderWriterDetail':
+        return {
+          nodes: ((variables.ids as string[]) ?? []).map((id) => {
+            const pull = pulls.find((each) => pullId(each) === id);
+            const repo = pull ? repoNamed(pull.repo) : undefined;
+            if (!pull || !repo || !reaches(who, repo)) return null;
+            const comments = pull.comments ?? [];
+            return {
+              __typename: 'PullRequest',
+              id,
+              body: pull.body ?? '',
+              closingIssuesReferences: { nodes: [] },
+              reviews: {
+                nodes: (pull.reviews ?? []).map((review) => ({
+                  author: { login: review.author },
+                  state: review.state,
+                  body: review.body ?? '',
+                  submittedAt: review.submittedAt ?? updatedOf(pull),
+                  createdAt: review.submittedAt ?? updatedOf(pull),
+                })),
+              },
+              reviewThreads: { nodes: [] },
+              comments: {
+                totalCount: comments.length,
+                nodes: comments.slice(0, Number(variables.comments ?? 30)).map((comment) => ({
+                  author: { login: comment.author },
+                  body: comment.body,
+                  createdAt: comment.createdAt ?? updatedOf(pull),
+                })),
+              },
+              files: { totalCount: 1, nodes: [{ path: 'src/index.ts', additions: 10, deletions: 2 }] },
+            };
+          }),
+        };
       case 'CommanderSweep':
         return {
           items: ((variables.ids as string[]) ?? []).map((id) => {

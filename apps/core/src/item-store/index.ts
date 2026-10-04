@@ -109,6 +109,7 @@ import { emailsIn } from './emails';
 import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
 import { type FocusSettingsStore, focusSettingsIn } from './focus-settings';
 import { type GitHubDiscussionStore, githubDiscussionsIn } from './github-discussions';
+import { type GitHubOversightStore, githubOversightIn } from './github-oversight';
 import { githubTodosIn } from './github-todos';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
@@ -162,6 +163,7 @@ export type { BusyCopies, BusyCopy } from './commander-events';
 export type { DashboardStore, StoredClear } from './dashboard';
 export type { FilingFeedbackStore } from './filing-feedback';
 export type { FocusSettingsStore } from './focus-settings';
+export type { GitHubOversightStore, OversightRequest, StaleWriterDetail } from './github-oversight';
 export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
 export type { MeetingChips, MeetingChipsChange } from './meeting-chips';
@@ -346,6 +348,9 @@ export type ItemStore = {
   githubWatch: GitHubWatchStore;
   // The GitHub Section's discussions, fetched on demand and kept beside the detail (github-discussions.ts).
   githubDiscussions: GitHubDiscussionStore;
+  // The oversight summary (#119, github-oversight.ts): its settings, the summary, the writer's detail
+  // kept beside pull requests, and the lookups finishes Links are made from.
+  githubOversight: GitHubOversightStore;
   // People (people.ts): who the people behind Items' handles are, matched across Sources after every
   // save from one, and merged, split and renamed by the User (logged in the People log, for undo).
   people: PeopleStore;
@@ -2309,6 +2314,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
     githubWatch,
     githubDiscussions: githubDiscussionsIn(db),
+    githubOversight: githubOversightIn(db, {
+      now,
+      withDetails: (rows) => withDetails(rows),
+      projects: () => projects.list({ includeArchived: true }),
+      people: () => people.list(),
+    }),
 
     chatWaiting: {
       judgedThrough: (itemId) => waiting.judgedThrough(itemId),

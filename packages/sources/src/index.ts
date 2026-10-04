@@ -10,6 +10,7 @@ export {
   GITHUB_HOURLY_LIMITS,
   type GitHubSourceOptions,
 } from './github/github-source';
+export { type ReadWriterDetail, readGitHubWriterDetails } from './github/writer-detail';
 export { createGmailSource, GMAIL_CADENCE, type GmailSourceOptions } from './gmail/gmail-source';
 export {
   type CalendarChoices,

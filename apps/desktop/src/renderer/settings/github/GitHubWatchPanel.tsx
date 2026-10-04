@@ -27,6 +27,7 @@ import {
 } from '@commander/ui';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import { SettingRow, SettingsGroup } from '../parts';
+import { OversightSettings } from './OversightSettings';
 
 // Settings → GitHub (#113): per GitHub Account, the orgs and repos it can reach, and which of them
 // Commander watches. Orgs come as groups with Watch whole org (repos made there later included),
@@ -446,6 +447,7 @@ export function GitHubWatchPanel({ no, now = Date.now }: { no: string; now?: () 
       {accounts?.map((account) => (
         <AccountWatch key={account.id} account={account} now={now} />
       ))}
+      <OversightSettings />
     </SettingsGroup>
   );
 }

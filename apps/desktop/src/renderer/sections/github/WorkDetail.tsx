@@ -349,6 +349,7 @@ export function WorkDetail({
   onFile,
   onClose,
   onOpenLink,
+  onRemoveLink,
   onOpenWork,
 }: {
   work: Work | null;
@@ -361,6 +362,8 @@ export function WorkDetail({
   onFile: () => void;
   onClose: () => void;
   onOpenLink: (link: WorkLink) => void;
+  /** Removes one of its Links (a finishes Link GitHub made, which is then never made again). */
+  onRemoveLink?: (link: WorkLink) => void;
   /** Opens another pull request or issue Commander holds in the Section. */
   onOpenWork: (itemId: string) => void;
 }) {
@@ -487,7 +490,12 @@ export function WorkDetail({
 
             <Discussion work={work} discussion={discussion} />
 
-            <TodoLinks links={links} onOpen={onOpenLink} />
+            <TodoLinks
+              links={links}
+              onOpen={onOpenLink}
+              onRemove={onRemoveLink}
+              removable={(link) => link.type === 'finishes' && !link.backlink}
+            />
 
             <PanePart label="Activity" count={history.length}>
               <ol className="m-0 list-none border border-line p-0">

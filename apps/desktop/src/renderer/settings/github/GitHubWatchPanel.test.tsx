@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import {
+  defaultOversightSettings,
   type GitHubAccess,
   type GitHubRepo,
   type GitHubWatch,
@@ -99,6 +100,8 @@ beforeEach(() => {
         requests.push(request);
         return answer(request);
       },
+      // The oversight summary's settings, in the same group (OversightSettings.test.tsx).
+      itemStore: async () => defaultOversightSettings,
     },
   });
 });

@@ -108,6 +108,18 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.calendarSettings.save(request.settings) };
       case 'meeting-preps':
         return { ok: true, result: store.meetingPreps(request.eventIds) };
+      case 'github-oversight':
+        return {
+          ok: true,
+          result: store.githubOversight.summary({
+            range: request.range,
+            ...(request.projectId !== undefined && { projectId: request.projectId }),
+          }),
+        };
+      case 'github-oversight-settings':
+        return { ok: true, result: store.githubOversight.settings() };
+      case 'save-github-oversight-settings':
+        return { ok: true, result: store.githubOversight.saveSettings(request.settings) };
       case 'people':
         return { ok: true, result: store.people.list() };
       case 'change-people':

@@ -98,6 +98,11 @@ export interface GitHubState {
   undo(entryId?: number): Promise<void>;
   /** Reads the work again. */
   reload(): void;
+  /** Work shown on its own (a summary line's Items), whatever the view and filters; null: none. */
+  only: { itemIds: ReadonlySet<string>; label: string } | null;
+  /** Lists just these Items (Closed shown too) until the view or a filter changes, or `showAll`. */
+  showOnly(itemIds: readonly string[], label: string): void;
+  showAll(): void;
   /** Asks every connected GitHub Account to sync now (the sync engine's refresh). */
   refresh(): void;
 }
@@ -133,6 +138,7 @@ export function useGitHub({
   const [refreshWanted, setRefreshWanted] = useState(false);
   const [view, setViewState] = useState<WorkView>(() => loadView(storage));
   const [filters, setFilters] = useState<WorkFilters>(NO_FILTERS);
+  const [only, setOnly] = useState<GitHubState['only']>(null);
   // People, so the author filter offers a Person once for all their GitHub logins.
   const people = usePeople();
   const [closedShown, setClosedShown] = useState(false);
@@ -195,12 +201,16 @@ export function useGitHub({
   const viewed = useMemo(() => all.filter((work) => inView(work, view, mine)), [all, view, mine]);
   const narrowed = useMemo(() => viewed.filter(include), [viewed, include]);
   const listed = useMemo(
-    () => narrowed.filter((work) => inFilters(work, filters, undefined, people)),
-    [narrowed, filters, people],
+    () =>
+      only
+        ? all.filter((work) => only.itemIds.has(work.id))
+        : narrowed.filter((work) => inFilters(work, filters, undefined, people)),
+    [all, only, narrowed, filters, people],
   );
   const groups = useMemo(
-    () => (view === 'mine' ? groupYourWork(listed, mine) : groupWork(listed)),
-    [view, listed, mine],
+    // A summary line's Items are listed as they are, whatever the view.
+    () => (view === 'mine' && !only ? groupYourWork(listed, mine) : groupWork(listed)),
+    [view, only, listed, mine],
   );
   const options = useMemo(() => filterOptions(narrowed, filters, people), [narrowed, filters, people]);
   const forProjectFilter = useMemo(
@@ -231,9 +241,10 @@ export function useGitHub({
     [requests],
   );
 
+  const closedListed = closedShown || only !== null;
   const shown = useMemo(
-    () => groups.flatMap((group) => (group.id === 'closed' && !closedShown ? [] : group.work)),
-    [groups, closedShown],
+    () => groups.flatMap((group) => (group.id === 'closed' && !closedListed ? [] : group.work)),
+    [groups, closedListed],
   );
   const selected =
     shown.find((work) => work.id === selectedId) ??
@@ -293,6 +304,7 @@ export function useGitHub({
   const setView = useCallback(
     (next: WorkView) => {
       setViewState(next);
+      setOnly(null);
       try {
         storage.setItem(VIEW_STORAGE_KEY, next);
       } catch {
@@ -302,11 +314,19 @@ export function useGitHub({
     [storage],
   );
 
-  const setFilter = useCallback(
-    (key: FilterKey, value: string | null) => setFilters((now) => ({ ...now, [key]: value })),
-    [],
-  );
-  const clearFilters = useCallback(() => setFilters(NO_FILTERS), []);
+  const setFilter = useCallback((key: FilterKey, value: string | null) => {
+    setOnly(null);
+    setFilters((now) => ({ ...now, [key]: value }));
+  }, []);
+  const clearFilters = useCallback(() => {
+    setOnly(null);
+    setFilters(NO_FILTERS);
+  }, []);
+  const showOnly = useCallback((itemIds: readonly string[], label: string) => {
+    setOnly({ itemIds: new Set(itemIds), label });
+    setSelectedId(itemIds[0] ?? null);
+  }, []);
+  const showAll = useCallback(() => setOnly(null), []);
 
   const moveSelection = useCallback(
     (step: 1 | -1) => {
@@ -331,11 +351,12 @@ export function useGitHub({
       if (!work) reload();
       if (work && !inView(work, view, mine)) setView(inView(work, 'pulls') ? 'pulls' : 'issues');
       if (!work || !inFilters(work, filters, undefined, people)) setFilters(NO_FILTERS);
+      if (only && !only.itemIds.has(target)) setOnly(null);
       if (!work || !isOpen(work)) setClosedShown(true);
       setSelectedId(target);
       setDetailOpen(true);
     },
-    [requests, all, view, filters, reload, setView, people, mine],
+    [requests, all, view, filters, only, reload, setView, people, mine],
   );
 
   const apply = useCallback(
@@ -393,7 +414,7 @@ export function useGitHub({
     forProjectFilter,
     groups,
     openCount: listed.filter(isOpen).length,
-    closedShown,
+    closedShown: closedListed,
     showClosed,
     selected,
     select: setSelectedId,
@@ -413,6 +434,9 @@ export function useGitHub({
     undo,
     reload,
     refresh,
+    only,
+    showOnly,
+    showAll,
   };
 }
 
