@@ -111,6 +111,54 @@ describe('renaming a Todo', () => {
   });
 });
 
+describe('a Todo Ares added from a Block', () => {
+  // As the gate carries out a "Suggest Todos" proposal: a Todo of origin Ares, made from the Block.
+  function aresTodo() {
+    const user = { by: { kind: 'user' as const } };
+    const note = store.ensureDailyNote('2026-10-03', user).id;
+    const text = 'need to send Dana the Q3 numbers';
+    const block = store.record(
+      {
+        type: 'create',
+        item: {
+          kind: 'block',
+          title: text,
+          detail: { kind: 'block', dailyNoteId: note, parentId: null, position: 'a0', text, folded: false },
+        },
+      },
+      user,
+    ).itemId;
+    const [todo] = store.recordAll(
+      [
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title: 'Send Dana the Q3 numbers',
+            detail: { kind: 'todo', origin: 'ares', dueOn: null, backedBy: null },
+          },
+        },
+      ],
+      { by: { kind: 'ares' } },
+    );
+    store.link({ from: todo?.itemId as string, linkType: 'made-from', to: block }, { by: { kind: 'ares' } });
+    return { todo: todo?.itemId as string, block, text };
+  }
+
+  it('knows the Block and day it was made from', async () => {
+    const { todo, block } = aresTodo();
+    const made = await todos.madeFrom(await todos.list());
+    expect(made.get(todo)).toEqual({ blockId: block, day: '2026-10-03' });
+  });
+
+  it('keeps its own title when renamed: the Block’s text is the User’s, not the Todo’s', async () => {
+    const { todo, block, text } = aresTodo();
+    await todos.rename(todo, 'Send Dana the Q3 and Q4 numbers');
+    expect(store.get(todo)?.item.title).toBe('Send Dana the Q3 and Q4 numbers');
+    expect(store.get(block)?.item.title).toBe(text);
+  });
+});
+
 describe('deleting a Todo', () => {
   it('takes it off the list, and undo brings it back with its history intact', async () => {
     const { itemId } = await todos.add('Renew passport');

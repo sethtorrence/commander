@@ -20,6 +20,8 @@ export type FakeReply = {
   sse?: unknown[];
   // Never answer (for timeouts).
   hang?: boolean;
+  // Answer only after this long (to watch a call in progress).
+  delayMs?: number;
 };
 
 export type FakeUsage = { prompt: number; completion: number; cached?: number };
@@ -80,11 +82,18 @@ export type FakeOpenAIServer = {
   requests: FakeRequest[];
   // Queues replies, answered in order; once the queue is empty, every request gets a plain reply.
   reply(...replies: FakeReply[]): void;
+  // Answers every request the queue doesn't, from what it asks (a reply naming what the prompt held).
+  respondWith(responder: (request: FakeRequest) => FakeReply): void;
   close(): Promise<void>;
 };
 
 function send(res: ServerResponse, reply: FakeReply) {
   if (reply.hang) return;
+  if (reply.delayMs) {
+    const { delayMs: _delay, ...now } = reply;
+    setTimeout(() => send(res, now), reply.delayMs);
+    return;
+  }
   if (reply.sse) {
     res.writeHead(reply.status ?? 200, { 'content-type': 'text/event-stream', ...reply.headers });
     for (const chunk of reply.sse) res.write(`data: ${JSON.stringify(chunk)}\n\n`);
@@ -99,6 +108,7 @@ export async function startFakeOpenAIServer(): Promise<FakeOpenAIServer> {
   const queue: FakeReply[] = [];
   const requests: FakeRequest[] = [];
   const open = new Set<ServerResponse>();
+  let responder: ((request: FakeRequest) => FakeReply) | null = null;
 
   const server = createServer((req, res) => {
     let text = '';
@@ -113,10 +123,14 @@ export async function startFakeOpenAIServer(): Promise<FakeOpenAIServer> {
       } catch {
         body = { unparsable: text };
       }
-      requests.push({ method: req.method ?? '', path: req.url ?? '', headers: req.headers, body });
+      const request = { method: req.method ?? '', path: req.url ?? '', headers: req.headers, body };
+      requests.push(request);
       open.add(res);
       res.on('close', () => open.delete(res));
-      send(res, queue.shift() ?? { json: chatCompletion('Hello from the fake server.') });
+      send(
+        res,
+        queue.shift() ?? responder?.(request) ?? { json: chatCompletion('Hello from the fake server.') },
+      );
     });
   });
 
@@ -127,6 +141,9 @@ export async function startFakeOpenAIServer(): Promise<FakeOpenAIServer> {
     baseUrl: `http://127.0.0.1:${port}/v4`,
     requests,
     reply: (...replies) => queue.push(...replies),
+    respondWith: (next) => {
+      responder = next;
+    },
     close: () =>
       new Promise((resolve) => {
         for (const res of open) res.destroy();

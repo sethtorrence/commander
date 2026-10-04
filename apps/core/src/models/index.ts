@@ -95,7 +95,7 @@ export function setUpModels(
   }
 
   return {
-    // For the Agent's jobs (the job runner arrives in a later ticket).
+    // For the Agent's jobs (the job runner, ../agent).
     client,
     // A message from the main process. Returns true when it was for the models side.
     handle(raw: unknown): boolean {

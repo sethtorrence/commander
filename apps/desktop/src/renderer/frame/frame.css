@@ -299,6 +299,40 @@
     padding-left: 10px;
     border-left: 1px solid var(--line);
   }
+  /* Working or idle: a lamp that breathes while one of Ares's jobs runs. */
+  .f-ares-l1 .state {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-left: 10px;
+    border-left: 1px solid var(--line);
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .f-ares-l1 .state::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    box-shadow: inset 0 0 0 1px var(--muted);
+  }
+  .f-ares-l1 .state.busy {
+    color: var(--signal-ink);
+  }
+  .f-ares-l1 .state.busy::before {
+    background: var(--signal);
+    box-shadow: none;
+    animation: f-ares-breathe 1.2s ease-in-out infinite;
+  }
+  @keyframes f-ares-breathe {
+    50% {
+      opacity: 0.25;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .f-ares-l1 .state.busy::before {
+      animation: none;
+    }
+  }
   .f-ares-l2 {
     font: 500 14px / 1.2 var(--sans);
     color: var(--text);

@@ -26,6 +26,7 @@ let clock: number;
 let store: ItemStore;
 let gate: Gate;
 let changes: number;
+let changedItems: string[][];
 let block: string;
 let email: string;
 let issue: string;
@@ -38,7 +39,13 @@ function openAll() {
     migrationsFolder: join(import.meta.dirname, '../../drizzle'),
     now: () => clock,
   });
-  gate = openGate({ itemStore: store, onChange: () => changes++ });
+  gate = openGate({
+    itemStore: store,
+    onChange: (itemIds) => {
+      changes++;
+      changedItems.push(itemIds);
+    },
+  });
   for (const action of ACTIONS) gate.registerAction(action);
 }
 
@@ -50,6 +57,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'commander-gate-'));
   clock = Date.UTC(2026, 9, 1, 12);
   changes = 0;
+  changedItems = [];
   openAll();
   block = created(
     store.record(
@@ -316,6 +324,20 @@ describe('propose', () => {
     gate.propose(archiveEmail());
     gate.propose(suggestTodo());
     expect(changes).toBe(2);
+  });
+
+  it('says which Items its changes touched, so views showing them catch up', () => {
+    gate.propose(suggestTodo({ confidence: 0.5 }));
+    expect(changedItems.at(-1)).toEqual([]);
+    const done = gate.propose(suggestTodo());
+    const [todo] = todos();
+    expect(new Set(changedItems.at(-1))).toEqual(new Set([todo?.id, block]));
+    if (done.decision !== 'auto') throw new Error('expected Auto');
+    gate.undo(done.done.id);
+    expect(new Set(changedItems.at(-1))).toEqual(new Set([todo?.id, block]));
+    const [waiting] = gate.activity({ statuses: ['pending'] });
+    gate.accept(waiting?.id as number);
+    expect(changedItems.at(-1)).toHaveLength(2);
   });
 });
 

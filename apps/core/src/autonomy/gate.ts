@@ -66,7 +66,15 @@ const user: ActionContext['by'] = { kind: 'user' };
 // Suggestions of these kinds are only ever accepted one at a time.
 const ONE_AT_A_TIME = new Set(['act-for-you', 'delete']);
 
-export function openGate({ itemStore, onChange }: { itemStore: ItemStore; onChange?: () => void }): Gate {
+// `onChange` hears of every change to Ares's activity, with the Items it changed (none for a
+// suggestion kept or dismissed), so open views can catch up.
+export function openGate({
+  itemStore,
+  onChange,
+}: {
+  itemStore: ItemStore;
+  onChange?: (itemIds: string[]) => void;
+}): Gate {
   const registered = new Map<string, RegisteredAction>();
 
   const settings = () => itemStore.autonomy.settings();
@@ -181,8 +189,19 @@ export function openGate({ itemStore, onChange }: { itemStore: ItemStore; onChan
     return itemStore.autonomy.proposals({ entryId }).some((record) => record.chained);
   }
 
-  function changed<T>(result: T): T {
-    onChange?.();
+  // The Items these activity entries changed (both ends of a Link).
+  function itemsOf(entryIds: readonly number[]): string[] {
+    const ids = new Set<string>();
+    for (const entryId of entryIds) {
+      const entry = itemStore.entry(entryId);
+      if (entry) ids.add(entry.itemId);
+      if (entry?.otherItemId) ids.add(entry.otherItemId);
+    }
+    return [...ids];
+  }
+
+  function changed<T>(result: T, entryIds: readonly number[] = []): T {
+    onChange?.(itemsOf(entryIds));
     return result;
   }
 
@@ -276,11 +295,12 @@ export function openGate({ itemStore, onChange }: { itemStore: ItemStore; onChan
         const entryIds = carryOut(saved, ares);
         return { decision, done: itemStore.autonomy.settleProposal(saved.id, { status: 'done', entryIds }) };
       });
-      return changed(outcome);
+      return changed(outcome, outcome.decision === 'auto' ? outcome.done.entryIds : []);
     },
 
     accept(proposalId) {
-      return changed(itemStore.transaction(() => acceptOne(proposalId)));
+      const accepted = itemStore.transaction(() => acceptOne(proposalId));
+      return changed(accepted, accepted.entryIds);
     },
 
     dismiss(proposalId) {
@@ -297,7 +317,11 @@ export function openGate({ itemStore, onChange }: { itemStore: ItemStore; onChan
           `${ACTION_KIND_NAMES[refused.actionKind]} suggestions are accepted one at a time`,
         );
       }
-      return changed(itemStore.transaction(() => records.map((record) => acceptOne(record.id))));
+      const accepted = itemStore.transaction(() => records.map((record) => acceptOne(record.id)));
+      return changed(
+        accepted,
+        accepted.flatMap((record) => record.entryIds),
+      );
     },
 
     undo(proposalId) {
@@ -312,7 +336,7 @@ export function openGate({ itemStore, onChange }: { itemStore: ItemStore; onChan
           itemStore.record({ type: 'undo', entryId }, { by: user, why: `Undid: ${record.reason}` });
         }
       });
-      return changed(toActivity(record, new Set(record.entryIds)));
+      return changed(toActivity(record, new Set(record.entryIds)), record.entryIds);
     },
 
     activity(query = {}) {

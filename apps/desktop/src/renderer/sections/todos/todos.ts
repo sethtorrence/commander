@@ -69,13 +69,20 @@ export interface Todos {
 
 export type LinearState = LinearIssueDetail['state'];
 
-/** Where a Todo of origin Daily Note was made: its Block, and the day of that Block's Daily Note. */
+/**
+ * Where a Todo made from a Block was made (origin Daily Note, or Ares suggesting it from one): its
+ * Block, and the day of that Block's Daily Note.
+ */
 export interface MadeFrom {
   blockId: string;
   day: string;
 }
 
-const fromDailyNote = (todo: Item) => todo.detail?.kind === 'todo' && todo.detail.origin === 'daily-note';
+const originIs = (todo: Item, origins: readonly string[]) =>
+  todo.detail?.kind === 'todo' && origins.includes(todo.detail.origin);
+// A Todo the User made from a Block (`[]`) is that Block's text; one Ares suggested from a Block has
+// a title of its own.
+const fromBlock = (todo: Item) => originIs(todo, ['daily-note', 'ares']);
 const backedBy = (todo: Item) => (todo.detail?.kind === 'todo' ? todo.detail.backedBy : null);
 
 /** The issue behind a Linear Todo, if the Item is one (the Todos Section reads them with `backing`). */
@@ -134,10 +141,12 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
       const trimmed = title.trim();
       if (!trimmed) throw new Error(EMPTY);
       const retitle: ItemAction = { type: 'update', itemId: todoId, changes: { title: trimmed } };
-      // A Todo made from a Block is that Block's text: the Block changes with it.
+      // A Todo the User made from a Block is that Block's text: the Block changes with it.
       const [made] = await itemStore({ op: 'block-todos', query: { todoIds: [todoId] } });
       const detail = made?.block.detail;
-      if (!made || detail?.kind !== 'block') return itemStore({ op: 'record', action: retitle });
+      if (!made || detail?.kind !== 'block' || !originIs(made.todo, ['daily-note'])) {
+        return itemStore({ op: 'record', action: retitle });
+      }
       const entries = await itemStore({
         op: 'record-all',
         actions: [
@@ -182,7 +191,7 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
     },
 
     async madeFrom(todos) {
-      const todoIds = todos.filter(fromDailyNote).map((todo) => todo.id);
+      const todoIds = todos.filter(fromBlock).map((todo) => todo.id);
       const made = await Promise.all(
         pages(todoIds).map((page) => itemStore({ op: 'block-todos', query: { todoIds: page } })),
       );

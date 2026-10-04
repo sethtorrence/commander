@@ -5,6 +5,8 @@ import { dayOfYear, isoWeek } from '../../frame/calendar';
 import type { LabelChip } from '../../links/block-text';
 import { MentionedIn } from '../../links/MentionedIn';
 import { dateOf, dayLabel, longDate, notePartNumber, weekday } from './days';
+import { MarginCards } from './MarginCards';
+import type { MarginSuggestion } from './margin-suggestions';
 import type { DayState } from './notebook';
 import { OutlineView, type ProjectView } from './OutlineView';
 import type { Outline } from './outline';
@@ -17,16 +19,29 @@ function daysInYear(year: number) {
 }
 
 // Column A: the sheet's title block, with its part number, the big date and a table of what it holds.
-function Spec({ day, today, outline }: { day: string; today: boolean; outline: Outline }) {
+function Spec({
+  day,
+  today,
+  outline,
+  suggested,
+}: {
+  day: string;
+  today: boolean;
+  outline: Outline;
+  /** How many of Ares's suggestions wait in the margin. */
+  suggested: number;
+}) {
   const date = dateOf(day);
   const todos = [...outline.values()].filter((block) => block.todo);
   const done = todos.filter((block) => block.todo?.done).length;
+  // Todos Ares added for its Blocks, and his suggestions still waiting.
+  const fromAres = todos.filter((block) => block.todo?.ares).length + suggested;
   const rows: [string, string, string?][] = [
     ['Meetings', '00'],
     today ? ['Open Todos', pad(todos.length - done)] : ['Todos done', `${done}/${todos.length}`],
     ['Blocks', pad(outline.size, 3)],
   ];
-  if (today) rows.push(['From Ares', '00', 'ares']);
+  if (today) rows.push(['From Ares', pad(fromAres), 'ares']);
   return (
     <aside className="n-spec" aria-label="Daily Note details">
       <div className="n-sp-pn">
@@ -130,6 +145,15 @@ export interface DaySheetProps {
   /** How chips are labelled. */
   label?: LabelChip;
   onOpenMention?(mention: Mention): void;
+  /** Ares's suggestions for its Blocks, as cards in the margin. */
+  margin?: DayMargin;
+}
+
+export interface DayMargin {
+  /** In the order of their Blocks. */
+  suggestions: readonly MarginSuggestion[];
+  onAdd(id: number): void;
+  onDismiss(id: number): void;
 }
 
 export interface DayProjects {
@@ -174,7 +198,16 @@ function CollapsedDay({ state, today, projects }: { state: DayState; today: stri
 }
 
 /** One Daily Note on the drawing: spec (A), the sheet (B–E) and its margin (F–H). */
-export function DaySheet({ state, today, sheet, projects, mentions, label, onOpenMention }: DaySheetProps) {
+export function DaySheet({
+  state,
+  today,
+  sheet,
+  projects,
+  mentions,
+  label,
+  onOpenMention,
+  margin,
+}: DaySheetProps) {
   const { day, outline } = state;
   const isToday = day === today;
   if (projects?.collapsed) return <CollapsedDay state={state} today={today} projects={projects} />;
@@ -186,7 +219,7 @@ export function DaySheet({ state, today, sheet, projects, mentions, label, onOpe
       data-testid="daily-note"
       aria-label={`${weekday(day)} ${longDate(day)}`}
     >
-      <Spec day={day} today={isToday} outline={outline} />
+      <Spec day={day} today={isToday} outline={outline} suggested={margin?.suggestions.length ?? 0} />
       <Sheet className="n-sheet">
         <SheetStrip
           eyebrow={dayLabel(day, today)}
@@ -219,7 +252,17 @@ export function DaySheet({ state, today, sheet, projects, mentions, label, onOpe
           )}
         </div>
       </Sheet>
-      <div className="n-gutter">{isToday && <Legend />}</div>
+      <div className="n-gutter">
+        {isToday && <Legend />}
+        {margin && (
+          <MarginCards
+            day={day}
+            suggestions={margin.suggestions}
+            onAdd={margin.onAdd}
+            onDismiss={margin.onDismiss}
+          />
+        )}
+      </div>
     </section>
   );
 }

@@ -1,4 +1,5 @@
 export * from './account-messages';
+export * from './agent';
 export * from './attachments';
 export * from './autonomy';
 export * from './autonomy-messages';

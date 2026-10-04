@@ -1,4 +1,4 @@
-import type { UsageSummary, UsageTotals } from '@commander/domain';
+import { jobDisplayName, type UsageSummary, type UsageTotals } from '@commander/domain';
 import { Button, Led } from '@commander/ui';
 import { useEffect, useState } from 'react';
 import { Readout, ReadoutRow, SettingRow, SettingsGroup } from '../parts';
@@ -132,7 +132,7 @@ export function UsagePanel({ no, version }: { no: string; version: number }) {
             <Breakdown
               title="By job"
               testId="usage-by-job"
-              rows={usage.byJob.map((row) => ({ ...row, name: row.job }))}
+              rows={usage.byJob.map((row) => ({ ...row, name: jobDisplayName(row.job) }))}
             />
             <Breakdown
               title="By provider"

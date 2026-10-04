@@ -10,6 +10,7 @@ import {
   type CoreMessage,
 } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
 import { type MarkdownCopy, READ_ONLY_NOTICE, setUpMarkdownCopy } from '.';
 
@@ -196,6 +197,38 @@ describe('the Markdown copy', () => {
     copy.itemsChanged([todoId]);
     await copy.flush();
     expect(read('2026-10-01.md')).toContain('- [x] Send the deck');
+  });
+
+  it('rewrites a day when Ares adds a Todo for one of its Blocks, from what the gate says it changed', async () => {
+    const blockId = addBlock('2026-10-01', 'need to send Dana the Q3 numbers');
+    chooseFolder(folder);
+    await copy.flush();
+    expect(read('2026-10-01.md')).toContain('- need to send Dana the Q3 numbers');
+
+    // As the Core wires it: the gate's changes go to the copy as well as to the window.
+    const gate = openGate({ itemStore: store, onChange: (itemIds) => copy.itemsChanged(itemIds) });
+    gate.registerAction({ action: 'suggest-todos', actionKind: 'organise', name: 'Suggest Todos' });
+    gate.propose({
+      actionKind: 'organise',
+      action: 'suggest-todos',
+      section: 'notes',
+      itemId: blockId,
+      itemActions: [
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title: 'Send Dana the Q3 numbers',
+            detail: { kind: 'todo', origin: 'ares', dueOn: null, backedBy: null },
+          },
+        },
+        { type: 'link', from: { step: 0 }, linkType: 'made-from', to: blockId },
+      ],
+      confidence: 0.95,
+      reason: 'You wrote it in your Daily Note.',
+    });
+    await copy.flush();
+    expect(read('2026-10-01.md')).toContain('- [ ] need to send Dana the Q3 numbers');
   });
 
   it('rewrites every day when a Project is renamed, with links to merged Projects by the one kept', async () => {

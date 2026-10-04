@@ -100,7 +100,20 @@ Every Ares action goes through one gate in the Core (`apps/core/src/autonomy/gat
 
 **Ares's activity page** (the Ares tab, or click the Ares module in the header) lists everything he did or suggested, newest first, with his reason and what caused it. Accept or dismiss suggestions there (Organise and Tidy your Sources all at once, Act for you and Delete one at a time), and **Undo** anything he did.
 
-Until his jobs arrive, the end-to-end tests stand in for them: with `COMMANDER_TEST_HOOKS=1` the main process exposes a hook, reachable only from the main process and never from the window, that registers actions and proposes.
+The end-to-end tests can stand in for his jobs: with `COMMANDER_TEST_HOOKS=1` the main process exposes a hook, reachable only from the main process and never from the window, that registers actions and proposes.
+
+### Ares's jobs
+
+A job runner in the Core (`apps/core/src/agent/`) runs Ares's jobs on their triggers: a pause in your typing, a Source sync, Items arriving, the machine idle (catch-up work), or on request. Each job declares its name, tier, Action kind and action (registered with the gate at every start), its triggers, and how it gathers its input. A run makes one model call under the job's name, so it shows on the Usage page, and hands what comes back to the gate as proposals; Ares never writes to the database himself.
+
+- **Quick jobs** make one call with no tools, and the reply must fit the job's fixed schema (zod). A reply that doesn't, even after one retry, is discarded and logged, never acted on. The material a job works on goes into the prompt as clearly delimited data (`apps/core/src/agent/prompt.ts`, the one place prompt-injection defences harden).
+- **The queue** runs a job triggered twice before it starts once, runs at most two jobs at once and never two runs of the same job. A failed or over-cap call is logged and runs again on the next trigger; after repeated failures automatic triggers wait (1, 2, 4… minutes, at most an hour). A missing key or the cap never adds to that wait.
+- **What each job has looked at** is kept in `commander.db` (each Item with a fingerprint of how it was, and how far through the activity log it got), so nothing is sent or suggested twice, and it carries on where it left off after a restart.
+- **Settings → Ares → Jobs** lists each job with how its last run went, a switch (off, it never runs) and **Run now**. A job whose action the Autonomy settings have Off doesn't run either. The Ares module in the header shows **Working** while a job runs and **Idle** otherwise.
+
+**Suggest Todos** (Quick, thinking `low`) is the first. About 20 seconds after you stop typing in a Daily Note it looks at the Blocks you changed since its last run, and when the machine has been idle for 5 minutes it catches up on today's note. It sends each written Block that isn't a Todo yet (with the Blocks above it as context) and asks for `{"todos":[{"blockId","title","confidence"}]}`, where `blockId` is the short reference the prompt gave the Block (`B1`, `B2`…); any other reference is dropped. Each Todo is a proposal on its Block (Organise / "Suggest Todos"): at Auto when sure, a confident one is added at once (origin Ares, a made-from Link to the Block, the Block's Project filed as inherited), and the Block shows its checkbox; otherwise it waits as a card in the margin beside the Block, with **Add** and **Dismiss**. A dismissed suggestion, or an Ares Todo you undo, isn't offered again for the same Block text. In Todos an Ares Todo shows "Ares · 3 Oct", its made-from Link opens the Block, and renaming it leaves the Block's text alone (and editing the Block leaves its title alone).
+
+The end-to-end tests shorten the pause after typing with `COMMANDER_TEST_ARES_PAUSE_MS` (honoured only with `COMMANDER_TEST_HOOKS=1`).
 
 ## Moving around
 

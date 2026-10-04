@@ -30,6 +30,8 @@ export interface Block {
 export interface BlockTodo {
   id: string;
   done: boolean;
+  /** Ares added it for the Block ("Suggest Todos"): it keeps a title of its own. */
+  ares?: boolean;
 }
 
 export type Outline = ReadonlyMap<string, Block>;

@@ -7,6 +7,7 @@ import type {
   FiledBy,
   ItemKind,
   ItemStatus,
+  JobOutcome,
   LinearCatalog,
   LinearIssueDetail,
   LinkTargetType,
@@ -32,6 +33,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
@@ -395,3 +397,36 @@ export const markdownCopy = sqliteTable('markdown_copy', {
   folder: text('folder'),
   updatedAt: integer('updated_at').notNull(),
 });
+
+// Where each of Ares's jobs stands (agent-jobs.ts), kept across restarts: whether the User switched it
+// off, how far through the activity log it has looked, and its last run, failures and back-off.
+export const agentJobs = sqliteTable('agent_jobs', {
+  job: text('job').primaryKey(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  // The last activity entry the job has looked at, or null before its first run.
+  cursor: integer('cursor'),
+  lastRunAt: integer('last_run_at'),
+  lastOutcome: text('last_outcome').$type<JobOutcome>(),
+  lastProblem: text('last_problem'),
+  // Failed runs in a row, and when automatic triggers may run it again.
+  failures: integer('failures').notNull().default(0),
+  retryAt: integer('retry_at'),
+});
+
+// What each job has already looked at, by Item and a fingerprint of what it saw (a Block's text), so
+// the same thing is never sent to the model, or suggested, twice. Kept after a suggestion is
+// dismissed or undone: that is what stops it being offered again.
+export const agentSeen = sqliteTable(
+  'agent_seen',
+  {
+    job: text('job').notNull(),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id),
+    fingerprint: text('fingerprint').notNull(),
+    // The proposal it led to, if any.
+    proposalId: integer('proposal_id').references(() => proposals.id),
+    at: integer('at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.job, t.itemId, t.fingerprint] })],
+);

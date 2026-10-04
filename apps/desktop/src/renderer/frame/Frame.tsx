@@ -18,6 +18,7 @@ import { CheatSheet } from './CheatSheet';
 import { Header } from './Header';
 import { NotebookTabs } from './NotebookTabs';
 import { RulerCursor } from './RulerCursor';
+import { useAresStatus } from './use-ares-status';
 
 const SETTINGS = 'settings';
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -110,6 +111,7 @@ export function Frame() {
     [],
   );
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
+  const aresWork = useAresStatus();
   // The open Project page (a temporary tab), and where Esc or × on it goes back to.
   const [page, setPage] = useState<string | null>(null);
   const [returnTo, setReturnTo] = useState(open);
@@ -198,7 +200,7 @@ export function Frame() {
         page={open === PROJECT_PAGE_SCOPE ? page : null}
         onBand={() => openSection('dashboard')}
         slotRef={setHeaderSlot}
-        ares={{ onOpen: () => openSection('ares') }}
+        ares={{ working: aresWork, onOpen: () => openSection('ares') }}
       />
       <RulerX className="fixed top-(--hdr) right-0 left-0 z-24" />
       <RulerY className="fixed top-(--top) bottom-0 left-0 z-24" />

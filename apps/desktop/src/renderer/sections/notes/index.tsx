@@ -25,13 +25,20 @@ import { useShortcuts } from '../../shortcuts/react';
 import { type SectionDefinition, useHeaderSlot, useSection } from '../section';
 import { useOutlineLinks } from './BlockLinks';
 import { effectiveFilings, filterView, noteCounts } from './block-projects';
-import { type DayProjects, DaySheet } from './DaySheet';
+import { type DayMargin, type DayProjects, DaySheet } from './DaySheet';
 import { dailyNotesIn } from './daily-notes';
 import { dateOf, dayKey, longDate, notePartNumber, weekday, weekOf } from './days';
+import { useMarginSuggestions } from './margin-suggestions';
 import { createNotebook, type DayState, type Notebook, type NotebookSnapshot } from './notebook';
 import { focusText, OutlineContext, type OutlineControls, type OutlineProjects } from './OutlineView';
-import type { Block, Caret } from './outline';
+import { type Block, type Caret, type Outline, visibleBlocks } from './outline';
 import { WeekStrip } from './WeekStrip';
+
+// Word from the Core that Ares did or suggested something.
+const onAresActivity = (listener: () => void) =>
+  window.commander.onCoreMessage((message) => {
+    if (message.type === 'ares-activity') listener();
+  });
 
 // How far below the window's top a day's sheet sits when the stream scrolls to it.
 const bodyTop = () =>
@@ -332,6 +339,25 @@ function NotesSection() {
       highlightBlock(withParents(notebook.snapshot(), itemId));
     else requestAnimationFrame(() => scrollToDay(day));
   });
+  // Ares's suggestions for Blocks, in the margin; and what he adds (a Todo for a Block) shows at once.
+  const margin = useMarginSuggestions(window.commander.autonomy, onAresActivity, active);
+  useEffect(
+    () =>
+      onAresActivity(() => {
+        if (shown.current) void notebook.refresh();
+      }),
+    [notebook],
+  );
+  const marginOf = useCallback(
+    (outline: Outline): DayMargin | undefined => {
+      const ordered = [...visibleBlocks(outline).map(({ block }) => block.id), ...outline.keys()];
+      const suggestions = [...new Set(ordered)].flatMap((id) => margin.byBlock.get(id) ?? []);
+      return suggestions.length
+        ? { suggestions, onAdd: (id) => void margin.add(id), onDismiss: (id) => void margin.dismiss(id) }
+        : undefined;
+    },
+    [margin],
+  );
   // Typing held back for a pause is saved before Commander quits.
   useEffect(() => window.commander.onSaveBeforeQuit?.(() => notebook.flush()), [notebook]);
 
@@ -467,6 +493,7 @@ function NotesSection() {
               mentions={mentions.get(day.day)}
               label={links.label}
               onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
+              margin={marginOf(day.outline)}
             />
           ))}
           <StreamEnd notebook={notebook} state={state} />

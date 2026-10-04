@@ -146,7 +146,8 @@ export function todoActionsFor(before: Outline, changes: readonly BlockChange[])
       continue;
     }
     const changed: { title?: string; status?: 'open' | 'done' } = {};
-    if (was && was.text !== block.text) changed.title = block.text;
+    // A Todo Ares added for the Block has a title of its own; one made with `[]` is the Block's text.
+    if (was && was.text !== block.text && !has.ares) changed.title = block.text;
     if (had.done !== has.done) changed.status = has.done ? 'done' : 'open';
     if (Object.keys(changed).length) actions.push({ type: 'update', itemId: has.id, changes: changed });
   }

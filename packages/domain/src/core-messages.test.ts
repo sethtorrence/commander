@@ -14,6 +14,12 @@ describe('parseCoreMessage', () => {
     });
   });
 
+  it('accepts word of whether Ares is working or idle', () => {
+    const working = { type: 'ares-status', working: true, running: ['Suggest Todos'] };
+    expect(parseCoreMessage(working)).toEqual({ ok: true, message: working });
+    expect(parseCoreMessage({ type: 'ares-status', working: 'yes', running: [] }).ok).toBe(false);
+  });
+
   it('accepts word of which Items changed', () => {
     const result = parseCoreMessage({ type: 'items-changed', itemIds: ['a', 'b'] });
     expect(result).toEqual({ ok: true, message: { type: 'items-changed', itemIds: ['a', 'b'] } });
