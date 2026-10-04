@@ -81,6 +81,15 @@ let accounts: ReturnType<typeof fakeAccounts>;
 const save = (...items: ReturnType<typeof issue>[]) =>
   store.saveFromSource({ source: 'linear', account: ACME, items });
 
+// The fixtures happen on 3 October 2026; pin today there so times read as "today" on any date.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 3, 15, 0));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 beforeEach(() => {
   const opened = openTestItemStore();
   ({ store, close } = opened);

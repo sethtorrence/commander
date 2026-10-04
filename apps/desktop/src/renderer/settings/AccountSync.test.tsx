@@ -6,7 +6,7 @@ import type {
   TeamsAccountSummary,
 } from '@commander/domain/ipc';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccountSync } from './AccountSync';
 
 // One Account's sync in Settings → Accounts: Teams shows its last check, its next full sync, and the
@@ -57,7 +57,15 @@ const linear: LinearAccountSummary = {
   },
 };
 
-afterEach(cleanup);
+// The fixtures happen on 3 October 2026; pin today there so times read as "today" on any date.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 9, 3, 15, 0));
+});
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 function show(account: TeamsAccountSummary | LinearAccountSummary) {
   const requests: AccountsRequest[] = [];
