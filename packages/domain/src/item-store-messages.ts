@@ -45,6 +45,7 @@ import {
 import { type LinearCatalog, linearCatalog } from './linear';
 import { type LinearSendPrefill, linearIssueDraft, linearSendPrefill } from './linear-send';
 import { type OutgoingChange, outgoingChange, outgoingQuery } from './outgoing';
+import { type PeopleChange, type Person, peopleAction, peopleChange, person } from './people';
 import {
   type Project,
   type ProjectChange,
@@ -162,6 +163,10 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('email-thread'), account: z.string().min(1), threadKey: z.string().min(1) }),
   // Ares's meeting preps (#130) for these events: at most one each.
   z.object({ op: z.literal('meeting-preps'), eventIds: z.array(z.string().min(1)).max(500) }),
+  // Settings → People (#117): everyone Commander knows, and the User's merges, splits, renames and
+  // undos, each kept in the People log. People are not Items: not in the activity log.
+  z.object({ op: z.literal('people') }),
+  z.object({ op: z.literal('change-people'), action: peopleAction }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -218,6 +223,8 @@ export type ItemStoreResults = {
   'email-threads': EmailThreadList;
   'email-thread': EmailThread | null;
   'meeting-preps': Item[];
+  people: Person[];
+  'change-people': PeopleChange;
 };
 
 export const itemStoreResult = {
@@ -263,6 +270,8 @@ export const itemStoreResult = {
   'email-threads': emailThreadList,
   'email-thread': emailThread.nullable(),
   'meeting-preps': z.array(item),
+  people: z.array(person),
+  'change-people': peopleChange,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

@@ -1,5 +1,6 @@
 import {
   type Item,
+  type Person,
   type Project,
   type SearchHit,
   type SearchQuery,
@@ -37,6 +38,8 @@ export type SearchSources = {
   projects: () => Project[];
   // An email's body text, kept beside its Item (null when none is kept).
   bodyText?: (itemId: string) => string | null;
+  // Everyone Commander knows (#117), the User first, then by name.
+  people?: () => Person[];
 };
 
 const sentAtOf = (item: Item) => (item.detail?.kind === 'email' ? item.detail.sentAt : null);
@@ -54,6 +57,7 @@ function emailsNewestFirst(hits: SearchHit[]): SearchHit[] {
 }
 
 const DEFAULT_LIMIT = 50;
+const PEOPLE_LIMIT = 8;
 const WORD = /[\p{L}\p{N}]+/gu;
 
 export function openSearch(sqlite: Database.Database, sources: SearchSources): SearchIndex {
@@ -101,6 +105,26 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
     });
   }
 
+  // People whose name has words starting with each word typed, or one of whose handles (an address,
+  // a login) starts with what was typed.
+  function matchingPeople(text: string): Person[] {
+    const typed = (text.match(WORD) ?? []).map((word) => word.toLowerCase());
+    const whole = text.trim().toLowerCase();
+    if (!typed.length || !sources.people) return [];
+    const found: Person[] = [];
+    for (const person of sources.people()) {
+      const named = (person.name.match(WORD) ?? []).map((word) => word.toLowerCase());
+      const byName = typed.every((word) => named.some((name) => name.startsWith(word)));
+      const byHandle = person.handles.some(({ handle }) => {
+        const bare = handle.slice(handle.indexOf(':') + 1).toLowerCase();
+        return handle.toLowerCase().startsWith(whole) || bare.startsWith(whole);
+      });
+      if (byName || byHandle) found.push(person);
+      if (found.length === PEOPLE_LIMIT) break;
+    }
+    return found;
+  }
+
   return {
     put: (item) => words.put(withBody(item)),
 
@@ -126,7 +150,11 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
         query.accounts !== undefined ||
         query.from !== undefined ||
         query.to !== undefined;
-      return { hits: emailsNewestFirst(hits), projects: narrowed ? [] : matchingProjects(query.text) };
+      return {
+        hits: emailsNewestFirst(hits),
+        projects: narrowed ? [] : matchingProjects(query.text),
+        people: narrowed ? [] : matchingPeople(query.text),
+      };
     },
   };
 }

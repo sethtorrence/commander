@@ -203,6 +203,11 @@ describe('the first sync', () => {
       kind: 'pull-request',
       title: 'Rotate the signing keys',
       people: ['github:priya', 'github:octocat', 'github:sam', 'priya@acme.test', 'priya.patel@acme.test'],
+      // Who the logins are, for Person matching: the author's profile, and the head commit's author.
+      identities: [
+        { handle: 'github:priya', email: 'priya@acme.test', name: 'Priya Patel' },
+        { handle: 'github:priya', email: 'priya.patel@acme.test', name: null },
+      ],
       status: 'open',
       detail: {
         kind: 'pull-request',
@@ -264,6 +269,7 @@ describe('the first sync', () => {
       kind: 'github-issue',
       title: 'Webhooks drop on 502',
       people: ['github:priya', 'github:octocat', 'priya@acme.test'],
+      identities: [{ handle: 'github:priya', email: 'priya@acme.test', name: null }],
       status: 'open',
       detail: {
         kind: 'github-issue',

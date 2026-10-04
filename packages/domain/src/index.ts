@@ -33,6 +33,7 @@ export * from './meetings';
 export * from './model-messages';
 export * from './models';
 export * from './outgoing';
+export * from './people';
 export * from './projects';
 export * from './ranking';
 export * from './rules';

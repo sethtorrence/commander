@@ -93,6 +93,9 @@ const syncAccountBase = {
   me: accountId.nullable().optional(),
   name: z.string().optional(),
   connectedAt: z.number().int().nonnegative().nullable().optional(),
+  // Who the User is in the Account, as People know them (#117): their own handles there (see the
+  // domain's people.ts, ownHandles) and the name the Account has for them.
+  own: z.object({ handles: z.array(z.string().min(1)), name: z.string().nullable() }).optional(),
 };
 export const coreSyncAccounts = z.object({
   type: z.literal('sync-accounts'),

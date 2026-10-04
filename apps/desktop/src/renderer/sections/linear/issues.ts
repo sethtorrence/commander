@@ -1,4 +1,5 @@
 import type { Item, LinearIssueDetail } from '@commander/domain';
+import { NO_PEOPLE, type PeopleLookup } from '../../people/people';
 
 /*
   The Linear Section's list, worked out from the `linear-issue` Items: the two views (Assigned to
@@ -118,7 +119,24 @@ export function isCurrentCycle(cycle: LinearIssueDetail['cycle'], now: number): 
   return !!cycle && cycle.startsAt <= now && now < cycle.endsAt;
 }
 
-function matches(issue: Issue, key: FilterKey, value: string | null, now: number): boolean {
+/**
+ * The assignee filter's value for an issue's assignee: their Person (`person:<id>`), so one choice
+ * covers the Person's Linear users in every workspace, or the Linear user while no Person is known.
+ */
+export function assigneeValue(issue: Issue, people: PeopleLookup = NO_PEOPLE): string | null {
+  const assignee = issue.detail.assignee;
+  if (!assignee) return null;
+  const person = people.personOf(`linear:${assignee.id}`);
+  return person ? `person:${person.id}` : assignee.id;
+}
+
+function matches(
+  issue: Issue,
+  key: FilterKey,
+  value: string | null,
+  now: number,
+  people: PeopleLookup,
+): boolean {
   if (value === null) return true;
   const { detail } = issue;
   switch (key) {
@@ -127,7 +145,8 @@ function matches(issue: Issue, key: FilterKey, value: string | null, now: number
     case 'linearProject':
       return value === 'none' ? !detail.linearProject : detail.linearProject?.id === value;
     case 'assignee':
-      return value === 'none' ? !detail.assignee : detail.assignee?.id === value;
+      if (value === 'none') return !detail.assignee;
+      return assigneeValue(issue, people) === value || detail.assignee?.id === value;
     case 'state':
       return detail.state.name === value;
     case 'cycle':
@@ -136,8 +155,14 @@ function matches(issue: Issue, key: FilterKey, value: string | null, now: number
   }
 }
 
-export function inFilters(issue: Issue, filters: IssueFilters, now: number, except?: FilterKey): boolean {
-  return FILTER_KEYS.every((key) => key === except || matches(issue, key, filters[key], now));
+export function inFilters(
+  issue: Issue,
+  filters: IssueFilters,
+  now: number,
+  except?: FilterKey,
+  people: PeopleLookup = NO_PEOPLE,
+): boolean {
+  return FILTER_KEYS.every((key) => key === except || matches(issue, key, filters[key], now, people));
 }
 
 export interface FilterOption {
@@ -156,7 +181,12 @@ const stateRank = (type: string) => {
 type Choice = { value: string; label: string; order: (string | number)[] };
 
 // Every choice a filter offers, from the issues there are (whatever the other filters).
-function choicesFor(key: FilterKey, issues: readonly Issue[], accounts: AccountsById): Choice[] {
+function choicesFor(
+  key: FilterKey,
+  issues: readonly Issue[],
+  accounts: AccountsById,
+  people: PeopleLookup,
+): Choice[] {
   const found = new Map<string, Choice>();
   const add = (choice: Choice) => {
     if (!found.has(choice.value)) found.set(choice.value, choice);
@@ -175,9 +205,11 @@ function choicesFor(key: FilterKey, issues: readonly Issue[], accounts: Accounts
         break;
       case 'assignee':
         if (detail.assignee) {
-          const mine = isMine(issue, accounts);
-          const { id, name } = detail.assignee;
-          add({ value: id, label: mine ? 'You' : name, order: [mine ? 1 : 2, name] });
+          const person = people.personOf(`linear:${detail.assignee.id}`);
+          const mine = isMine(issue, accounts) || !!person?.isUser;
+          const name = person?.name ?? detail.assignee.name;
+          const value = assigneeValue(issue, people) ?? detail.assignee.id;
+          add({ value, label: mine ? 'You' : name, order: [mine ? 1 : 2, name] });
         }
         break;
       case 'state':
@@ -224,16 +256,17 @@ export function filterOptions(
   filters: IssueFilters,
   now: number,
   accounts: AccountsById,
+  people: PeopleLookup = NO_PEOPLE,
 ): FilterOptions {
   const options = {} as FilterOptions;
   for (const key of FILTER_KEYS) {
     const counted = issues.filter(
-      (issue) => (key === 'state' || isOpen(issue)) && inFilters(issue, filters, now, key),
+      (issue) => (key === 'state' || isOpen(issue)) && inFilters(issue, filters, now, key, people),
     );
-    options[key] = choicesFor(key, issues, accounts).map(({ value, label }) => ({
+    options[key] = choicesFor(key, issues, accounts, people).map(({ value, label }) => ({
       value,
       label,
-      count: counted.filter((issue) => matches(issue, key, value, now)).length,
+      count: counted.filter((issue) => matches(issue, key, value, now, people)).length,
     }));
   }
   return options;

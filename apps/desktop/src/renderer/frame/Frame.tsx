@@ -10,6 +10,8 @@ import {
 } from 'react';
 import { itemChangesFromCore } from '../item-store/changes';
 import { PaletteHost } from '../palette/PaletteHost';
+import { PeopleProvider } from '../people/context';
+import { peopleIn } from '../people/people';
 import { ProjectsProvider, useProjects } from '../projects/context';
 import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
 import { ProjectPageTab } from '../projects/page/ProjectPageTab';
@@ -58,7 +60,8 @@ function SectionView({
 }
 
 /**
- * What the whole window shares: the Projects with the one Project filter, the Dashboard's ranked
+ * What the whole window shares: the Projects with the one Project filter, People (who each handle
+ * in an Item is, for every row and pane that shows people), the Dashboard's ranked
  * list (read by the Dashboard, the header's band meter and the Project pages), and Ares's Updates
  * (the quiet count, and the Update the User asks for).
  */
@@ -77,19 +80,22 @@ function FrameProviders({
   onOpenUpdateLine: (target: OpenTarget) => void;
   children: ReactNode;
 }) {
+  const people = useMemo(() => peopleIn(window.commander.itemStore), []);
   return (
-    <ProjectsProvider client={projects} onOpenPage={onOpenPage}>
-      <DashboardProvider client={dashboard} open={open}>
-        <UpdatesProvider
-          client={window.commander.updates}
-          onCoreMessage={window.commander.onCoreMessage}
-          onAskForUpdate={window.commander.onAskForUpdate}
-          onOpen={onOpenUpdateLine}
-        >
-          {children}
-        </UpdatesProvider>
-      </DashboardProvider>
-    </ProjectsProvider>
+    <PeopleProvider client={people} changes={itemChangesFromCore}>
+      <ProjectsProvider client={projects} onOpenPage={onOpenPage}>
+        <DashboardProvider client={dashboard} open={open}>
+          <UpdatesProvider
+            client={window.commander.updates}
+            onCoreMessage={window.commander.onCoreMessage}
+            onAskForUpdate={window.commander.onAskForUpdate}
+            onOpen={onOpenUpdateLine}
+          >
+            {children}
+          </UpdatesProvider>
+        </DashboardProvider>
+      </ProjectsProvider>
+    </PeopleProvider>
   );
 }
 

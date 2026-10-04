@@ -27,6 +27,7 @@ import type {
   ModelProvider,
   ModelTier,
   OutgoingStatus,
+  PeopleChangeAction,
   ProjectChangeAction,
   ProposalRecord,
   ProposalStatus,
@@ -775,3 +776,67 @@ export const chatWaiting = sqliteTable('chat_waiting', {
   clearedBy: text('cleared_by').$type<'reply' | 'ares' | 'user'>(),
   clearEntryId: integer('clear_entry_id').references(() => activity.id),
 });
+
+// People (#117): someone the User works with, recognised as the same human across Sources. Not
+// Items, so their changes go to the People log, not the activity log. A Person merged into another
+// keeps its row (`merged_into`, as Projects do), so undoing the merge can bring it back; it is gone
+// from every list meanwhile. `name` is the name they go by, kept up to date as their handles change:
+// the User's own name for them (`user_name`) when they gave one, else the richest Source's.
+export const people = sqliteTable(
+  'people',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    userName: text('user_name'),
+    mergedInto: text('merged_into'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [index('people_merged_into').on(t.mergedInto)],
+);
+
+// Each handle Commander has seen (`linear:<id>`, `github:<login>`, `teams:<id>` or an email address,
+// normalised: see the domain's people.ts), and the Person it belongs to. `name` is its Source's name
+// for it. `pinned`: the User placed it (a merge or split), so matching never moves it. `own`: one of
+// the User's own handles, from their Accounts, which makes its Person the User.
+export const personHandles = sqliteTable(
+  'person_handles',
+  {
+    handle: text('handle').primaryKey(),
+    personId: text('person_id')
+      .notNull()
+      .references(() => people.id),
+    name: text('name'),
+    pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
+    own: integer('own', { mode: 'boolean' }).notNull().default(false),
+    seenAt: integer('seen_at').notNull(),
+  },
+  (t) => [index('person_handles_person').on(t.personId)],
+);
+
+// The People log: every change to People (the User's merges, splits and renames, their undos, and
+// matching joining two People by an address they share), with the People and handles it touched
+// before and after, which powers undo.
+export const peopleChanges = sqliteTable(
+  'people_changes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    at: integer('at').notNull(),
+    action: text('action').$type<PeopleChangeAction>().notNull(),
+    // The Person changed (the one kept, for a merge; the one split from, for a split).
+    personId: text('person_id').notNull(),
+    // The other Person: the one merged away, or the one a split made.
+    otherId: text('other_id'),
+    why: text('why'),
+    before: text('before', { mode: 'json' }).$type<PeopleSnapshot>().notNull(),
+    after: text('after', { mode: 'json' }).$type<PeopleSnapshot>().notNull(),
+    undoes: integer('undoes').references((): AnySQLiteColumn => peopleChanges.id),
+  },
+  (t) => [uniqueIndex('people_changes_undoes').on(t.undoes)],
+);
+
+export type PersonRowState = typeof people.$inferSelect;
+export type HandleRowState = { handle: string; personId: string; pinned: boolean };
+// What the People log keeps of the People a change touched: their rows, and their handles' places.
+// A Person a change made (a split's new Person) is kept before it as merged into the one it came from.
+export type PeopleSnapshot = { people: PersonRowState[]; handles: HandleRowState[] };

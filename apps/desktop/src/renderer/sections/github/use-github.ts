@@ -3,6 +3,7 @@ import type { GitHubAccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ItemChanges } from '../../item-store/changes';
+import { usePeople } from '../../people/context';
 import type { GitHubAccountsClient, GitHubWork, WorkLink } from './github-work';
 import {
   type FilterKey,
@@ -120,6 +121,8 @@ export function useGitHub({
   const [refreshWanted, setRefreshWanted] = useState(false);
   const [view, setViewState] = useState<WorkView>(() => loadView(storage));
   const [filters, setFilters] = useState<WorkFilters>(NO_FILTERS);
+  // People, so the author filter offers a Person once for all their GitHub logins.
+  const people = usePeople();
   const [closedShown, setClosedShown] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -174,20 +177,25 @@ export function useGitHub({
   const all = useMemo(() => toWork(items ?? []), [items]);
   const viewed = useMemo(() => all.filter((work) => inView(work, view)), [all, view]);
   const narrowed = useMemo(() => viewed.filter(include), [viewed, include]);
-  const listed = useMemo(() => narrowed.filter((work) => inFilters(work, filters)), [narrowed, filters]);
+  const listed = useMemo(
+    () => narrowed.filter((work) => inFilters(work, filters, undefined, people)),
+    [narrowed, filters, people],
+  );
   const groups = useMemo(() => groupWork(listed), [listed]);
-  const options = useMemo(() => filterOptions(narrowed, filters), [narrowed, filters]);
+  const options = useMemo(() => filterOptions(narrowed, filters, people), [narrowed, filters, people]);
   const forProjectFilter = useMemo(
-    () => viewed.filter((work) => isOpen(work) && inFilters(work, filters)),
-    [viewed, filters],
+    () => viewed.filter((work) => isOpen(work) && inFilters(work, filters, undefined, people)),
+    [viewed, filters, people],
   );
   const viewCounts = useMemo(() => {
-    const counted = all.filter((work) => isOpen(work) && include(work) && inFilters(work, filters));
+    const counted = all.filter(
+      (work) => isOpen(work) && include(work) && inFilters(work, filters, undefined, people),
+    );
     return {
       pulls: counted.filter((work) => inView(work, 'pulls')).length,
       issues: counted.filter((work) => inView(work, 'issues')).length,
     };
-  }, [all, include, filters]);
+  }, [all, include, filters, people]);
 
   // The pull requests a waiting review request points at.
   const reviewAsked = useMemo(
@@ -301,12 +309,12 @@ export function useGitHub({
       // Not read yet (it synced since): read again, and let nothing hide it meanwhile.
       if (!work) reload();
       if (work && !inView(work, view)) setView(inView(work, 'pulls') ? 'pulls' : 'issues');
-      if (!work || !inFilters(work, filters)) setFilters(NO_FILTERS);
+      if (!work || !inFilters(work, filters, undefined, people)) setFilters(NO_FILTERS);
       if (!work || !isOpen(work)) setClosedShown(true);
       setSelectedId(target);
       setDetailOpen(true);
     },
-    [requests, all, view, filters, reload, setView],
+    [requests, all, view, filters, reload, setView, people],
   );
 
   const apply = useCallback(

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { item, itemKind } from './items';
+import { person } from './people';
 import { project } from './projects';
 
 // Global search: what the window asks the Core's search module, and what it answers. Search is
@@ -46,5 +47,8 @@ export const searchResult = z.object({
   // Projects whose name or code matches, in their order (not archived). Only when no filter narrows
   // the search to Items.
   projects: z.array(project),
+  // People whose name or a handle matches (#117), the User first, then by name. Only when no filter
+  // narrows the search to Items.
+  people: z.array(person).optional(),
 });
 export type SearchResult = z.infer<typeof searchResult>;

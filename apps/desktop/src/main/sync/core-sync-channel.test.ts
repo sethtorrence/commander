@@ -42,7 +42,13 @@ describe('the Core sync channel', () => {
       {
         type: 'sync-accounts',
         accounts: [
-          { id: 'linear:org-acme', source: 'linear', needsReconnect: false, me: 'user-me' },
+          {
+            id: 'linear:org-acme',
+            source: 'linear',
+            needsReconnect: false,
+            me: 'user-me',
+            own: { handles: ['linear:user-me'], name: 'Sam' },
+          },
           { id: 'linear:org-globex', source: 'linear', needsReconnect: true, me: null, name: 'Globex' },
         ],
         endpoints,
@@ -99,10 +105,36 @@ describe('the Core sync channel', () => {
             sources: ['outlook', 'outlook-calendar'],
             needsReconnect: true,
             me: 'u-sam',
+            own: { handles: ['teams:u-sam'], name: 'Sam' },
           },
         ],
         endpoints,
       },
+    ]);
+  });
+
+  it('tells the Core the User’s own handles in each Account, so the User is one Person', () => {
+    const { sync, sent } = channel();
+    sync.setAccounts([
+      {
+        id: 'github:42',
+        source: 'github',
+        status: 'connected',
+        user: { id: '42', name: 'Sam Rivera' },
+        login: 'SamR',
+      },
+      {
+        id: 'teams:tenant-1:u-sam',
+        source: 'teams',
+        status: 'connected',
+        user: { id: 'u-sam', name: 'Sam Rivera' },
+        userPrincipalName: 'sam@contoso.test',
+      },
+    ]);
+    const accounts = (sent[0] as { accounts: { own?: unknown }[] }).accounts;
+    expect(accounts.map((account) => account.own)).toEqual([
+      { handles: ['github:samr'], name: 'Sam Rivera' },
+      { handles: ['teams:u-sam', 'sam@contoso.test'], name: 'Sam Rivera' },
     ]);
   });
 

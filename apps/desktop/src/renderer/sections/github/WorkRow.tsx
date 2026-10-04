@@ -1,6 +1,8 @@
 import { cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
+import { usePeople } from '../../people/context';
+import { shownAs } from '../../people/people';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { Tag } from '../linear/IssueRow';
@@ -84,6 +86,11 @@ export function WorkRow({
   const row = useRef<HTMLLIElement>(null);
   const state = stateOf(work);
   const pull = isPullRequest(work) ? work : null;
+  // The author as their Person, with their handles on hover; the login until Commander knows them.
+  const people = usePeople();
+  const author = work.detail.author
+    ? shownAs(people, `github:${work.detail.author}`, work.detail.author)
+    : null;
   const identifier = identifierOf(work);
   const closed = state === 'merged' || state === 'closed';
   useEffect(() => {
@@ -144,8 +151,8 @@ export function WorkRow({
           </span>
         )}
         {pull?.detail.reviewDecision && !compact && <Tag>{REVIEW_DECISIONS[pull.detail.reviewDecision]}</Tag>}
-        <Tag className={compact ? 'w-[72px]' : 'w-[92px]'} title={work.detail.author ?? 'A deleted user'}>
-          {work.detail.author ?? 'ghost'}
+        <Tag className={compact ? 'w-[72px]' : 'w-[92px]'} title={author?.title ?? 'A deleted user'}>
+          {author?.name ?? 'ghost'}
         </Tag>
         <span
           className="w-8 text-right font-mono text-label leading-5 font-medium tabular-nums text-muted"

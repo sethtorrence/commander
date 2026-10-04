@@ -6,6 +6,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openTestItemStore } from '../../item-store/test-item-store';
+import { PeopleProvider } from '../../people/context';
+import { type PeopleClient, peopleIn } from '../../people/people';
 import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
 import { ShortcutProvider, ShortcutScope, useActiveScopes, useShortcutList } from '../../shortcuts/react';
@@ -21,6 +23,7 @@ import { ACME, CURRENT_CYCLE, issue, OPS, PRIYA, SAM, STATES } from './test-issu
 let store: ItemStore;
 let issues: LinearIssues;
 let projects: ProjectsClient;
+let people: PeopleClient;
 let close: () => void;
 const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
 
@@ -95,6 +98,7 @@ beforeEach(() => {
   ({ store, close } = opened);
   issues = linearIssuesIn(opened.client);
   projects = projectsIn(opened.client);
+  people = peopleIn(opened.client);
   accounts = fakeAccounts([acme()]);
   localStorage.clear();
   controls.openSection.mockReset();
@@ -541,5 +545,56 @@ describe('editing an issue (Two-way sync)', () => {
         .getAllByRole('option')
         .map((option) => option.textContent),
     ).toEqual(['Todo', 'In Progress', 'In Review', 'Done']);
+  });
+});
+
+describe('People in the Linear Section', () => {
+  it('shows assignees, creators and commenters as their Person, with their handles on hover', async () => {
+    // GitHub says @priya-p has Priya's address: she is one Person, whom the User renamed.
+    store.saveFromSource({
+      source: 'github',
+      account: 'github:42',
+      items: [
+        {
+          externalId: 'pr-1',
+          kind: 'pull-request',
+          title: 'Rotate keys',
+          people: ['github:priya-p'],
+          identities: [{ handle: 'github:priya-p', email: 'priya@acme.test' }],
+        },
+      ],
+    });
+    const priya = store.people.list().find((person) => person.name === 'Priya Patel');
+    store.people.change({ type: 'rename', personId: priya?.id ?? '', name: 'Priya P.' });
+    render(
+      <ShortcutProvider>
+        <PeopleProvider client={people}>
+          <ProjectsProvider client={projects} storage={localStorage}>
+            <FrameControlsProvider value={controls}>
+              <SectionProvider place={place}>
+                <ShortcutScope scope="linear" group="Linear">
+                  <Active>
+                    <LinearSheet issues={issues} accounts={accounts.client} />
+                  </Active>
+                </ShortcutScope>
+              </SectionProvider>
+            </FrameControlsProvider>
+          </ProjectsProvider>
+        </PeopleProvider>
+      </ShortcutProvider>,
+    );
+    await waitFor(() => expect(listed()).toHaveLength(2));
+    fireEvent.click(tab('All tickets'));
+    await waitFor(() => expect(listed()).toHaveLength(3));
+    const row = screen.getAllByTestId('linear-issue').find((each) => each.textContent?.includes('OPS-7'));
+    const tag = await waitFor(() => within(row as HTMLElement).getByText('Priya P.'));
+    expect(tag.closest('[title]')?.getAttribute('title')).toBe(
+      'Priya P. — Linear: Priya Patel · GitHub: @priya-p · Email: priya@acme.test',
+    );
+
+    fireEvent.click(screen.getByText('Fix the login loop'));
+    const pane = await waitFor(() => detail() as HTMLElement);
+    // The creator (in the byline) and the commenter.
+    expect(within(pane).getAllByText('Priya P.')).toHaveLength(2);
   });
 });

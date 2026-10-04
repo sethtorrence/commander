@@ -9,6 +9,7 @@ import {
   type CoreSystemState,
   coreAccountRefused,
   coreSyncStatus,
+  ownHandles,
   SOURCES_OF_ACCOUNT,
   type Source,
 } from '@commander/domain';
@@ -47,26 +48,32 @@ export function createCoreSyncChannel({
         sources?: CarriedSource[];
         // When the User connected it (Gmail downloads the 30 days before).
         connectedAt?: number | null;
+        // Who signed in, by Source (GitHub's login, Google's address, Microsoft's principal name):
+        // the User's own handles, so the User is one Person across their Accounts.
+        login?: string;
+        email?: string;
+        userPrincipalName?: string;
       }[],
     ) {
       send({
         type: 'sync-accounts',
-        accounts: accounts.flatMap(
-          ({ id, name, source, status, user, sources, connectedAt }): CoreSyncAccounts['accounts'] => {
-            const account = {
-              id,
-              needsReconnect: status === 'needs-reconnect',
-              me: user?.id ?? null,
-              ...(name ? { name } : {}),
-              ...(connectedAt ? { connectedAt } : {}),
-            };
-            const [only, ...others] = SOURCES_OF_ACCOUNT[source];
-            if (!sources && only && others.length === 0) return [{ ...account, source: only }];
-            // Only the Sources switched on sync; with none on, the Account doesn't.
-            const on: Source[] = (sources ?? []).filter((each) => each.enabled).map((each) => each.source);
-            return on.length > 0 ? [{ ...account, sources: on }] : [];
-          },
-        ),
+        accounts: accounts.flatMap((summary): CoreSyncAccounts['accounts'] => {
+          const { id, name, source, status, user, sources, connectedAt } = summary;
+          const handles = ownHandles(summary);
+          const account = {
+            id,
+            needsReconnect: status === 'needs-reconnect',
+            me: user?.id ?? null,
+            ...(name ? { name } : {}),
+            ...(connectedAt ? { connectedAt } : {}),
+            ...(handles.length ? { own: { handles, name: user?.name ?? null } } : {}),
+          };
+          const [only, ...others] = SOURCES_OF_ACCOUNT[source];
+          if (!sources && only && others.length === 0) return [{ ...account, source: only }];
+          // Only the Sources switched on sync; with none on, the Account doesn't.
+          const on: Source[] = (sources ?? []).filter((each) => each.enabled).map((each) => each.source);
+          return on.length > 0 ? [{ ...account, sources: on }] : [];
+        }),
         endpoints,
       });
     },

@@ -201,3 +201,11 @@ _Avoid_: Customer, member, tenant
 **Person**:
 Someone the User works with, recognised as the same human across Sources (their GitHub user, Linear user and email addresses).
 _Avoid_: Contact, teammate, member, user (that's the person running Commander)
+
+**Handle**:
+How a Source names a person on an Item: a Linear user, a GitHub login, a Microsoft (Teams) user or an email address; a Person has many, and each belongs to one Person.
+_Avoid_: Identity, alias, account (that's the User's sign-in), username
+
+**People log**:
+The record of every change to People (merged, split, renamed, and matched into one by an address they share), kept apart from the Activity log because a Person is not an Item; it powers undo for those changes.
+_Avoid_: People history, audit trail

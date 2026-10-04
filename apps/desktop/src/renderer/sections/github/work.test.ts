@@ -1,5 +1,6 @@
-import type { Item, SourceItem } from '@commander/domain';
+import type { Item, Person, SourceItem } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
+import { lookupOf } from '../../people/people';
 import { DOTFILES, GITHUB, issue, NOW, pull, WEB } from './test-work';
 import {
   ageOf,
@@ -182,6 +183,37 @@ describe('the GitHub filters', () => {
       { value: 'closed', label: 'Closed', count: 0 },
     ]);
     expect(options.label).toEqual([{ value: 'bug', label: 'bug', count: 1 }]);
+  });
+
+  it('offers authors as People, so one choice covers every GitHub login of a Person', () => {
+    const both = work(
+      pull({ number: 5, title: 'Docs', author: 'priya' }),
+      pull({ number: 6, title: 'Infra', author: 'priya-work' }),
+      pull({ number: 7, title: 'Theme', author: 'sam' }),
+    );
+    const priya: Person = {
+      id: 'person-priya',
+      name: 'Priya Patel',
+      userName: null,
+      isUser: false,
+      handles: [
+        { handle: 'github:priya', source: 'github', name: null },
+        { handle: 'github:priya-work', source: 'github', name: null },
+        { handle: 'linear:u-priya', source: 'linear', name: 'Priya Patel' },
+      ],
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const people = lookupOf([priya]);
+    expect(filterOptions(both, NO_FILTERS, people).author).toEqual([
+      { value: 'person:person-priya', label: 'Priya Patel', count: 2 },
+      { value: 'sam', label: 'sam', count: 1 },
+    ]);
+    const chosen = { ...NO_FILTERS, author: 'person:person-priya' };
+    expect(titles(both.filter((each) => inFilters(each, chosen, undefined, people)))).toEqual([
+      'Docs',
+      'Infra',
+    ]);
   });
 
   it('offers only the states issues have in the Issues view', () => {

@@ -5,6 +5,7 @@ import {
   type Item,
   type PullRequestDetail,
 } from '@commander/domain';
+import { NO_PEOPLE, type PeopleLookup } from '../../people/people';
 
 /*
   The GitHub Section's list, worked out from the `pull-request` and `github-issue` Items: the two
@@ -163,7 +164,23 @@ export type FilterKey = keyof WorkFilters;
 export const FILTER_KEYS: readonly FilterKey[] = ['org', 'repo', 'author', 'state', 'label'];
 export const NO_FILTERS: WorkFilters = { org: null, repo: null, author: null, state: null, label: null };
 
-function matches(work: Work, key: FilterKey, value: string | null): boolean {
+/**
+ * The author filter's value for a piece of work: its author's Person (`person:<id>`), so one choice
+ * covers every GitHub login of theirs, or the login while no Person is known.
+ */
+export function authorValue(work: Work, people: PeopleLookup = NO_PEOPLE): string | null {
+  const login = work.detail.author;
+  if (!login) return null;
+  const person = people.personOf(`github:${login}`);
+  return person ? `person:${person.id}` : login;
+}
+
+function matches(
+  work: Work,
+  key: FilterKey,
+  value: string | null,
+  people: PeopleLookup = NO_PEOPLE,
+): boolean {
   if (value === null) return true;
   switch (key) {
     case 'org':
@@ -171,7 +188,7 @@ function matches(work: Work, key: FilterKey, value: string | null): boolean {
     case 'repo':
       return repoOf(work) === value;
     case 'author':
-      return work.detail.author === value;
+      return authorValue(work, people) === value || work.detail.author === value;
     case 'state':
       return stateOf(work) === value;
     case 'label':
@@ -179,8 +196,13 @@ function matches(work: Work, key: FilterKey, value: string | null): boolean {
   }
 }
 
-export function inFilters(work: Work, filters: WorkFilters, except?: FilterKey): boolean {
-  return FILTER_KEYS.every((key) => key === except || matches(work, key, filters[key]));
+export function inFilters(
+  work: Work,
+  filters: WorkFilters,
+  except?: FilterKey,
+  people: PeopleLookup = NO_PEOPLE,
+): boolean {
+  return FILTER_KEYS.every((key) => key === except || matches(work, key, filters[key], people));
 }
 
 export interface FilterOption {
@@ -193,8 +215,14 @@ export type FilterOptions = Record<FilterKey, FilterOption[]>;
 const STATE_ORDER: WorkState[] = ['open', 'draft', 'merged', 'closed'];
 
 // Every choice a filter offers, from the work there is (whatever the other filters).
-function choicesFor(key: FilterKey, list: readonly Work[]): { value: string; label: string }[] {
+function choicesFor(
+  key: FilterKey,
+  list: readonly Work[],
+  people: PeopleLookup,
+): { value: string; label: string }[] {
   const found = new Set<string>();
+  // Authors are offered as People: their name, covering every login of theirs.
+  const authors = new Map<string, string>();
   for (const work of list) {
     switch (key) {
       case 'org':
@@ -203,9 +231,12 @@ function choicesFor(key: FilterKey, list: readonly Work[]): { value: string; lab
       case 'repo':
         found.add(repoOf(work));
         break;
-      case 'author':
-        if (work.detail.author) found.add(work.detail.author);
+      case 'author': {
+        const value = authorValue(work, people);
+        const login = work.detail.author;
+        if (value && login) authors.set(value, people.personOf(`github:${login}`)?.name ?? login);
         break;
+      }
       case 'label':
         for (const label of work.detail.labels) found.add(label.name);
         break;
@@ -216,9 +247,11 @@ function choicesFor(key: FilterKey, list: readonly Work[]): { value: string; lab
     const states: WorkState[] = list.some(isPullRequest) ? STATE_ORDER : ['open', 'closed'];
     return states.map((state) => ({ value: state, label: STATE_NAMES[state] }));
   }
-  return [...found]
-    .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-    .map((value) => ({ value, label: value }));
+  const choices =
+    key === 'author'
+      ? [...authors].map(([value, label]) => ({ value, label }))
+      : [...found].map((value) => ({ value, label: value }));
+  return choices.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 }
 
 /**
@@ -226,14 +259,20 @@ function choicesFor(key: FilterKey, list: readonly Work[]): { value: string; lab
  * except that a state counts all of its own (so Merged counts merged pull requests). `list` is the
  * work the view and the Project filter let through.
  */
-export function filterOptions(list: readonly Work[], filters: WorkFilters): FilterOptions {
+export function filterOptions(
+  list: readonly Work[],
+  filters: WorkFilters,
+  people: PeopleLookup = NO_PEOPLE,
+): FilterOptions {
   const options = {} as FilterOptions;
   for (const key of FILTER_KEYS) {
-    const counted = list.filter((work) => (key === 'state' || isOpen(work)) && inFilters(work, filters, key));
-    options[key] = choicesFor(key, list).map(({ value, label }) => ({
+    const counted = list.filter(
+      (work) => (key === 'state' || isOpen(work)) && inFilters(work, filters, key, people),
+    );
+    options[key] = choicesFor(key, list, people).map(({ value, label }) => ({
       value,
       label,
-      count: counted.filter((work) => matches(work, key, value)).length,
+      count: counted.filter((work) => matches(work, key, value, people)).length,
     }));
   }
   return options;

@@ -1,4 +1,5 @@
-import type { Filing, Project, SearchHit, SearchResult } from '@commander/domain';
+import type { Filing, Person, Project, SearchHit, SearchResult } from '@commander/domain';
+import { handleSourceName } from '../people/people';
 import { dateOf } from '../sections/notes/days';
 import { kindTag } from '../sections/todos/links';
 import type { Command } from './commands';
@@ -8,7 +9,8 @@ import type { PaletteQuery } from './query';
   What the palette lists for its input, as groups of rows after the prototype's jump palette
   (a tag, the label, a hint on the right):
 
-  - Jump: Sections and today's Daily Note; then Projects (their pages)
+  - Jump: Sections and today's Daily Note; then Projects (their pages); then People (#117), which
+    open Settings → People at the Person until the People view gives them a page
   - search results grouped by kind, the group holding the best hit first
   - Commands
   - Search in Linear, last, when local results are thin and a Linear Account is connected
@@ -21,6 +23,7 @@ export type PaletteAction =
   | { type: 'section'; sectionId: string }
   | { type: 'today' }
   | { type: 'project'; projectId: string }
+  | { type: 'person'; personId: string }
   | { type: 'item'; hit: SearchHit }
   | { type: 'command'; command: Command }
   | { type: 'browser'; url: string };
@@ -134,6 +137,17 @@ function projectRow(project: Project): PaletteRow {
   };
 }
 
+function personRow(person: Person): PaletteRow {
+  const sources = [...new Set(person.handles.map((each) => handleSourceName(each.source)))];
+  return {
+    key: `person:${person.id}`,
+    tag: person.isUser ? 'You' : 'Person',
+    label: person.name,
+    hint: sources.join(' · '),
+    action: { type: 'person', personId: person.id },
+  };
+}
+
 export function paletteGroups(context: PaletteContext): PaletteGroup[] {
   const { query, result } = context;
   const groups: PaletteGroup[] = [];
@@ -164,6 +178,7 @@ export function paletteGroups(context: PaletteContext): PaletteGroup[] {
       jump.filter((row) => matches(typed, `${row.label} ${row.hint === 'Notes' ? 'daily note notes' : ''}`)),
     );
     add('Projects', (query.search ? (result?.projects ?? []) : context.projects).map(projectRow));
+    if (query.search) add('People', (result?.people ?? []).map(personRow));
   }
 
   if (query.search && result) {

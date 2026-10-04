@@ -10,7 +10,7 @@ const PULL_REQUEST = `fragment CommanderPullRequest on PullRequest {
   id number url title body isDraft state createdAt updatedAt mergedAt closedAt
   additions deletions changedFiles baseRefName headRefName reviewDecision
   ${REPO}
-  author { login ... on User { email } }
+  author { login ... on User { email name } }
   labels(first: 20) { nodes { name color } }
   assignees(first: 10) { nodes { login } }
   reviewRequests(first: 20) { nodes { requestedReviewer { ${REVIEWER} } } }
@@ -25,7 +25,7 @@ const PULL_REQUEST = `fragment CommanderPullRequest on PullRequest {
 const ISSUE = `fragment CommanderIssue on Issue {
   id number url title body state stateReason createdAt updatedAt closedAt
   ${REPO}
-  author { login ... on User { email } }
+  author { login ... on User { email name } }
   assignees(first: 10) { nodes { login } }
   labels(first: 20) { nodes { name color } }
   milestone { title dueOn }

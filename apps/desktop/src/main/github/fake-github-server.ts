@@ -89,6 +89,9 @@ export type FakeGitHubPullRequest = {
   title: string;
   body?: string;
   author: string;
+  // The author's public email and profile name, when GitHub shows them (Person matching uses them).
+  authorEmail?: string;
+  authorName?: string;
   state?: 'OPEN' | 'CLOSED' | 'MERGED';
   draft?: boolean;
   reviewers?: string[];
@@ -613,7 +616,7 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
       headRefName: `branch-${pull.number}`,
       reviewDecision: decision,
       repository: repoRef(repo),
-      author: { login: pull.author, email: '' },
+      author: { login: pull.author, email: pull.authorEmail ?? '', name: pull.authorName ?? null },
       labels: { nodes: (pull.labels ?? []).map((name) => ({ name, color: 'ededed' })) },
       assignees: { nodes: (pull.assignees ?? []).map((login) => ({ login })) },
       reviewRequests: { nodes: asked.map((requestedReviewer) => ({ requestedReviewer })) },

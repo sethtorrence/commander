@@ -41,6 +41,7 @@ import {
   type ItemQuery,
   type ItemRef,
   type ItemView,
+  identitiesOf,
   isGitHubItemDetail,
   itemAction,
   itemQuery,
@@ -105,6 +106,7 @@ import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-c
 import { type MeetingChips, meetingChipsIn } from './meeting-chips';
 import { type ModelStore, openModelStore } from './models';
 import { type OutgoingStore, openOutgoingQueue } from './outgoing';
+import { type PeopleStore, peopleIn } from './people';
 import { projectsIn } from './projects';
 import {
   actorColumns,
@@ -150,6 +152,7 @@ export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
 export type { MeetingChips, MeetingChipsChange } from './meeting-chips';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
+export type { PeopleStore } from './people';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
 export type { UpdateState, UpdateStore } from './updates';
@@ -317,6 +320,9 @@ export type ItemStore = {
   githubWatch: GitHubWatchStore;
   // The GitHub Section's discussions, fetched on demand and kept beside the detail (github-discussions.ts).
   githubDiscussions: GitHubDiscussionStore;
+  // People (people.ts): who the people behind Items' handles are, matched across Sources after every
+  // save from one, and merged, split and renamed by the User (logged in the People log, for undo).
+  people: PeopleStore;
   // Teams Chats the User muted or excluded (chat-settings.ts), in the same database. Excluding one
   // deletes its Item; the sync engine passes an Account's excluded Chats to its sync, to skip.
   chatSettings: ChatSettingsStore;
@@ -413,6 +419,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const outgoing = openOutgoingQueue(db);
   const syncState = openSyncStateStore(db);
   const calendars = calendarsIn(db);
+  const people = peopleIn(db, now, (message) => new ItemStoreError('invalid', message));
   const warnings = injectionWarningsIn(db, {
     now,
     readItem: (itemId) => readItem(itemId),
@@ -570,6 +577,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     projects: () => projects.list(),
     // An email's text is searched too; it is kept beside the Item, not in it.
     bodyText: (itemId) => emails.readBody(itemId)?.text ?? null,
+    people: () => people.list(),
   });
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
@@ -1744,8 +1752,29 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       result.tombstoned.push(existing.id);
     }
     result.todos = [...new Set(linearTodos.takeChanged())];
+    // Who the Source said its people are: matched into People in the same transaction.
+    people.seen(batch.items.flatMap((item) => identitiesOf(item)));
     return result;
   });
+
+  // A database from before People existed: its Items' people are matched once, as it opens.
+  if (people.empty()) {
+    sqlite.transaction(() => {
+      const { items } = schema;
+      for (let after = ''; ; ) {
+        const rows = db
+          .select()
+          .from(items)
+          .where(and(sql`${items.people} <> '[]'`, sql`${items.id} > ${after}`))
+          .orderBy(asc(items.id))
+          .limit(500)
+          .all();
+        if (!rows.length) break;
+        people.seen(withDetails(rows).flatMap((item) => identitiesOf(item)));
+        after = rows.at(-1)?.id ?? '';
+      }
+    })();
+  }
 
   // A GitHub review request names its pull request's Item by id: filled in from the pull request's
   // external id in the same Account (saved before it in the batch, or by an earlier sync).
@@ -2139,6 +2168,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           throw error;
         }
       }),
+    },
+
+    people: {
+      ...people,
+      change: sqlite.transaction((action: Parameters<PeopleStore['change']>[0]) => people.change(action)),
+      seen: sqlite.transaction((identities: Parameters<PeopleStore['seen']>[0]) => people.seen(identities)),
+      recogniseUser: sqlite.transaction((accounts: Parameters<PeopleStore['recogniseUser']>[0]) =>
+        people.recogniseUser(accounts),
+      ),
     },
 
     close() {

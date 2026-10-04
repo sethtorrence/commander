@@ -1,6 +1,8 @@
 import { cn } from '@commander/ui';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
+import { usePeople } from '../../people/context';
+import { shownAs } from '../../people/people';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { PRIORITY_NAMES, PriorityIcon, StateIcon } from './glyphs';
@@ -104,6 +106,17 @@ export function IssueRow({
   const row = useRef<HTMLLIElement>(null);
   const { detail } = issue;
   const closed = issue.status === 'done';
+  // The assignee as their Person, with their handles on hover; Linear's short name until known.
+  const people = usePeople();
+  const assignee = detail.assignee
+    ? shownAs(people, `linear:${detail.assignee.id}`, detail.assignee.displayName)
+    : null;
+  const assigneeTitle = !detail.assignee
+    ? 'Unassigned'
+    : assignee?.person
+      ? assignee.title
+      : detail.assignee.name;
+  const you = mine || !!assignee?.person?.isUser;
   useEffect(() => {
     if (selected) row.current?.scrollIntoView?.({ block: 'nearest' });
   }, [selected]);
@@ -162,11 +175,8 @@ export function IssueRow({
         <span className="grid h-5 w-5 place-items-center" title={PRIORITY_NAMES[detail.priority]}>
           <PriorityIcon priority={detail.priority} />
         </span>
-        <Tag
-          className={cn(compact ? 'w-[72px]' : 'w-[92px]', mine && 'text-ink')}
-          title={detail.assignee ? detail.assignee.name : 'Unassigned'}
-        >
-          {mine ? 'You' : (detail.assignee?.displayName ?? '—')}
+        <Tag className={cn(compact ? 'w-[72px]' : 'w-[92px]', you && 'text-ink')} title={assigneeTitle}>
+          {you ? 'You' : (assignee?.name ?? '—')}
         </Tag>
         {workspace && !compact && <Tag className="border-dashed">{workspace}</Tag>}
       </span>

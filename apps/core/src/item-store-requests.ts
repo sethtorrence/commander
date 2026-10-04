@@ -108,6 +108,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.calendarSettings.save(request.settings) };
       case 'meeting-preps':
         return { ok: true, result: store.meetingPreps(request.eventIds) };
+      case 'people':
+        return { ok: true, result: store.people.list() };
+      case 'change-people':
+        return { ok: true, result: store.people.change(request.action) };
       case 'set-calendar-enabled':
         return {
           ok: true,
