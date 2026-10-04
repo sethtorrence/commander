@@ -28,13 +28,15 @@ export function describeSync(
   now: Date,
 ): { synced: string; next: string; problem: string | null } {
   const [one, many] = nouns[status.source];
+  // A Source with a light sync (Teams) last synced with a check, and syncs fully on its cadence.
+  const light = status.alsoAfterOtherSources !== undefined;
   const synced =
     status.lastSyncedAt === null
       ? 'Not synced yet'
-      : `Synced ${clockTime(status.lastSyncedAt, now)} · ${status.itemCount} ${status.itemCount === 1 ? one : many}`;
+      : `${light ? 'Checked' : 'Synced'} ${clockTime(status.lastSyncedAt, now)} · ${status.itemCount} ${status.itemCount === 1 ? one : many}`;
   const at = status.nextSyncAt === null ? null : clockTime(status.nextSyncAt, now);
   const next = {
-    idle: at ? `Next sync ${at}` : 'Waiting to sync',
+    idle: at ? `${light ? 'Next full sync' : 'Next sync'} ${at}` : 'Waiting to sync',
     syncing: 'Syncing now…',
     'backing-off': at ? `Trying again at ${at}` : 'Waiting to try again',
     offline: 'Paused while offline',

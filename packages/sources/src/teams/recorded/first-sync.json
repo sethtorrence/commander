@@ -1,0 +1,802 @@
+[
+  {
+    "request": {
+      "path": "/me/chats?$expand=lastMessagePreview&$top=50"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())",
+        "value": [
+          {
+            "id": "19:priya_sam@unq.gbl.spaces",
+            "topic": null,
+            "createdDateTime": "2026-05-01T08:00:00.000Z",
+            "lastUpdatedDateTime": "2026-05-01T08:00:00.000Z",
+            "chatType": "oneOnOne",
+            "webUrl": "https://teams.microsoft.com/l/chat/19%3Apriya_sam%40unq.gbl.spaces/0?tenantId=fake-tenant",
+            "tenantId": "fake-tenant",
+            "onlineMeetingInfo": null,
+            "viewpoint": {
+              "isHidden": false,
+              "lastMessageReadDateTime": "2026-10-03T09:30:00.000Z"
+            },
+            "lastMessagePreview": {
+              "@odata.type": "#microsoft.graph.chatMessageInfo",
+              "id": "1791021600000",
+              "createdDateTime": "2026-10-03T10:00:00.000Z",
+              "isDeleted": false,
+              "messageType": "message",
+              "eventDetail": null,
+              "body": {
+                "contentType": "text",
+                "content": "Can you review the rollout plan?"
+              },
+              "from": {
+                "application": null,
+                "device": null,
+                "user": {
+                  "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                  "id": "u-priya",
+                  "displayName": "Priya Patel",
+                  "userIdentityType": "aadUser",
+                  "tenantId": "fake-tenant"
+                }
+              }
+            }
+          },
+          {
+            "id": "19:launch@thread.v2",
+            "topic": "Launch crew",
+            "createdDateTime": "2026-09-01T10:00:00.000Z",
+            "lastUpdatedDateTime": "2026-09-01T10:00:00.000Z",
+            "chatType": "group",
+            "webUrl": "https://teams.microsoft.com/l/chat/19%3Alaunch%40thread.v2/0?tenantId=fake-tenant",
+            "tenantId": "fake-tenant",
+            "onlineMeetingInfo": null,
+            "viewpoint": {
+              "isHidden": false,
+              "lastMessageReadDateTime": "2026-10-02T15:00:00.000Z"
+            },
+            "lastMessagePreview": {
+              "@odata.type": "#microsoft.graph.chatMessageInfo",
+              "id": "1790956800000",
+              "createdDateTime": "2026-10-02T16:00:00.000Z",
+              "isDeleted": false,
+              "messageType": "message",
+              "eventDetail": null,
+              "body": {
+                "contentType": "text",
+                "content": "Launch moved to Thursday."
+              },
+              "from": {
+                "application": null,
+                "device": null,
+                "user": {
+                  "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                  "id": "u-lee",
+                  "displayName": "Lee Chen",
+                  "userIdentityType": "aadUser",
+                  "tenantId": "fake-tenant"
+                }
+              }
+            }
+          }
+        ],
+        "@odata.nextLink": "{graph}/me/chats?$expand=lastMessagePreview&$top=50&$skiptoken=page-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/chats?$expand=lastMessagePreview&$top=50&$skiptoken=page-2"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())",
+        "value": [
+          {
+            "id": "19:meeting_standup@thread.v2",
+            "topic": "Daily standup",
+            "createdDateTime": "2026-08-01T09:00:00.000Z",
+            "lastUpdatedDateTime": "2026-08-01T09:00:00.000Z",
+            "chatType": "meeting",
+            "webUrl": "https://teams.microsoft.com/l/chat/19%3Ameeting_standup%40thread.v2/0?tenantId=fake-tenant",
+            "tenantId": "fake-tenant",
+            "onlineMeetingInfo": {
+              "calendarEventId": null,
+              "joinWebUrl": "https://teams.microsoft.com/l/meetup-join/19%3ameeting_standup%40thread.v2/0?context=%7b%7d",
+              "organizer": {
+                "id": "u-ana",
+                "displayName": null,
+                "userIdentityType": "aadUser"
+              }
+            },
+            "viewpoint": {
+              "isHidden": false,
+              "lastMessageReadDateTime": "2026-09-30T09:20:00.000Z"
+            },
+            "lastMessagePreview": {
+              "@odata.type": "#microsoft.graph.chatMessageInfo",
+              "id": "1790759700000",
+              "createdDateTime": "2026-09-30T09:15:00.000Z",
+              "isDeleted": false,
+              "messageType": "message",
+              "eventDetail": null,
+              "body": {
+                "contentType": "text",
+                "content": "Notes from today are in the wiki."
+              },
+              "from": {
+                "application": null,
+                "device": null,
+                "user": {
+                  "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                  "id": "u-ana",
+                  "displayName": "Ana Gomez",
+                  "userIdentityType": "aadUser",
+                  "tenantId": "fake-tenant"
+                }
+              }
+            }
+          },
+          {
+            "id": "19:old@thread.v2",
+            "topic": null,
+            "createdDateTime": "2026-06-01T10:00:00.000Z",
+            "lastUpdatedDateTime": "2026-06-01T10:00:00.000Z",
+            "chatType": "group",
+            "webUrl": "https://teams.microsoft.com/l/chat/19%3Aold%40thread.v2/0?tenantId=fake-tenant",
+            "tenantId": "fake-tenant",
+            "onlineMeetingInfo": null,
+            "viewpoint": {
+              "isHidden": true,
+              "lastMessageReadDateTime": "2026-07-01T12:00:00.000Z"
+            },
+            "lastMessagePreview": {
+              "@odata.type": "#microsoft.graph.chatMessageInfo",
+              "id": "1782903600000",
+              "createdDateTime": "2026-07-01T11:00:00.000Z",
+              "isDeleted": false,
+              "messageType": "message",
+              "eventDetail": null,
+              "body": {
+                "contentType": "text",
+                "content": "See you all at the offsite"
+              },
+              "from": {
+                "application": null,
+                "device": null,
+                "user": {
+                  "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                  "id": "u-lee",
+                  "displayName": "Lee Chen",
+                  "userIdentityType": "aadUser",
+                  "tenantId": "fake-tenant"
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:priya_sam@unq.gbl.spaces/members"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#members",
+        "value": [
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-sam",
+            "roles": ["owner"],
+            "displayName": "Sam Rivera",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-sam",
+            "email": "sam@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-priya",
+            "roles": ["owner"],
+            "displayName": "Priya Patel",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-priya",
+            "email": "Priya.Patel@contoso.test",
+            "tenantId": "fake-tenant"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:launch@thread.v2/members"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#members",
+        "value": [
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-sam",
+            "roles": ["owner"],
+            "displayName": "Sam Rivera",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-sam",
+            "email": "sam@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-priya",
+            "roles": ["owner"],
+            "displayName": "Priya Patel",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-priya",
+            "email": "Priya.Patel@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-lee",
+            "roles": ["owner"],
+            "displayName": "Lee Chen",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-lee",
+            "email": "lee@contoso.test",
+            "tenantId": "fake-tenant"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:meeting_standup@thread.v2/members"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#members",
+        "value": [
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-sam",
+            "roles": ["owner"],
+            "displayName": "Sam Rivera",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-sam",
+            "email": "sam@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-priya",
+            "roles": ["owner"],
+            "displayName": "Priya Patel",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-priya",
+            "email": "Priya.Patel@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-lee",
+            "roles": ["owner"],
+            "displayName": "Lee Chen",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-lee",
+            "email": "lee@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-ana",
+            "roles": ["owner"],
+            "displayName": "Ana Gomez",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-ana",
+            "email": "ana@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.anonymousGuestConversationMember",
+            "id": "guest-jordan",
+            "roles": ["guest"],
+            "displayName": "Jordan (Guest)",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:old@thread.v2/members"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#members",
+        "value": [
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-sam",
+            "roles": ["owner"],
+            "displayName": "Sam Rivera",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-sam",
+            "email": "sam@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-lee",
+            "roles": ["owner"],
+            "displayName": "Lee Chen",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-lee",
+            "email": "lee@contoso.test",
+            "tenantId": "fake-tenant"
+          },
+          {
+            "@odata.type": "#microsoft.graph.aadUserConversationMember",
+            "id": "MCMjMSMju-ana",
+            "roles": ["owner"],
+            "displayName": "Ana Gomez",
+            "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+            "userId": "u-ana",
+            "email": "ana@contoso.test",
+            "tenantId": "fake-tenant"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:priya_sam@unq.gbl.spaces/messages?$top=50&$orderby=lastModifiedDateTime desc&$filter=lastModifiedDateTime gt 2026-09-03T12:00:00.000Z"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#messages",
+        "value": [
+          {
+            "id": "1791021600000",
+            "replyToId": null,
+            "etag": "1791021600000",
+            "messageType": "message",
+            "createdDateTime": "2026-10-03T10:00:00.000Z",
+            "lastModifiedDateTime": "2026-10-03T10:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                "id": "u-priya",
+                "displayName": "Priya Patel",
+                "userIdentityType": "aadUser",
+                "tenantId": "fake-tenant"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<p><at id=\"0\">Sam Rivera</at> can you review <a href=\"https://contoso.test/rollout\">the rollout plan</a>?</p>"
+            },
+            "attachments": [],
+            "mentions": [
+              {
+                "id": 0,
+                "mentionText": "Sam Rivera",
+                "mentioned": {
+                  "application": null,
+                  "device": null,
+                  "conversation": null,
+                  "tag": null,
+                  "user": {
+                    "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                    "id": "u-sam",
+                    "displayName": "Sam Rivera",
+                    "userIdentityType": "aadUser",
+                    "tenantId": "fake-tenant"
+                  }
+                }
+              }
+            ],
+            "reactions": []
+          },
+          {
+            "id": "1791018000000",
+            "replyToId": null,
+            "etag": "1791018000000",
+            "messageType": "message",
+            "createdDateTime": "2026-10-03T09:00:00.000Z",
+            "lastModifiedDateTime": "2026-10-03T09:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                "id": "u-sam",
+                "displayName": "Sam Rivera",
+                "userIdentityType": "aadUser",
+                "tenantId": "fake-tenant"
+              }
+            },
+            "body": {
+              "contentType": "text",
+              "content": "Morning! Back from leave."
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": []
+          }
+        ],
+        "@odata.nextLink": "{graph}/chats/19:priya_sam@unq.gbl.spaces/messages?$skiptoken=m-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:priya_sam@unq.gbl.spaces/messages?$skiptoken=m-2"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#messages",
+        "value": [
+          {
+            "id": "1789912800000",
+            "replyToId": null,
+            "etag": "1789977600000",
+            "messageType": "message",
+            "createdDateTime": "2026-09-20T14:00:00.000Z",
+            "lastModifiedDateTime": "2026-09-21T08:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                "id": "u-priya",
+                "displayName": "Priya Patel",
+                "userIdentityType": "aadUser",
+                "tenantId": "fake-tenant"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<p>Enjoy the break!</p>"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": [
+              {
+                "reactionType": "like",
+                "createdDateTime": "2026-09-21T08:00:00.000Z",
+                "user": {
+                  "application": null,
+                  "device": null,
+                  "user": {
+                    "id": "u-sam",
+                    "displayName": null,
+                    "userIdentityType": "aadUser"
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:launch@thread.v2/messages?$top=50&$orderby=lastModifiedDateTime desc&$filter=lastModifiedDateTime gt 2026-09-03T12:00:00.000Z"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#messages",
+        "value": [
+          {
+            "id": "1790956800000",
+            "replyToId": null,
+            "etag": "1790956800000",
+            "messageType": "message",
+            "createdDateTime": "2026-10-02T16:00:00.000Z",
+            "lastModifiedDateTime": "2026-10-02T16:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                "id": "u-lee",
+                "displayName": "Lee Chen",
+                "userIdentityType": "aadUser",
+                "tenantId": "fake-tenant"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<attachment id=\"1789902000000\"></attachment><p>Launch moved to <b>Thursday</b>.</p><ul><li>QA on Wednesday</li><li>Go on Thursday</li></ul>"
+            },
+            "attachments": [
+              {
+                "id": "1789902000000",
+                "contentType": "messageReference",
+                "contentUrl": null,
+                "content": "{\"messageId\":\"1789902000000\",\"messagePreview\":\"Draft attached\"}",
+                "name": null,
+                "thumbnailUrl": null,
+                "teamsAppId": null
+              }
+            ],
+            "mentions": [],
+            "reactions": []
+          },
+          {
+            "id": "1789902000000",
+            "replyToId": null,
+            "etag": "1789902000000",
+            "messageType": "message",
+            "createdDateTime": "2026-09-20T11:00:00.000Z",
+            "lastModifiedDateTime": "2026-09-20T11:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                "id": "u-priya",
+                "displayName": "Priya Patel",
+                "userIdentityType": "aadUser",
+                "tenantId": "fake-tenant"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<p>Draft attached <img src=\"https://graph.microsoft.com/v1.0/chats/19:launch@thread.v2/messages/1789902000000/hostedContents/aGM=/$value\" width=\"250\" height=\"140\" alt=\"image\" itemtype=\"http://schema.skype.com/AMSImage\"></p><attachment id=\"att-plan\"></attachment>"
+            },
+            "attachments": [
+              {
+                "id": "att-plan",
+                "contentType": "reference",
+                "contentUrl": "https://contoso.sharepoint.com/sites/launch/Shared%20Documents/plan.docx",
+                "content": null,
+                "name": "plan.docx",
+                "thumbnailUrl": null,
+                "teamsAppId": null
+              }
+            ],
+            "mentions": [],
+            "reactions": []
+          },
+          {
+            "id": "1789466400000",
+            "replyToId": null,
+            "etag": "1789466400000",
+            "messageType": "systemEventMessage",
+            "createdDateTime": "2026-09-15T10:00:00.000Z",
+            "lastModifiedDateTime": "2026-09-15T10:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": {
+              "@odata.type": "#microsoft.graph.membersAddedEventMessageDetail",
+              "visibleHistoryStartDateTime": "0001-01-01T00:00:00Z",
+              "members": [
+                {
+                  "id": "u-lee",
+                  "displayName": null,
+                  "userIdentityType": "aadUser"
+                }
+              ],
+              "initiator": {
+                "user": {
+                  "id": "u-priya",
+                  "displayName": null,
+                  "userIdentityType": "aadUser"
+                }
+              }
+            },
+            "from": null,
+            "body": {
+              "contentType": "html",
+              "content": "<systemEventMessage/>"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": []
+          },
+          {
+            "id": "1789380000000",
+            "replyToId": null,
+            "etag": "1789380300000",
+            "messageType": "message",
+            "createdDateTime": "2026-09-14T10:00:00.000Z",
+            "lastModifiedDateTime": "2026-09-14T10:05:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": "2026-09-14T10:05:00.000Z",
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                "id": "u-priya",
+                "displayName": "Priya Patel",
+                "userIdentityType": "aadUser",
+                "tenantId": "fake-tenant"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": ""
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": []
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/chats/19:meeting_standup@thread.v2/messages?$top=50&$orderby=lastModifiedDateTime desc&$filter=lastModifiedDateTime gt 2026-09-03T12:00:00.000Z"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#messages",
+        "value": [
+          {
+            "id": "1790759700000",
+            "replyToId": null,
+            "etag": "1790759700000",
+            "messageType": "message",
+            "createdDateTime": "2026-09-30T09:15:00.000Z",
+            "lastModifiedDateTime": "2026-09-30T09:15:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": null,
+            "channelIdentity": null,
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "@odata.type": "#microsoft.graph.teamworkUserIdentity",
+                "id": "u-ana",
+                "displayName": "Ana Gomez",
+                "userIdentityType": "aadUser",
+                "tenantId": "fake-tenant"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<p>Notes from today are in the wiki.</p>"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": []
+          }
+        ]
+      }
+    }
+  }
+]

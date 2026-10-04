@@ -12,7 +12,8 @@ import { setUpSync } from '.';
 
 const T0 = Date.UTC(2026, 9, 3, 9);
 const ACME = 'linear:org-acme';
-const endpoints = { linear: 'http://127.0.0.1:9/graphql' };
+const TEAMS = 'teams:tenant-1:u-sam';
+const endpoints = { linear: 'http://127.0.0.1:9/graphql', graph: 'http://127.0.0.1:9/v1.0' };
 
 let dir: string;
 let store: ItemStore;
@@ -55,6 +56,14 @@ beforeEach(() => {
     send: (message) => sent.push(message),
     accessTokens: { request: async () => ({ token: 'secret', kind: 'api-key' }) },
     linearSource: ({ apiUrl }) => adapterFor(apiUrl),
+    teamsSource: ({ graphUrl }) => ({
+      source: 'teams',
+      cadence: { defaultMinutes: 1440, choices: [1440], alsoAfterOtherSources: true },
+      async sync() {
+        endpointsSeen.push(graphUrl());
+        return { cursor: { chats: {} }, cost: { requests: 1, complexity: null } };
+      },
+    }),
     random: () => 0,
     log: () => {},
   });
@@ -91,6 +100,26 @@ describe('sync messages', () => {
 
     expect(endpointsSeen).toHaveLength(2);
     expect(lastStatus()).toMatchObject({ cadenceMinutes: 60, nextSyncAt: T0 + 5 * 60_000 + 60 * 60_000 });
+  });
+
+  it('syncs Teams at the Graph endpoint named, and switches its checks alongside other Sources', async () => {
+    sync.handle({
+      type: 'sync-accounts',
+      accounts: [{ id: TEAMS, source: 'teams', needsReconnect: false }],
+      endpoints,
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    sync.handle({
+      type: 'sync-command',
+      command: { op: 'set-also-after-other-sources', account: TEAMS, enabled: false },
+    });
+
+    expect(endpointsSeen).toEqual([endpoints.graph]);
+    expect(lastStatus()).toMatchObject({
+      account: TEAMS,
+      cadenceMinutes: 1440,
+      alsoAfterOtherSources: false,
+    });
   });
 
   it('pauses while the machine sleeps', async () => {

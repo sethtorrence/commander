@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { linearIssueDetail } from './linear';
+import { fieldSummary } from './logged-fields';
+import { chatDetail } from './teams';
 
 // Items: everything Commander tracks, in one shape (ADR 0001). A shared core plus
 // kind-specific detail, typed Links between Items, and one activity log of every change.
@@ -83,6 +85,7 @@ export const itemDetail = z.discriminatedUnion('kind', [
   dailyNoteDetail,
   blockDetail,
   linearIssueDetail,
+  chatDetail,
 ]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 
@@ -301,6 +304,9 @@ export const activityEntry = z.object({
   undoes: z.number().int().positive().nullable(),
   // The Item fields the entry changed. Empty for a creation, and for Links.
   changes: z.array(itemChange),
+  // A Source's change to detail fields the log keeps only in summary (a Chat's messages; see
+  // logged-fields.ts): those fields are empty in `changes`, and the entry can't be undone.
+  summaries: z.array(fieldSummary).optional(),
 });
 export type ActivityEntry = z.infer<typeof activityEntry>;
 

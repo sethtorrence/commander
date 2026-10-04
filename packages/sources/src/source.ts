@@ -1,4 +1,4 @@
-import type { LinearCatalog, Source, SourceItem } from '@commander/domain';
+import type { ItemDetail, ItemStatus, LinearCatalog, Source, SourceItem } from '@commander/domain';
 
 // The one Source interface every Source adapter implements (Linear now; GitHub, Calendar, Email
 // and Teams later). An adapter only translates: it reads the Source and hands over Items, and
@@ -10,7 +10,23 @@ import type { LinearCatalog, Source, SourceItem } from '@commander/domain';
 export type AccessToken = { token: string; kind: 'oauth' | 'api-key' };
 
 // Minutes between syncs: the Source's default, and the choices the User has (per Account).
-export type Cadence = { defaultMinutes: number; choices: readonly number[] };
+// `alsoAfterOtherSources`: the Source also has a cheap light sync (a check), which runs whenever
+// another Source's Account finishes syncing (unless the User switches it off) and on refresh; its
+// cadence then runs full syncs, counted from the last full one (Teams: once a day).
+export type Cadence = { defaultMinutes: number; choices: readonly number[]; alsoAfterOtherSources?: boolean };
+
+// A full sync, or a light one (only a cheap check and what it finds changed). Only Sources whose
+// cadence has `alsoAfterOtherSources` are ever asked for a light sync.
+export type SyncMode = 'full' | 'light';
+
+// An Item from this Account as Commander last saved it.
+export type StoredItem = {
+  externalId: string;
+  title: string;
+  people: string[];
+  status: ItemStatus;
+  detail: ItemDetail | null;
+};
 
 // One page of a sync: Items new or changed at the Source, and the external ids it deleted.
 export type SyncPage = { items: SourceItem[]; deleted: string[] };
@@ -19,6 +35,12 @@ export type SyncRequest = {
   account: string;
   // What the Account's last successful sync returned; null for its first sync (or a full re-sync).
   cursor: unknown;
+  mode: SyncMode;
+  // Who the User is at the Source in the Account (their Teams user id), when known.
+  me?: string | null;
+  // The Account's Items Commander holds with these external ids (tombstones aside), as last saved:
+  // for Sources that fetch only part of an Item when it changes (a Chat's new messages).
+  stored?(externalIds: string[]): StoredItem[];
   // A current access token. Ask for it per request rather than holding on to it.
   accessToken(): Promise<AccessToken>;
   // Hands a page to the engine, which saves it through the Item store at once. Saving the same

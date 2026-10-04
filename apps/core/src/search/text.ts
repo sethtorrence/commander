@@ -1,7 +1,11 @@
 import type { Item } from '@commander/domain';
 
 // What search reads of an Item: its title, its identifier (a Linear issue's ENG-418, a Daily Note's
-// day) and the rest of its words. Search by meaning (#73) embeds the same text.
+// day) and the rest of its words (a Chat's: its recent messages). Search by meaning (#73) embeds the
+// same text.
+
+// A Chat's messages that search reads, newest kept.
+export const CHAT_MESSAGES_SEARCHED = 50;
 
 export type SearchableItem = Pick<
   Item,
@@ -23,6 +27,12 @@ export function searchTextOf(item: SearchableItem): SearchText | null {
       .join('\n');
   } else if (detail?.kind === 'daily-note') {
     identifier = detail.day;
+  } else if (detail?.kind === 'chat') {
+    body = detail.messages
+      .slice(-CHAT_MESSAGES_SEARCHED)
+      .filter((message) => !message.deleted && message.text)
+      .map((message) => message.text)
+      .join('\n');
   }
   const title = item.title.trim();
   if (!title && !identifier && !body) return null;

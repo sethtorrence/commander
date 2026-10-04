@@ -9,7 +9,13 @@ import {
   coreSyncCommand,
   coreSystemState,
 } from '@commander/domain';
-import { createLinearSource, type LinearSourceOptions, type SourceAdapter } from '@commander/sources';
+import {
+  createLinearSource,
+  createTeamsSource,
+  type LinearSourceOptions,
+  type SourceAdapter,
+  type TeamsSourceOptions,
+} from '@commander/sources';
 import { z } from 'zod';
 import type { AccessTokens } from '../access-tokens';
 import type { ItemStore } from '../item-store';
@@ -22,6 +28,8 @@ export type SyncOptions = {
   accessTokens: Pick<AccessTokens, 'request'>;
   // For tests: stands in for the Linear adapter.
   linearSource?: (options: LinearSourceOptions) => SourceAdapter;
+  // For tests: stands in for the Teams adapter.
+  teamsSource?: (options: TeamsSourceOptions) => SourceAdapter;
   random?: () => number;
   log?: (message: string) => void;
 };
@@ -34,15 +42,17 @@ export function setUpSync(
     send,
     accessTokens,
     linearSource = createLinearSource,
+    teamsSource = createTeamsSource,
     random,
     log = (message) => console.warn(message),
   }: SyncOptions,
 ) {
   // Where Linear lives, from the main process (a fake on this machine in the end-to-end tests).
   let linearApiUrl = 'https://api.linear.app/graphql';
+  let graphUrl = 'https://graph.microsoft.com/v1.0';
   const engine: SyncEngine = createSyncEngine({
     store,
-    adapters: [linearSource({ apiUrl: () => linearApiUrl })],
+    adapters: [linearSource({ apiUrl: () => linearApiUrl }), teamsSource({ graphUrl: () => graphUrl })],
     accessTokens,
     onSignInRefused: (account) => send({ type: 'account-refused', account }),
     random,
@@ -66,6 +76,7 @@ export function setUpSync(
           const parsed = coreSyncAccounts.safeParse(raw);
           if (!parsed.success) return reject(parsed.error);
           linearApiUrl = parsed.data.endpoints.linear;
+          if (parsed.data.endpoints.graph) graphUrl = parsed.data.endpoints.graph;
           engine.setAccounts(parsed.data.accounts);
           return true;
         }
@@ -74,7 +85,8 @@ export function setUpSync(
           if (!parsed.success) return reject(parsed.error);
           const { command } = parsed.data;
           if (command.op === 'refresh') void engine.refresh(command.account);
-          else engine.setCadence(command.account, command.minutes);
+          else if (command.op === 'set-cadence') engine.setCadence(command.account, command.minutes);
+          else engine.setAlsoAfterOtherSources(command.account, command.enabled);
           return true;
         }
         case 'system-state': {

@@ -50,6 +50,7 @@ async function sync(
   const result = await source.sync({
     account: 'linear:org-acme',
     cursor,
+    mode: 'full',
     accessToken: async () => token,
     save: (page) => pages.push(page),
     signal: new AbortController().signal,

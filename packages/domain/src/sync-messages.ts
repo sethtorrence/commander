@@ -9,8 +9,9 @@ import { source } from './items';
 
 const accountId = z.string().min(1);
 
-// Why a sync ran: on the Account's cadence, or at once (Sync now, opening a Section, after an edit).
-export const syncTrigger = z.enum(['scheduled', 'refresh']);
+// Why a sync ran: on the Account's cadence, at once (Sync now, opening a Section, after an edit), or
+// as a light check after another Source's sync (Teams).
+export const syncTrigger = z.enum(['scheduled', 'refresh', 'alongside']);
 export type SyncTrigger = z.infer<typeof syncTrigger>;
 
 export const syncOutcomeKind = z.enum(['synced', 'rate-limited', 'refused', 'failed']);
@@ -53,6 +54,9 @@ export const accountSyncStatus = z.object({
   // Two-way sync: the Account's changes made in Commander still on their way to the Source, and those
   // that couldn't sync.
   outgoing: z.object({ pending: z.number().int().nonnegative(), failed: z.number().int().nonnegative() }),
+  // Sources with a light sync only (Teams): whether it also checks whenever another Source syncs. Their
+  // `nextSyncAt` is then the next full sync, and `lastSyncedAt` the last sync of either kind.
+  alsoAfterOtherSources: z.boolean().optional(),
 });
 // The zod-free AccountSyncStatus type in ipc.ts (for the preload and window) must match the schema.
 type _StatusMatches = [AccountSyncStatus] extends [z.infer<typeof accountSyncStatus>]
@@ -70,8 +74,9 @@ export const coreSyncAccounts = z.object({
   accounts: z.array(
     z.object({ id: accountId, source, needsReconnect: z.boolean(), me: accountId.nullable().optional() }),
   ),
-  // Where to reach each Source (the end-to-end tests point Linear at a fake on this machine).
-  endpoints: z.object({ linear: z.string().url() }),
+  // Where to reach each Source (the end-to-end tests point Linear and Graph at fakes on this machine).
+  // `graph`: Microsoft Graph's base, for Teams.
+  endpoints: z.object({ linear: z.string().url(), graph: z.string().url().optional() }),
 });
 export type CoreSyncAccounts = z.infer<typeof coreSyncAccounts>;
 
@@ -81,6 +86,7 @@ export const coreSyncCommand = z.object({
   command: z.discriminatedUnion('op', [
     z.object({ op: z.literal('refresh'), account: accountId }),
     z.object({ op: z.literal('set-cadence'), account: accountId, minutes: z.number().int().positive() }),
+    z.object({ op: z.literal('set-also-after-other-sources'), account: accountId, enabled: z.boolean() }),
   ]),
 });
 export type CoreSyncCommand = z.infer<typeof coreSyncCommand>;

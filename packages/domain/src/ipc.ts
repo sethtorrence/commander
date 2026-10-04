@@ -122,6 +122,8 @@ export type AccountSyncStatus = {
   problem: { kind: 'rate-limited' | 'refused' | 'failed'; message: string } | null;
   // Changes made in Commander still on their way to the Source, and those that couldn't sync.
   outgoing: { pending: number; failed: number };
+  // Sources with a light sync only (Teams): whether it also checks whenever another Source syncs.
+  alsoAfterOtherSources?: boolean;
 };
 export type AccountsState = {
   accounts: AccountSummary[];
@@ -145,7 +147,9 @@ export type AccountsRequest =
   // Syncs the Account at once (Sync now; Sections call it when they open).
   | { op: 'sync-now'; accountId: string }
   // Minutes between the Account's syncs, from its Source's choices.
-  | { op: 'set-sync-cadence'; accountId: string; minutes: number };
+  | { op: 'set-sync-cadence'; accountId: string; minutes: number }
+  // Teams: whether to also check whenever another Source syncs.
+  | { op: 'set-sync-also-after-other-sources'; accountId: string; enabled: boolean };
 export type AccountsResponse =
   | { ok: true; state: AccountsState }
   // `source`: the Source the failure is about, when it is about one. `adminConsent`: the sign-in

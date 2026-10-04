@@ -16,6 +16,7 @@ import {
   blockLinksIn,
   blockTodoQuery,
   type CausedBy,
+  compactForLog,
   type DailyNotePage,
   type DailyNoteProjects,
   type DailyNoteQuery,
@@ -23,6 +24,7 @@ import {
   DELETE_FIELD,
   dailyNoteQuery,
   describeRule,
+  type FieldSummary,
   type Filing,
   firstMatch,
   type Item,
@@ -89,6 +91,7 @@ import {
   actorColumns,
   blockDetailOf,
   changesBetween,
+  chatDetailOf,
   dailyNoteDetailOf,
   type ItemRow,
   type ItemState,
@@ -208,6 +211,9 @@ export type ItemStore = {
   // The external ids of an Account's live Items behind open Todos (the issues of open Linear Todos):
   // each sync re-reads them, as what a Source reports changed can miss them (a reassignment).
   recheckIds(account: { source: Source; account: string }): string[];
+  // The Account's live Items with these external ids, as last saved: for adapters that fetch only
+  // part of an Item when it changes (a Chat's new messages).
+  fromSource(account: { source: Source; account: string }, externalIds: string[]): Item[];
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
   // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
@@ -479,7 +485,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   function withDetails(rows: ItemRow[]): Item[] {
     const idsOf = (kind: ItemKind) => rows.filter((row) => row.kind === kind).map((row) => row.id);
     const details = new Map<string, ItemDetail>();
-    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails } = schema;
+    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails, chatDetails } = schema;
     const todoIds = idsOf('todo');
     if (todoIds.length) {
       const found = db.select().from(todoDetails).where(inArray(todoDetails.itemId, todoIds)).all();
@@ -503,6 +509,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         .where(inArray(linearIssueDetails.itemId, issueIds))
         .all();
       for (const row of found) details.set(row.itemId, linearIssueDetailOf(row));
+    }
+    const chatIds = idsOf('chat');
+    if (chatIds.length) {
+      const found = db.select().from(chatDetails).where(inArray(chatDetails.itemId, chatIds)).all();
+      for (const row of found) details.set(row.itemId, chatDetailOf(row));
     }
     // The warning mark: an Item's own, or (for a Todo) the Item's behind it.
     const backedBy = (id: string) => {
@@ -559,7 +570,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   function writeDetail(id: string, detail: ItemDetail | null) {
-    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails } = schema;
+    const { todoDetails, dailyNoteDetails, blockDetails, linearIssueDetails, chatDetails } = schema;
+    if (detail?.kind !== 'chat') db.delete(chatDetails).where(eq(chatDetails.itemId, id)).run();
     if (detail?.kind !== 'todo') db.delete(todoDetails).where(eq(todoDetails.itemId, id)).run();
     if (detail?.kind !== 'daily-note')
       db.delete(dailyNoteDetails).where(eq(dailyNoteDetails.itemId, id)).run();
@@ -589,6 +601,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         db.insert(linearIssueDetails)
           .values({ itemId: id, ...values })
           .onConflictDoUpdate({ target: linearIssueDetails.itemId, set: values })
+          .run();
+        return;
+      }
+      case 'chat': {
+        const { kind: _kind, ...data } = detail;
+        db.insert(chatDetails)
+          .values({ itemId: id, data })
+          .onConflictDoUpdate({ target: chatDetails.itemId, set: { data } })
           .run();
         return;
       }
@@ -635,6 +655,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   function log(entry: NewEntry, at: number): ActivityEntry {
+    const { before, after, summary } = forTheLog(entry);
     const row = db
       .insert(schema.activity)
       .values({
@@ -648,12 +669,37 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         causedByItemId: entry.causedBy?.itemId ?? null,
         causedByEntryId: entry.causedBy?.entryId ?? null,
         undoes: entry.undoes ?? null,
-        before: entry.before,
-        after: entry.after,
+        before,
+        after,
+        summary,
       })
       .returning()
       .get();
     return toEntry(row);
+  }
+
+  // What the log keeps of an entry: a Source's changes to an Item have the detail fields the log
+  // keeps only in summary (a Chat's messages) emptied, and summarised (the domain's logged-fields.ts).
+  function forTheLog(entry: NewEntry): { before: unknown; after: unknown; summary: FieldSummary[] | null } {
+    const isState = (state: unknown): state is ItemState =>
+      typeof state === 'object' && state !== null && 'detail' in state;
+    const { before, after } = entry;
+    const itemEntry = !entry.otherItemId && !entry.otherProjectId;
+    if (
+      entry.by.kind !== 'source' ||
+      !itemEntry ||
+      !isState(after) ||
+      (before !== null && !isState(before))
+    ) {
+      return { before, after, summary: null };
+    }
+    const compact = compactForLog(before?.detail ?? null, after.detail);
+    if (compact.summaries.length === 0) return { before, after, summary: null };
+    return {
+      before: before && { ...before, detail: compact.before },
+      after: { ...after, detail: compact.after },
+      summary: compact.summaries,
+    };
   }
 
   // A Project as the far end of a Link: the one it was merged into, if it was.
@@ -964,6 +1010,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (!target) throw new ItemStoreError('not-found', `No activity entry ${entryId}`);
     if (target.action === 'injection-warning') {
       throw new ItemStoreError('invalid', 'An injection warning records what Ares found; it can’t be undone');
+    }
+    if (target.summary?.length) {
+      throw new ItemStoreError('invalid', 'A change the Source made to this Item can’t be undone');
     }
     if (db.select().from(activity).where(eq(activity.undoes, entryId)).get()) {
       throw new ItemStoreError('already-undone', `Activity entry ${entryId} is already undone`);
@@ -1540,6 +1589,27 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     dailyNoteProjects,
     projectBlocks,
     recheckIds: (account) => linearTodos.recheckIds(account),
+
+    fromSource({ source, account }, externalIds) {
+      const { items } = schema;
+      const found: Item[] = [];
+      for (let i = 0; i < externalIds.length; i += 500) {
+        const rows = db
+          .select()
+          .from(items)
+          .where(
+            and(
+              eq(items.source, source),
+              eq(items.account, account),
+              inArray(items.externalId, externalIds.slice(i, i + 500)),
+              isNull(items.deletedAt),
+            ),
+          )
+          .all();
+        found.push(...withDetails(rows));
+      }
+      return found;
+    },
 
     activity(input = {}) {
       const query = activityQuery.parse(input);

@@ -54,11 +54,16 @@ describe('the Core sync channel', () => {
     const { sync, sent } = channel();
     sync.refresh('linear:org-acme');
     sync.setCadence('linear:org-acme', 30);
+    sync.setAlsoAfterOtherSources('teams:tenant-1:u-sam', false);
     sync.systemState({ awake: false, online: true });
 
     expect(sent).toEqual([
       { type: 'sync-command', command: { op: 'refresh', account: 'linear:org-acme' } },
       { type: 'sync-command', command: { op: 'set-cadence', account: 'linear:org-acme', minutes: 30 } },
+      {
+        type: 'sync-command',
+        command: { op: 'set-also-after-other-sources', account: 'teams:tenant-1:u-sam', enabled: false },
+      },
       { type: 'system-state', awake: false, online: true },
     ]);
   });

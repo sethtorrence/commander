@@ -4,6 +4,8 @@ import type {
   ActionKind,
   ActivityAction,
   AutonomySection,
+  ChatDetail,
+  FieldSummary,
   FiledBy,
   ItemKind,
   ItemStatus,
@@ -151,6 +153,9 @@ export const activity = sqliteTable(
     undoes: integer('undoes').references((): AnySQLiteColumn => activity.id),
     before: text('before', { mode: 'json' }),
     after: text('after', { mode: 'json' }),
+    // A Source's change to detail fields the log keeps only in summary (see the domain's
+    // logged-fields.ts): those fields are empty in `before` and `after`, and summarised here.
+    summary: text('summary', { mode: 'json' }).$type<FieldSummary[]>(),
   },
   (t) => [
     index('activity_item').on(t.itemId),
@@ -229,6 +234,16 @@ export const linearIssueDetails = sqliteTable('linear_issue_details', {
   data: text('data', { mode: 'json' }).$type<Omit<LinearIssueDetail, 'kind'>>().notNull(),
 });
 
+// Kind-specific detail for Teams Chats, as Teams sync reported them (see ChatDetail): the Chat and
+// its recent messages, as plain text.
+export const chatDetails = sqliteTable('chat_details', {
+  itemId: text('item_id')
+    .primaryKey()
+    .references(() => items.id),
+  // The rest of the detail, without `kind`.
+  data: text('data', { mode: 'json' }).$type<Omit<ChatDetail, 'kind'>>().notNull(),
+});
+
 // Where each Account's sync stands, so it carries on after a restart: the Source's cursor, when it
 // last synced, any back-off, and the User's cadence. Never a token.
 export const syncState = sqliteTable('sync_state', {
@@ -243,6 +258,10 @@ export const syncState = sqliteTable('sync_state', {
   failures: integer('failures').notNull().default(0),
   retryAt: integer('retry_at'),
   problem: text('problem', { mode: 'json' }).$type<SyncProblem>(),
+  // Sources with a light sync (Teams): when the last full sync finished, which the cadence counts
+  // from, and whether it also checks whenever another Source syncs (null: the default, on).
+  lastFullSyncAt: integer('last_full_sync_at'),
+  alsoAfterOtherSources: integer('also_after_other_sources', { mode: 'boolean' }),
 });
 
 // One row per sync run: what it saved and what it cost the Source (Linear's reported complexity).

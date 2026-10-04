@@ -60,6 +60,11 @@ export function createCoreSyncChannel({
       send({ type: 'sync-command', command: { op: 'set-cadence', account, minutes } });
     },
 
+    // Teams: whether it also checks whenever another Source syncs.
+    setAlsoAfterOtherSources(account: string, enabled: boolean) {
+      send({ type: 'sync-command', command: { op: 'set-also-after-other-sources', account, enabled } });
+    },
+
     systemState(state: { awake: boolean; online: boolean }) {
       send({ type: 'system-state', ...state });
     },
