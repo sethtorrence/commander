@@ -10,11 +10,17 @@ const listOf = (text: string) =>
     .split(/[\s,]+/)
     .map((each) => each.trim())
     .filter(Boolean);
+// Labels may hold spaces ("good first issue"): only commas part them.
+const labelsOf = (text: string) =>
+  text
+    .split(',')
+    .map((each) => each.trim())
+    .filter(Boolean);
 
 /**
  * Settings → GitHub → Oversight summary (#119): when an open pull request counts as Stuck for being
- * old and quiet (both in days), and which authors are bots, left out of Started besides every
- * `[bot]` login. Each saves when its field is left (or on Enter).
+ * old and quiet (both in days), which authors are bots, left out of Started besides every `[bot]`
+ * login, and the skill-managed labels (#120). Each saves when its field is left (or on Enter).
  */
 export function OversightSettings({
   itemStore = window.commander.itemStore,
@@ -25,6 +31,7 @@ export function OversightSettings({
   const [old, setOld] = useState('');
   const [idle, setIdle] = useState('');
   const [bots, setBots] = useState('');
+  const [skillLabels, setSkillLabels] = useState('');
 
   // What is saved, or being saved: each field's change builds on the last, answered or not.
   const latest = useRef<Settings | null>(null);
@@ -34,6 +41,7 @@ export function OversightSettings({
     setOld(String(next.longRunningDays));
     setIdle(String(next.idleDays));
     setBots(next.bots.join(', '));
+    setSkillLabels(next.skillLabels.join(', '));
   };
   // biome-ignore lint/correctness/useExhaustiveDependencies: `show` only sets state
   useEffect(() => {
@@ -107,6 +115,22 @@ export function OversightSettings({
           disabled={!settings}
           onChange={(change) => setBots(change.target.value)}
           onBlur={() => save({ bots: listOf(bots) })}
+          onKeyDown={onEnter}
+        />
+      </SettingRow>
+      <SettingRow
+        label="Skill-managed labels"
+        description="Issues with any of these labels are wayfinder maps and build tickets your skills keep open on purpose: they show as progress, count as work once claimed or closed, and never as Stuck. A trailing * matches any suffix; an issue labelled wayfinder:map is always a map."
+      >
+        <Input
+          aria-label="Skill-managed labels"
+          data-testid="oversight-skill-labels"
+          className="max-w-[460px]"
+          placeholder="wayfinder:*, ready-for-agent"
+          value={skillLabels}
+          disabled={!settings}
+          onChange={(change) => setSkillLabels(change.target.value)}
+          onBlur={() => save({ skillLabels: labelsOf(skillLabels) })}
           onKeyDown={onEnter}
         />
       </SettingRow>

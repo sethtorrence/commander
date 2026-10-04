@@ -188,6 +188,10 @@ _Avoid_: Notification, alert, briefing, digest
 What Shipped, Started, is Stuck and is On fire in the watched GitHub repos over a range of days, grouped by Project then repo and ending "Nothing on fire" when that's true; shown at the top of the GitHub Section. Commander works out its facts from what it holds; Ares writes it from them.
 _Avoid_: Report, changelog, commit list
 
+**Skill-managed issue**:
+A GitHub issue the User's coding-agent skills keep open on purpose (a wayfinder map or one of its tickets, or a build ticket in a GitHub milestone), recognised by its labels (editable in Settings → GitHub) and shown as progress rather than as old open work; it counts as work only once claimed or closed, and is never Stuck. A **map** is one labelled `wayfinder:map`; its **tickets** are its sub-issues.
+_Avoid_: Stale issue, epic, tracking issue; "skill" alone (a Skill is one of Ares's abilities)
+
 **Suggestion**:
 Something Ares has prepared and left on its Item for the User to accept or dismiss (what Ask means); nothing happens until it is accepted, and one suggested because of another Item says what caused it.
 _Avoid_: Recommendation, proposal (that's what Ares's jobs hand the gate), prompt, nudge

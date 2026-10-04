@@ -880,6 +880,8 @@ export const githubOversightSettings = sqliteTable('github_oversight_settings', 
   longRunningDays: integer('long_running_days').notNull(),
   idleDays: integer('idle_days').notNull(),
   bots: text('bots', { mode: 'json' }).$type<string[]>().notNull(),
+  // The skill-managed labels (#120); null: the defaults.
+  skillLabels: text('skill_labels', { mode: 'json' }).$type<string[]>(),
   updatedAt: integer('updated_at').notNull(),
 });
 

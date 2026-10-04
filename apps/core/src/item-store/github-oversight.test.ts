@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   defaultOversightSettings,
+  type GitHubIssueDetail,
   type GitHubRepoHealth,
   type GitHubWriterDetail,
   type PullRequestDetail,
@@ -94,8 +95,25 @@ describe('settings', () => {
       idleDays: 3,
       bots: ['acme-bot'],
     });
-    expect(saved).toEqual({ longRunningDays: 10, idleDays: 3, bots: ['acme-bot'] });
+    // The skill-managed labels (#120) stay as they were when left out.
+    expect(saved).toEqual({
+      longRunningDays: 10,
+      idleDays: 3,
+      bots: ['acme-bot'],
+      skillLabels: defaultOversightSettings.skillLabels,
+    });
     expect(store.githubOversight.settings()).toEqual(saved);
+  });
+
+  it('keeps the skill-managed labels the User edits (#120)', () => {
+    const saved = store.githubOversight.saveSettings({
+      ...defaultOversightSettings,
+      skillLabels: [' build:* ', 'agent-ready', 'agent-ready'],
+    });
+    expect(saved.skillLabels).toEqual(['build:*', 'agent-ready']);
+    store.githubOversight.saveSettings({ longRunningDays: 7, idleDays: 5, bots: [] });
+    expect(store.githubOversight.settings().skillLabels).toEqual(['build:*', 'agent-ready']);
+    expect(store.githubOversight.saveSettings({ ...saved, skillLabels: [] }).skillLabels).toEqual([]);
   });
 
   it('refuses settings that make no sense', () => {
@@ -156,6 +174,82 @@ describe('the summary', () => {
     // One Project only.
     const unfiled = store.githubOversight.summary({ range: { from: NOW - DAY, to: NOW }, projectId: null });
     expect(unfiled.sections.find((each) => each.kind === 'shipped')?.groups).toEqual([]);
+  });
+
+  it('shows a map as progress, by the skill-managed labels in the settings (#120)', () => {
+    const issue = (number: number, changes: Partial<GitHubIssueDetail> = {}): SourceItem => ({
+      externalId: `R_api:issue/${number}`,
+      kind: 'github-issue',
+      title: number === 1 ? 'Commander v1 map' : `Ticket ${number}`,
+      status: changes.state === 'closed' ? 'done' : 'open',
+      detail: {
+        kind: 'github-issue',
+        repo: API,
+        number,
+        url: `https://github.com/acme/api/issues/${number}`,
+        nodeId: `I_${number}`,
+        author: 'priya',
+        assignees: [],
+        labels: [],
+        milestone: null,
+        state: 'open',
+        stateReason: null,
+        body: '',
+        commentCount: 0,
+        createdAt: NOW - 40 * DAY,
+        updatedAt: NOW - 30 * DAY,
+        closedAt: null,
+        parent: null,
+        subIssues: null,
+        ...changes,
+      },
+    });
+    const parent = { owner: 'acme', name: 'api', number: 1, title: 'Commander v1 map', url: '' };
+    store.saveFromSource({
+      source: 'github',
+      account: GITHUB,
+      items: [
+        issue(1, {
+          labels: [{ name: 'wayfinder:map', color: '0e8a16' }],
+          subIssues: { total: 3, completed: 1 },
+        }),
+        issue(2, { parent, createdAt: NOW - HOUR }),
+        issue(3, { parent, state: 'closed', stateReason: 'completed', closedAt: NOW - 2 * HOUR }),
+        issue(4, { parent }),
+        // A build ticket, opened today: never Started.
+        issue(5, { labels: [{ name: 'build:ticket', color: 'ededed' }], createdAt: NOW - HOUR }),
+      ],
+    });
+    const range = { from: NOW - DAY, to: NOW };
+    const lines = () =>
+      store.githubOversight
+        .summary({ range })
+        .sections.flatMap((each) =>
+          each.groups.flatMap((group) => group.entries.map((entry) => entry.facts)),
+        );
+    expect(lines()).toEqual([
+      {
+        kind: 'shipped',
+        merged: 0,
+        issuesClosed: 0,
+        releases: [],
+        tickets: [{ number: 3, title: 'Ticket 3', kind: 'map-ticket', pullRequest: null }],
+      },
+      { kind: 'started', pullRequests: 0, issues: 1, claimed: [] },
+      {
+        kind: 'progress',
+        group: 'map',
+        number: 1,
+        title: 'Commander v1 map',
+        done: 1,
+        total: 3,
+        opened: 1,
+        closed: 1,
+        blocked: 0,
+      },
+    ]);
+    store.githubOversight.saveSettings({ ...defaultOversightSettings, skillLabels: ['build:*'] });
+    expect(lines().map((facts) => facts.kind)).toEqual(['shipped', 'progress']);
   });
 
   it('leaves out deleted Items', () => {

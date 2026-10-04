@@ -22,6 +22,7 @@ import { useProjects } from '../../projects/context';
 import { useSection } from '../section';
 import type { GitHubAccountsClient } from './github-work';
 import { type OversightClient, type OversightScope, spanOf } from './oversight';
+import { ProgressBar } from './ProgressGroup';
 
 export const SUMMARY_OPEN_KEY = 'commander.github.summary.open';
 
@@ -47,7 +48,8 @@ function aWeekAgo(now: number): string {
 /**
  * The oversight summary at the top of the GitHub Section (#119), in a collapsible panel: its facts
  * in plain lines (what Shipped, Started, is Stuck and is On fire, per Project then repo,
- * ending "Nothing on fire"), with a range picker (Since yesterday, This week, Custom since…) and a
+ * ending "Nothing on fire"; maps and milestones that moved under Progress, each with a thin bar, #120),
+ * with a range picker (Since yesterday, This week, Custom since…) and a
  * Project picker. Every line opens its Items in the Section. It is read again when Items change or a
  * sync finishes. Ares writes it properly in #121.
  */
@@ -208,7 +210,8 @@ export function OversightPanel({
           ) : (
             <>
               {plain.sections.map((section) =>
-                section.kind === 'on-fire' && !section.groups.length ? null : (
+                (section.kind === 'on-fire' || section.kind === 'progress') &&
+                !section.groups.length ? null : (
                   <section key={section.kind} aria-label={section.title} className="py-1">
                     <h3 className="m-0 font-mono text-label leading-6 font-semibold uppercase tracking-label text-muted">
                       {section.title}
@@ -219,7 +222,10 @@ export function OversightPanel({
                           <p className="m-0 text-note leading-5 font-semibold text-text">{group.title}</p>
                           <ul className="m-0 list-none p-0 pl-3">
                             {group.lines.map((line) => (
-                              <li key={`${line.text}:${line.itemIds.join(',')}`}>
+                              <li
+                                key={`${line.text}:${line.itemIds.join(',')}`}
+                                className="flex items-center gap-3"
+                              >
                                 <button
                                   type="button"
                                   data-testid="github-summary-line"
@@ -228,6 +234,14 @@ export function OversightPanel({
                                 >
                                   {line.text}
                                 </button>
+                                {line.progress && (
+                                  <ProgressBar
+                                    done={line.progress.done}
+                                    total={line.progress.total}
+                                    label={`${line.text.slice(0, line.text.indexOf(': '))} progress`}
+                                    className="w-20 flex-none"
+                                  />
+                                )}
                               </li>
                             ))}
                           </ul>

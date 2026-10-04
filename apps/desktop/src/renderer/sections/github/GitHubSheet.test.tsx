@@ -718,3 +718,90 @@ describe('Your work (#116)', () => {
     await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('github', 2));
   });
 });
+
+describe('skill-managed issues (#120)', () => {
+  const label = (name: string) => ({ name, color: 'ededed' });
+  const mapRef = { owner: 'acme', name: 'api', number: 1, title: 'Commander v1 map', url: '' };
+  const m4 = { title: 'M4 · GitHub', dueOn: null };
+
+  beforeEach(() => {
+    localStorage.setItem('commander.github.view', 'issues');
+    save(
+      issue({
+        number: 1,
+        title: 'Commander v1 map',
+        labels: [label('wayfinder:map')],
+        subIssues: { total: 4, completed: 1 },
+        createdAt: NOW - 60 * 24 * HOUR,
+      }),
+      issue({
+        number: 2,
+        title: 'Gmail research',
+        labels: [label('wayfinder:research')],
+        parent: mapRef,
+        state: 'closed',
+        stateReason: 'completed',
+        closedAt: NOW - 5 * HOUR,
+      }),
+      issue({
+        number: 3,
+        title: 'Grill the sync engine',
+        labels: [label('wayfinder:grilling')],
+        parent: mapRef,
+        blockedBy: [{ owner: 'acme', name: 'api', number: 99, state: 'open' }],
+      }),
+      issue({
+        number: 40,
+        title: 'Sign in',
+        labels: [label('ready-for-agent')],
+        milestone: m4,
+        state: 'closed',
+        stateReason: 'completed',
+        closedAt: NOW - HOUR,
+      }),
+      issue({ number: 41, title: 'Sync', labels: [label('ready-for-agent')], milestone: m4 }),
+    );
+  });
+
+  it('groups them under their map or milestone, collapsed, with the progress line and a bar', async () => {
+    renderSheet();
+    const map = await screen.findByRole('region', { name: 'Map: Commander v1 map' });
+    const milestone = screen.getByRole('region', { name: 'Milestone: M4 · GitHub' });
+    // Only the issues no map or milestone holds are listed until a group opens.
+    expect(listed()).toEqual(['acme/api#30 Webhooks drop on 502']);
+    expect(within(map).getByTestId('github-progress-line').textContent).toBe('1 of 4 decided, 1 blocked');
+    expect(within(milestone).getByTestId('github-progress-line').textContent).toBe('1 of 2 done');
+    const bar = within(map).getByRole('progressbar', { name: 'Commander v1 map progress' });
+    expect([bar.getAttribute('aria-valuenow'), bar.getAttribute('aria-valuemax')]).toEqual(['1', '4']);
+    // Open tickets only are counted in the Issues tab.
+    expect(tab('Issues').textContent).toMatch(/04$/);
+
+    fireEvent.click(within(map).getByRole('button', { expanded: false }));
+    expect(
+      within(map)
+        .getAllByTestId('github-work')
+        .map((row) => row.getAttribute('aria-label')),
+    ).toEqual([
+      'acme/api#1 Commander v1 map',
+      'acme/api#3 Grill the sync engine',
+      'acme/api#2 Gmail research',
+    ]);
+    // The map's row shows its progress instead of its age.
+    const mapRow = within(map).getByRole('listitem', { name: 'acme/api#1 Commander v1 map' });
+    expect(within(mapRow).getByTitle('1 of 4 decided, 1 blocked').textContent).toBe('1/4');
+    expect(within(mapRow).queryByTitle('Open for')).toBeNull();
+  });
+
+  it('opens the group of a ticket asked for from the palette', async () => {
+    renderSheet();
+    await screen.findByRole('region', { name: 'Milestone: M4 · GitHub' });
+    const ticket = store.query({ kinds: ['github-issue'] }).find((each) => each.title === 'Sync');
+    const { requestReveal } = await import('../../frame/reveal');
+    act(() => requestReveal('github', ticket?.id ?? ''));
+    await waitFor(() =>
+      expect(within(detail() as HTMLElement).getByRole('heading', { name: 'Sync' })).toBeTruthy(),
+    );
+    const milestone = screen.getByRole('region', { name: 'Milestone: M4 · GitHub' });
+    expect(within(milestone).getByRole('listitem', { name: 'acme/api#41 Sync' })).toBeTruthy();
+  });
+});

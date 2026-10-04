@@ -117,3 +117,48 @@ it('syncs pull requests, issues, review requests and releases, then finds nothin
   expect(asked.filter((each) => each.startsWith('POST'))).toEqual(['POST /graphql CommanderOpenWork']);
   expect(again.result.cost).toEqual({ requests: 0, complexity: 1 });
 });
+
+it('answers a map’s sub-issues, milestones, claims and blockers as GitHub does (#120)', async () => {
+  github.addIssue({
+    repo: 'acme-org/api',
+    number: 1,
+    title: 'v1 map',
+    author: 'octocat',
+    labels: ['wayfinder:map'],
+  });
+  github.addIssue({
+    repo: 'acme-org/api',
+    number: 2,
+    title: 'Research',
+    author: 'octocat',
+    labels: ['wayfinder:research'],
+    parent: 1,
+    state: 'CLOSED',
+    stateReason: 'NOT_PLANNED',
+  });
+  github.addIssue({
+    repo: 'acme-org/api',
+    number: 3,
+    title: 'Grill',
+    author: 'octocat',
+    labels: ['wayfinder:grilling'],
+    parent: 1,
+    milestone: 'M4',
+    assignees: ['priya'],
+    assignedAt: '2026-10-02T08:00:00Z',
+    blockedBy: [2, 30],
+  });
+  const { items } = await sync(null);
+  const detail = (number: number) =>
+    items.find((item) => item.externalId.endsWith(`:issue/${number}`))?.detail as Record<string, unknown>;
+  expect(detail(1)).toMatchObject({ subIssues: { total: 2, completed: 1 }, parent: null });
+  expect(detail(2)).toMatchObject({ state: 'closed', stateReason: 'not-planned', parent: { number: 1 } });
+  expect(detail(3)).toMatchObject({
+    milestone: { title: 'M4', issues: { open: 1, closed: 0 } },
+    claimedAt: Date.parse('2026-10-02T08:00:00Z'),
+    blockedBy: [
+      { owner: 'acme-org', name: 'api', number: 2, state: 'closed' },
+      { owner: 'acme-org', name: 'api', number: 30, state: 'open' },
+    ],
+  });
+});

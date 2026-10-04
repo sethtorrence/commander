@@ -348,7 +348,9 @@ function inBandOrder(a: Placed, b: Placed): number {
  * request counts only while its Todo is open: ticked (or deleted) in Commander, it is done with.
  */
 export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<string>): Item[] {
-  const open = items.filter((item) => isOpen(item) && !muted?.has(item.id));
+  // A GitHub issue is never placed for itself (being open or old, a skill-managed ticket above all,
+  // #120): one assigned to the User reaches the Dashboard through its GitHub Todo.
+  const open = items.filter((item) => isOpen(item) && !muted?.has(item.id) && item.kind !== 'github-issue');
   const present = new Set(open.map((item) => item.id));
   const backing = new Set(
     open.flatMap((item) =>

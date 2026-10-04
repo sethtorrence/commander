@@ -64,6 +64,15 @@ export const githubIssueRef = z.object({
 });
 export type GitHubIssueRef = z.infer<typeof githubIssueRef>;
 
+// An issue blocking another (GitHub's issue dependencies), and whether it was open.
+export const githubBlocker = z.object({
+  owner: login,
+  name: z.string().min(1),
+  number: z.number().int().positive(),
+  state: z.enum(['open', 'closed']),
+});
+export type GitHubBlocker = z.infer<typeof githubBlocker>;
+
 export const pullRequestDetail = z.object({
   kind: z.literal('pull-request'),
   repo: githubRepoName,
@@ -107,7 +116,17 @@ export const githubIssueDetail = z.object({
   author: login.nullable(),
   assignees: z.array(login),
   labels: z.array(githubLabel),
-  milestone: z.object({ title: z.string(), dueOn: timestamp.nullable() }).nullable(),
+  // Its milestone; `issues`: how many of the milestone's issues are open and closed, as GitHub
+  // counted them (where synced; skill-managed progress, #120, fills in what Commander doesn't hold).
+  milestone: z
+    .object({
+      title: z.string(),
+      dueOn: timestamp.nullable(),
+      issues: z
+        .object({ open: z.number().int().nonnegative(), closed: z.number().int().nonnegative() })
+        .optional(),
+    })
+    .nullable(),
   state: z.enum(['open', 'closed']),
   // Why it was closed (or that it was reopened), as GitHub says; null when it doesn't.
   stateReason: z.enum(['completed', 'not-planned', 'reopened', 'duplicate']).nullable(),
@@ -122,6 +141,12 @@ export const githubIssueDetail = z.object({
   subIssues: z
     .object({ total: z.number().int().nonnegative(), completed: z.number().int().nonnegative() })
     .nullable(),
+  // When it was last assigned to one of its current assignees (claimed, for a skill-managed ticket);
+  // null when GitHub's timeline didn't say. Left out by syncs before #120.
+  claimedAt: timestamp.nullable().optional(),
+  // The issues blocking it (GitHub's issue dependencies), each as it stood when this one was synced.
+  // Left out by syncs before #120.
+  blockedBy: z.array(githubBlocker).optional(),
 });
 export type GitHubIssueDetail = z.infer<typeof githubIssueDetail>;
 

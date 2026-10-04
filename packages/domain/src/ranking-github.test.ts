@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aresRanker, rankingFingerprint } from './ares-ranking';
-import type { PullRequestDetail, ReviewRequestDetail } from './github';
+import type { GitHubIssueDetail, PullRequestDetail, ReviewRequestDetail } from './github';
 import type { Item } from './items';
 import { type RankingContext, rankByBandRules } from './ranking';
 
@@ -227,5 +227,73 @@ describe('Ares’s ranking', () => {
       { itemId: 'p1', band: 'now', reason: 'Release is blocked on this' },
       { itemId: 'r1', band: 'today', reason: 'priya asked for your review · 2 days' },
     ]);
+  });
+});
+
+describe('skill-managed issues (#120)', () => {
+  function ticket(id: string, number: number, changes: Partial<GitHubIssueDetail> = {}): Item {
+    return {
+      id,
+      kind: 'github-issue',
+      source: 'github',
+      account: GITHUB,
+      externalId: `R_api:issue/${number}`,
+      title: `Ticket ${number}`,
+      people: [],
+      filing: null,
+      status: 'open',
+      createdAt: NOW - 60 * DAY,
+      updatedAt: NOW - 50 * DAY,
+      deletedAt: null,
+      detail: {
+        kind: 'github-issue',
+        repo,
+        number,
+        url: `https://github.com/acme/api/issues/${number}`,
+        nodeId: `I_${number}`,
+        author: 'priya',
+        assignees: [],
+        labels: [{ name: 'ready-for-agent', color: 'ededed' }],
+        milestone: { title: 'M4', dueOn: null },
+        state: 'open',
+        stateReason: null,
+        body: '',
+        commentCount: 0,
+        createdAt: NOW - 60 * DAY,
+        updatedAt: NOW - 50 * DAY,
+        closedAt: null,
+        parent: null,
+        subIssues: null,
+        ...changes,
+      },
+    };
+  }
+
+  it('never ranks one for being open or old: a claimed ticket shows only through its Todo', () => {
+    const unclaimed = ticket('unclaimed', 40);
+    const map = ticket('map', 1, { labels: [{ name: 'wayfinder:map', color: 'ededed' }], milestone: null });
+    const claimed = ticket('claimed', 41, { assignees: ['octocat'], claimedAt: NOW - HOUR });
+    const todo: Item = {
+      ...todoFor(claimed),
+      title: claimed.title,
+      detail: { kind: 'todo', origin: 'github', dueOn: '2026-10-01', backedBy: claimed.id },
+    };
+    expect(placed([unclaimed, map, claimed, todo]).map((each) => each.itemId)).toEqual([todo.id]);
+    // Nor does a ranking of Ares's place one.
+    const ranking = {
+      by: 'ares' as const,
+      at: NOW - HOUR,
+      why: null,
+      entries: [
+        {
+          itemId: unclaimed.id,
+          band: 'today' as const,
+          rank: 1,
+          reason: 'Open for weeks',
+          fingerprint: rankingFingerprint(unclaimed),
+        },
+      ],
+    };
+    expect(aresRanker(ranking)([unclaimed, map], context)).toEqual([]);
   });
 });

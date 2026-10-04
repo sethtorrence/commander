@@ -7,7 +7,15 @@ import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { Tag } from '../linear/IssueRow';
 import { CheckIcon, WorkStateIcon } from './glyphs';
-import { ageOf, identifierOf, isPullRequest, STATE_NAMES, stateOf, type Work } from './work';
+import {
+  ageOf,
+  identifierOf,
+  isPullRequest,
+  type SkillProgress,
+  STATE_NAMES,
+  stateOf,
+  type Work,
+} from './work';
 
 const pad = (n: number) => String(n).padStart(3, '0');
 
@@ -61,7 +69,8 @@ function WorkBadge({ work }: { work: Work }) {
 /**
  * A pull request's or issue's row, after the prototype's GitHub rows (.pr): number, state mark,
  * Badge, `owner/repo#123` and title, then its state, for a pull request the checks and the review
- * decision, its author and its age (since it was opened). A review asked of the User says so.
+ * decision, its author and its age (since it was opened). A review asked of the User says so. A map's
+ * row (#120) shows its progress instead of its age: it is open for months on purpose.
  */
 export function WorkRow({
   work,
@@ -70,6 +79,7 @@ export function WorkRow({
   now,
   reviewAsked = false,
   note,
+  progress,
   compact = false,
   onOpen,
 }: {
@@ -81,6 +91,8 @@ export function WorkRow({
   reviewAsked?: boolean;
   /** Your work's word on it: who the User's pull request waits on, or the team a review was asked of. */
   note?: string;
+  /** A map's progress (#120), shown instead of its age. */
+  progress?: SkillProgress;
   /** Beside the detail pane: the state and review tags make way for the title. */
   compact?: boolean;
   /** Selects the row and opens it in the detail pane. */
@@ -162,12 +174,21 @@ export function WorkRow({
         <Tag className={compact ? 'w-[72px]' : 'w-[92px]'} title={author?.title ?? 'A deleted user'}>
           {author?.name ?? 'ghost'}
         </Tag>
-        <span
-          className="w-8 text-right font-mono text-label leading-5 font-medium tabular-nums text-muted"
-          title="Open for"
-        >
-          {ageOf(work.detail.createdAt, now)}
-        </span>
+        {progress ? (
+          <span
+            className="min-w-8 text-right font-mono text-label leading-5 font-medium tabular-nums text-muted"
+            title={progress.line}
+          >
+            {progress.done}/{progress.total}
+          </span>
+        ) : (
+          <span
+            className="w-8 text-right font-mono text-label leading-5 font-medium tabular-nums text-muted"
+            title="Open for"
+          >
+            {ageOf(work.detail.createdAt, now)}
+          </span>
+        )}
       </span>
     </li>
   );

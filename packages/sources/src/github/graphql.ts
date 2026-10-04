@@ -28,10 +28,14 @@ const ISSUE = `fragment CommanderIssue on Issue {
   author { login ... on User { email name } }
   assignees(first: 10) { nodes { login } }
   labels(first: 20) { nodes { name color } }
-  milestone { title dueOn }
+  milestone { title dueOn open: issues(states: [OPEN]) { totalCount } closed: issues(states: [CLOSED]) { totalCount } }
   comments { totalCount }
   parent { number title url repository { name owner { login } } }
   subIssuesSummary { total completed }
+  timelineItems(itemTypes: [ASSIGNED_EVENT], last: 10) {
+    nodes { ... on AssignedEvent { createdAt assignee { ... on User { login } ... on Bot { login } } } }
+  }
+  blockedBy(first: 20) { nodes { number state repository { name owner { login } } } }
 }`;
 
 // How many pull requests and issues match a search, before fetching them.

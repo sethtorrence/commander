@@ -16,6 +16,7 @@ import type { GitHubAccountsClient, GitHubWork, WorkLink } from './github-work';
 import { ViewSwitch, WorkFilterBar } from './ListControls';
 import { OversightPanel } from './OversightPanel';
 import { type OversightClient, targetOf } from './oversight';
+import { ProgressGroup } from './ProgressGroup';
 import { useGitHub } from './use-github';
 import { WorkDetail } from './WorkDetail';
 import { WorkRow } from './WorkRow';
@@ -64,6 +65,9 @@ const and = (names: string[]) =>
  *
  * Above the view switch, the oversight summary (#119) when given its `oversight` client: each of its
  * lines opens its Items here. The People view (#122) joins the Section later.
+ *
+ * In Issues, skill-managed issues (#120) sit under their map or milestone, each a collapsed group
+ * with its progress line and bar; the map's own row shows its progress instead of its age.
  */
 export function GitHubSheet({
   work,
@@ -200,6 +204,37 @@ export function GitHubSheet({
               {groups.map((group, index) => {
                 const isClosed = group.id === 'closed';
                 const first = number + 1;
+                if (group.skill) {
+                  const shown = state.groupShown(group.id);
+                  if (shown) number += group.work.length;
+                  const { skill } = group;
+                  return (
+                    <ProgressGroup
+                      key={group.id}
+                      no={`G${index + 1}`}
+                      title={group.title}
+                      count={group.work.length}
+                      progress={skill}
+                      expanded={shown}
+                      onExpandedChange={(open) => state.showGroup(group.id, open)}
+                    >
+                      <ul className="m-0 list-none p-0">
+                        {group.work.map((each, i) => (
+                          <WorkRow
+                            key={each.id}
+                            work={each}
+                            number={first + i}
+                            selected={each.id === selected?.id}
+                            now={now.getTime()}
+                            progress={each.id === skill.mapId ? skill : undefined}
+                            compact={detailOpen}
+                            onOpen={() => openWork(each.id)}
+                          />
+                        ))}
+                      </ul>
+                    </ProgressGroup>
+                  );
+                }
                 if (!isClosed || state.closedShown) number += group.work.length;
                 return (
                   <TodoGroup

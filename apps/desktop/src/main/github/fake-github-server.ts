@@ -10,7 +10,8 @@ import type { AddressInfo } from 'node:net';
 // repos (what Settings → GitHub lists, #113), and what GitHub sync reads (#114): the gates (org repos
 // and issues, the User's repos and teams, a repo's issues) answering If-None-Match with a free 304,
 // X-RateLimit headers, and the GraphQL GitHub sync sends (open work, search, repos, the sweep) over
-// pull requests, issues, releases and commits added here. It also answers the GitHub Section's
+// pull requests, issues, releases and commits added here (issues with their milestone counts,
+// sub-issues, assignments and blockers, for skill-managed issues, #120). It also answers the GitHub Section's
 // discussion query (#115): comments, reviews, review comments and a pull request's checks. It can
 // also refuse with a rate limit (403 or 429, with Retry-After). Nothing here talks to the real GitHub.
 //
@@ -118,8 +119,18 @@ export type FakeGitHubIssue = {
   body?: string;
   author: string;
   state?: 'OPEN' | 'CLOSED';
+  // Why it closed: COMPLETED unless given.
+  stateReason?: 'COMPLETED' | 'NOT_PLANNED' | 'DUPLICATE';
   assignees?: string[];
+  // When it was assigned (to each of its assignees, as its timeline says); when it was opened unless given.
+  assignedAt?: string;
   labels?: string[];
+  // Its milestone, by title (GitHub counts the milestone's open and closed issues).
+  milestone?: string;
+  // Its parent issue in the same repo, by number: it is that issue's sub-issue.
+  parent?: number;
+  // The issues in the same repo blocking it (GitHub's issue dependencies), by number.
+  blockedBy?: number[];
   comments?: FakeGitHubComment[];
   createdAt?: string;
   updatedAt?: string;
@@ -201,6 +212,8 @@ export type FakeGitHub = {
   // Changes a pull request (and its updatedAt, to now unless given).
   updatePullRequest(repo: string, number: number, changes: Partial<FakeGitHubPullRequest>): void;
   addIssue(issue: FakeGitHubIssue): void;
+  // Changes an issue (and its updatedAt, to now unless given), as claiming or closing it on GitHub would.
+  updateIssue(repo: string, number: number, changes: Partial<FakeGitHubIssue>): void;
   // Comments on a pull request or issue (by number), moving its updatedAt to now, as GitHub does.
   addComment(repo: string, number: number, comment: FakeGitHubComment): void;
   // The pull request as it stands here.
@@ -354,6 +367,10 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     },
     addIssue: (issue) => {
       issues.push(issue);
+    },
+    updateIssue: (repo, number, changes) => {
+      const issue = issues.find((each) => each.repo === repo && each.number === number);
+      if (issue) Object.assign(issue, { updatedAt: new Date().toISOString() }, changes);
     },
     addComment: (repo, number, comment) => {
       const entry =
@@ -717,6 +734,12 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     if (!repo) throw new Error(`No repo ${issue.repo}`);
     const state = issue.state ?? 'OPEN';
     const updated = updatedOf(issue);
+    const sameRepo = issues.filter((each) => each.repo === issue.repo);
+    const closed = (each: FakeGitHubIssue) => each.state === 'CLOSED';
+    const named = (number: number) => sameRepo.find((each) => each.number === number);
+    const parent = issue.parent === undefined ? undefined : named(issue.parent);
+    const children = sameRepo.filter((each) => each.parent === issue.number);
+    const inMilestone = sameRepo.filter((each) => issue.milestone && each.milestone === issue.milestone);
     return {
       __typename: 'Issue',
       id: issueId(issue),
@@ -725,7 +748,7 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
       title: issue.title,
       body: issue.body ?? '',
       state,
-      stateReason: state === 'CLOSED' ? 'COMPLETED' : null,
+      stateReason: state === 'CLOSED' ? (issue.stateReason ?? 'COMPLETED') : null,
       createdAt: issue.createdAt ?? updated,
       updatedAt: updated,
       closedAt: state === 'CLOSED' ? updated : null,
@@ -733,10 +756,44 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
       author: { login: issue.author, email: '' },
       assignees: { nodes: (issue.assignees ?? []).map((login) => ({ login })) },
       labels: { nodes: (issue.labels ?? []).map((name) => ({ name, color: 'ededed' })) },
-      milestone: null,
+      milestone: issue.milestone
+        ? {
+            title: issue.milestone,
+            dueOn: null,
+            open: { totalCount: inMilestone.filter((each) => !closed(each)).length },
+            closed: { totalCount: inMilestone.filter(closed).length },
+          }
+        : null,
       comments: { totalCount: 0 },
-      parent: null,
-      subIssuesSummary: null,
+      parent: parent
+        ? {
+            number: parent.number,
+            title: parent.title,
+            url: `${fake.webUrl}/${parent.repo}/issues/${parent.number}`,
+            repository: { name: repo.name, owner: { login: repo.owner } },
+          }
+        : null,
+      subIssuesSummary: { total: children.length, completed: children.filter(closed).length },
+      timelineItems: {
+        nodes: (issue.assignees ?? []).map((login) => ({
+          createdAt: issue.assignedAt ?? issue.createdAt ?? updated,
+          assignee: { login },
+        })),
+      },
+      blockedBy: {
+        nodes: (issue.blockedBy ?? []).flatMap((number) => {
+          const blocker = named(number);
+          return blocker
+            ? [
+                {
+                  number,
+                  state: blocker.state ?? 'OPEN',
+                  repository: { name: repo.name, owner: { login: repo.owner } },
+                },
+              ]
+            : [];
+        }),
+      },
     };
   }
 

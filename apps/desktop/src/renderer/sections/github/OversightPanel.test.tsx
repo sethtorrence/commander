@@ -243,3 +243,50 @@ describe('a finishes Link in the detail pane', () => {
     expect(store.githubOversight.finishesEverMade(dark, linear)).toBe(true);
   });
 });
+
+describe('skill-managed issues in the summary (#120)', () => {
+  it('shows a Progress line with its bar, only when a map or milestone moved, and opens its issues', async () => {
+    const { unmount } = renderSheet();
+    await waitFor(() => expect(lines()).toHaveLength(4));
+    expect(within(summary()).queryByRole('region', { name: 'Progress' })).toBeNull();
+    unmount();
+
+    const mapRef = { owner: 'acme', name: 'api', number: 1, title: 'v1 map', url: '' };
+    const label = (name: string) => ({ name, color: 'ededed' });
+    store.saveFromSource({
+      source: 'github',
+      account: GITHUB,
+      items: [
+        issue({
+          number: 1,
+          title: 'v1 map',
+          labels: [label('wayfinder:map')],
+          createdAt: NOW - 30 * DAY,
+          updatedAt: NOW - 3 * HOUR,
+        }),
+        issue({ number: 2, title: 'Research', parent: mapRef, createdAt: NOW - HOUR, updatedAt: NOW - HOUR }),
+        issue({
+          number: 3,
+          title: 'Grill',
+          parent: mapRef,
+          createdAt: NOW - 20 * DAY,
+          state: 'closed',
+          stateReason: 'completed',
+          closedAt: NOW - HOUR,
+        }),
+      ],
+    });
+    renderSheet();
+    const progress = await within(summary()).findByRole('region', { name: 'Progress' });
+    expect(within(progress).getByTestId('github-summary-line').textContent).toBe(
+      'acme/api#1 v1 map: 1 of 2 decided, 1 opened and 1 closed',
+    );
+    const bar = within(progress).getByRole('progressbar', { name: 'acme/api#1 v1 map progress' });
+    expect([bar.getAttribute('aria-valuenow'), bar.getAttribute('aria-valuemax')]).toEqual(['1', '2']);
+
+    fireEvent.click(within(progress).getByTestId('github-summary-line'));
+    await waitFor(() =>
+      expect(listed()).toEqual(['acme/api#2 Research', 'acme/api#1 v1 map', 'acme/api#3 Grill']),
+    );
+  });
+});

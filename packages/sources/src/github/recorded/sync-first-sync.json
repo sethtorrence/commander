@@ -546,7 +546,9 @@
               },
               "milestone": {
                 "title": "October",
-                "dueOn": "2026-10-31T00:00:00Z"
+                "dueOn": "2026-10-31T00:00:00Z",
+                "open": { "totalCount": 3 },
+                "closed": { "totalCount": 5 }
               },
               "comments": {
                 "totalCount": 4
@@ -565,6 +567,21 @@
               "subIssuesSummary": {
                 "total": 0,
                 "completed": 0
+              },
+              "timelineItems": {
+                "nodes": [
+                  { "createdAt": "2026-09-21T08:00:00Z", "assignee": { "login": "priya" } },
+                  { "createdAt": "2026-09-28T08:00:00Z", "assignee": { "login": "octocat" } }
+                ]
+              },
+              "blockedBy": {
+                "nodes": [
+                  {
+                    "number": 28,
+                    "state": "CLOSED",
+                    "repository": { "name": "api", "owner": { "login": "acme" } }
+                  }
+                ]
               }
             }
           ],
@@ -1074,7 +1091,9 @@
                 },
                 "milestone": {
                   "title": "October",
-                  "dueOn": "2026-10-31T00:00:00Z"
+                  "dueOn": "2026-10-31T00:00:00Z",
+                  "open": { "totalCount": 3 },
+                  "closed": { "totalCount": 5 }
                 },
                 "comments": {
                   "totalCount": 4
@@ -1093,6 +1112,21 @@
                 "subIssuesSummary": {
                   "total": 0,
                   "completed": 0
+                },
+                "timelineItems": {
+                  "nodes": [
+                    { "createdAt": "2026-09-21T08:00:00Z", "assignee": { "login": "priya" } },
+                    { "createdAt": "2026-09-28T08:00:00Z", "assignee": { "login": "octocat" } }
+                  ]
+                },
+                "blockedBy": {
+                  "nodes": [
+                    {
+                      "number": 28,
+                      "state": "CLOSED",
+                      "repository": { "name": "api", "owner": { "login": "acme" } }
+                    }
+                  ]
                 }
               },
               {

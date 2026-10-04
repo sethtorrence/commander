@@ -31,6 +31,8 @@ export interface GitHubWork {
    * the Core until the Item changes, else fetched from GitHub now.
    */
   discussion(itemId: string): Promise<GitHubDiscussionResponse>;
+  /** The labels that make an issue skill-managed (#120, Settings → GitHub). */
+  skillLabels(): Promise<string[]>;
 }
 
 // The Item store answers at most 1000 Items a query.
@@ -82,6 +84,10 @@ export function githubWorkIn(itemStore: ItemStoreClient, bridge: DiscussionBridg
 
     discussion(itemId) {
       return bridge.githubDiscussion({ itemId });
+    },
+
+    async skillLabels() {
+      return (await itemStore({ op: 'github-oversight-settings' })).skillLabels;
     },
   };
 }

@@ -95,12 +95,14 @@ function pr(
   ) as Item & { detail: PullRequestDetail };
 }
 
-function issue(changes: Partial<GitHubIssueDetail> & { projectId?: string | null } = {}): Item {
-  const { projectId = null, ...detail } = changes;
+function issue(
+  changes: Partial<GitHubIssueDetail> & { title?: string; projectId?: string | null } = {},
+): Item {
+  const { projectId = null, title = 'An issue', ...detail } = changes;
   const number = detail.number ?? next + 100;
   return item(
     'github-issue',
-    'An issue',
+    title,
     {
       kind: 'github-issue',
       repo: API,
@@ -194,12 +196,12 @@ describe('Shipped', () => {
         repo: API,
         // Pull requests, then issues, then releases; each kind oldest first.
         itemIds: [alsoMerged.id, merged.id, shipped.id],
-        facts: { kind: 'shipped', merged: 2, issuesClosed: 0, releases: ['v2.3.0'] },
+        facts: { kind: 'shipped', merged: 2, issuesClosed: 0, releases: ['v2.3.0'], tickets: [] },
       },
       {
         repo: WEB,
         itemIds: [webMerged.id],
-        facts: { kind: 'shipped', merged: 1, issuesClosed: 0, releases: [] },
+        facts: { kind: 'shipped', merged: 1, issuesClosed: 0, releases: [], tickets: [] },
       },
     ]);
   });
@@ -214,7 +216,7 @@ describe('Shipped', () => {
       {
         repo: API,
         itemIds: [done.id],
-        facts: { kind: 'shipped', merged: 0, issuesClosed: 1, releases: [] },
+        facts: { kind: 'shipped', merged: 0, issuesClosed: 1, releases: [], tickets: [] },
       },
     ]);
   });
@@ -236,7 +238,7 @@ describe('Started', () => {
       {
         repo: API,
         itemIds: [openedAndMerged.id, opened.id, newIssue.id],
-        facts: { kind: 'started', pullRequests: 2, issues: 1 },
+        facts: { kind: 'started', pullRequests: 2, issues: 1, claimed: [] },
       },
     ]);
   });
@@ -274,13 +276,11 @@ describe('Started', () => {
     ).toEqual([stillDrafting.id]);
   });
 
-  it('sets aside what the skill-managed seam (#120) claims', () => {
+  it('leaves out skill-managed issues merely opened (#120)', () => {
     const map = issue({ createdAt: NOW - HOUR, labels: [{ name: 'wayfinder:map', color: 'ededed' }] });
+    const ticket = issue({ createdAt: NOW - HOUR, labels: [{ name: 'ready-for-agent', color: 'ededed' }] });
     const plain = issue({ createdAt: NOW - HOUR });
-    const result = oversight({
-      items: [map, plain],
-      isSkillManaged: (work) => work.detail.labels.some((label) => label.name.startsWith('wayfinder:')),
-    });
+    const result = oversight({ items: [map, ticket, plain] });
     expect(entries(result, 'started').flatMap((entry) => entry.itemIds)).toEqual([plain.id]);
   });
 });
@@ -496,13 +496,300 @@ describe('grouping', () => {
     ]);
   });
 
-  it('always has the four sections, in order', () => {
+  it('always has the five sections, in order', () => {
     expect(oversight({}).sections.map((each) => each.kind)).toEqual([
       'shipped',
       'started',
+      'progress',
       'stuck',
       'on-fire',
     ]);
+  });
+});
+
+describe('skill-managed issues (#120)', () => {
+  const wayfinder = (type: string) => ({ name: `wayfinder:${type}`, color: 'ededed' });
+  const agent = { name: 'ready-for-agent', color: 'ededed' };
+  const parentRef = (number: number) => ({
+    owner: 'acme',
+    name: 'api',
+    number,
+    title: 'Commander v1 map',
+    url: `https://github.com/acme/api/issues/${number}`,
+  });
+  const m4 = { title: 'M4 · GitHub', dueOn: null };
+  const closedDone = (at: number) => ({
+    state: 'closed' as const,
+    stateReason: 'completed' as const,
+    closedAt: at,
+  });
+
+  // A map filed under Titanlink: 26 sub-issues on GitHub, 15 closed; Commander holds six of them.
+  function aMap() {
+    const map = issue({
+      number: 1,
+      title: 'Commander v1 map',
+      labels: [wayfinder('map')],
+      projectId: TITANLINK.id,
+      subIssues: { total: 26, completed: 15 },
+      createdAt: NOW - 60 * DAY,
+    });
+    const tickets = {
+      openedToday: issue({
+        number: 40,
+        labels: [wayfinder('grilling')],
+        parent: parentRef(1),
+        createdAt: NOW - HOUR,
+      }),
+      openedYesterday: issue({
+        number: 41,
+        labels: [wayfinder('task')],
+        parent: parentRef(1),
+        createdAt: FROM + HOUR,
+      }),
+      closedToday: issue({
+        number: 30,
+        labels: [wayfinder('research')],
+        parent: parentRef(1),
+        ...closedDone(NOW - 2 * HOUR),
+      }),
+      notPlanned: issue({
+        number: 31,
+        labels: [wayfinder('research')],
+        parent: parentRef(1),
+        state: 'closed',
+        stateReason: 'not-planned',
+        closedAt: NOW - 3 * HOUR,
+      }),
+      closedLongAgo: issue({
+        number: 20,
+        labels: [wayfinder('task')],
+        parent: parentRef(1),
+        ...closedDone(NOW - 20 * DAY),
+      }),
+      oldOpen: issue({
+        number: 21,
+        labels: [wayfinder('grilling')],
+        parent: parentRef(1),
+        createdAt: NOW - 60 * DAY,
+        updatedAt: NOW - 50 * DAY,
+        blockedBy: [{ owner: 'acme', name: 'api', number: 40, state: 'open' }],
+      }),
+    };
+    return { map, tickets };
+  }
+
+  it('gives each map that moved in the range one Progress line in its Project', () => {
+    const { map, tickets } = aMap();
+    const quiet = issue({
+      number: 2,
+      title: 'Quiet map',
+      labels: [wayfinder('map')],
+      createdAt: NOW - 90 * DAY,
+    });
+    const result = oversight({ items: [map, ...Object.values(tickets), quiet] });
+    expect(section(result, 'progress')).toEqual([
+      {
+        project: TITANLINK,
+        entries: [
+          {
+            repo: API,
+            // The map, then its tickets: open, then closed, each by number.
+            itemIds: [
+              map.id,
+              tickets.oldOpen.id,
+              tickets.openedToday.id,
+              tickets.openedYesterday.id,
+              tickets.closedLongAgo.id,
+              tickets.closedToday.id,
+              tickets.notPlanned.id,
+            ],
+            facts: {
+              kind: 'progress',
+              group: 'map',
+              number: 1,
+              title: 'Commander v1 map',
+              // GitHub's 15 closed of 26, as the three closed tickets Commander holds are among them.
+              done: 15,
+              total: 26,
+              opened: 2,
+              closed: 2,
+              blocked: 1,
+            },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('gives a milestone of build tickets a Progress line, under the Project most of its tickets are in', () => {
+    const items = [
+      issue({
+        number: 119,
+        labels: [agent],
+        milestone: m4,
+        projectId: LONGTAIL.id,
+        ...closedDone(NOW - HOUR),
+      }),
+      issue({ number: 120, labels: [agent], milestone: m4, projectId: LONGTAIL.id }),
+      issue({ number: 121, labels: [agent], milestone: m4 }),
+    ];
+    expect(entries(oversight({ items }), 'progress').map((entry) => entry.facts)).toEqual([
+      {
+        kind: 'progress',
+        group: 'milestone',
+        number: null,
+        title: 'M4 · GitHub',
+        done: 1,
+        total: 3,
+        opened: 0,
+        closed: 1,
+        blocked: 0,
+      },
+    ]);
+    expect(section(oversight({ items }), 'progress')[0]?.project).toEqual(LONGTAIL);
+  });
+
+  it('lists tickets claimed in the range under Started, and freshly opened ones only in the Progress line', () => {
+    const { map, tickets } = aMap();
+    const claimed = issue({
+      number: 66,
+      title: 'Retry webhooks',
+      labels: [agent],
+      milestone: m4,
+      assignees: ['priya'],
+      claimedAt: NOW - 4 * HOUR,
+      createdAt: NOW - 10 * DAY,
+    });
+    const claimedLastWeek = issue({
+      number: 67,
+      labels: [agent],
+      milestone: m4,
+      assignees: ['omar'],
+      claimedAt: NOW - 7 * DAY,
+    });
+    const result = oversight({ items: [map, ...Object.values(tickets), claimed, claimedLastWeek] });
+    expect(entries(result, 'started')).toEqual([
+      {
+        repo: API,
+        itemIds: [claimed.id],
+        facts: {
+          kind: 'started',
+          pullRequests: 0,
+          issues: 0,
+          claimed: [{ number: 66, title: 'Retry webhooks', by: ['priya'] }],
+        },
+      },
+    ]);
+  });
+
+  it('lists tickets closed as done under Shipped, a pull request that closed one once, with its ticket', () => {
+    const ticket = issue({
+      number: 66,
+      title: 'Retry webhooks',
+      labels: [agent],
+      milestone: m4,
+      ...closedDone(NOW - HOUR),
+    });
+    const byHand = issue({
+      number: 67,
+      title: 'Docs',
+      labels: [agent],
+      milestone: m4,
+      ...closedDone(NOW - 2 * HOUR),
+    });
+    const dropped = issue({
+      number: 68,
+      labels: [agent],
+      milestone: m4,
+      state: 'closed',
+      stateReason: 'not-planned',
+      closedAt: NOW - HOUR,
+    });
+    const fix = pr({
+      number: 170,
+      state: 'merged',
+      mergedAt: NOW - HOUR,
+      closedAt: NOW - HOUR,
+      closingIssues: [{ owner: 'acme', name: 'api', number: 66, title: 'Retry webhooks', url: '' }],
+    });
+    const other = pr({ number: 171, state: 'merged', mergedAt: NOW - 3 * HOUR, closedAt: NOW - 3 * HOUR });
+    const plainIssue = issue({ number: 90, ...closedDone(NOW - HOUR) });
+
+    const result = oversight({ items: [ticket, byHand, dropped, fix, other, plainIssue] });
+    expect(entries(result, 'shipped')).toEqual([
+      {
+        repo: API,
+        itemIds: [other.id, fix.id, byHand.id, ticket.id, plainIssue.id],
+        facts: {
+          kind: 'shipped',
+          // #171 only: #170 shows with its ticket.
+          merged: 1,
+          issuesClosed: 1,
+          releases: [],
+          tickets: [
+            { number: 67, title: 'Docs', kind: 'build-ticket', pullRequest: null },
+            { number: 66, title: 'Retry webhooks', kind: 'build-ticket', pullRequest: 170 },
+          ],
+        },
+      },
+    ]);
+    expect(plainSummary(result).sections[0]?.groups[0]?.lines.map((line) => line.text)).toEqual([
+      'acme/api: 1 PR merged, 1 issue closed, #67 done (build ticket), #170 closes #66 (build ticket)',
+    ]);
+  });
+
+  it('never counts an old open ticket as Stuck', () => {
+    const { map, tickets } = aMap();
+    const idle = pr({ number: 20, createdAt: NOW - 10 * DAY, updatedAt: NOW - 6 * DAY });
+    const result = oversight({ items: [map, ...Object.values(tickets), idle] });
+    expect(entries(result, 'stuck').flatMap((entry) => entry.itemIds)).toEqual([idle.id]);
+  });
+
+  it('follows the skill-managed labels in the settings', () => {
+    const ticket = issue({
+      number: 5,
+      labels: [{ name: 'build:ticket', color: 'ededed' }],
+      createdAt: NOW - HOUR,
+    });
+    const triage = issue({ number: 6, labels: [agent], createdAt: NOW - HOUR });
+    const result = oversight({
+      items: [ticket, triage],
+      settings: { ...defaultOversightSettings, skillLabels: ['build:*'] },
+    });
+    expect(entries(result, 'started').flatMap((entry) => entry.itemIds)).toEqual([triage.id]);
+  });
+
+  it('words Progress lines and claimed tickets', () => {
+    const { map, tickets } = aMap();
+    const claimed = issue({
+      number: 66,
+      title: 'Retry webhooks',
+      labels: [agent],
+      assignees: ['priya'],
+      claimedAt: NOW - HOUR,
+    });
+    const milestone = [
+      issue({ number: 119, labels: [agent], milestone: m4, ...closedDone(NOW - HOUR) }),
+      issue({ number: 120, labels: [agent], milestone: m4 }),
+    ];
+    const summary = plainSummary(
+      oversight({ items: [map, ...Object.values(tickets), claimed, ...milestone] }),
+    );
+    const lines = (title: string) =>
+      summary.sections
+        .find((each) => each.title === title)
+        ?.groups.flatMap((g) => g.lines.map((l) => l.text));
+    expect(lines('Progress')).toEqual([
+      'acme/api#1 Commander v1 map: 15 of 26 decided, 2 opened and 2 closed, 1 blocked',
+      'acme/api milestone M4 · GitHub: 1 of 2 done, 1 closed',
+    ]);
+    expect(lines('Started')).toEqual(['acme/api: claimed #66 Retry webhooks (priya)']);
+    // A progress line carries its counts, for a progress bar.
+    expect(summary.sections.find((each) => each.kind === 'progress')?.groups[0]?.lines[0]?.progress).toEqual({
+      done: 15,
+      total: 26,
+    });
   });
 });
 
@@ -564,7 +851,7 @@ describe('people', () => {
       personId: 'person-omar',
       name: 'Omar Haddad',
     });
-    expect(plainSummary(result).sections[2]?.groups[0]?.lines[0]?.text).toBe(
+    expect(plainSummary(result).sections[3]?.groups[0]?.lines[0]?.text).toBe(
       'acme/api#12 Retry webhooks: waiting 4 days on Omar Haddad',
     );
   });
@@ -596,6 +883,7 @@ describe('the plain summary', () => {
     ).toEqual([
       ['Shipped', [['Titanlink', ['acme/api: 4 PRs merged, release v2.3.0']]]],
       ['Started', [['Unfiled', ['acme/web: 1 PR and 2 issues opened']]]],
+      ['Progress', []],
       ['Stuck', [['Titanlink', ['acme/api#12 Retry webhooks: waiting 4 days on omar, checks failing']]]],
       ['On fire', []],
     ]);
