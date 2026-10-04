@@ -107,7 +107,7 @@ describe('reading Linear issues', () => {
     ]);
   });
 
-  it('words what Linear changed: closed, reopened, renamed, deleted', async () => {
+  it('words what Linear changed: closed, reopened, renamed, a field, deleted', async () => {
     save(issue({ identifier: 'ENG-1', title: 'Old' }));
     save(issue({ identifier: 'ENG-1', title: 'Old', state: STATES.done }));
     save(issue({ identifier: 'ENG-1', title: 'Old', state: STATES.todo }));
@@ -119,12 +119,105 @@ describe('reading Linear issues', () => {
 
     expect(history.map((entry) => describeIssueEntry(entry, history))).toEqual([
       'Deleted in Linear',
-      'Changed in Linear',
+      'State changed in Linear',
       'Renamed in Linear',
       'Reopened in Linear',
       'Closed in Linear',
       'Added from Linear',
     ]);
+  });
+});
+
+describe('changing Linear issues (Two-way sync)', () => {
+  const SAM = { id: 'user-sam', name: 'Sam Rivera', displayName: 'sam', email: null };
+  const one = async () => {
+    save(issue({ identifier: 'ENG-1', title: 'Fix the login loop', priority: 3 }));
+    const [item] = await issues.list();
+    if (!item) throw new Error('No issue');
+    return item;
+  };
+
+  it('edits a field as the User: it shows at once and waits to reach Linear', async () => {
+    const item = await one();
+    const entry = await issues.edit(item.id, { priority: 1 });
+
+    expect(store.get(item.id)?.item.detail).toMatchObject({ priority: 1 });
+    expect(entry.by).toEqual({ kind: 'user' });
+    expect(await issues.outgoing()).toEqual([
+      expect.objectContaining({ itemId: item.id, field: 'priority', status: 'pending' }),
+    ]);
+    const history = await issues.history(item.id);
+    expect(describeIssueEntry(history[0] as (typeof history)[0], history)).toBe('Priority changed by you');
+  });
+
+  it('posts a comment under an id of its own, as the User', async () => {
+    const item = await one();
+    await issues.comment(item.id, 'On it.', SAM);
+
+    const detail = store.get(item.id)?.item.detail as { comments: { id: string; body: string }[] };
+    const [comment] = detail.comments;
+    expect(comment).toMatchObject({ body: 'On it.', author: SAM });
+    expect(comment?.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect((await issues.outgoing()).map((change) => change.field)).toEqual([`comment:${comment?.id}`]);
+    const history = await issues.history(item.id);
+    expect(describeIssueEntry(history[0] as (typeof history)[0], history)).toBe('Commented by you');
+
+    await issues.undo(history[0]?.id as number);
+    const after = await issues.history(item.id);
+    expect(describeIssueEntry(after[0] as (typeof after)[0], after)).toBe('Comment undone by you');
+  });
+
+  it('retries changes that couldn’t sync', async () => {
+    const item = await one();
+    await issues.edit(item.id, { estimate: 5 });
+    const ids = store.outgoing.forItem(item.id).map((row) => row.id);
+    store.outgoing.fail(ids, { error: 'Linear refused the change.', failed: true, nextAttemptAt: null });
+    expect(await issues.outgoing()).toEqual([expect.objectContaining({ status: 'failed' })]);
+
+    await issues.retry(item.id);
+    expect(await issues.outgoing()).toEqual([expect.objectContaining({ status: 'pending', error: null })]);
+  });
+
+  it('reads what an Account’s Linear offers the pickers', async () => {
+    expect(await issues.catalog(ACME)).toBeNull();
+    const catalog = {
+      kind: 'linear' as const,
+      teams: [
+        {
+          id: 'team-eng',
+          key: 'ENG',
+          name: 'Engineering',
+          states: [],
+          members: [SAM],
+          labels: [],
+          cycles: [],
+          linearProjects: [],
+        },
+      ],
+    };
+    store.syncState.saveCatalog(ACME, 'linear', catalog, Date.now());
+    expect(await issues.catalog(ACME)).toEqual(catalog);
+  });
+
+  it('words Linear moving only its updated time (as after a change sent from here) as an update', async () => {
+    const item = await one();
+    save(issue({ identifier: 'ENG-1', title: 'Fix the login loop', priority: 3, updatedAt: Date.now() }));
+    const history = await issues.history(item.id);
+    expect(describeIssueEntry(history[0] as (typeof history)[0], history)).toBe('Updated in Linear');
+  });
+
+  it('words a change Linear made that won over the User’s with its note', async () => {
+    const item = await one();
+    store.saveFromSource({
+      source: 'linear',
+      account: ACME,
+      items: [issue({ identifier: 'ENG-1', title: 'Fix the login loop', priority: 2 })],
+      why: 'Changed in Linear by Priya Patel at 14:02',
+    });
+    const history = await issues.history(item.id);
+    expect(describeIssueEntry(history[0] as (typeof history)[0], history)).toBe(
+      'Changed in Linear by Priya Patel at 14:02',
+    );
   });
 });
 
@@ -140,6 +233,7 @@ describe('the sync status line', () => {
     nextSyncAt: null,
     itemCount: 4,
     problem: null,
+    outgoing: { pending: 0, failed: 0 },
     ...overrides,
   });
   const account = (name: string, sync: AccountSyncStatus | null): AccountSummary => ({

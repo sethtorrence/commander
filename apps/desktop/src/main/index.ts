@@ -65,11 +65,15 @@ function startCore(secrets: Secrets) {
   ]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));
-  const accounts = setUpAccounts({ secrets, sendToCore: (message) => core.postMessage(message) });
+  const accounts = setUpAccounts({ secrets, sendToCore: (message) => core.postMessage(message), testHooks });
   const models = setUpModels(secrets, core);
   const autonomy = createAutonomyChannels((message) => core.postMessage(message));
   ipcMain.handle(ipc.autonomy, (_event, request: unknown) => autonomy.window.request(request));
-  if (testHooks) Object.assign(globalThis, { commanderTestHooks: { autonomy: autonomy.test.request } });
+  if (testHooks) {
+    Object.assign(globalThis, {
+      commanderTestHooks: { autonomy: autonomy.test.request, setOnline: accounts.setOnline },
+    });
+  }
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.

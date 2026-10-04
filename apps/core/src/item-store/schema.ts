@@ -7,11 +7,13 @@ import type {
   FiledBy,
   ItemKind,
   ItemStatus,
+  LinearCatalog,
   LinearIssueDetail,
   LinkType,
   ModelCall,
   ModelProvider,
   ModelTier,
+  OutgoingStatus,
   ProjectChangeAction,
   ProposalRecord,
   ProposalStatus,
@@ -251,6 +253,46 @@ export const syncRuns = sqliteTable(
   },
   (t) => [index('sync_runs_account').on(t.account, t.startedAt)],
 );
+
+// Two-way sync's outgoing queue: each change made in Commander to a synced field of a Source Item,
+// until it reaches the Source (or the User undoes it). Queued in the same transaction as the change,
+// so it survives restarts.
+export const outgoingChanges = sqliteTable(
+  'outgoing_changes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    account: text('account').notNull(),
+    source: text('source').$type<Source>().notNull(),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id),
+    externalId: text('external_id').notNull(),
+    // The synced field (see the domain's synced-fields.ts).
+    field: text('field').notNull(),
+    // The field's value as the User left it, and as the Source had it when last synced.
+    value: text('value', { mode: 'json' }),
+    synced: text('synced', { mode: 'json' }),
+    // When the User made the change (the latest, when several to one field were folded together).
+    madeAt: integer('made_at').notNull(),
+    // The activity entry that made it.
+    entryId: integer('entry_id').references(() => activity.id),
+    status: text('status').$type<OutgoingStatus>().notNull(),
+    attempts: integer('attempts').notNull().default(0),
+    // When to try again after a failure; null means as soon as possible.
+    nextAttemptAt: integer('next_attempt_at'),
+    error: text('error'),
+  },
+  (t) => [index('outgoing_changes_account').on(t.account), index('outgoing_changes_item').on(t.itemId)],
+);
+
+// What each Account's Source offers the detail pane's pickers (Linear: each team's states, members,
+// labels, cycles and Linear projects), as its last sync fetched it.
+export const sourceCatalogs = sqliteTable('source_catalogs', {
+  account: text('account').primaryKey(),
+  source: text('source').$type<Source>().notNull(),
+  catalog: text('catalog', { mode: 'json' }).$type<LinearCatalog>().notNull(),
+  fetchedAt: integer('fetched_at').notNull(),
+});
 
 // The Autonomy settings (Everywhere, Section and per-action levels) as one validated document.
 export const autonomySettings = sqliteTable('autonomy_settings', {

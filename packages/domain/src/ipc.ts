@@ -57,6 +57,8 @@ export type AccountSyncStatus = {
   nextSyncAt: number | null;
   itemCount: number;
   problem: { kind: 'rate-limited' | 'refused' | 'failed'; message: string } | null;
+  // Changes made in Commander still on their way to the Source, and those that couldn't sync.
+  outgoing: { pending: number; failed: number };
 };
 export type AccountsState = {
   accounts: AccountSummary[];

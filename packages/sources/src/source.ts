@@ -1,4 +1,4 @@
-import type { Source, SourceItem } from '@commander/domain';
+import type { LinearCatalog, Source, SourceItem } from '@commander/domain';
 
 // The one Source interface every Source adapter implements (Linear now; GitHub, Calendar, Email
 // and Teams later). An adapter only translates: it reads the Source and hands over Items, and
@@ -24,9 +24,15 @@ export type SyncRequest = {
   // Hands a page to the engine, which saves it through the Item store at once. Saving the same
   // Items twice is harmless, so a sync that fails half-way can simply run again.
   save(page: SyncPage): void;
+  // Hands over what the Source offers the detail pane's pickers, kept per Account (Two-way sync).
+  saveCatalog?(catalog: SourceCatalog): void;
   // Aborted when the sync is no longer wanted (the Account was removed).
   signal: AbortSignal;
 };
+
+// What a Source offers for its synced fields' pickers (Linear: each team's states, members, labels,
+// cycles and Linear projects).
+export type SourceCatalog = LinearCatalog;
 
 // What a Source reports a sync cost it, for comparing with its limits.
 export type SyncCost = { requests: number; complexity: number | null };
@@ -34,12 +40,44 @@ export type SyncCost = { requests: number; complexity: number | null };
 // A finished sync: the cursor the next sync starts from, and what it cost.
 export type SyncResult = { cursor: unknown; cost: SyncCost };
 
+// Two-way sync: one change the User made to a synced field (see the domain's synced-fields.ts), as
+// the outgoing queue hands it over: the field's new value, the Source's value when last synced, and
+// when the User made it (an edit made offline carries the time it was made, not sent).
+export type FieldChange = { field: string; value: unknown; synced: unknown; madeAt: number };
+
+export type WriteRequest = {
+  account: string;
+  // The Source's id for the Item.
+  externalId: string;
+  // The Item's queued changes, one per field (oldest first).
+  changes: FieldChange[];
+  // A current access token: every write runs as the User.
+  accessToken(): Promise<AccessToken>;
+  signal: AbortSignal;
+};
+
+// A change the adapter didn't write because the Source changed that field after the User did: the
+// newer change wins, per field. Who made the Source's change (a name, when known) and when.
+export type Superseded = { field: string; by: string | null; at: number };
+
+export type WriteResult = {
+  // The Item as the Source has it once the write is done, to save at once (null if unknown).
+  item: SourceItem | null;
+  superseded: Superseded[];
+  cost: SyncCost;
+};
+
 export type SourceAdapter = {
   source: Source;
   cadence: Cadence;
   // Fetches what changed since `cursor` and hands it over page by page. Rejects with RateLimited,
   // SignInRefused, CursorExpired, or any other error (treated as passing, and retried with back-off).
   sync(request: SyncRequest): Promise<SyncResult>;
+  // Two-way sync: writes one Item's queued changes to the Source, sending only the fields that
+  // changed, after checking the Source's history for newer changes to them. Safe to run again with
+  // the same changes. Rejects with WriteRejected when the Source refuses the change itself, and
+  // otherwise as `sync` does. Sources without it are read-only.
+  write?(request: WriteRequest): Promise<WriteResult>;
 };
 
 // The Source asked Commander to slow down: a 429, or a quota answer under another status (Gmail
@@ -58,6 +96,12 @@ export class RateLimited extends Error {
 // The Source refused the Account's sign-in (revoked API key or token): it may need reconnecting.
 export class SignInRefused extends Error {
   override name = 'SignInRefused';
+}
+
+// The Source refused the change itself (an id it doesn't know, a value it won't take): trying again
+// won't help, so the change stops as Couldn't sync at once. The message is User-facing.
+export class WriteRejected extends Error {
+  override name = 'WriteRejected';
 }
 
 // The Source no longer accepts the cursor (Gmail historyId expired, a 410): sync again from scratch.

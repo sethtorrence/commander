@@ -61,6 +61,7 @@ const syncStatus = (overrides: Partial<AccountSyncStatus> = {}): AccountSyncStat
   nextSyncAt: null,
   itemCount: 3,
   problem: null,
+  outgoing: { pending: 0, failed: 0 },
   ...overrides,
 });
 
@@ -284,8 +285,9 @@ describe('the Linear sheet', () => {
     expect(field('linearProject')).toBe('Login revamp');
     expect(field('cycle')).toBe('Cycle 41');
     expect(field('labels')).toBe('Bug');
-    expect(field('dueDate')).toMatch(/9 Oct/);
-    expect(field('estimate')).toBe('3 points');
+    expect(within(pane).getByLabelText<HTMLInputElement>('Due date').value).toBe('2026-10-09');
+    expect(within(pane).getByLabelText<HTMLInputElement>('Estimate').value).toBe('3');
+    expect(field('estimate')).toBe('points');
     expect(field('project')).toContain('Unfiled');
 
     const identifier = within(pane).getByRole('link', { name: 'ENG-418' });
@@ -373,5 +375,138 @@ describe('the Linear sheet', () => {
     accounts.change([acme(syncStatus({ lastSyncedAt: new Date(2026, 9, 3, 14, 17).getTime() }))]);
 
     await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('linear', 3));
+  });
+});
+
+describe('editing an issue (Two-way sync)', () => {
+  async function open(title = 'Fix the login loop') {
+    renderSheet();
+    await waitFor(() => expect(listed()).toHaveLength(2));
+    fireEvent.click(screen.getByText(title));
+    return detail() as HTMLElement;
+  }
+  const issueId = () =>
+    store.query({ kinds: ['linear-issue'] }).find((item) => item.title === 'Fix the login loop')?.id ?? '';
+  const stored = () =>
+    store.get(issueId())?.item.detail as { estimate: number | null; comments: { body: string }[] };
+  const queued = () => store.outgoing.forItem(issueId()).map((change) => change.field);
+
+  it('changes the estimate in place: it shows at once, waits to reach Linear, and Ctrl+Z puts it back', async () => {
+    const pane = await open();
+    const estimate = within(pane).getByLabelText<HTMLInputElement>('Estimate');
+    fireEvent.change(estimate, { target: { value: '5' } });
+    await press('Enter', estimate);
+
+    await waitFor(() => expect(stored().estimate).toBe(5));
+    expect(queued()).toEqual(['estimate']);
+    await waitFor(() => expect(within(pane).getByTestId('issue-sync').textContent).toBe('Saving to Linear…'));
+    const activity = within(pane).getByRole('region', { name: 'Activity' });
+    await waitFor(() => expect(within(activity).getByText('Estimate changed by you')).toBeTruthy());
+
+    estimate.blur();
+    await press('z', document.body, { ctrlKey: true });
+    await waitFor(() => expect(stored().estimate).toBe(3));
+    expect(queued()).toEqual([]);
+  });
+
+  it('posts a comment with Ctrl+Enter, as the User, and it shows at once', async () => {
+    const pane = await open();
+    const box = within(pane).getByRole('textbox', { name: 'New comment' });
+    fireEvent.change(box, { target: { value: 'Fixed on staging.' } });
+    await press('Enter', box, { ctrlKey: true });
+
+    await waitFor(() =>
+      expect(stored().comments.map((comment) => comment.body)).toContain('Fixed on staging.'),
+    );
+    const comments = within(pane).getByRole('region', { name: 'Comments' });
+    await waitFor(() => expect(within(comments).getByText('Fixed on staging.')).toBeTruthy());
+    expect(within(comments).getAllByText('Sam Rivera').length).toBeGreaterThan(0);
+    expect((box as HTMLTextAreaElement).value).toBe('');
+    expect(queued()).toEqual([expect.stringMatching(/^comment:/)]);
+  });
+
+  it('shows Couldn’t sync with Retry when a change couldn’t reach Linear, and Retry sends it again', async () => {
+    const pane = await open();
+    store.record(
+      { type: 'edit-fields', itemId: issueId(), fields: { priority: 1 } },
+      { by: { kind: 'user' } },
+    );
+    const ids = store.outgoing.forItem(issueId()).map((change) => change.id);
+    store.outgoing.fail(ids, {
+      error: 'Linear refused the change: no such state.',
+      failed: true,
+      nextAttemptAt: null,
+    });
+    accounts.change([acme(syncStatus({ outgoing: { pending: 0, failed: 1 } }))]);
+
+    const alert = await within(pane).findByRole('alert');
+    expect(alert.textContent).toContain('Couldn’t sync');
+    expect(alert.textContent).toContain('Linear refused the change: no such state.');
+    const row = screen.getAllByTestId('linear-issue').find((each) => each.textContent?.includes('ENG-418'));
+    expect(row?.textContent).toContain('Couldn’t sync');
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(store.outgoing.forItem(issueId())[0]?.status).toBe('pending'));
+    await waitFor(() => expect(within(pane).queryByRole('alert')).toBeNull());
+  });
+
+  it('notes a change made in Linear that won over the User’s', async () => {
+    const pane = await open();
+    store.saveFromSource({
+      source: 'linear',
+      account: ACME,
+      items: [
+        issue({
+          identifier: 'ENG-418',
+          title: 'Fix the login loop',
+          assignee: SAM,
+          state: STATES.progress,
+          priority: 4,
+          cycle: CURRENT_CYCLE,
+        }),
+      ],
+      why: 'Changed in Linear by Priya Patel at 14:02',
+    });
+    accounts.change([acme(syncStatus({ lastSyncedAt: new Date(2026, 9, 3, 14, 3).getTime() }))]);
+
+    await waitFor(() =>
+      expect(within(pane).getByTestId('issue-sync').textContent).toBe(
+        'Changed in Linear by Priya Patel at 14:02',
+      ),
+    );
+  });
+
+  it('offers the team’s workflow states from the Account’s catalog', async () => {
+    store.syncState.saveCatalog(
+      ACME,
+      'linear',
+      {
+        kind: 'linear',
+        teams: [
+          {
+            id: 'team-eng',
+            key: 'ENG',
+            name: 'Engineering',
+            states: [STATES.todo, STATES.progress, STATES.review, STATES.done],
+            members: [PRIYA, SAM],
+            labels: [{ id: 'label-customer', name: 'Customer', color: '#5e6ad2' }],
+            cycles: [],
+            linearProjects: [],
+          },
+        ],
+      },
+      Date.now(),
+    );
+    const pane = await open();
+    const state = within(pane).getByRole('combobox', { name: 'State' });
+    await act(async () => {
+      fireEvent.keyDown(state, { key: 'Enter' });
+    });
+    const listbox = await screen.findByRole('listbox');
+    expect(
+      within(listbox)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Todo', 'In Progress', 'In Review', 'Done']);
   });
 });

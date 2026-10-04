@@ -42,6 +42,10 @@ _Avoid_: Soft delete, trash, archive
 Changes made in Commander are written back to the Source, and changes in the Source show up in Commander.
 _Avoid_: Import, mirror
 
+**Synced field**:
+One part of a Source Item that Two-way sync writes back on its own (a Linear issue's state or priority, each of its labels, each comment); changes, undo and conflicts ("the newer change wins") are all judged per synced field.
+_Avoid_: Property, attribute, column
+
 ## Projects
 
 **Project**:

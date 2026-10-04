@@ -1,12 +1,26 @@
 import type { ActivityEntry, LinearIssueDetail } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { shortDate } from '../../frame/calendar';
 import { ItemBadge } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { Eyebrow, PaneEmpty, PanePart } from '../todos/detail/parts';
 import { TodoLinks } from '../todos/detail/TodoLinks';
 import { whenShort } from '../todos/when';
+import type { IssueSync, PickerOptions } from './editing';
+import {
+  AssigneePicker,
+  CommentBox,
+  CyclePicker,
+  cycleName,
+  DueDateInput,
+  EstimateInput,
+  type FieldEdit,
+  LabelsPicker,
+  LinearProjectPicker,
+  PriorityPicker,
+  StatePicker,
+} from './FieldEditors';
 import { PRIORITY_NAMES, PriorityIcon, StateIcon } from './glyphs';
 import type { Issue } from './issues';
 import { describeIssueEntry, type IssueLink } from './linear-issues';
@@ -15,10 +29,13 @@ import { Markdown } from './Markdown';
 /*
   The detail pane beside the list, after the Todos detail pane and the prototype's reader: actions
   along the top, then the issue's identifier (a link to it in Linear), title, fields, description,
-  comments, Links both ways and activity log. Read-only apart from filing.
+  comments, Links both ways and activity log.
 
-  Two-way sync (#60) makes the fields marked `writable` below editable in place, and adds a comment
-  box under the comments; everything here already reads from the Item, so edits show as they land.
+  Two-way sync: the fields marked `writable` below are edited in place (pickers, and inputs for the
+  due date and estimate), and a comment box sits under the comments. Edits show at once; a line
+  under the fields says when they are on their way to Linear, or couldn't sync (with Retry), and
+  notes a change made in Linear that won over the User's. The description stays read-only, with
+  Edit in Linear.
 */
 
 type FieldKey =
@@ -32,7 +49,7 @@ type FieldKey =
   | 'dueDate'
   | 'estimate';
 
-// The issue's fields, in order. `writable`: changeable from Commander once two-way sync lands (#14).
+// The issue's fields, in order. `writable`: changeable from Commander (#14).
 const FIELDS: { key: FieldKey; label: string; writable: boolean }[] = [
   { key: 'state', label: 'State', writable: true },
   { key: 'priority', label: 'Priority', writable: true },
@@ -77,7 +94,7 @@ function fieldValue(key: FieldKey, detail: LinearIssueDetail, mine: boolean): Re
       return detail.linearProject?.name ?? none;
     case 'cycle':
       if (!detail.cycle) return none;
-      return [`Cycle ${detail.cycle.number}`, detail.cycle.name].filter(Boolean).join(' · ');
+      return cycleName(detail.cycle);
     case 'labels':
       if (!detail.labels.length) return none;
       return (
@@ -103,6 +120,98 @@ function fieldValue(key: FieldKey, detail: LinearIssueDetail, mine: boolean): Re
   }
 }
 
+/** A writable field's editor, showing its value as the read-only pane does. */
+function editorFor(
+  key: FieldKey,
+  detail: LinearIssueDetail,
+  shown: ReactNode,
+  editing: Editing,
+  afterChoice: () => void,
+): ReactNode {
+  const props = { detail, options: editing.options, onEdit: editing.onEdit, display: shown, afterChoice };
+  switch (key) {
+    case 'state':
+      return <StatePicker {...props} />;
+    case 'priority':
+      return <PriorityPicker {...props} />;
+    case 'assignee':
+      return <AssigneePicker {...props} me={editing.me} />;
+    case 'linearProject':
+      return <LinearProjectPicker {...props} />;
+    case 'cycle':
+      return <CyclePicker {...props} />;
+    case 'labels':
+      return <LabelsPicker {...props} />;
+    case 'dueDate':
+      return <DueDateInput detail={detail} onEdit={editing.onEdit} />;
+    case 'estimate':
+      return <EstimateInput detail={detail} onEdit={editing.onEdit} />;
+    default:
+      return shown;
+  }
+}
+
+/** What the pane needs to edit the issue (Two-way sync). */
+export interface Editing {
+  options: PickerOptions;
+  /** The User's own Linear user id in the issue's workspace. */
+  me: string | null;
+  /** Where the issue's changes stand. */
+  sync: IssueSync;
+  /** Why changes on their way can't go yet (offline, needs reconnecting), when they can't. */
+  waiting: string | null;
+  /** A change made in Linear that won over the User's, as its note. */
+  note: string | null;
+  onEdit: FieldEdit;
+  onComment: (body: string) => Promise<boolean>;
+  onRetry: () => void;
+}
+
+/** The line under the fields: changes on their way, Couldn't sync with Retry, or Linear's note. */
+function SyncLine({ editing }: { editing: Editing }) {
+  const { sync, note, waiting, onRetry } = editing;
+  if (sync.kind === 'failed') {
+    return (
+      <div
+        role="alert"
+        data-testid="issue-sync"
+        className="mt-2.5 flex items-center justify-between gap-2.5 border border-ink px-2.5 py-1.5 text-note"
+      >
+        <span>
+          <b className="font-semibold text-ink">Couldn’t sync</b>
+          {sync.error && <span className="text-muted"> · {sync.error}</span>}
+        </span>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="cursor-pointer border border-ink bg-transparent px-2.5 py-0.5 font-mono text-label-lg font-semibold uppercase tracking-label text-ink hover:bg-raise"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (sync.kind === 'sending') {
+    return (
+      <p role="status" data-testid="issue-sync" className="m-0 mt-2.5 text-note text-muted">
+        {waiting ?? 'Saving to Linear…'}
+      </p>
+    );
+  }
+  if (note) {
+    return (
+      <p
+        role="status"
+        data-testid="issue-sync"
+        className="m-0 mt-2.5 border border-line px-2.5 py-1.5 text-note text-text"
+      >
+        {note}
+      </p>
+    );
+  }
+  return null;
+}
+
 /** Opens the issue (or anything on Linear) in the system browser, through the window's new-window handler. */
 function OutLink({ href, className, children }: { href: string; className?: string; children: ReactNode }) {
   return (
@@ -118,6 +227,7 @@ export function IssueDetail({
   workspace,
   links,
   history,
+  editing,
   onFile,
   onClose,
   onOpenLink,
@@ -128,6 +238,8 @@ export function IssueDetail({
   workspace: string | null;
   links: IssueLink[];
   history: ActivityEntry[];
+  /** Editing the issue's synced fields and commenting; without it the pane is read-only. */
+  editing?: Editing;
   /** Opens the Badge picker for the issue. */
   onFile: () => void;
   onClose: () => void;
@@ -136,8 +248,15 @@ export function IssueDetail({
   const { projects, archived, projectOf } = useProjects();
   const detail = issue?.detail;
   const project = issue ? projectOf(issue.filing) : undefined;
+  const pane = useRef<HTMLElement>(null);
+  const backToPane = () => pane.current?.focus();
   return (
-    <section aria-label="Issue detail" className="min-w-0 border-l border-line">
+    <section
+      ref={pane}
+      tabIndex={-1}
+      aria-label="Issue detail"
+      className="min-w-0 border-l border-line focus-visible:outline-none"
+    >
       <div className="sticky top-(--body) max-h-[calc(100vh-var(--body))] overflow-auto [scrollbar-width:thin]">
         <div className="sticky top-0 z-2 flex h-11 items-stretch border-b border-line bg-sheet">
           {issue && detail && (
@@ -179,11 +298,16 @@ export function IssueDetail({
               {detail.creator && ` by ${detail.creator.name}`} · updated {whenShort(detail.updatedAt)}
             </p>
             <dl className="mt-3.5 mb-0 border-t border-line">
-              {FIELDS.map((field) => (
-                <Fact key={field.key} field={field.key} label={field.label}>
-                  {fieldValue(field.key, detail, mine)}
-                </Fact>
-              ))}
+              {FIELDS.map((field) => {
+                const shown = fieldValue(field.key, detail, mine);
+                return (
+                  <Fact key={field.key} field={field.key} label={field.label}>
+                    {editing && field.writable
+                      ? editorFor(field.key, detail, shown, editing, backToPane)
+                      : shown}
+                  </Fact>
+                );
+              })}
               <Fact field="project" label="Project">
                 <span className="flex items-center justify-end gap-[9px]">
                   <ItemBadge filing={issue.filing} />
@@ -191,6 +315,7 @@ export function IssueDetail({
                 </span>
               </Fact>
             </dl>
+            {editing && <SyncLine editing={editing} />}
 
             <section aria-label="Description" className="mt-[18px]">
               <Eyebrow className="mb-2 flex items-center justify-between">
@@ -234,6 +359,7 @@ export function IssueDetail({
               ) : (
                 <PaneEmpty>No comments.</PaneEmpty>
               )}
+              {editing && <CommentBox onComment={editing.onComment} />}
             </PanePart>
 
             <TodoLinks links={links} onOpen={onOpenLink} />

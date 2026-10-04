@@ -62,6 +62,12 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.undoRefile(request.entryIds) };
       case 'search':
         return { ok: true, result: store.search.query(request.query) };
+      case 'outgoing':
+        return { ok: true, result: store.outgoing.list(request.query) };
+      case 'retry-outgoing':
+        return { ok: true, result: store.outgoing.retry(request.itemId) };
+      case 'source-catalog':
+        return { ok: true, result: store.syncState.catalog(request.account) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

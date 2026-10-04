@@ -9,7 +9,8 @@ import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
 import { TodoGroup } from '../todos/TodoGroup';
-import { IssueDetail } from './IssueDetail';
+import { pickerOptions, supersededNote } from './editing';
+import { type Editing, IssueDetail } from './IssueDetail';
 import { IssueRow } from './IssueRow';
 import { isMine } from './issues';
 import { IssueFilterBar, ViewSwitch } from './ListControls';
@@ -99,6 +100,27 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
   // From the palette: open an issue it found, whatever the view and filters were hiding.
   useReveal('linear', (itemId) => state.reveal(itemId));
 
+  // Editing the selected issue (Two-way sync): its pickers' choices and where its changes stand.
+  const editing: Editing | undefined = selected
+    ? {
+        options: pickerOptions(
+          selected,
+          (selected.account && state.catalogs.get(selected.account)) || null,
+          state.allIssues,
+          now.getTime(),
+        ),
+        me: (selected.account && accountsById.get(selected.account)?.user?.id) || null,
+        sync: state.syncOf(selected.id),
+        waiting: waitingFor(
+          selected.account ? state.accounts.find((a) => a.id === selected.account) : undefined,
+        ),
+        note: supersededNote(state.history),
+        onEdit: (fields) => void state.edit(fields),
+        onComment: state.comment,
+        onRetry: () => void state.retry(),
+      }
+    : undefined;
+
   const workspaces = state.accounts.map((account) => account.name);
   const status = syncLine(state.accounts, now);
   const syncing = state.accounts.some((account) => account.sync?.activity === 'syncing');
@@ -166,6 +188,7 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
                                 : null
                             }
                             compact={detailOpen}
+                            unsynced={state.syncOf(issue.id).kind === 'failed'}
                             onOpen={() => openIssue(issue.id)}
                           />
                         ))}
@@ -187,6 +210,7 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
                 workspace={selected?.account ? (accountsById.get(selected.account)?.name ?? null) : null}
                 links={state.links}
                 history={state.history}
+                editing={editing}
                 onFile={file}
                 onClose={() => setDetailOpen(false)}
                 onOpenLink={openLink}
@@ -198,6 +222,18 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
       {badges.picker}
     </SectionSheet>
   );
+}
+
+// Why changes on their way to Linear are waiting, when they can't go yet.
+function waitingFor(
+  account: { sync: { activity: string } | null; status: string } | undefined,
+): string | null {
+  if (account?.status === 'needs-reconnect' || account?.sync?.activity === 'needs-reconnect') {
+    return 'Waiting for Linear to be reconnected';
+  }
+  if (account?.sync?.activity === 'offline') return 'Offline · saves to Linear when back online';
+  if (account?.sync?.activity === 'asleep') return 'Saves to Linear when the machine wakes';
+  return null;
 }
 
 function EmptyGroup({ children }: { children: ReactNode }) {
