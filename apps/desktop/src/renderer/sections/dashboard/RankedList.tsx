@@ -40,6 +40,7 @@ const SECTION_LABELS: Record<string, string> = {
   calendar: 'Calendar',
   teams: 'Teams',
   github: 'GitHub',
+  email: 'Email',
 };
 
 /** Where in it to show: the message that put a Chat on the Dashboard, or a Teams suggestion's message. */
@@ -391,6 +392,13 @@ function Marker({ row, onTick }: { row: FeedRow; onTick: () => void }) {
         <ChatTypeGlyph type={item.detail.chatType} className="w-6" />
       </span>
     );
+  // An email thread: nothing to tick (it is answered, or sorted, in the Email Section).
+  if (item.detail?.kind === 'email')
+    return (
+      <span className="grid h-[22px] place-items-center" title="Email">
+        <EnvelopeGlyph />
+      </span>
+    );
   // The User's pull request: nothing to tick, its state instead.
   if (item.detail?.kind === 'pull-request')
     return (
@@ -543,5 +551,13 @@ function ActionBar({
         )}
       </span>
     </div>
+  );
+}
+
+function EnvelopeGlyph() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 text-muted">
+      <path d="M2 3.5h12v9H2zM2 4l6 4.5L14 4" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
   );
 }

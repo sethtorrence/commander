@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { emailBucket } from './buckets';
 import { emailBody, emailLabel } from './email';
 import { item } from './items';
 
@@ -21,10 +22,12 @@ export const emailListView = z.union([
 ]) as z.ZodType<EmailListView>;
 
 // A view's threads, newest first (a snoozed thread that came back counts from when it came back).
-// `account`: one Account's only. `view`: the Inbox unless given.
+// `account`: one Account's only. `view`: the Inbox unless given. `bucket` (#137): only the threads in
+// that Bucket (by its latest message), or Unsorted (`unsorted`).
 export const emailThreadQuery = z.object({
   account: id.optional(),
   view: emailListView.optional(),
+  bucket: id.optional(),
   limit: z.number().int().positive().max(2000).optional(),
 });
 export type EmailThreadQuery = z.input<typeof emailThreadQuery>;
@@ -56,15 +59,29 @@ export const emailThreadSummary = z.object({
   snoozedUntil: timestamp.nullable().optional(),
   // It came back from a snooze set for then ("Snoozed until 09:00"), until it is archived.
   returnedFrom: timestamp.nullable().optional(),
+  // Its Bucket (#137): its latest message's, and how it got there; null while Unsorted.
+  bucket: emailBucket.nullable().optional(),
 });
 export type EmailThreadSummary = z.infer<typeof emailThreadSummary>;
 
+// The view's threads counted by Bucket and Project (each by its latest message; null: Unsorted, or
+// Unfiled), whatever the Bucket asked for: the Bucket strip's counts, combined in the window with the
+// Project filter, and the Project filter's with the Bucket strip (#137).
+export const emailThreadFacet = z.object({
+  bucketId: id.nullable(),
+  projectId: id.nullable(),
+  threads: count,
+  unread: count,
+});
+export type EmailThreadFacet = z.infer<typeof emailThreadFacet>;
+
 export const emailThreadList = z.object({
   threads: z.array(emailThreadSummary),
-  // Threads in the inbox with unread mail (the Email tab's count), and all threads in the inbox,
-  // for the Accounts the query covers.
+  // Threads in the view (and Bucket, when asked) with unread mail (the Email tab's count, of the inbox
+  // in Needs reply), and all of them, for the Accounts the query covers.
   unreadThreads: count,
   total: count,
+  facets: z.array(emailThreadFacet).optional(),
 });
 export type EmailThreadList = z.infer<typeof emailThreadList>;
 

@@ -1,3 +1,4 @@
+import { BUCKET_FIELD } from './buckets';
 import type { EmailDetail, EmailLabel } from './email';
 import { EMAIL_VIEWS, type EmailFixedView, type EmailListView } from './email-threads';
 import { isEmailLabelField, LABEL_FIELD, SNOOZE_FIELD } from './synced-fields';
@@ -5,9 +6,9 @@ import { isEmailLabelField, LABEL_FIELD, SNOOZE_FIELD } from './synced-fields';
 /*
   Organising email (#135), as pure functions the Item store and the window share:
 
-  - **Thread actions:** what archiving, Trash, starring, read and unread, labels and snooze change on
-    each message of a thread (emails are Items, one per message), as `edit-fields` changes of their
-    synced fields. Only messages that change are named, so every entry is a real change to undo.
+  - **Thread actions:** what archiving, Trash, starring, read and unread, labels, snooze and moving to a
+    Bucket (#137) change on each message of a thread (emails are Items, one per message), as
+    `edit-fields` changes of their synced fields. Only messages that change are named, so every entry is a real change to undo.
   - **Views:** which of the Email Section's views a thread is in (Inbox, Starred, Snoozed, Archive,
     Trash, and each label), from its messages.
   - **Section search:** the operators `/` understands (from:, to:, subject:, has:attachment,
@@ -27,7 +28,9 @@ export type ThreadAction =
   | { type: 'label'; label: EmailLabel }
   | { type: 'unlabel'; labelId: string }
   | { type: 'snooze'; until: number }
-  | { type: 'unsnooze' };
+  | { type: 'unsnooze' }
+  // Moves the thread to a Bucket (null: Unsorted), by the User (#137).
+  | { type: 'bucket'; bucketId: string | null };
 
 export type ThreadMessage = { id: string; detail: EmailDetail };
 export type MessageFields = { itemId: string; fields: Record<string, unknown> };
@@ -93,6 +96,14 @@ export function threadActionFields(
       );
     case 'unsnooze':
       return each((detail) => (detail.snooze ? { [SNOOZE_FIELD]: null } : null));
+    case 'bucket':
+      // Already there by the User's hand: nothing to change. Sorted there by a Rule or Ares, it is
+      // the User's now, so neither moves it again.
+      return each((detail) =>
+        detail.bucket?.sortedBy === 'user' && (detail.bucket.bucketId ?? null) === action.bucketId
+          ? null
+          : { [BUCKET_FIELD]: { bucketId: action.bucketId, sortedBy: 'user' } },
+      );
   }
 }
 

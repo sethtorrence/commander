@@ -318,17 +318,18 @@ describe('an email’s synced fields', () => {
     listId: null,
   };
 
-  it('has inbox, read, starred, trash, snooze and one label:<id> per label beside those', () => {
+  it('has inbox, read, starred, trash, snooze, bucket and one label:<id> per label beside those', () => {
     expect(syncedFieldsOf(mail)).toEqual({
       inbox: true,
       read: false,
       starred: false,
       trash: false,
       snooze: null,
+      bucket: null,
       'label:CATEGORY_PERSONAL': { id: 'CATEGORY_PERSONAL', name: 'Personal' },
       'label:Label_1': { id: 'Label_1', name: 'Receipts' },
     });
-    for (const field of ['inbox', 'read', 'starred', 'trash', 'snooze', 'label:Label_2'])
+    for (const field of ['inbox', 'read', 'starred', 'trash', 'snooze', 'bucket', 'label:Label_2'])
       expect(isSyncedField('email', field)).toBe(true);
     expect(isSyncedField('email', 'subject')).toBe(false);
     expect(isSyncedField('email', 'label:')).toBe(false);

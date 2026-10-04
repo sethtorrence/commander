@@ -540,6 +540,20 @@ export const rules = sqliteTable('rules', {
   deletedAt: integer('deleted_at'),
 });
 
+// Settings → Buckets (#137): what to do with an email, the User's own list. A fresh install gets the
+// starter set (buckets.ts); a removed Bucket keeps its row (deleted_at), for Undo.
+export const buckets = sqliteTable('buckets', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  // What belongs in it, plainly: what Ares sorts by.
+  description: text('description').notNull(),
+  // Its place among the Buckets that aren't removed; a removed one keeps the place it had.
+  position: integer('position').notNull(),
+  createdAt: integer('created_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  deletedAt: integer('deleted_at'),
+});
+
 // Settings → Notes → Markdown copy folder (#53): where the read-only Markdown copy of the Daily Notes
 // is written, in a single row; no row, or a null folder, while the copy is off.
 export const markdownCopy = sqliteTable('markdown_copy', {

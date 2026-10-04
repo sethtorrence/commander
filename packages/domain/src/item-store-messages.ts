@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type DashboardClears, type DashboardState, dashboardClears, dashboardState } from './ares-ranking';
 import { attachmentMaxBytes, attachmentNamePattern } from './attachments';
+import { type Bucket, type BucketChange, bucket, bucketAction, bucketChange } from './buckets';
 import {
   type CalendarSettings,
   type CalendarSummary,
@@ -135,6 +136,11 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('preview-rule'), request: rulePreviewRequest }),
   z.object({ op: z.literal('refile'), itemIds: z.array(z.string().min(1)).min(1).max(1000) }),
   z.object({ op: z.literal('undo-refile'), entryIds: z.array(z.number().int().positive()).min(1).max(1000) }),
+  // Buckets (#137): the User's list and its changes, and re-sorting held mail by the Bucket Rules.
+  z.object({ op: z.literal('buckets') }),
+  z.object({ op: z.literal('change-bucket'), action: bucketAction }),
+  z.object({ op: z.literal('resort'), itemIds: z.array(z.string().min(1)).min(1).max(5000) }),
+  z.object({ op: z.literal('undo-resort'), entryIds: z.array(z.number().int().positive()).min(1).max(5000) }),
   // Global search (the Ctrl+K palette): local, ranked, never waiting on a model.
   z.object({ op: z.literal('search'), query: searchQuery }),
   // Two-way sync: changes waiting to reach their Source (or that couldn't sync), and Retry for an
@@ -267,6 +273,10 @@ export type ItemStoreResults = {
   'preview-rule': RulePreview;
   refile: ActivityEntry[];
   'undo-refile': ActivityEntry[];
+  buckets: Bucket[];
+  'change-bucket': BucketChange;
+  resort: ActivityEntry[];
+  'undo-resort': ActivityEntry[];
   search: SearchResult;
   outgoing: OutgoingChange[];
   'retry-outgoing': OutgoingChange[];
@@ -329,6 +339,10 @@ export const itemStoreResult = {
   'preview-rule': rulePreview,
   refile: z.array(activityEntry),
   'undo-refile': z.array(activityEntry),
+  buckets: z.array(bucket),
+  'change-bucket': bucketChange,
+  resort: z.array(activityEntry),
+  'undo-resort': z.array(activityEntry),
   search: searchResult,
   outgoing: z.array(outgoingChange),
   'retry-outgoing': z.array(outgoingChange),

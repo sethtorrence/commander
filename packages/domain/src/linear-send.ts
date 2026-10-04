@@ -94,7 +94,7 @@ export function teamForProject(
   if (projectId !== null) {
     const ordered = [...rules].sort((a, b) => a.order - b.order);
     for (const rule of ordered) {
-      if (rule.target.projectId !== projectId) continue;
+      if (rule.target.kind !== 'project' || rule.target.projectId !== projectId) continue;
       for (const condition of teamConditions(rule)) {
         const account = accountWith(catalogs, condition.value);
         if (account) return { account, teamId: condition.value };

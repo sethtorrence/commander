@@ -250,8 +250,8 @@ describe('the Email sheet', () => {
     expect(within(shipped as HTMLElement).getByLabelText('Has attachments')).toBeTruthy();
     expect(within(standup as HTMLElement).getByText('sam@work.test')).toBeTruthy();
     expect(within(conversation as HTMLElement).getByTestId('thread-time').textContent).toBe('14:00');
-    // The Email tab counts the inbox's unread threads.
-    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('email', 2));
+    // The Email tab counts unread threads in Needs reply (#137): none is sorted there yet.
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('email', 0));
   });
 
   it('narrows to one Account with the Account switcher, and back to all', async () => {

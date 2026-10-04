@@ -324,7 +324,7 @@ describe('the list of Rules', () => {
 
     const deleted = change({ type: 'delete', ruleId: eng.id });
 
-    expect(deleted).toEqual({ rule: null, refile: [] });
+    expect(deleted).toEqual({ rule: null, refile: [], resort: [] });
     expect(store.rules().map((r) => r.id)).toEqual([ops.id]);
     expect(filingOf(ids['1'])).toEqual({ projectId: tl.id, filedBy: 'rule' });
 
@@ -462,25 +462,28 @@ describe('undoing a re-filing', () => {
   });
 });
 
+const projectOf = (rule: { target: RuleDraft['target'] }) =>
+  rule.target.kind === 'project' ? rule.target.projectId : null;
+
 describe('merging Projects', () => {
   it('moves the merged Project’s Rules to the one kept, and undo puts them back', () => {
     const toTx = addRule(tx, all(team(OPS)));
     const toTl = addRule(tl, all(team(ENG)));
 
     const merged = store.changeProject({ type: 'merge', projectId: tx.id, into: tl.id });
-    expect(store.rules().map((r) => [r.id, r.target.projectId])).toEqual([
+    expect(store.rules().map((r) => [r.id, projectOf(r)])).toEqual([
       [toTx.id, tl.id],
       [toTl.id, tl.id],
     ]);
 
     const undone = store.changeProject({ type: 'undo', changeId: merged.id });
-    expect(store.rules().map((r) => [r.id, r.target.projectId])).toEqual([
+    expect(store.rules().map((r) => [r.id, projectOf(r)])).toEqual([
       [toTx.id, tx.id],
       [toTl.id, tl.id],
     ]);
 
     // Undoing the undo merges them again, Rules included.
     store.changeProject({ type: 'undo', changeId: undone.id });
-    expect(store.rules().map((r) => r.target.projectId)).toEqual([tl.id, tl.id]);
+    expect(store.rules().map((r) => projectOf(r))).toEqual([tl.id, tl.id]);
   });
 });

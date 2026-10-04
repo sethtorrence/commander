@@ -1,5 +1,6 @@
 import type {
   ActivityEntry,
+  Bucket,
   EmailLabel,
   EmailListView,
   EmailSearchResult,
@@ -20,12 +21,23 @@ import { clockTime } from '../../settings/account-sync';
   Accounts, goes through here, so components never build requests themselves. Emails are Items, one
   per message; the Section shows them as threads. Filing a thread files each of its messages, as one
   change the User can undo, and so does organising it (#135): archive, Trash, star, read, labels and
-  snooze are edits of each message's synced fields (ADR 0003), which the Core queues for Gmail.
+  snooze are edits of each message's synced fields (ADR 0003), which the Core queues for Gmail. So is
+  moving it to a Bucket (#137), though that stays in Commander.
 */
 
 export interface EmailClient {
-  /** A view's threads (the inbox unless asked), newest first: every Account's, or one Account's. */
-  threads(query: { account?: string; view?: EmailListView; limit?: number }): Promise<EmailThreadList>;
+  /**
+   * A view's threads (the inbox unless asked), newest first: every Account's, or one Account's; in one
+   * Bucket (or Unsorted) when asked, with the view's counts by Bucket and Project.
+   */
+  threads(query: {
+    account?: string;
+    view?: EmailListView;
+    bucket?: string;
+    limit?: number;
+  }): Promise<EmailThreadList>;
+  /** The User's Buckets, in their order. */
+  buckets(): Promise<Bucket[]>;
   /** Each view's threads and unread ones, with a view per label. */
   views(account?: string): Promise<EmailViewCounts>;
   /** The Section's search (`/`), with its operators, newest first. */
@@ -53,6 +65,7 @@ export interface EmailClient {
 export function emailIn(itemStore: ItemStoreClient): EmailClient {
   return {
     threads: (query) => itemStore({ op: 'email-threads', query }),
+    buckets: () => itemStore({ op: 'buckets' }),
     views: (account) => itemStore({ op: 'email-views', query: account ? { account } : {} }),
     search: (text, account) =>
       itemStore({ op: 'email-search', query: { text, ...(account ? { account } : {}) } }),

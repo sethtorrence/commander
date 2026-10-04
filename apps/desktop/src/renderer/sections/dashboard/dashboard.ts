@@ -1,4 +1,12 @@
-import type { ActivityEntry, ChatSetting, CoreMessage, DashboardState, Item } from '@commander/domain';
+import {
+  type ActivityEntry,
+  type ChatSetting,
+  type CoreMessage,
+  type DashboardState,
+  type Item,
+  NEEDS_REPLY,
+  WAITING_ON_OTHERS,
+} from '@commander/domain';
 import type { AccountSummary, AccountsState } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import type { AutonomyClient } from '../ares/activity';
@@ -21,7 +29,8 @@ export interface DashboardClient {
   /**
    * The open Items the Dashboard ranks: open Todos, Linear issues and Teams Chats, not deleted,
    * today's and tomorrow's events (its schedule; the next meeting is ranked into Now), GitHub's open
-   * work, and Ares's latest GitHub summary.
+   * work, Ares's latest GitHub summary, and the inbox's threads in Needs reply and Waiting on others,
+   * each by its latest message (#137).
    */
   items(): Promise<Item[]>;
   /** The Chats the User muted or excluded (muted ones never reach the Dashboard). */
@@ -111,21 +120,28 @@ export function dashboardIn(
       const today = dayKey(clock(), timeZone);
       const from = dayStart(today, timeZone);
       const to = dayStart(addDays(today, 2), timeZone);
-      const [todos, issues, events, chats, invitations, work, summaries] = await Promise.all([
-        itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
-        itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
-        itemStore({ op: 'events', query: { from, to, limit: MOST } }),
-        itemStore({ op: 'query', query: { kinds: ['chat'], statuses: ['open'], limit: MOST } }),
-        // Invitations waiting for an answer, whenever they are (#129): the band rules put them in Today.
-        itemStore({ op: 'invitations' }),
-        // GitHub's open work (#116): reviews asked of the User, and pull requests (theirs are ranked).
-        itemStore({
-          op: 'query',
-          query: { kinds: ['review-request', 'pull-request'], statuses: ['open'], limit: MOST },
-        }),
-        // Ares's latest daily GitHub summary or Monday roll-up (#121): one row, FYI or Today.
-        itemStore({ op: 'github-summaries', cadences: ['daily', 'weekly'], limit: 1 }),
-      ]);
+      const [todos, issues, events, chats, invitations, work, summaries, needsReply, waiting] =
+        await Promise.all([
+          itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
+          itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
+          itemStore({ op: 'events', query: { from, to, limit: MOST } }),
+          itemStore({ op: 'query', query: { kinds: ['chat'], statuses: ['open'], limit: MOST } }),
+          // Invitations waiting for an answer, whenever they are (#129): the band rules put them in Today.
+          itemStore({ op: 'invitations' }),
+          // GitHub's open work (#116): reviews asked of the User, and pull requests (theirs are ranked).
+          itemStore({
+            op: 'query',
+            query: { kinds: ['review-request', 'pull-request'], statuses: ['open'], limit: MOST },
+          }),
+          // Ares's latest daily GitHub summary or Monday roll-up (#121): one row, FYI or Today.
+          itemStore({ op: 'github-summaries', cadences: ['daily', 'weekly'], limit: 1 }),
+          // Email (#137): the inbox's threads in the two Buckets the band rules place.
+          itemStore({ op: 'email-threads', query: { view: 'inbox', bucket: NEEDS_REPLY, limit: MOST } }),
+          itemStore({
+            op: 'email-threads',
+            query: { view: 'inbox', bucket: WAITING_ON_OTHERS, limit: MOST },
+          }),
+        ]);
       const shown = new Set(events.map((event) => event.id));
       return [
         ...todos,
@@ -135,6 +151,7 @@ export function dashboardIn(
         ...invitations.filter((item) => !shown.has(item.id)),
         ...work,
         ...summaries.summaries,
+        ...[...needsReply.threads, ...waiting.threads].map((thread) => thread.latest),
       ];
     },
 

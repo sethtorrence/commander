@@ -1,7 +1,9 @@
 import {
   type ActivityEntry,
+  type Bucket,
   describeRule,
   type Item,
+  isEmailRuleField,
   isGroup,
   type Project,
   RULE_FIELDS,
@@ -19,8 +21,9 @@ import type { ItemStoreClient } from '../item-store/client';
 
 /*
   The renderer's view of Rules in the Item store: the one ordered list, changing it, the editor's live
-  preview, and re-filing existing Items after a change. Matching happens in the Core; the field
-  registry (which fields each Source offers, and how a Rule reads) comes from @commander/domain.
+  preview, and re-filing existing Items (or re-sorting existing emails into Buckets, #137) after a
+  change. Matching happens in the Core; the field registry (which fields each Source offers, and how a
+  Rule reads) comes from @commander/domain.
 */
 
 export interface RulesClient {
@@ -34,7 +37,16 @@ export interface RulesClient {
   refile(itemIds: string[]): Promise<ActivityEntry[]>;
   /** Undoes a re-filing, all at once. */
   undoRefile(entryIds: number[]): Promise<ActivityEntry[]>;
-  /** The Items whose values the editor offers (every Linear issue, calendar event and Chat held). */
+  /** Re-sorts these emails into Buckets by the Rules, as one change. */
+  resort(itemIds: string[]): Promise<ActivityEntry[]>;
+  /** Undoes a re-sorting, all at once. */
+  undoResort(entryIds: number[]): Promise<ActivityEntry[]>;
+  /** The Buckets a Rule can sort into. */
+  buckets(): Promise<Bucket[]>;
+  /**
+   * The Items whose values the editor offers (every Linear issue, calendar event and Chat held, and
+   * recent email).
+   */
   items(): Promise<Item[]>;
 }
 
@@ -45,14 +57,36 @@ export function rulesIn(itemStore: ItemStoreClient): RulesClient {
     preview: (rule, ruleId) => itemStore({ op: 'preview-rule', request: { rule, ruleId, sampleSize: 6 } }),
     refile: (itemIds) => itemStore({ op: 'refile', itemIds }),
     undoRefile: (entryIds) => itemStore({ op: 'undo-refile', entryIds }),
-    items: () => itemStore({ op: 'query', query: { kinds: ['linear-issue', 'event', 'chat'], limit: 1000 } }),
+    resort: (itemIds) => itemStore({ op: 'resort', itemIds }),
+    undoResort: (entryIds) => itemStore({ op: 'undo-resort', entryIds }),
+    buckets: () => itemStore({ op: 'buckets' }),
+    async items() {
+      const [others, emails] = await Promise.all([
+        itemStore({ op: 'query', query: { kinds: ['linear-issue', 'event', 'chat'], limit: 1000 } }),
+        itemStore({ op: 'query', query: { kinds: ['email'], limit: 1000 } }),
+      ]);
+      return [...others, ...emails];
+    },
   };
 }
 
-/** A Rule as it reads in a list: "team is ENG → TL". */
-export function ruleText(rule: Pick<Rule, 'when' | 'target'>, projects: readonly Project[]): string {
-  const project = projects.find((p) => p.id === rule.target.projectId);
-  return `${describeRule(rule.when)} → ${project?.code ?? '?'}`;
+/** Where a Rule files or sorts, as it reads: a Project's code, or a Bucket's name. */
+export function targetText(
+  target: Rule['target'],
+  projects: readonly Project[],
+  buckets: readonly Bucket[] = [],
+): string {
+  if (target.kind === 'bucket') return buckets.find((b) => b.id === target.bucketId)?.name ?? '?';
+  return projects.find((p) => p.id === target.projectId)?.code ?? '?';
+}
+
+/** A Rule as it reads in a list: "team is ENG → TL", "from domain is stripe.com → Receipts". */
+export function ruleText(
+  rule: Pick<Rule, 'when' | 'target'>,
+  projects: readonly Project[],
+  buckets: readonly Bucket[] = [],
+): string {
+  return `${describeRule(rule.when)} → ${targetText(rule.target, projects, buckets)}`;
 }
 
 /**
@@ -88,13 +122,14 @@ export function placements(
   overlaps: readonly Rule[],
   projects: readonly Project[],
   editing?: string,
+  buckets: readonly Bucket[] = [],
 ): Placement[] {
   const others = rules.filter((rule) => rule.id !== editing);
   const overlapping = new Set(overlaps.map((rule) => rule.id));
   const byPosition = new Map<number, string[]>();
   others.forEach((rule, index) => {
     if (!overlapping.has(rule.id)) return;
-    const text = ruleText(rule, projects);
+    const text = ruleText(rule, projects, buckets);
     byPosition.set(index, [...(byPosition.get(index) ?? []), `above ${text}`]);
     byPosition.set(index + 1, [`below ${text}`, ...(byPosition.get(index + 1) ?? [])]);
   });
@@ -122,11 +157,33 @@ export function newCondition(fieldId = 'linear.team'): ConditionDraft {
   return { field: fieldId, op: field?.ops[0] ?? 'is', value: '', label: '' };
 }
 
-export const newGroup = (): TermDraft => ({ join: 'or', conditions: [newCondition('linear.label')] });
+/** The field a new condition starts on: a Bucket Rule's reads email. */
+export const firstField = (kind: Rule['target']['kind']) =>
+  kind === 'bucket' ? 'gmail.domain' : 'linear.team';
+
+export const newGroup = (kind: Rule['target']['kind'] = 'project'): TermDraft => ({
+  join: 'or',
+  conditions: [newCondition(kind === 'bucket' ? 'gmail.domain' : 'linear.label')],
+});
+
+/**
+ * The conditions kept when a Rule's target changes kind: a Bucket Rule reads only email, so other
+ * conditions go (a new email condition stands in when none is left).
+ */
+export function draftFor(draft: WhenDraft, kind: Rule['target']['kind']): WhenDraft {
+  if (kind !== 'bucket') return draft;
+  const fits = (condition: ConditionDraft) => isEmailRuleField(condition.field);
+  const terms = draft.terms.flatMap((term): TermDraft[] => {
+    if (!isGroupDraft(term)) return fits(term) ? [term] : [];
+    const conditions = term.conditions.filter(fits);
+    return conditions.length ? [{ ...term, conditions }] : [];
+  });
+  return { ...draft, terms: terms.length ? terms : [newCondition(firstField(kind))] };
+}
 
 /** A Rule's conditions as the editor holds them. */
-export function whenDraftOf(when?: RuleWhen): WhenDraft {
-  if (!when) return { join: 'and', terms: [newCondition()] };
+export function whenDraftOf(when?: RuleWhen, kind: Rule['target']['kind'] = 'project'): WhenDraft {
+  if (!when) return { join: 'and', terms: [newCondition(firstField(kind))] };
   const copy = (term: RuleTerm): TermDraft =>
     isGroup(term) ? { join: term.join, conditions: term.conditions.map((c) => ({ ...c })) } : { ...term };
   return { join: when.join, terms: when.terms.map(copy) };

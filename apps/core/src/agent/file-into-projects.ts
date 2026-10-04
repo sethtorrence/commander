@@ -384,7 +384,9 @@ export function fileIntoProjectsJob(
     if (!projects.length) return 'The User has no Projects yet.';
     return projects
       .map((project) => {
-        const own = rules.filter((rule) => rule.target.projectId === project.id);
+        const own = rules.filter(
+          (rule) => rule.target.kind === 'project' && rule.target.projectId === project.id,
+        );
         return [
           `${project.code} · ${project.name}`,
           ...own.map((rule) => `  Rule: ${describeRule(rule.when)}`),

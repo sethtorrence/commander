@@ -15,7 +15,9 @@ import {
   inReview,
   localDay,
   meetingTimes,
+  NEEDS_REPLY,
   type Ranking,
+  WAITING_ON_OTHERS,
   waitingSince,
 } from '@commander/domain';
 import { dateOf } from '../notes/days';
@@ -173,6 +175,12 @@ export function tabCount(rows: readonly FeedRow[]): number {
 
 const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+// The Buckets that bring email to the Dashboard (#137), as its stamp says them.
+const EMAIL_BUCKETS: Record<string, string> = {
+  [NEEDS_REPLY]: 'Needs reply',
+  [WAITING_ON_OTHERS]: 'Waiting on others',
+};
+
 const CHAT_TYPES: Record<ChatType, string> = {
   'one-on-one': 'One-to-one',
   group: 'Group',
@@ -215,6 +223,8 @@ export function sourceTag(item: Item, suggested = false): { stamp: string; text:
   if (item.detail?.kind === 'pull-request') return { stamp: 'GH', text: 'Your pull request' };
   if (item.detail?.kind === 'github-summary')
     return { stamp: 'ARES', text: item.detail.cadence === 'weekly' ? 'GitHub roll-up' : 'GitHub summary' };
+  if (item.detail?.kind === 'email')
+    return { stamp: 'EML', text: EMAIL_BUCKETS[item.detail.bucket?.bucketId ?? ''] ?? 'Email' };
   const due = dueOf(item);
   const origin = originLabel(item);
   return { stamp: 'TODO', text: due ? `${origin} · due ${SHORT_DAYS[dateOf(due).getDay()]}` : origin };
@@ -251,6 +261,11 @@ export function rowMeta(row: FeedRow, now: number): [string, string] {
     if (changesRequested(detail)) return ['Chg', 'Changes'];
     return [shortAgo(waitingSince(detail), now), 'Waiting'];
   }
+  if (item.detail?.kind === 'email')
+    return [
+      shortAgo(item.detail.sentAt, now),
+      item.detail.bucket?.bucketId === NEEDS_REPLY ? 'Reply' : 'Waiting',
+    ];
   const today = localDay(now);
   const due = dueOf(item);
   if (due && due < today) return [`${daysBetween(due, today)}D`, 'Overdue'];

@@ -65,7 +65,7 @@ A Project's short code on its accent colour (e.g. `LT`), marking which Project a
 _Avoid_: Tag, label, icon, chip
 
 **Rule**:
-A condition the User sets that files matching items into a Project (or emails into a Bucket); Rules sit in one list the User orders, and the first match wins.
+A condition the User sets that files matching items into a Project (or sorts emails into a Bucket); Rules sit in one list the User orders, and the first match (per kind of target) wins.
 _Avoid_: Filter, automation, mapping (alone)
 
 **Project log**:

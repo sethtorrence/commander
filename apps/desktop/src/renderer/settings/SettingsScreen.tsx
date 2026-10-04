@@ -7,6 +7,7 @@ import {
   THEMES,
   useAppearance,
 } from '@commander/ui';
+import { BucketsSettings } from '../buckets/BucketsSettings';
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
 import { PeopleSettings } from '../people/PeopleSettings';
@@ -103,6 +104,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
       <CalendarSettings no="15" />
       <PeopleSettings no="16" />
       <EmailSettings no="17" shown={open} />
+      <BucketsSettings no="18" shown={open} />
     </Sheet>
   );
 }
