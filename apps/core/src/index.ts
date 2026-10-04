@@ -43,6 +43,10 @@ const accessTokens = createAccessTokens((message) => port.postMessage(message));
 const models = setUpModels(itemStore, { send: (message) => port.postMessage(message), accessTokens });
 // Source sync: every Account on its cadence, writing through the Item store.
 const sync = setUpSync(itemStore, { send: (message) => port.postMessage(message), accessTokens });
+// What a sync changed (new Linear Todos among it) shows at once in open views.
+sync.engine.onSynced(({ itemIds }) => {
+  if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
+});
 
 // The gate every Ares action goes through. Test hooks (proposing from end-to-end tests) are on only
 // when the main process asks for them.

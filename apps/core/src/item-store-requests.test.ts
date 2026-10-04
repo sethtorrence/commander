@@ -227,6 +227,71 @@ describe('answering Item store requests from the window', () => {
     expect(changed).toEqual([[parent, child]]);
   });
 
+  it('names the Items a change carried along too: ticking a Linear Todo moves its issue', () => {
+    const states = [
+      { id: 'state-todo', name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
+      { id: 'state-done', name: 'Done', type: 'completed', color: '#5e6ad2' },
+    ];
+    const team = { id: 'team-eng', key: 'ENG', name: 'Engineering' };
+    const me = { id: 'user-me', name: 'Sam Rivera', displayName: 'sam', email: null };
+    store.syncState.saveCatalog(
+      'linear:org-acme',
+      'linear',
+      {
+        kind: 'linear',
+        teams: [{ ...team, states, members: [], labels: [], cycles: [], linearProjects: [] }],
+      },
+      0,
+    );
+    store.saveFromSource({
+      source: 'linear',
+      account: 'linear:org-acme',
+      me: me.id,
+      items: [
+        {
+          externalId: 'issue-1',
+          kind: 'linear-issue',
+          title: 'Fix the login loop',
+          detail: {
+            kind: 'linear-issue',
+            identifier: 'ENG-1',
+            url: 'https://linear.app/acme/issue/ENG-1',
+            team,
+            state: states[0] as (typeof states)[number],
+            priority: 0,
+            assignee: me,
+            creator: null,
+            labels: [],
+            cycle: null,
+            linearProject: null,
+            dueDate: null,
+            estimate: null,
+            description: null,
+            comments: [],
+            createdAt: 0,
+            updatedAt: 0,
+            startedAt: null,
+            completedAt: null,
+            canceledAt: null,
+          },
+        },
+      ],
+    });
+    const [todo] = store.query({ kinds: ['todo'] });
+    const [issue] = store.query({ kinds: ['linear-issue'] });
+    const changed: string[][] = [];
+    answerItemStoreRequest(
+      store,
+      {
+        type: 'item-store-request',
+        id: 1,
+        request: { op: 'record', action: { type: 'update', itemId: todo?.id, changes: { status: 'done' } } },
+      },
+      (ids) => changed.push(ids),
+    );
+    expect(changed).toEqual([[todo?.id, issue?.id]]);
+  });
+
   it('finds the Todos made from Blocks', () => {
     const note = store.ensureDailyNote('2026-10-03', { by: { kind: 'user' } });
     const blockId = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e04';

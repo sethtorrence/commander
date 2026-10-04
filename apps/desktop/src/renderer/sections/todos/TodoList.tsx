@@ -7,6 +7,7 @@ export function TodoList({
   todos,
   first,
   madeFrom,
+  backing,
   selectedId,
   onSelect,
   onOpen,
@@ -16,6 +17,8 @@ export function TodoList({
   first: number;
   /** Where the Todos made from a Block were made, by Todo id, for their origin. */
   madeFrom: ReadonlyMap<string, MadeFrom>;
+  /** The Item behind each backed Todo (a Linear Todo's issue), by Todo id, for its origin. */
+  backing: ReadonlyMap<string, Item>;
   selectedId: string | null;
   onSelect: (todoId: string) => void;
   onOpen: (todoId: string) => void;
@@ -33,6 +36,7 @@ export function TodoList({
           todo={todo}
           number={first + index}
           madeFrom={madeFrom.get(todo.id)}
+          backing={backing.get(todo.id)}
           selected={todo.id === selectedId}
           onSelect={() => onSelect(todo.id)}
           onOpen={() => onOpen(todo.id)}

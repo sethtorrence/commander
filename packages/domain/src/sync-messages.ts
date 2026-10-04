@@ -66,7 +66,10 @@ void _statusMatches;
 // Main process → Core: the Accounts to sync, sent at start-up and whenever they change.
 export const coreSyncAccounts = z.object({
   type: z.literal('sync-accounts'),
-  accounts: z.array(z.object({ id: accountId, source, needsReconnect: z.boolean() })),
+  // `me`: who the User is in the Account (their Linear user id), for Linear Todos; null until known.
+  accounts: z.array(
+    z.object({ id: accountId, source, needsReconnect: z.boolean(), me: accountId.nullable().optional() }),
+  ),
   // Where to reach each Source (the end-to-end tests point Linear at a fake on this machine).
   endpoints: z.object({ linear: z.string().url() }),
 });

@@ -212,6 +212,7 @@ export function ProjectPage({
                 todos={openTodos}
                 first={1}
                 madeFrom={state.madeFrom}
+                backing={state.backing}
                 selectedId={state.selected?.id ?? null}
                 onSelect={state.select}
                 onOpen={state.select}

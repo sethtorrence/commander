@@ -4,8 +4,9 @@ import type { ReactNode } from 'react';
 import { shortDate } from '../../../frame/calendar';
 import { originLabel } from '../origin';
 import { TodoProject } from '../project';
-import type { MadeFrom, TodoLink } from '../todos';
+import type { LinearState, MadeFrom, TodoLink } from '../todos';
 import { timeOfDay } from '../when';
+import { LinearFacts } from './LinearFacts';
 import { Eyebrow } from './parts';
 import { TitleField } from './TitleField';
 import { TodoActivity } from './TodoActivity';
@@ -18,6 +19,7 @@ import { TodoLinks } from './TodoLinks';
 export function TodoDetail({
   todo,
   madeFrom,
+  linear,
   links,
   history,
   onRename,
@@ -29,6 +31,15 @@ export function TodoDetail({
   todo: Item | null;
   /** For a Todo made from a Block: where, for its origin. */
   madeFrom?: MadeFrom;
+  /** For a Linear Todo: its issue, the states it can move to, and Set Linear state…'s menu. */
+  linear?: {
+    issue: Item;
+    states: LinearState[];
+    menuOpen: boolean;
+    onMenuOpenChange: (open: boolean) => void;
+    onSetState: (state: LinearState) => void;
+    onOpenIssue: () => void;
+  };
   links: TodoLink[];
   history: ActivityEntry[];
   onRename: (title: string) => void;
@@ -66,7 +77,8 @@ export function TodoDetail({
             </p>
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact label="Status">{done ? 'Done' : 'Open'}</Fact>
-              <Fact label="Origin">{originLabel(todo, madeFrom)}</Fact>
+              <Fact label="Origin">{originLabel(todo, madeFrom, linear?.issue)}</Fact>
+              {linear && <LinearFacts {...linear} Fact={Fact} />}
               <Fact label="Project">
                 <TodoProject todo={todo} />
               </Fact>

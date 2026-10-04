@@ -11,7 +11,7 @@ const heartbeat = z.object({
 // Ares did or suggested something (through the gate): views of his activity reload.
 const aresActivity = z.object({ type: z.literal('ares-activity'), at: z.number().int().nonnegative() });
 
-// Items were changed in the Item store (by the window, so far): open views showing them catch up.
+// Items were changed in the Item store (by the window, or a sync): open views showing them catch up.
 const itemsChanged = z.object({
   type: z.literal('items-changed'),
   itemIds: z.array(z.string().min(1)).min(1),

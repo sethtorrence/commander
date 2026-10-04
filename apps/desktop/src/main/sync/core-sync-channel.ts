@@ -31,13 +31,22 @@ export function createCoreSyncChannel({
   const listeners = new Set<() => void>();
 
   return {
-    setAccounts(accounts: { id: string; source: Source; status: 'connected' | 'needs-reconnect' }[]) {
+    setAccounts(
+      accounts: {
+        id: string;
+        source: Source;
+        status: 'connected' | 'needs-reconnect';
+        // Who the User is in the Account (their Linear user), for "assigned to me"; null until known.
+        user: { id: string; name: string } | null;
+      }[],
+    ) {
       send({
         type: 'sync-accounts',
-        accounts: accounts.map(({ id, source, status }) => ({
+        accounts: accounts.map(({ id, source, status, user }) => ({
           id,
           source,
           needsReconnect: status === 'needs-reconnect',
+          me: user?.id ?? null,
         })),
         endpoints,
       });

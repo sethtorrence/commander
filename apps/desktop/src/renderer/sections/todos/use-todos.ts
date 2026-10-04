@@ -1,7 +1,7 @@
 import type { ActivityEntry, Filing, Item } from '@commander/domain';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { MadeFrom, TodoLink, Todos } from './todos';
+import type { LinearState, MadeFrom, TodoLink, Todos } from './todos';
 
 export interface TodosState {
   /**
@@ -17,6 +17,8 @@ export interface TodosState {
   done: Item[];
   /** Where each Todo made from a Block (origin Daily Note) was made, by Todo id. */
   madeFrom: ReadonlyMap<string, MadeFrom>;
+  /** The Item behind each backed Todo (a Linear Todo's issue), by Todo id. */
+  backing: ReadonlyMap<string, Item>;
   /** How many Todos are open, shown or not, for the notebook tab. */
   openCount: number;
   /** Whether the Done group is expanded. It starts collapsed. */
@@ -51,6 +53,8 @@ export interface TodosState {
   refresh(): void;
   /** Makes a change through another module (filing a Todo), so it reloads and can be undone here. */
   apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
+  /** Moves the selected Linear Todo's issue to another state (Set Linear state…); undoable here. */
+  setLinearState(state: LinearState): Promise<ActivityEntry | null>;
 }
 
 /**
@@ -62,6 +66,7 @@ export interface TodosState {
 export function useTodos(todos: Todos, include?: (todo: Item) => boolean): TodosState {
   const [all, setAll] = useState<Item[] | null>(null);
   const [madeFrom, setMadeFrom] = useState<ReadonlyMap<string, MadeFrom>>(new Map());
+  const [backing, setBacking] = useState<ReadonlyMap<string, Item>>(new Map());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [doneShown, setDoneShown] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -80,10 +85,11 @@ export function useTodos(todos: Todos, include?: (todo: Item) => boolean): Todos
     let current = true;
     (async () => {
       const next = await todos.list();
-      const origins = await todos.madeFrom(next);
+      const [origins, behind] = await Promise.all([todos.madeFrom(next), todos.backing(next)]);
       if (!current) return;
       setAll(next);
       setMadeFrom(origins);
+      setBacking(behind);
     })().catch(report);
     return () => {
       current = false;
@@ -217,6 +223,15 @@ export function useTodos(todos: Todos, include?: (todo: Item) => boolean): Todos
     [todos, find, run, stepOffIfSelected],
   );
 
+  const setLinearState = useCallback(
+    async (state: LinearState) => {
+      const issue = selected ? backing.get(selected.id) : undefined;
+      if (issue?.detail?.kind !== 'linear-issue' || issue.detail.state.id === state.id) return null;
+      return run(() => todos.setLinearState(issue.id, state));
+    },
+    [todos, selected, backing, run],
+  );
+
   const undo = useCallback(
     async (entryId?: number) => {
       const target = entryId ?? undoable.current.at(-1);
@@ -241,6 +256,7 @@ export function useTodos(todos: Todos, include?: (todo: Item) => boolean): Todos
     open,
     done,
     madeFrom,
+    backing,
     openCount: allOpen.length,
     doneShown,
     showDone,
@@ -259,6 +275,7 @@ export function useTodos(todos: Todos, include?: (todo: Item) => boolean): Todos
     undo,
     refresh: changed,
     apply: run,
+    setLinearState,
   };
 }
 

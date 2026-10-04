@@ -31,19 +31,19 @@ function channel() {
 }
 
 describe('the Core sync channel', () => {
-  it('sends the Accounts to sync, with whether each needs reconnecting', () => {
+  it('sends the Accounts to sync, with whether each needs reconnecting and who the User is there', () => {
     const { sync, sent } = channel();
     sync.setAccounts([
-      { id: 'linear:org-acme', source: 'linear', status: 'connected' },
-      { id: 'linear:org-globex', source: 'linear', status: 'needs-reconnect' },
+      { id: 'linear:org-acme', source: 'linear', status: 'connected', user: { id: 'user-me', name: 'Sam' } },
+      { id: 'linear:org-globex', source: 'linear', status: 'needs-reconnect', user: null },
     ]);
 
     expect(sent).toEqual([
       {
         type: 'sync-accounts',
         accounts: [
-          { id: 'linear:org-acme', source: 'linear', needsReconnect: false },
-          { id: 'linear:org-globex', source: 'linear', needsReconnect: true },
+          { id: 'linear:org-acme', source: 'linear', needsReconnect: false, me: 'user-me' },
+          { id: 'linear:org-globex', source: 'linear', needsReconnect: true, me: null },
         ],
         endpoints,
       },

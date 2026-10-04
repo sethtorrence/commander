@@ -10,6 +10,7 @@ export * from './ipc';
 export * from './item-store-messages';
 export * from './items';
 export * from './linear';
+export * from './linear-todos';
 export * from './links';
 export * from './model-messages';
 export * from './models';

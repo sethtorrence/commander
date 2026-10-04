@@ -248,7 +248,7 @@ describe('scheduling', () => {
     engine.setAccounts(connected(ACME));
     await vi.advanceTimersByTimeAsync(1);
 
-    expect(synced).toEqual([{ account: ACME, source: 'linear', outcome: 'synced' }]);
+    expect(synced).toEqual([{ account: ACME, source: 'linear', outcome: 'synced', itemIds: [] }]);
   });
 });
 
@@ -481,5 +481,57 @@ describe('what a sync saves', () => {
     expect(store.syncState.get(ACME)).toBeNull();
     expect(syncTimes()).toEqual([0]);
     expect(status()).toBeUndefined();
+  });
+});
+
+describe('Linear Todos', () => {
+  const ME = 'user-me-acme';
+  const assigned = (externalId: string, assignee: string): SourceItem => ({
+    externalId,
+    kind: 'linear-issue',
+    title: `Issue ${externalId}`,
+    detail: {
+      kind: 'linear-issue',
+      identifier: externalId.toUpperCase(),
+      url: `https://linear.app/acme/issue/${externalId}`,
+      team: { id: 'team-eng', key: 'ENG', name: 'Engineering' },
+      state: { id: 'state-todo', name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
+      priority: 0,
+      assignee: { id: assignee, name: assignee, displayName: assignee, email: null },
+      creator: null,
+      labels: [],
+      cycle: null,
+      linearProject: null,
+      dueDate: null,
+      estimate: null,
+      description: null,
+      comments: [],
+      createdAt: T0,
+      updatedAt: T0,
+      startedAt: null,
+      completedAt: null,
+      canceledAt: null,
+    },
+  });
+
+  it('keeps them for the User the Account signs in as, re-reads their issues each sync, and reports what changed', async () => {
+    const synced: { itemIds: string[] }[] = [];
+    engine.onSynced((event) => synced.push(event));
+    const rechecked: (string[] | undefined)[] = [];
+    source.adapter.sync = async (request) => {
+      rechecked.push(request.recheck);
+      return source.sendIssues(request);
+    };
+    source.issues.set(ACME, [assigned('eng-1', ME), assigned('eng-2', 'user-priya')]);
+    engine.setAccounts([{ id: ACME, source: 'linear', needsReconnect: false, me: ME }]);
+    await vi.advanceTimersByTimeAsync(1);
+
+    const [todo, ...others] = store.query({ kinds: ['todo'] });
+    expect(others).toEqual([]);
+    expect(todo?.title).toBe('Issue eng-1');
+    expect(synced[0]?.itemIds).toContain(todo?.id);
+
+    await engine.refresh(ACME);
+    expect(rechecked).toEqual([[], ['eng-1']]);
   });
 });

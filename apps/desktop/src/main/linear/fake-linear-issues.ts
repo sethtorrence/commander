@@ -194,16 +194,14 @@ export function createFakeIssues(now: () => number = Date.now) {
   const stamp = () => new Date(now()).toISOString();
 
   // Applies a change to an issue as Linear would, recording what it changed and who changed it.
-  function change(issue: FakeIssue, changes: Partial<FakeIssue>, by: FakeUser | null) {
+  function change(issue: FakeIssue, changes: Partial<FakeIssue>, by: FakeUser | null, quietly = false) {
     const before = structuredClone(issue);
-    Object.assign(issue, changes, { updatedAt: stamp() });
+    const at = stamp();
+    Object.assign(issue, changes, quietly ? {} : { updatedAt: at });
     const entry = historyOf(before, issue);
     if (entry) {
       const actor = by ? { id: by.id, name: by.name } : null;
-      histories.set(issue.id, [
-        { createdAt: issue.updatedAt, actor, ...entry },
-        ...(histories.get(issue.id) ?? []),
-      ]);
+      histories.set(issue.id, [{ createdAt: at, actor, ...entry }, ...(histories.get(issue.id) ?? [])]);
     }
   }
 
@@ -325,9 +323,10 @@ export function createFakeIssues(now: () => number = Date.now) {
     },
 
     // Changes an issue the way an edit in Linear does (by `by`, when given), moving its updatedAt on
-    // and recording what changed in its history.
-    update(id: string, changes: Partial<FakeIssue>, by: FakeUser | null = null) {
-      change(find(id), changes, by);
+    // and recording what changed in its history. `quietly` leaves updatedAt alone, so a sync asking
+    // for what changed since misses it (as an "assigned to me" poll misses a reassignment).
+    update(id: string, changes: Partial<FakeIssue>, by: FakeUser | null = null, { quietly = false } = {}) {
+      change(find(id), changes, by, quietly);
     },
 
     // The issue as the fake has it now, for checking what reached Linear.

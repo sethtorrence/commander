@@ -39,7 +39,12 @@ function respond({ status, headers, body }: Recorded) {
   return new Response(body === null ? 'Service Unavailable' : JSON.stringify(body), { status, headers });
 }
 
-async function sync(fetch: typeof globalThis.fetch, cursor: unknown = null, token = apiKey) {
+async function sync(
+  fetch: typeof globalThis.fetch,
+  cursor: unknown = null,
+  token = apiKey,
+  recheck: string[] | undefined = undefined,
+) {
   const pages: SyncPage[] = [];
   const source = createLinearSource({ apiUrl: () => 'https://linear.test/graphql', fetch, now: () => NOW });
   const result = await source.sync({
@@ -48,6 +53,7 @@ async function sync(fetch: typeof globalThis.fetch, cursor: unknown = null, toke
     accessToken: async () => token,
     save: (page) => pages.push(page),
     signal: new AbortController().signal,
+    recheck,
   });
   return { result, pages, items: pages.flatMap((page) => page.items) };
 }
@@ -218,6 +224,54 @@ describe('polling for changes', () => {
 
     expect(result.cursor).toEqual(cursor);
     expect(pages.flatMap((page) => [...page.items, ...page.deleted])).toEqual([]);
+  });
+
+  // The issues behind open Linear Todos: a reassignment may not show among what changed.
+  describe('re-reading the issues it is asked to recheck', () => {
+    const empty = (operationName: string, field: string): Exchange => ({
+      request: { operationName, variables: {} },
+      response: {
+        status: 200,
+        headers: {},
+        body: { data: { [field]: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } } },
+      },
+    });
+    const recorded = (incremental as Exchange[])[0]?.response.body as {
+      data: { issues: { nodes: Record<string, unknown>[] } };
+    };
+    const reassigned = { ...recorded.data.issues.nodes[0], updatedAt: '2026-09-30T10:00:00.000Z' };
+
+    it('reads them in one batched query, and reports those Linear no longer has as deleted', async () => {
+      const linear = replay([
+        empty('CommanderIssues', 'issues'),
+        empty('CommanderChangedComments', 'comments'),
+        {
+          request: {
+            operationName: 'CommanderIssues',
+            variables: { includeArchived: true, filter: { id: { in: ['issue-418', 'issue-gone'] } } },
+          },
+          response: {
+            status: 200,
+            headers: {},
+            body: {
+              data: { issues: { nodes: [reassigned], pageInfo: { hasNextPage: false, endCursor: null } } },
+            },
+          },
+        },
+      ]);
+      const { items, pages, result } = await sync(linear.fetch, cursor, apiKey, ['issue-418', 'issue-gone']);
+
+      expect(linear.remaining()).toBe(0);
+      expect(byId(items, 'issue-418')?.detail).toMatchObject({ assignee: { name: 'Priya Patel' } });
+      expect(pages.flatMap((page) => page.deleted)).toEqual(['issue-gone']);
+      expect(result.cursor).toEqual(cursor);
+    });
+
+    it('skips those the sync already brought', async () => {
+      const linear = replay(incremental as Exchange[]);
+      await sync(linear.fetch, cursor, apiKey, ['issue-418', 'issue-401']);
+      expect(linear.remaining()).toBe(0);
+    });
   });
 });
 

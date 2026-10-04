@@ -5,6 +5,7 @@ import type {
   Item,
   ItemAction,
   ItemChange,
+  LinearIssueDetail,
   LinkEnd,
   LinkType,
   Project,
@@ -55,7 +56,18 @@ export interface Todos {
   undo(entryId: number): Promise<ActivityEntry>;
   /** For the Todos made from a Block (origin Daily Note): the Block and its day, by Todo id. */
   madeFrom(todos: readonly Item[]): Promise<Map<string, MadeFrom>>;
+  /** For backed Todos (a Linear Todo): the Item behind each, by Todo id. */
+  backing(todos: readonly Item[]): Promise<Map<string, Item>>;
+  /**
+   * The workflow states a Linear Todo's issue can move to: its team's, in the team's order, as its
+   * Account's Linear offers them (with the issue's own, should the catalog not have it yet).
+   */
+  linearStates(issue: Item): Promise<LinearState[]>;
+  /** Moves a Linear Todo's issue to another state (Set Linear state…); its Todo follows. */
+  setLinearState(issueId: string, state: LinearState): Promise<ActivityEntry>;
 }
+
+export type LinearState = LinearIssueDetail['state'];
 
 /** Where a Todo of origin Daily Note was made: its Block, and the day of that Block's Daily Note. */
 export interface MadeFrom {
@@ -64,6 +76,19 @@ export interface MadeFrom {
 }
 
 const fromDailyNote = (todo: Item) => todo.detail?.kind === 'todo' && todo.detail.origin === 'daily-note';
+const backedBy = (todo: Item) => (todo.detail?.kind === 'todo' ? todo.detail.backedBy : null);
+
+/** The issue behind a Linear Todo, if the Item is one (the Todos Section reads them with `backing`). */
+export function linearIssueOf(item: Item | undefined): (Item & { detail: LinearIssueDetail }) | null {
+  return item?.detail?.kind === 'linear-issue' ? (item as Item & { detail: LinearIssueDetail }) : null;
+}
+
+// The store answers for up to 1000 Items at a time.
+function pages<T>(list: readonly T[]): T[][] {
+  const all: T[][] = [];
+  for (let i = 0; i < list.length; i += 1000) all.push(list.slice(i, i + 1000));
+  return all;
+}
 
 const EMPTY = 'A Todo can’t be empty';
 
@@ -158,13 +183,38 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
 
     async madeFrom(todos) {
       const todoIds = todos.filter(fromDailyNote).map((todo) => todo.id);
-      // The store answers for up to 1000 Todos at a time.
-      const pages = [];
-      for (let i = 0; i < todoIds.length; i += 1000) pages.push(todoIds.slice(i, i + 1000));
       const made = await Promise.all(
-        pages.map((page) => itemStore({ op: 'block-todos', query: { todoIds: page } })),
+        pages(todoIds).map((page) => itemStore({ op: 'block-todos', query: { todoIds: page } })),
       );
       return new Map(made.flat().map(({ todo, block, day }) => [todo.id, { blockId: block.id, day }]));
+    },
+
+    async backing(todos) {
+      const ids = [...new Set(todos.flatMap((todo) => backedBy(todo) ?? []))];
+      const found = await Promise.all(
+        pages(ids).map((page) =>
+          itemStore({ op: 'query', query: { ids: page, includeDeleted: true, limit: 1000 } }),
+        ),
+      );
+      const byId = new Map(found.flat().map((item) => [item.id, item]));
+      return new Map(
+        todos.flatMap((todo) => {
+          const behind = byId.get(backedBy(todo) ?? '');
+          return behind ? [[todo.id, behind] as const] : [];
+        }),
+      );
+    },
+
+    async linearStates(issue) {
+      const detail = linearIssueOf(issue)?.detail;
+      if (!detail || !issue.account) return [];
+      const catalog = await itemStore({ op: 'source-catalog', account: issue.account });
+      const states = catalog?.teams.find((team) => team.id === detail.team.id)?.states ?? [];
+      return states.some((state) => state.id === detail.state.id) ? states : [...states, detail.state];
+    },
+
+    setLinearState(issueId, state) {
+      return itemStore({ op: 'record', action: { type: 'edit-fields', itemId: issueId, fields: { state } } });
     },
   };
 }

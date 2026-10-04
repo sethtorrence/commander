@@ -26,6 +26,9 @@ export type SyncRequest = {
   save(page: SyncPage): void;
   // Hands over what the Source offers the detail pane's pickers, kept per Account (Two-way sync).
   saveCatalog?(catalog: SourceCatalog): void;
+  // External ids to read again on every sync whatever changed (the issues behind open Linear Todos,
+  // as a reassignment may not show among what changed). Ones the Source no longer has go in `deleted`.
+  recheck?: string[];
   // Aborted when the sync is no longer wanted (the Account was removed).
   signal: AbortSignal;
 };
