@@ -13,6 +13,7 @@ import { createGitHubAccounts } from '../github/github-accounts';
 import { createGitHubWatchChannel } from '../github/github-watch-channel';
 import { createGoogleAccounts } from '../google/google-accounts';
 import { createLinearAccounts } from '../linear/linear-accounts';
+import { createOutlookAccounts } from '../microsoft/outlook-accounts';
 import { createTeamsAccounts } from '../microsoft/teams-accounts';
 import type { Secrets } from '../secrets';
 import { type CoreSyncMessage, createCoreSyncChannel } from '../sync/core-sync-channel';
@@ -93,12 +94,21 @@ export function setUpAccounts({
         await core.removeItems({ source: 'google-calendar', account: id, name });
       },
     }),
+    // One Microsoft sign-in (the Teams app's) for both Outlook Sources, mail and calendar.
+    createOutlookAccounts({
+      ...shared,
+      config: microsoftSettings,
+      removeItems: async ({ id, name }) => {
+        await core.removeItems({ source: 'outlook', account: id, name });
+        await core.removeItems({ source: 'outlook-calendar', account: id, name });
+      },
+    }),
   ]);
 
   // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
   // reports a sign-in a Source refused, which may mean the Account needs reconnecting. Sources the
-  // Core can't sync yet (GitHub, Gmail and Google Calendar, for now) are passed on and left alone
-  // there.
+  // Core can't sync yet (GitHub, Gmail, Google Calendar, Outlook and Outlook Calendar, for now) are
+  // passed on and left alone there.
   const sync = createCoreSyncChannel({
     send: sendToCore,
     endpoints: { linear: linearSettings.apiUrl, graph: microsoftSettings.graphUrl },

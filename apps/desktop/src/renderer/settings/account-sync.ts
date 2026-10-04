@@ -20,6 +20,7 @@ const nouns: Record<AccountSyncStatus['source'], [string, string]> = {
   gmail: ['email', 'emails'],
   outlook: ['email', 'emails'],
   'google-calendar': ['event', 'events'],
+  'outlook-calendar': ['event', 'events'],
   teams: ['chat', 'chats'],
 };
 

@@ -6,7 +6,9 @@ import type { AddressInfo } from 'node:net';
 // Graph, for tests only (unit and end-to-end). It behaves like Microsoft where Commander depends on
 // it: authorization code with PKCE and no client secret for a public client whose redirect is
 // http://localhost (any port, the path matched exactly), refresh tokens that rotate, an ID token
-// carrying the tenant, `GET /me`, and the AADSTS errors of a tenant that needs admin consent; and
+// carrying the tenant, the granted scopes in the token response (fewer than asked for, when an
+// administrator approved only some), `GET /me`, and the AADSTS errors of a tenant that needs admin
+// consent; and
 // for Teams sync, the User's Chats: `GET /me/chats?$expand=lastMessagePreview`, a Chat's members, and
 // its messages newest-modified first, filtered on `lastModifiedDateTime`, paged with nextLinks.
 // Nothing here talks to the real Microsoft.
@@ -75,6 +77,9 @@ export type FakeMicrosoft = {
   // Sign-ins need an administrator's approval: refused with this code at the redirect, or when the
   // code is exchanged. null lets the User consent again.
   requireAdminConsent(code: AdminConsentCode | null, where?: 'redirect' | 'token'): void;
+  // Sign-ins are granted only these of the scopes asked for (as when an administrator approved only
+  // some permissions for the tenant). null grants everything asked for again.
+  limitGrantedScopes(scopes: string[] | null): void;
   // Revokes every token of a user: refreshes with their refresh tokens now fail for good.
   revoke(userId: string): void;
   // Refreshes answer 503 until switched back.
@@ -134,6 +139,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
   const expiresIn = options.expiresIn ?? 3_599;
   let nextUser: FakeMicrosoftUser | 'decline' = options.user ?? SAM;
   let adminConsent: { code: AdminConsentCode; where: 'redirect' | 'token' } | null = null;
+  let grantable: Set<string> | null = null;
   const codes = new Map<
     string,
     { challenge: string; redirectUri: string; user: FakeMicrosoftUser; scope: string }
@@ -162,6 +168,9 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     },
     requireAdminConsent: (code, where = 'redirect') => {
       adminConsent = code ? { code, where } : null;
+    },
+    limitGrantedScopes: (scopes) => {
+      grantable = scopes && new Set(scopes);
     },
     revoke: (userId) => {
       for (let i = grants.length - 1; i >= 0; i--) if (grants[i]?.user.id === userId) grants.splice(i, 1);
@@ -236,11 +245,12 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       return reply({ error: 'invalid_request', error_description: 'AADSTS900144: PKCE required.' });
     }
     const code = token('code');
+    const asked = (params.scope ?? '').split(' ').filter(Boolean);
     codes.set(code, {
       challenge: params.code_challenge ?? '',
       redirectUri,
       user: nextUser,
-      scope: params.scope ?? '',
+      scope: asked.filter((scope) => grantable?.has(scope) ?? true).join(' '),
     });
     reply({ code });
   }

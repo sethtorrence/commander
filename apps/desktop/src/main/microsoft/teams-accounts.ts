@@ -1,11 +1,9 @@
-import { z } from 'zod';
 import type { AccountRecord } from '../accounts/account-store';
 import {
   type AccountSourceDefinition,
   createSourceAccounts,
   type SourceAccounts,
   type SourceAccountsOptions,
-  type SourceCredential,
 } from '../accounts/source-accounts';
 import { SignInError } from '../oauth/sign-in-error';
 import {
@@ -15,6 +13,7 @@ import {
   refreshMicrosoftTokens,
   signInWithMicrosoft,
 } from './microsoft-sign-in';
+import { readMicrosoftUser } from './microsoft-user';
 
 // Teams Accounts: one per Microsoft work account, signed in with Commander's Entra app. `GET /me`
 // names the Account ("Teams · <user principal name>") and keys it by tenant and user, so connecting
@@ -39,37 +38,6 @@ export type TeamsAccounts = SourceAccounts;
 
 export type TeamsAccountsOptions = SourceAccountsOptions & { config: MicrosoftConfig };
 
-const me = z.object({
-  id: z.string().min(1),
-  displayName: z.string().nullable(),
-  userPrincipalName: z.string().min(1),
-});
-
-async function readMe(graphUrl: string, credential: SourceCredential) {
-  if (credential.kind !== 'oauth')
-    throw new SignInError('invalid-credential', 'Teams needs a Microsoft sign-in.');
-  let response: Response;
-  try {
-    response = await fetch(`${graphUrl}/me?$select=id,displayName,userPrincipalName`, {
-      headers: { authorization: `Bearer ${credential.accessToken}`, accept: 'application/json' },
-    });
-  } catch {
-    throw new SignInError(
-      'unreachable',
-      'Commander couldn’t reach Microsoft. Check your connection and try again.',
-    );
-  }
-  const parsed = me.safeParse(await response.json().catch(() => null));
-  if (response.ok && parsed.success) return parsed.data;
-  if (response.status === 401 || response.status === 403) {
-    throw new SignInError('invalid-credential', 'Microsoft didn’t accept the sign-in. Try connecting again.');
-  }
-  throw new SignInError(
-    'unreachable',
-    `Microsoft couldn’t answer just now (HTTP ${response.status}). Try again.`,
-  );
-}
-
 const upnOf = (record: AccountRecord | null) => record?.details.userPrincipalName ?? null;
 
 export function teamsSource(config: MicrosoftConfig): AccountSourceDefinition<MicrosoftSignIn> {
@@ -89,7 +57,7 @@ export function teamsSource(config: MicrosoftConfig): AccountSourceDefinition<Mi
       'This build of Commander has no Microsoft app set up, so Teams can’t be connected yet. See “Connecting Teams” in the README.',
     apiKeys: false,
     async identify(credential, signIn) {
-      const user = await readMe(config.graphUrl, credential);
+      const user = await readMicrosoftUser(config.graphUrl, credential, 'Teams');
       const tenantId = signIn?.tenantId ?? config.tenantId;
       if (!tenantId)
         throw new SignInError('not-configured', 'This build of Commander has no Microsoft tenant set up.');

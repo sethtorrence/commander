@@ -85,7 +85,7 @@ describe('signing in with Microsoft through the browser', () => {
     expect(first?.code_challenge).not.toBe(second?.code_challenge);
   });
 
-  it('exchanges the code for tokens that expire when Microsoft says, and learns the tenant from the ID token', async () => {
+  it('exchanges the code for tokens that expire when Microsoft says, and learns the tenant from the ID token and the scopes granted', async () => {
     const signedIn = await signIn();
 
     const [accessToken, refreshToken] = microsoft.issuedTokens();
@@ -94,6 +94,7 @@ describe('signing in with Microsoft through the browser', () => {
       refreshToken,
       expiresAt: NOW + 3_599_000,
       tenantId: microsoft.tenantId,
+      scope: SCOPES.join(' '),
     });
   });
 

@@ -12,6 +12,7 @@ import { createGoogleAccounts } from '../google/google-accounts';
 import { ACME, type FakeLinear, startFakeLinear } from '../linear/fake-linear-server';
 import { createLinearAccounts, type LinearAccounts } from '../linear/linear-accounts';
 import { type FakeMicrosoft, SAM, startFakeMicrosoft } from '../microsoft/fake-microsoft-server';
+import { createOutlookAccounts } from '../microsoft/outlook-accounts';
 import { createTeamsAccounts, TEAMS_SCOPES } from '../microsoft/teams-accounts';
 import { createSecrets, type Secrets } from '../secrets';
 import { createAccountStore } from './account-store';
@@ -494,6 +495,77 @@ describe('Settings → Accounts requests for a Google Account', () => {
       source: 'google',
       error:
         'Your Google Workspace admin hasn’t allowed Commander. Ask them to allow it, or connect a personal account.',
+    });
+  });
+});
+
+describe('Settings → Accounts requests for an Outlook Account', () => {
+  beforeEach(() => {
+    accounts = combineAccounts([
+      linearAccounts,
+      teams(),
+      createOutlookAccounts({
+        config: {
+          clientId: microsoft.clientId,
+          tenantId: microsoft.tenantId,
+          loginUrl: microsoft.loginUrl,
+          graphUrl: microsoft.graphUrl,
+        },
+        secrets,
+        store: createAccountStore(join(dir, 'accounts.json')),
+        openBrowser: async (url) => {
+          await fetch(url);
+        },
+        removeItems: async () => {},
+      }),
+    ]);
+  });
+
+  it('connects it beside the same user’s Teams Account, each its own Account, listing Outlook and Outlook Calendar', async () => {
+    await answerAccountsRequest(accounts, { op: 'connect', source: 'teams', method: 'oauth' });
+
+    const connected = await answerAccountsRequest(accounts, {
+      op: 'connect',
+      source: 'outlook',
+      method: 'oauth',
+    });
+
+    expect(connected.state.sources).toContainEqual({ source: 'outlook', oauth: true, apiKey: false });
+    expect(connected.state.accounts).toMatchObject([
+      { id: `teams:${microsoft.tenantId}:${SAM.id}`, name: 'Teams · sam@contoso.test' },
+      {
+        id: `outlook:${microsoft.tenantId}:${SAM.id}`,
+        name: 'Outlook · sam@contoso.test',
+        sources: [
+          { source: 'outlook', granted: true, enabled: true },
+          { source: 'outlook-calendar', granted: true, enabled: true },
+        ],
+      },
+    ]);
+
+    const removed = await answerAccountsRequest(accounts, {
+      op: 'remove',
+      accountId: `outlook:${microsoft.tenantId}:${SAM.id}`,
+    });
+    expect(removed.state.accounts).toMatchObject([{ id: `teams:${microsoft.tenantId}:${SAM.id}` }]);
+  });
+
+  it('explains a tenant that needs admin consent under Outlook, with the mail and calendar permissions', async () => {
+    microsoft.requireAdminConsent('AADSTS65001');
+
+    const response = await answerAccountsRequest(accounts, {
+      op: 'connect',
+      source: 'outlook',
+      method: 'oauth',
+    });
+
+    expect(response).toMatchObject({
+      ok: false,
+      source: 'outlook',
+      adminConsent: {
+        permissions: expect.arrayContaining(['Mail.ReadWrite', 'Mail.Send', 'Calendars.ReadWrite']),
+      },
+      state: { accounts: [] },
     });
   });
 });

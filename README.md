@@ -57,13 +57,13 @@ cp config/example.json config/local.json   # then fill in the client IDs
 }
 ```
 
-The `microsoft` and `google` blocks are optional: without them (or with `null`s), Teams or Google can't be connected. The `github` block is optional too: without a client ID, GitHub connects only with a token or gh's sign-in. Restart `pnpm dev` after changing the file.
+The `microsoft` and `google` blocks are optional: without them (or with `null`s), Teams and Outlook, or Google, can't be connected. The `github` block is optional too: without a client ID, GitHub connects only with a token or gh's sign-in. Restart `pnpm dev` after changing the file.
 
 ### Accounts
 
 **Settings → Accounts** (`,`) lists the Accounts of every Source, grouped by Source, each with its own **Connect**. Every Account can show **Reconnect** (when its sign-in failed for good) and be **Removed**. However a Source signs in, its tokens and API keys are stored only in the system keyring, through the secrets module; the window never receives one. The Accounts themselves (their names, how they signed in, and whether they need reconnecting) are kept in `accounts.json` in the `userData` folder. Each Source plugs into the same Account code (`apps/desktop/src/main/accounts/source-accounts.ts`) with its own sign-in, refresh and naming.
 
-An Account can carry more than one Source that share its sign-in: a Google Account carries **Gmail** and **Google Calendar**, each with its own switch in Settings → Accounts. The sync engine keeps one queue per Account, so two Sources of one Account never call out at the same time, but each Source has its own cursor, cadence, status and back-off (kept per Account and Source in `commander.db`). Linear, Teams and GitHub Accounts carry one Source each and work as before.
+An Account can carry more than one Source that share its sign-in: a Google Account carries **Gmail** and **Google Calendar**, and an Outlook Account **Outlook** (mail) and **Outlook Calendar**, each with its own switch in Settings → Accounts. The sync engine keeps one queue per Account, so two Sources of one Account never call out at the same time, but each Source has its own cursor, cadence, status and back-off (kept per Account and Source in `commander.db`). Linear, Teams and GitHub Accounts carry one Source each and work as before.
 
 ### Connecting Linear
 
@@ -98,6 +98,30 @@ The end-to-end tests never contact Linear: they point sign-in and sync at a fake
 4. Run `pnpm dev`, choose **Connect Teams**, and approve in your browser.
 
 The end-to-end tests never contact Microsoft: they point sign-in and Graph at a fake Microsoft identity platform and Graph on this machine through `COMMANDER_TEST_MICROSOFT`, which only accepts loopback URLs.
+
+### Connecting Outlook
+
+**Connect Outlook** in Settings → Accounts signs in once for both Outlook Sources, **Outlook** (mail) and **Outlook Calendar**, through the same Entra app and sign-in as Teams (above). Each Microsoft account is its own Account, shown as "Outlook · <your sign-in>" and keyed by tenant and user, so connecting the same account again updates it. It is a separate Account from that user's Teams Account, with its own sign-in. Nothing syncs yet: Outlook Calendar sync (M5) and Outlook mail sync (M6) plug into this Account.
+
+- Sign-in, the `http://localhost` loopback, refreshing (rotated refresh token saved first, one refresh at a time), **Reconnect** and the admin consent explanation work exactly as for Teams.
+- It asks for these permissions at once:
+
+  | Permission | For |
+  |---|---|
+  | `openid`, `profile`, `offline_access`, `User.Read` | Who you are (the Account's name and key), and a refresh token |
+  | `Mail.ReadWrite`, `Mail.Send` | Outlook: read, move, flag and delete mail, and send it |
+  | `Calendars.ReadWrite` | Outlook Calendar: read and write events, including replies to invitations |
+
+  `MailboxSettings.ReadWrite` is **not** asked for here: mirroring Buckets as Outlook categories (M6) asks for it separately, only when you switch mirroring on.
+- Microsoft asks for every permission together, so both Sources are normally on. If the token covers only some (an administrator approved only part of them), the Source missing its permissions stays off with **Grant access**, which signs in again for that Account. You can switch either Source off and on.
+- **Connect Outlook** is shown only when `config/local.json` has both `microsoft.clientId` and `microsoft.tenantId`; otherwise a line explains why.
+- If Microsoft refuses a refresh for good, the Account shows **Reconnect** and both its Sources pause; reconnecting signs in again as the same user and keeps the same Account.
+- **Remove** deletes the Account's keyring entry and its Outlook mail and Outlook Calendar Items.
+- A personal Outlook.com account can't sign in to the single-tenant app; that waits for a multi-tenant registration.
+
+**Adding Outlook to Commander's Entra app (once, by the owner):** in the Microsoft Entra admin center → App registrations → the Commander app set up for Teams → **API permissions**, add the **delegated** Microsoft Graph permissions `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite` and `MailboxSettings.ReadWrite` (the last is only requested once Bucket mirroring is switched on). The redirect URI and the IDs in `config/local.json` are already in place from Teams. Then run `pnpm dev`, choose **Connect Outlook**, approve in your browser, and check that the Account appears with both Sources on. If your tenant asks for an administrator's approval, the error code is what to note (no tenant details).
+
+The end-to-end tests use the same fake Microsoft identity platform and Graph as Teams (`COMMANDER_TEST_MICROSOFT`).
 
 ### Connecting GitHub
 

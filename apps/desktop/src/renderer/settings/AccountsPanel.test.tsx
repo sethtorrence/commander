@@ -6,6 +6,7 @@ import type {
   GitHubAccountSummary,
   GoogleAccountSummary,
   LinearAccountSummary,
+  OutlookAccountSummary,
   TeamsAccountSummary,
 } from '@commander/domain/ipc';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -70,7 +71,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const source = (name: 'linear' | 'teams' | 'github' | 'google') =>
+const source = (name: 'linear' | 'teams' | 'github' | 'google' | 'outlook') =>
   within(screen.getByTestId(`source-${name}`));
 
 describe('Settings → Accounts', () => {
@@ -507,5 +508,130 @@ describe('Google in Settings → Accounts', () => {
     fireEvent.click(await waitFor(() => google().getByRole('button', { name: 'Connect Google' })));
 
     await waitFor(() => expect(google().getByRole('alert').textContent).toBe(blocked));
+  });
+});
+
+describe('Outlook in Settings → Accounts', () => {
+  const samOutlook: OutlookAccountSummary = {
+    id: 'outlook:tenant-1:user-9',
+    source: 'outlook',
+    name: 'Outlook · sam@contoso.test',
+    userPrincipalName: 'sam@contoso.test',
+    method: 'oauth',
+    status: 'connected',
+    user: { id: 'user-9', name: 'Sam Rivera' },
+    sync: null,
+    sources: [
+      { source: 'outlook', granted: true, enabled: true },
+      { source: 'outlook-calendar', granted: false, enabled: false },
+    ],
+  };
+  const withOutlook = (oauth: boolean): AccountsState['sources'] => [
+    ...bothConfigured,
+    { source: 'outlook', oauth, apiKey: false },
+  ];
+  const outlook = () => source('outlook');
+
+  it('connects Outlook through the browser, once for mail and calendar', async () => {
+    state = { accounts: [], sources: withOutlook(true) };
+    render(<AccountsPanel no="02" />);
+
+    expect(await waitFor(() => outlook().getByText(/both Outlook mail and Outlook Calendar/))).toBeTruthy();
+    fireEvent.click(outlook().getByRole('button', { name: 'Connect Outlook' }));
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'outlook',
+        method: 'oauth',
+        reconnect: undefined,
+      }),
+    );
+  });
+
+  it('hides Connect Outlook, saying why, in a build without the Microsoft app', async () => {
+    state = { accounts: [], sources: withOutlook(false) };
+    render(<AccountsPanel no="02" />);
+
+    await waitFor(() => expect(outlook().getByText(/See “Connecting Outlook” in the README/)).toBeTruthy());
+    expect(outlook().queryByRole('button', { name: 'Connect Outlook' })).toBeNull();
+  });
+
+  it('lists Outlook and Outlook Calendar under the Account, each switchable, with Grant access for one not granted', async () => {
+    state = { accounts: [samOutlook], sources: withOutlook(true) };
+    render(<AccountsPanel no="02" />);
+    await waitFor(() => outlook().getByTestId('account'));
+
+    expect(outlook().getByText(/Microsoft account · Sam Rivera · Signed in with Microsoft/)).toBeTruthy();
+    const mail = within(outlook().getByTestId('carried-source-outlook'));
+    const calendar = within(outlook().getByTestId('carried-source-outlook-calendar'));
+    expect(mail.getByRole('switch', { name: 'Outlook' }).getAttribute('aria-checked')).toBe('true');
+    expect(calendar.getByText('Not allowed in Microsoft')).toBeTruthy();
+    expect((calendar.getByRole('switch', { name: 'Outlook Calendar' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+
+    fireEvent.click(mail.getByRole('switch', { name: 'Outlook' }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'set-source-enabled',
+        accountId: samOutlook.id,
+        source: 'outlook',
+        enabled: false,
+      }),
+    );
+
+    fireEvent.click(calendar.getByRole('button', { name: 'Grant access' }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'outlook',
+        method: 'oauth',
+        reconnect: samOutlook.id,
+      }),
+    );
+  });
+
+  it('offers Reconnect for an Outlook Account whose sign-in was refused for good', async () => {
+    state = { accounts: [{ ...samOutlook, status: 'needs-reconnect' }], sources: withOutlook(true) };
+    render(<AccountsPanel no="02" />);
+
+    fireEvent.click(await waitFor(() => outlook().getByRole('button', { name: 'Reconnect' })));
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'outlook',
+        method: 'oauth',
+        reconnect: samOutlook.id,
+      }),
+    );
+  });
+
+  it('shows a tenant that needs admin consent under Outlook, with the permissions and the link', async () => {
+    state = { accounts: [], sources: withOutlook(true) };
+    answer = (request) =>
+      request.op === 'connect'
+        ? {
+            ok: false,
+            source: 'outlook',
+            error: 'Your organisation needs an administrator to approve Commander.',
+            adminConsent: {
+              permissions: ['Mail.ReadWrite', 'Mail.Send', 'Calendars.ReadWrite'],
+              url: 'https://login.example.test/tenant/adminconsent?client_id=app',
+            },
+            state,
+          }
+        : { ok: true, state };
+    render(<AccountsPanel no="02" />);
+
+    fireEvent.click(await waitFor(() => outlook().getByRole('button', { name: 'Connect Outlook' })));
+
+    const permissions = await waitFor(() => outlook().getByTestId('admin-consent-permissions'));
+    expect(
+      within(permissions)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Mail.ReadWrite', 'Mail.Send', 'Calendars.ReadWrite']);
   });
 });

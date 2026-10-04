@@ -250,6 +250,7 @@ export const SOURCE_NAMES: Record<Source, string> = {
   gmail: 'Gmail',
   outlook: 'Outlook',
   'google-calendar': 'Google Calendar',
+  'outlook-calendar': 'Outlook Calendar',
   teams: 'Teams',
   linear: 'Linear',
   github: 'GitHub',
