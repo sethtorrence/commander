@@ -9,7 +9,9 @@ import {
   blockTodo,
   blockTodoQuery,
   type DailyNotePage,
+  type DailyNoteProjects,
   dailyNotePage,
+  dailyNoteProjects,
   dailyNoteQuery,
   type Item,
   type ItemView,
@@ -17,6 +19,8 @@ import {
   itemAction,
   itemQuery,
   itemView,
+  type ProjectBlock,
+  projectBlock,
 } from './items';
 import { type LinearCatalog, linearCatalog } from './linear';
 import { type OutgoingChange, outgoingChange, outgoingQuery } from './outgoing';
@@ -88,6 +92,10 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // What an Account's Source offers the detail pane's pickers (Linear: each team's states, members,
   // labels, cycles and Linear projects), as its last sync fetched it; null before the first.
   z.object({ op: z.literal('source-catalog'), account: z.string().min(1) }),
+  // The Project filter in Notes: which Projects each written Daily Note has Blocks in.
+  z.object({ op: z.literal('daily-note-projects') }),
+  // A Project page's Notes list: the Project's written Blocks, by day.
+  z.object({ op: z.literal('project-blocks'), projectId: z.string().min(1) }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -116,6 +124,8 @@ export type ItemStoreResults = {
   outgoing: OutgoingChange[];
   'retry-outgoing': OutgoingChange[];
   'source-catalog': LinearCatalog | null;
+  'daily-note-projects': DailyNoteProjects[];
+  'project-blocks': ProjectBlock[];
 };
 
 export const itemStoreResult = {
@@ -142,6 +152,8 @@ export const itemStoreResult = {
   outgoing: z.array(outgoingChange),
   'retry-outgoing': z.array(outgoingChange),
   'source-catalog': linearCatalog.nullable(),
+  'daily-note-projects': z.array(dailyNoteProjects),
+  'project-blocks': z.array(projectBlock),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

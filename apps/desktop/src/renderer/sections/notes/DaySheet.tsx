@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { dayOfYear, isoWeek } from '../../frame/calendar';
 import { dateOf, dayLabel, longDate, notePartNumber, weekday } from './days';
 import type { DayState } from './notebook';
-import { OutlineView } from './OutlineView';
+import { OutlineView, type ProjectView } from './OutlineView';
 import type { Outline } from './outline';
 
 const pad = (n: number, width = 2) => String(n).padStart(width, '0');
@@ -95,6 +95,7 @@ function Legend() {
       </Key>
       <Key keys={<Kbd>■</Kbd>}>click a bullet to fold</Key>
       <Key keys={<Kbd>[ ]</Kbd>}>start a line, get a Todo</Key>
+      <Key keys={<Kbd>#LT</Kbd>}>file it under a Project</Key>
       <Key keys={<Kbd>Ctrl ↵</Kbd>}>make a Todo, tick it</Key>
       <Key keys={<Kbd>Ctrl .</Kbd>}>fold, unfold</Key>
       <Key
@@ -118,12 +119,56 @@ export interface DaySheetProps {
   today: string;
   /** Its place in the stream, from 1, and how many sheets there are. */
   sheet: readonly [number, number];
+  /** Its Blocks' Projects and the Project filter (#51). */
+  projects?: DayProjects;
+}
+
+export interface DayProjects {
+  view: ProjectView;
+  /** Under the filter, with nothing in it: the day shows as one line, `filtered` naming the filter. */
+  collapsed: boolean;
+  filtered: string;
+  /** Shows a collapsed day in full. */
+  onExpand(): void;
+}
+
+// A day with nothing in the Project filter: one line, which opens the day in full.
+function CollapsedDay({ state, today, projects }: { state: DayState; today: string; projects: DayProjects }) {
+  const { day, outline } = state;
+  const written = [...outline.values()].filter((block) => block.text !== '').length;
+  return (
+    <section
+      id={`day-${day}`}
+      className={cn('n-day n-g8 n-collapsed', day === today && 'today')}
+      data-day={day}
+      data-testid="daily-note"
+      data-collapsed=""
+      aria-label={`${weekday(day)} ${longDate(day)}`}
+    >
+      <button
+        type="button"
+        className="n-col-row"
+        title="Nothing here under the Project filter. Click to show the whole day."
+        onClick={projects.onExpand}
+      >
+        <span className="m">{notePartNumber(day)}</span>
+        <b>
+          {weekday(day)} {longDate(day)}
+        </b>
+        <span>Nothing in {projects.filtered}</span>
+        <span className="m">
+          {pad(written, 3)} {written === 1 ? 'Block' : 'Blocks'} · Show
+        </span>
+      </button>
+    </section>
+  );
 }
 
 /** One Daily Note on the drawing: spec (A), the sheet (B–E) and its margin (F–H). */
-export function DaySheet({ state, today, sheet }: DaySheetProps) {
+export function DaySheet({ state, today, sheet, projects }: DaySheetProps) {
   const { day, outline } = state;
   const isToday = day === today;
+  if (projects?.collapsed) return <CollapsedDay state={state} today={today} projects={projects} />;
   return (
     <section
       id={`day-${day}`}
@@ -152,6 +197,7 @@ export function DaySheet({ state, today, sheet }: DaySheetProps) {
             day={day}
             outline={outline}
             placeholder={isToday ? 'Nothing yet. Start typing.' : 'Nothing written this day.'}
+            projectView={projects?.view}
           />
         </div>
       </Sheet>

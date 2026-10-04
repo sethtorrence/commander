@@ -1,5 +1,6 @@
 import './notes.css';
 import './formatting.css';
+import type { DailyNoteProjects, Filing } from '@commander/domain';
 import { DimensionLine, toast } from '@commander/ui';
 import {
   useCallback,
@@ -15,14 +16,19 @@ import { isoWeek } from '../../frame/calendar';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { itemChangesFromCore } from '../../item-store/changes';
+import { BadgePicker } from '../../projects/BadgePicker';
+import { SectionProjectFilter } from '../../projects/badges';
+import { useProjects } from '../../projects/context';
+import type { ProjectFilter } from '../../projects/filter';
 import { useShortcuts } from '../../shortcuts/react';
 import { type SectionDefinition, useHeaderSlot, useSection } from '../section';
-import { DaySheet } from './DaySheet';
+import { effectiveFilings, filterView, noteCounts } from './block-projects';
+import { type DayProjects, DaySheet } from './DaySheet';
 import { dailyNotesIn } from './daily-notes';
 import { dateOf, dayKey, longDate, notePartNumber, weekday, weekOf } from './days';
-import { createNotebook, type Notebook, type NotebookSnapshot } from './notebook';
-import { focusText, OutlineContext, type OutlineControls } from './OutlineView';
-import type { Caret } from './outline';
+import { createNotebook, type DayState, type Notebook, type NotebookSnapshot } from './notebook';
+import { focusText, OutlineContext, type OutlineControls, type OutlineProjects } from './OutlineView';
+import type { Block, Caret } from './outline';
 import { WeekStrip } from './WeekStrip';
 
 // How far below the window's top a day's sheet sits when the stream scrolls to it.
@@ -165,15 +171,133 @@ function StreamEnd({ notebook, state }: { notebook: Notebook; state: NotebookSna
   );
 }
 
+/*
+  The Project filter in Notes (#51): the one app-wide filter narrows the stream to a Project's Blocks
+  (or the Unfiled ones), with the Blocks above them dimmed as context, and a day with none of them
+  collapses to one line. The Blocks the User writes in while it is on stay shown, as does a day they
+  open from its line, until the filter changes. Its counts are Daily Notes, not Blocks.
+*/
+function useNoteFilter(days: readonly DayState[], savedProjects: readonly DailyNoteProjects[]) {
+  const { filter, projectById } = useProjects();
+  const [kept, setKept] = useState<{ filter: ProjectFilter; ids: ReadonlySet<string> }>({
+    filter,
+    ids: new Set(),
+  });
+  const [opened, setOpened] = useState<{ filter: ProjectFilter; days: ReadonlySet<string> }>({
+    filter,
+    days: new Set(),
+  });
+  const keptIds = kept.filter === filter ? kept.ids : null;
+  const openedDays = opened.filter === filter ? opened.days : null;
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+
+  /** Keeps a Block shown under the current filter (the User is writing in it, or it was revealed). */
+  const keep = useCallback((id: string) => {
+    const current = filterRef.current;
+    if (current === 'everything') return;
+    setKept((was) => {
+      const ids = was.filter === current ? was.ids : new Set<string>();
+      return ids.has(id) ? was : { filter: current, ids: new Set([...ids, id]) };
+    });
+  }, []);
+
+  const filtered = filter === 'unfiled' ? 'Unfiled' : (projectById(filter)?.name ?? 'this Project');
+  const views = useMemo(() => {
+    const byDay = new Map<string, DayProjects>();
+    for (const { day, outline } of days) {
+      const dayFilter = openedDays?.has(day) ? 'everything' : filter;
+      const view = filterView(outline, dayFilter, keptIds ?? undefined);
+      const keepsOne = !!keptIds && [...keptIds].some((id) => outline.has(id));
+      byDay.set(day, {
+        view: { ...view, filings: effectiveFilings(outline) },
+        collapsed: dayFilter !== 'everything' && view.matching === 0 && !keepsOne,
+        filtered,
+        onExpand: () =>
+          setOpened((was) => ({
+            filter,
+            days: new Set([...(was.filter === filter ? was.days : []), day]),
+          })),
+      });
+    }
+    return byDay;
+  }, [days, filter, keptIds, openedDays, filtered]);
+
+  const counts = useMemo(() => noteCounts(savedProjects, days), [savedProjects, days]);
+  return { views, counts, keep };
+}
+
+// The Badge picker for a Block, opened from its margin Badge: `b` is a typing key in the editor.
+function useBlockPicker(notebook: Notebook) {
+  const [target, setTarget] = useState<{
+    day: string;
+    block: Block;
+    filing: Filing;
+    anchor: HTMLElement;
+  } | null>(null);
+  const open = useCallback(
+    (day: string, block: Block, filing: Filing, anchor: HTMLElement) =>
+      setTarget({ day, block, filing, anchor }),
+    [],
+  );
+  const close = useCallback(() => setTarget(null), []);
+  const picker = target && (
+    <BadgePicker
+      target={{ id: target.block.id, title: target.block.text, filing: target.filing }}
+      anchor={target.anchor}
+      clearLabel={target.block.parentId ? 'Follow its parent' : 'Unfiled'}
+      onClose={close}
+      onPick={(projectId) => {
+        setTarget(null);
+        notebook.file(target.day, target.block.id, projectId);
+      }}
+    />
+  );
+  return { open, picker };
+}
+
 // The Notes Section: today's Daily Note on top, earlier days below in one stream, and the week strip.
 function NotesSection() {
   const { active } = useSection();
   const slot = useHeaderSlot();
   const today = dayKey(useNow(60_000));
+  const { projects } = useProjects();
+  // The Notebook reads the `#LT` shorthand against the Projects as they are now.
+  const projectsNow = useRef(projects);
+  projectsNow.current = projects;
+  const [api] = useState(() => dailyNotesIn(window.commander.itemStore));
   const [notebook] = useState(() =>
-    createNotebook(dailyNotesIn(window.commander.itemStore), { today, onError: (message) => toast(message) }),
+    createNotebook(api, {
+      today,
+      onError: (message) => toast(message),
+      projects: () => projectsNow.current,
+    }),
   );
   const state = useSyncExternalStore(notebook.subscribe, notebook.snapshot);
+
+  // Which Projects every Daily Note has Blocks in, for the filter's counts; read again after changes.
+  const [savedProjects, setSavedProjects] = useState<DailyNoteProjects[]>([]);
+  const loadProjects = useCallback(() => {
+    void api.projects?.().then(setSavedProjects, () => {});
+  }, [api]);
+  useEffect(() => {
+    if (state.started) loadProjects();
+  }, [state.started, loadProjects]);
+  const noteFilter = useNoteFilter(state.days, savedProjects);
+  const { keep } = noteFilter;
+  const blockPicker = useBlockPicker(notebook);
+  // A Block clicked into stays shown under the Project filter while the User writes in it.
+  const stream = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = stream.current;
+    if (!element) return;
+    const onFocus = (event: FocusEvent) => {
+      const id = event.target instanceof HTMLElement ? event.target.dataset.blockId : undefined;
+      if (id) keep(id);
+    };
+    element.addEventListener('focusin', onFocus);
+    return () => element.removeEventListener('focusin', onFocus);
+  }, [keep]);
 
   // Today's Daily Note is made when Notes is first shown (every Section stays mounted behind the others).
   useEffect(() => {
@@ -190,13 +314,16 @@ function NotesSection() {
     () =>
       itemChangesFromCore(() => {
         if (!shown.current) void notebook.refresh();
+        loadProjects();
       }),
-    [notebook],
+    [notebook, loadProjects],
   );
   // A Block opened from elsewhere (a Todo's made-from Link, the palette): its day comes on screen,
   // and it is scrolled to and highlighted. A Daily Note opened from the palette scrolls to its day.
   useReveal('notes', async (itemId) => {
     await notebook.start();
+    // Shown even when the Project filter would leave it out.
+    keep(itemId);
     const day = await notebook.reveal(itemId);
     if (!day) return;
     if (notebook.snapshot().days.some((d) => d.outline.has(itemId)))
@@ -217,16 +344,23 @@ function NotesSection() {
     focusText(element, caret.offset);
   }, []);
   useLayoutEffect(applyFocus);
+  const outlineProjects = useMemo<OutlineProjects>(
+    () => ({ list: projects, pick: blockPicker.open }),
+    [projects, blockPicker.open],
+  );
   const controls = useMemo<OutlineControls>(
     () => ({
       notebook,
       focus(caret) {
         if (!caret) return;
+        // A Block the caret goes to stays shown under the Project filter (a new one, say).
+        keep(caret.id);
         pendingFocus.current = caret;
         requestAnimationFrame(applyFocus);
       },
+      projects: outlineProjects,
     }),
-    [notebook, applyFocus],
+    [notebook, applyFocus, keep, outlineProjects],
   );
 
   useShortcuts([
@@ -297,13 +431,23 @@ function NotesSection() {
             />,
             slot,
           )}
-        <div className="n-stream" data-notes-stream="">
+        <div className="n-stream" data-notes-stream="" ref={stream}>
           <Dimensions today={today} ready={state.started} />
+          <div className="n-filter n-g8">
+            <SectionProjectFilter className="n-pflt" counts={noteFilter.counts} />
+          </div>
           {state.days.map((day, index) => (
-            <DaySheet key={day.day} state={day} today={today} sheet={[index + 1, sheets]} />
+            <DaySheet
+              key={day.day}
+              state={day}
+              today={today}
+              sheet={[index + 1, sheets]}
+              projects={noteFilter.views.get(day.day)}
+            />
           ))}
           <StreamEnd notebook={notebook} state={state} />
         </div>
+        {blockPicker.picker}
       </div>
     </OutlineContext.Provider>
   );

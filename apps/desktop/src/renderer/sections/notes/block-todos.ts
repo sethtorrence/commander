@@ -1,4 +1,4 @@
-import type { ItemAction } from '@commander/domain';
+import { type ItemAction, isOwnFiling } from '@commander/domain';
 import { type Block, type BlockChange, type Caret, type Edit, enter, type Outline } from './outline';
 
 /*
@@ -94,9 +94,17 @@ export function enterTodo(
 
 // ---- saving ----
 
+// A Block's own Project, as saved: an inherited one is the Item store's to keep.
+const ownProject = (block: Block) =>
+  block.filing && isOwnFiling(block.filing) ? block.filing.projectId : null;
+
 // What of a Block is saved on its Item: everything but its Todo, which is an Item of its own.
 export const sameSavedBlock = (a: Block, b: Block) =>
-  a.parentId === b.parentId && a.position === b.position && a.text === b.text && a.folded === b.folded;
+  a.parentId === b.parentId &&
+  a.position === b.position &&
+  a.text === b.text &&
+  a.folded === b.folded &&
+  ownProject(a) === ownProject(b);
 
 // The Todo's Item for a Block that became a Todo, and its made-from Link to the Block.
 function todoActionsMaking(block: Block, todo: NonNullable<Block['todo']>): ItemAction[] {

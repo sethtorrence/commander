@@ -1,3 +1,4 @@
+import type { Filing } from '@commander/domain';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 
 /*
@@ -18,6 +19,11 @@ export interface Block {
   folded: boolean;
   /** The Todo made from this Block (`[]`), shown as its checkbox; absent for a plain Block. */
   todo?: BlockTodo;
+  /**
+   * The Project its Item is filed under. Only its own (not inherited) counts in the outline; what a
+   * Block shows is worked out from the tree (block-projects.ts). Absent for a new Block: it inherits.
+   */
+  filing?: Filing;
 }
 
 /** A Block's Todo: its own Item (see block-todos.ts), and whether it is ticked. */

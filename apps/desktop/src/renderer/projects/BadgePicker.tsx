@@ -26,12 +26,12 @@ const HOW: Record<FiledBy, string> = {
 
 type Choice = { project: Project | null; label: string };
 
-/** The choices that match what was typed: Projects by code or name, and Unfiled. */
-export function matchChoices(projects: readonly Project[], query: string): Choice[] {
+/** The choices that match what was typed: Projects by code or name, and Unfiled (or `clearLabel`). */
+export function matchChoices(projects: readonly Project[], query: string, clearLabel = 'Unfiled'): Choice[] {
   const q = query.trim().toLowerCase();
   const all: Choice[] = [
     ...projects.map((project) => ({ project, label: project.name })),
-    { project: null, label: 'Unfiled' },
+    { project: null, label: clearLabel },
   ];
   if (!q) return all;
   const starts = (text: string) => text.toLowerCase().startsWith(q);
@@ -60,11 +60,14 @@ export function BadgePicker({
   anchor,
   onPick,
   onClose,
+  clearLabel,
 }: {
   target: PickerTarget;
   anchor: HTMLElement | null;
   onPick: (projectId: string | null) => void;
   onClose: () => void;
+  /** What choosing no Project is called, where it isn't Unfiled (a Block follows its parent). */
+  clearLabel?: string;
 }) {
   const { projects } = useProjects();
   const portal = usePortalContainer() ?? document.body;
@@ -72,7 +75,7 @@ export function BadgePicker({
   const [active, setActive] = useState(0);
   const panel = useRef<HTMLDivElement>(null);
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
-  const choices = useMemo(() => matchChoices(projects, query), [projects, query]);
+  const choices = useMemo(() => matchChoices(projects, query, clearLabel), [projects, query, clearLabel]);
   const current = target.filing?.projectId ?? null;
   const highlighted = Math.min(active, Math.max(0, choices.length - 1));
 

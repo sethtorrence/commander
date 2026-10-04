@@ -1,4 +1,5 @@
-import { attachmentMarkdown } from '@commander/domain';
+import { attachmentMarkdown, type Project } from '@commander/domain';
+import { fileBlock, withTags } from './block-projects';
 import { enterTodo, makeTodo, removeTodo, tickTodo, typeTodoMark } from './block-todos';
 import type { DailyNotes } from './daily-notes';
 import {
@@ -35,6 +36,9 @@ import {
   - A Block can be a Todo (block-todos.ts): `[] ` typed at its start, or Ctrl+Enter, makes one;
     its checkbox ticks it; deleting the checkbox or the Block deletes the Todo. Each is one step to
     undo, saved together with the Block. Changes made in the Todos Section show after `refresh()`.
+  - A Block can belong to a Project (block-projects.ts): `#LT` in its text, or the Badge picker
+    (`file`), sets its own; without one it inherits its parent's. Each is one step to undo; the Item
+    store re-files the Blocks below and the Todos that follow, and puts them back on undo.
   - A day that has no Daily Note yet (an empty past day opened from the week strip) shows blank, and
     its Daily Note is made only when the User writes in it.
   - Today's Daily Note, made when Notes first opens or when the date moves on while it is open, starts
@@ -71,6 +75,8 @@ export interface NotebookOptions {
   typingPauseMs?: number;
   /** Told when something couldn't be saved or loaded. */
   onError?: (message: string) => void;
+  /** The Projects, for the `#LT` shorthand. Without them (the daily template) it is plain text. */
+  projects?: () => readonly Project[];
 }
 
 export interface Notebook {
@@ -108,6 +114,11 @@ export interface Notebook {
   tick(day: string, id: string): boolean;
   /** Deletes a Block's checkbox: it becomes a plain Block, and its Todo is deleted. */
   removeTodo(day: string, id: string): Caret | null;
+  /**
+   * The Badge picker on a Block: files it under a Project, or (null) back to inheriting its parent's.
+   * A `#LT` in its text changes with it. Returns false if nothing changed.
+   */
+  file(day: string, id: string, projectId: string | null): boolean;
   /** Reads the days on screen again, for changes made elsewhere (the Todos Section). */
   refresh(): Promise<void>;
   /** Makes sure the day holding a Block is on screen, and returns that day (null if it isn't found). */
@@ -147,6 +158,7 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     pageSize = 7,
     typingPauseMs = 800,
     onError = () => {},
+    projects = () => [],
   } = options;
   let state: NotebookSnapshot = {
     today: options.today,
@@ -260,6 +272,8 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     before = outlineOfDay(day),
   ): Caret | null {
     if (!edit) return null;
+    // `#LT` typed into a Block, or taken out, files it (or returns it to inheriting) with this step.
+    edit = withTags(edit, outlineOfDay(day), projects());
     setDay(day, { outline: edit.outline });
     const focusAfter = edit.focus ?? focusBefore;
     if (edit.changes.length) {
@@ -372,8 +386,9 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
         const saved = held?.step.before ?? before;
         return commit(day, todo, 'Make a Todo', held?.step.focusBefore ?? todo.focus, saved);
       }
-      const changed = setText(before, id, text);
-      if (!changed) return null;
+      const typed = setText(before, id, text);
+      if (!typed) return null;
+      const changed = withTags(typed, before, projects());
       if (typing && (typing.day !== day || typing.id !== id)) flushTyping();
       let step = typing?.step;
       if (!step) {
@@ -458,6 +473,13 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     },
 
     removeTodo: removeCheckbox,
+
+    file(day, id, projectId) {
+      const caret = { id, offset: outlineOfDay(day).get(id)?.text.length ?? 0 };
+      return !!edit(day, projectId ? 'File under a Project' : 'Unfile', caret, (outline) =>
+        fileBlock(outline, id, projectId, projects()),
+      );
+    },
 
     refresh() {
       flushTyping();

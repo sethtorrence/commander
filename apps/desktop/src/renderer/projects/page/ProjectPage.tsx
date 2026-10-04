@@ -14,6 +14,7 @@ import { PickBadgeProvider, useBadgePicker } from '../BadgePicker';
 import { SectionProjectFilter } from '../badges';
 import { useProjects } from '../context';
 import { ManageProject } from './ManageProject';
+import { ProjectNotes } from './ProjectNotes';
 import { filingBreakdown, projectPartNumber, sectionCounts } from './project-page';
 import { SideCard } from './SideCard';
 
@@ -204,6 +205,12 @@ export function ProjectPage({ projectId, active, itemStore, back, onOpenSection 
         <div className="sticky top-(--body) mr-4 ml-3.5 flex max-h-[calc(100vh-var(--body))] flex-col gap-3.5 overflow-auto pt-3.5 pb-6 [scrollbar-width:none]">
           <FiledCard project={project} items={items.own} />
           <MappingRules project={project} itemStore={itemStore} active={active} onChanged={refresh} />
+          <ProjectNotes
+            project={project}
+            itemStore={itemStore}
+            reloadWhen={items.own}
+            onOpenSection={onOpenSection}
+          />
           <ManageProject project={project} itemStore={itemStore} onChanged={refresh} />
         </div>
       </aside>

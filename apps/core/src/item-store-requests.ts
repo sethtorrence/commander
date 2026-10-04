@@ -68,20 +68,29 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.outgoing.retry(request.itemId) };
       case 'source-catalog':
         return { ok: true, result: store.syncState.catalog(request.account) };
+      case 'daily-note-projects':
+        return { ok: true, result: store.dailyNoteProjects() };
+      case 'project-blocks':
+        return { ok: true, result: store.projectBlocks(request.projectId) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 }
 
-// The Items a recorded change touched (each changed Item, and both ends of a Link), in order, once each.
-function changedItems(response: CoreItemStoreReply['response']): string[] {
+// The Items a recorded change touched, in order, once each: each changed Item, both ends of a Link,
+// and the Items re-filed along with it (the Blocks under a re-filed Block, the Todos that follow them),
+// which are in the activity log after the last entry before the change.
+function changedItems(store: ItemStore, response: CoreItemStoreReply['response'], since: number): string[] {
   if (!response.ok) return [];
   const result = response.result;
   const entries = (Array.isArray(result) ? result : [result]) as ActivityEntry[];
+  const alongside = store.activity({ after: since, limit: 1000 }).reverse();
   return [
     ...new Set(
-      entries.flatMap((entry) => (entry.otherItemId ? [entry.itemId, entry.otherItemId] : [entry.itemId])),
+      [...entries, ...alongside].flatMap((entry) =>
+        entry.otherItemId ? [entry.itemId, entry.otherItemId] : [entry.itemId],
+      ),
     ),
   ];
 }
@@ -98,10 +107,12 @@ export function answerItemStoreRequest(
   const parsed = envelope.safeParse(message);
   if (!parsed.success) return null;
   const { request } = message as { request?: unknown };
+  const op = (request as { op?: unknown } | undefined)?.op;
+  const records = onChanged && (op === 'record' || op === 'record-all');
+  const since = records ? (store.activity({ limit: 1 })[0]?.id ?? 0) : 0;
   const response = answer(store, request);
-  const op = (request as { op?: unknown }).op;
-  if (onChanged && (op === 'record' || op === 'record-all')) {
-    const ids = changedItems(response);
+  if (onChanged && records) {
+    const ids = changedItems(store, response, since);
     if (ids.length) onChanged(ids);
   }
   return { type: 'item-store-reply', id: parsed.data.id, response };

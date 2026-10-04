@@ -15,6 +15,7 @@ import {
   blockTodoQuery,
   type CausedBy,
   type DailyNotePage,
+  type DailyNoteProjects,
   type DailyNoteQuery,
   type DailyTemplate,
   dailyNoteQuery,
@@ -34,6 +35,7 @@ import {
   type LinkType,
   type Project,
   type ProjectAction,
+  type ProjectBlock,
   type ProjectChange,
   type ProjectQuery,
   type RefileCandidate,
@@ -51,7 +53,7 @@ import {
   statusFromDetail,
 } from '@commander/domain';
 import Database from 'better-sqlite3';
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
@@ -59,6 +61,7 @@ import { z } from 'zod';
 import { openSearch, type Search } from '../search';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
+import { blockFilingIn } from './block-filing';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type ModelStore, openModelStore } from './models';
 import { type OutgoingStore, openOutgoingQueue } from './outgoing';
@@ -156,6 +159,11 @@ export type ItemStore = {
   saveDailyTemplate(template: DailyTemplate): DailyTemplate;
   // Live Todos made from live Blocks (a made-from Link to the Block), with the Block and its day.
   blockTodos(query: BlockTodoQuery): BlockTodo[];
+  // Each Daily Note with written Blocks, newest first: the Projects they are filed under, and whether
+  // any is Unfiled (the Project filter's counts in Notes).
+  dailyNoteProjects(): DailyNoteProjects[];
+  // A Project's written Blocks (own or inherited), newest day first, each day's in outline order.
+  projectBlocks(projectId: string): ProjectBlock[];
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
   // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
@@ -341,6 +349,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     }
     return candidates;
   }
+  // Block Projects: a Block's inherited Project, and the Todos that follow their Blocks.
+  const blockFiling = blockFilingIn({
+    db,
+    readItem,
+    withDetails,
+    writeState,
+    log,
+    projects: () => projects.list(),
+  });
 
   // The search index follows every Item written below (insertItem and writeState).
   const search = openSearch(sqlite, {
@@ -509,7 +526,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (chosenId && readItem(chosenId))
       throw new ItemStoreError('invalid', `The id ${chosenId} is already taken`);
     const id = chosenId ?? randomUUID();
-    const state = checked(id, identity.kind, input);
+    const state = checked(id, identity.kind, blockFiling.settled(id, identity.kind, input));
     db.insert(schema.items)
       .values({ id, ...identity, ...itemColumns(state), createdAt: at, updatedAt: at })
       .run();
@@ -593,8 +610,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         const item = requireItem(action.itemId);
         projects.checkFiling(action.changes.filing);
         const before = stateOf(item);
-        const after = writeState(item, { ...before, ...action.changes }, at);
-        return logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
+        const changed = blockFiling.settled(item.id, item.kind, { ...before, ...action.changes });
+        const after = writeState(item, changed, at);
+        const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
+        blockFiling.afterUpdate({ ...item, ...after }, before, logged, at);
+        return logged;
       }
       case 'edit-fields': {
         const item = requireItem(action.itemId);
@@ -624,10 +644,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         }
         const existed = setLink(link, action.type === 'link', at);
         const after = action.type === 'link' ? link : null;
-        return log(
+        const logged = log(
           { ...entry, action: action.type, itemId: link.from, otherItemId: link.to, before: existed, after },
           at,
         );
+        if (after) blockFiling.afterLink(after, logged, at);
+        return logged;
       }
       case 'undo':
         return undo(action.entryId, entry, at);
@@ -665,7 +687,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const wanted = target.before as LinkState | null;
       const link = (target.before ?? target.after) as LinkState;
       const existed = setLink(link, wanted !== null, at);
-      return log({ ...undoEntry, otherItemId: target.otherItemId, before: existed, after: wanted }, at);
+      const logged = log(
+        { ...undoEntry, otherItemId: target.otherItemId, before: existed, after: wanted },
+        at,
+      );
+      if (wanted) blockFiling.afterLink(wanted, logged, at);
+      return logged;
     }
 
     const item = requireItem(target.itemId);
@@ -682,8 +709,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const detail = undoneDetail(current.detail, before.detail, after.detail);
       if (detail) restored = { ...restored, detail, status: statusFromDetail(detail, restored.status) };
     }
-    writeState(item, restored, at);
-    return logAndQueue(item, { ...undoEntry, before: current, after: restored }, at);
+    const settled = writeState(item, blockFiling.settled(item.id, item.kind, restored), at);
+    const logged = logAndQueue(item, { ...undoEntry, before: current, after: settled }, at);
+    blockFiling.afterUpdate({ ...item, ...settled }, current, logged, at);
+    return logged;
   }
 
   // Logs a change, and queues what it changed in a Source Item's synced fields for the Source (Two-way
@@ -721,7 +750,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         title: text,
         people: [],
         status: 'open',
-        filing: null,
+        // `#LT` in the template's text files the copy under LT; the Blocks under it inherit that.
+        filing: blockFiling.fromText(text),
         detail: { kind: 'block', dailyNoteId, parentId, position, text, folded },
         deletedAt: null,
       };
@@ -841,6 +871,61 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const todos = withDetails(rows.map((row) => row.todo));
     const blocksFound = withDetails(rows.map((row) => row.block));
     return rows.map((row, i) => ({ todo: todos[i] as Item, block: blocksFound[i] as Item, day: row.day }));
+  }
+
+  function dailyNoteProjects(): DailyNoteProjects[] {
+    const rows = sqlite
+      .prepare(
+        `SELECT d.day AS day, bi.project_id AS projectId
+         FROM block_details b
+         JOIN items bi ON bi.id = b.item_id
+         JOIN items ni ON ni.id = b.daily_note_id
+         JOIN daily_note_details d ON d.item_id = b.daily_note_id
+         WHERE bi.deleted_at IS NULL AND ni.deleted_at IS NULL AND b.text <> ''
+         GROUP BY d.day, bi.project_id
+         ORDER BY d.day DESC, bi.project_id`,
+      )
+      .all() as { day: string; projectId: string | null }[];
+    const byDay = new Map<string, DailyNoteProjects>();
+    for (const { day, projectId } of rows) {
+      const found = byDay.get(day) ?? { day, projectIds: [], unfiled: false };
+      byDay.set(day, found);
+      if (projectId) found.projectIds.push(projectId);
+      else found.unfiled = true;
+    }
+    return [...byDay.values()];
+  }
+
+  function projectBlocks(projectId: string): ProjectBlock[] {
+    const { items, blockDetails, dailyNoteDetails } = schema;
+    const notes = db
+      .selectDistinct({ id: blockDetails.dailyNoteId, day: dailyNoteDetails.day })
+      .from(items)
+      .innerJoin(blockDetails, eq(blockDetails.itemId, items.id))
+      .innerJoin(dailyNoteDetails, eq(dailyNoteDetails.itemId, blockDetails.dailyNoteId))
+      .where(and(eq(items.projectId, projectId), isNull(items.deletedAt), sql`${blockDetails.text} <> ''`))
+      .orderBy(desc(dailyNoteDetails.day))
+      .limit(200)
+      .all();
+    const all = blocks(notes.map((note) => note.id));
+    return notes.flatMap(({ id, day }) => {
+      const children = new Map<string | null, Item[]>();
+      for (const block of all) {
+        if (block.detail?.kind !== 'block' || block.detail.dailyNoteId !== id) continue;
+        const siblings = children.get(block.detail.parentId) ?? [];
+        children.set(block.detail.parentId, [...siblings, block]);
+      }
+      const found: ProjectBlock[] = [];
+      const walk = (parentId: string | null) => {
+        for (const block of children.get(parentId) ?? []) {
+          const text = block.detail?.kind === 'block' ? block.detail.text : '';
+          if (block.filing?.projectId === projectId && text !== '') found.push({ block, day });
+          walk(block.id);
+        }
+      };
+      walk(null);
+      return found;
+    });
   }
 
   function blocks(dailyNoteIds: string[]): Item[] {
@@ -996,6 +1081,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     dailyTemplate: () => template.read(),
     saveDailyTemplate: (input) => template.save(input),
     blockTodos,
+    dailyNoteProjects,
+    projectBlocks,
 
     activity(input = {}) {
       const query = activityQuery.parse(input);
@@ -1004,9 +1091,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         .select()
         .from(activity)
         .where(
-          query.itemId
-            ? or(eq(activity.itemId, query.itemId), eq(activity.otherItemId, query.itemId))
-            : undefined,
+          and(
+            query.itemId
+              ? or(eq(activity.itemId, query.itemId), eq(activity.otherItemId, query.itemId))
+              : undefined,
+            query.after !== undefined ? gt(activity.id, query.after) : undefined,
+          ),
         )
         .orderBy(desc(activity.id))
         .limit(query.limit ?? 200)
