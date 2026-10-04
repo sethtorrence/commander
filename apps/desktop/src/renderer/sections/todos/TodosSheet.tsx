@@ -1,5 +1,5 @@
 import type { Item } from '@commander/domain';
-import { cn, toast } from '@commander/ui';
+import { Button, cn, toast } from '@commander/ui';
 import { useEffect, useRef, useState } from 'react';
 import { requestReveal, useReveal } from '../../frame/reveal';
 import type { ItemChanges } from '../../item-store/changes';
@@ -28,7 +28,16 @@ const onPressable = () => !!document.activeElement?.closest('button, a[href], su
  * Closed, the sheet spans columns A–F like the prototype's Todos sheet; open, it spans A–H with
  * the detail pane in the last three eighths, like its Calendar.
  */
-export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemChanges }) {
+export function TodosSheet({
+  todos,
+  changes,
+  planFocusTime,
+}: {
+  todos: Todos;
+  changes?: ItemChanges;
+  /** Asks Ares to find time for the Todos now (#131); the Calendar Section then shows his suggestions. */
+  planFocusTime?: () => Promise<void>;
+}) {
   // Projects (projects/): the filter narrows the list, `b` or a Badge click files a Todo.
   const { filter, include, filingForNew } = useProjectFilter();
   const { projects, openPage } = useProjects();
@@ -158,7 +167,26 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
           · {done.length} done · from Linear, GitHub, Email, the Daily Note and you
         </>
       }
-      aside={<Keys />}
+      aside={
+        <div className="flex items-end gap-5">
+          {planFocusTime && (
+            <Button
+              onClick={() =>
+                planFocusTime().then(
+                  () => {
+                    toast('Ares is looking for time for your Todos.');
+                    openSection('calendar');
+                  },
+                  (error) => toast(error instanceof Error ? error.message : String(error)),
+                )
+              }
+            >
+              Plan focus time
+            </Button>
+          )}
+          <Keys />
+        </div>
+      }
       className="flex flex-col"
     >
       <SectionProjectFilter items={state.allOpen} />

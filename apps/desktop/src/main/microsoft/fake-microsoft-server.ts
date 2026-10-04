@@ -17,10 +17,15 @@ import type { AddressInfo } from 'node:net';
 // moment); for Outlook Calendar, `GET /me/calendars` and each calendar's `calendarView/delta` over
 // a window, paged by `Prefer: odata.maxpagesize`, ending in a delta link that later returns only
 // changes (deleted events as `@removed`), 410 SyncStateNotFound once delta links expire, and
-// throttling; and answering invitations (#129): `GET /me/events/{id}` (a series master stands for
+// throttling; answering invitations (#129): `GET /me/events/{id}` (a series master stands for
 // its instances) and `POST /me/events/{id}/accept`, `/tentativelyAccept` or `/decline`, each recorded
 // with its `sendResponse`, after which the event (or every instance of the series) carries the
-// answer. Nothing here talks to the real Microsoft.
+// answer; and for the events Commander writes (#131), `POST /me/calendars` (an owned calendar the
+// User can edit), `POST /me/calendars/{id}/events` (which hands back the event it already made for a
+// `transactionId` it has seen, as Graph does for a retried create), `GET /me/events` filtered on an
+// extended property's value (Commander's marker), `GET /me/events/{id}/calendar`, and `PATCH` and
+// `DELETE /me/events/{id}`, each change returned by the next delta (with `transactionId`, but never
+// extended properties, which delta can't expand). Nothing here talks to the real Microsoft.
 
 export type FakeMicrosoftUser = { id: string; displayName: string; userPrincipalName: string };
 
@@ -69,6 +74,9 @@ export type FakeOutlookCalendar = {
   };
   events: FakeOutlookEvent[];
 };
+
+// A calendar write the fake received.
+export type FakeCalendarWrite = { method: string; path: string; body: unknown };
 
 // Microsoft's answers when a tenant won't let the User consent on their own.
 export type AdminConsentCode = 'AADSTS90094' | 'AADSTS65001';
@@ -131,6 +139,12 @@ export type FakeMicrosoft = {
   calendarPrefers: string[];
   // Every answer to an invitation Commander sent, oldest first.
   rsvps: { userId: string; eventId: string; action: string; sendResponse: boolean | null }[];
+  // Every calendar write (POST, PATCH and DELETE), its path and query decoded, and its JSON body.
+  calendarWrites: FakeCalendarWrite[];
+  // A user's live events on a calendar, with the extended properties they were made with.
+  eventsOn(userId: string, calendarId: string): FakeOutlookEvent[];
+  // A user's calendars, as `GET /me/calendars` lists them.
+  calendarsOf(userId: string): FakeOutlookCalendar['calendar'][];
   // How many refreshes Microsoft accepted.
   refreshes: number;
   // The user the next browser sign-in approves.
@@ -236,6 +250,10 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     if (!found) throw new Error(`No fake calendar ${calendarId} for ${userId}`);
     return found;
   };
+  // Calendar writes: the extended properties each event was made with, kept apart from the event as
+  // delta never returns them, and a count of the events and calendars made, for their ids.
+  const extendedProperties = new Map<string, unknown[]>();
+  let madeCount = 0;
 
   const fake: FakeMicrosoft = {
     loginUrl: '',
@@ -321,6 +339,11 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     },
     calendarPrefers: [],
     rsvps: [],
+    calendarWrites: [],
+    eventsOn: (userId, calendarId) =>
+      [...calendarOf(userId, calendarId).events.values()].map(({ event }) => withProperties(event)),
+    calendarsOf: (userId) =>
+      (calendarsByUser.get(userId) ?? []).map(({ calendar }) => listedCalendar(calendar, userNamed(userId))),
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 
@@ -711,6 +734,242 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     return json(response, 404, { error: { code: 'NotFound', message: 'Not in the fake.' } });
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Calendar writes (#131): the calendars and events Commander makes, moves and deletes.
+
+  type ExtendedProperty = { id?: unknown; value?: unknown };
+
+  const itemNotFound = (response: ServerResponse) =>
+    json(response, 404, {
+      error: { code: 'ErrorItemNotFound', message: 'The specified object was not found in the store.' },
+    });
+
+  const userNamed = (userId: string) =>
+    grants.find((each) => each.user.id === userId)?.user ??
+    (typeof nextUser === 'object' && nextUser.id === userId ? nextUser : undefined);
+
+  // A calendar as `GET /me/calendars` lists it, with the fields Graph fills in.
+  function listedCalendar(calendar: FakeOutlookCalendar['calendar'], user: FakeMicrosoftUser | undefined) {
+    return {
+      color: 'auto',
+      hexColor: '',
+      isDefaultCalendar: false,
+      canEdit: true,
+      ...(user && { owner: { name: user.displayName, address: user.userPrincipalName } }),
+      ...calendar,
+    };
+  }
+
+  // An event with the extended properties it was made with: answers to writes, never delta.
+  const withProperties = (event: FakeOutlookEvent): FakeOutlookEvent => {
+    const properties = extendedProperties.get(event.id);
+    return properties ? { ...event, singleValueExtendedProperties: properties } : event;
+  };
+
+  const liveEvents = (userId: string) =>
+    (calendarsByUser.get(userId) ?? []).flatMap((each) =>
+      [...each.events.values()].map(({ event }) => event),
+    );
+
+  const zoneOf = (time: unknown) => String((time as { timeZone?: unknown } | null)?.timeZone ?? 'UTC');
+
+  // Graph takes a time as a wall clock in a zone (IANA, or UTC); calendarView writes it in UTC.
+  function inUtc(time: unknown): { dateTime: string; timeZone: string } {
+    const dateTime = String((time as { dateTime?: unknown } | null)?.dateTime ?? '');
+    const timeZone = zoneOf(time);
+    const wall = Date.parse(`${dateTime.slice(0, 19)}Z`);
+    if (!Number.isFinite(wall)) return { dateTime, timeZone };
+    // How far the zone's clocks are ahead of UTC at an instant; a zone Intl doesn't know counts as UTC.
+    const offset = (at: number) => {
+      try {
+        const parts = new Intl.DateTimeFormat('en-GB', {
+          timeZone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hourCycle: 'h23',
+        }).formatToParts(at);
+        const part = (type: string) => Number(parts.find((each) => each.type === type)?.value ?? 0);
+        const shown = Date.UTC(
+          part('year'),
+          part('month') - 1,
+          part('day'),
+          part('hour'),
+          part('minute'),
+          part('second'),
+        );
+        return shown - Math.floor(at / 1000) * 1000;
+      } catch {
+        return 0;
+      }
+    };
+    // The wall clock less the zone's offset, checked again at the instant found (clock changes).
+    const at = wall - offset(wall - offset(wall));
+    return { dateTime: `${new Date(at).toISOString().slice(0, 19)}.0000000`, timeZone: 'UTC' };
+  }
+
+  // The requests answered here: everything under /me/events but reading one event and answering an
+  // invitation (#129, eventResource), and POSTs making calendars and events.
+  function isCalendarWrite(request: IncomingMessage, url: URL) {
+    const path = url.pathname;
+    const one = /^\/v1\.0\/me\/events\/[^/]+(\/[^/]+)?$/.exec(path);
+    if (one && request.method === 'GET' && !one[1]) return false;
+    if (one && request.method === 'POST' && /^\/(accept|tentativelyAccept|decline)$/.test(one[1] ?? ''))
+      return false;
+    if (path === '/v1.0/me/events' || path.startsWith('/v1.0/me/events/')) return true;
+    return (
+      request.method === 'POST' &&
+      (path === '/v1.0/me/calendars' || /^\/v1\.0\/me\/calendars\/[^/]+\/events$/.test(path))
+    );
+  }
+
+  async function calendarWrite(
+    user: FakeMicrosoftUser,
+    request: IncomingMessage,
+    url: URL,
+    response: ServerResponse,
+  ) {
+    const method = request.method ?? 'GET';
+    const text = method === 'POST' || method === 'PATCH' ? await body(request) : '';
+    let payload: Record<string, unknown> = {};
+    try {
+      if (text) payload = JSON.parse(text) as Record<string, unknown>;
+    } catch {
+      return json(response, 400, {
+        error: { code: 'BadRequest', message: 'Unable to read JSON request payload.' },
+      });
+    }
+    if (method !== 'GET') {
+      fake.calendarWrites.push({
+        method,
+        path: decodeURIComponent(url.pathname + url.search),
+        body: text ? payload : null,
+      });
+    }
+    const path = url.pathname;
+    if (method === 'POST' && path === '/v1.0/me/calendars') return makeCalendar(user, payload, response);
+    const events = /^\/v1\.0\/me\/calendars\/([^/]+)\/events$/.exec(path);
+    if (method === 'POST' && events) {
+      return makeEvent(user, decodeURIComponent(events[1] ?? ''), payload, response);
+    }
+    if (method === 'GET' && path === '/v1.0/me/events') return markedEvents(user, url, response);
+    const one = /^\/v1\.0\/me\/events\/([^/]+)(\/calendar)?$/.exec(path);
+    const eventId = decodeURIComponent(one?.[1] ?? '');
+    const calendar = (calendarsByUser.get(user.id) ?? []).find((each) => each.events.has(eventId));
+    const held = calendar?.events.get(eventId);
+    if (!one || !calendar || !held) return itemNotFound(response);
+    if (one[2]) {
+      return method === 'GET'
+        ? json(response, 200, listedCalendar(calendar.calendar, user))
+        : itemNotFound(response);
+    }
+    if (method === 'GET') return json(response, 200, withProperties(held.event));
+    if (method === 'PATCH') {
+      // A merge: the fields sent replace the event's, times stored in UTC as calendarView answers them.
+      const { singleValueExtendedProperties: _, id: __, ...fields } = payload;
+      const event: FakeOutlookEvent = {
+        ...held.event,
+        ...fields,
+        id: eventId,
+        start: fields.start ? inUtc(fields.start) : held.event.start,
+        end: fields.end ? inUtc(fields.end) : held.event.end,
+        ...(fields.start ? { originalStartTimeZone: zoneOf(fields.start) } : {}),
+        ...(fields.end ? { originalEndTimeZone: zoneOf(fields.end) } : {}),
+        lastModifiedDateTime: new Date().toISOString(),
+      };
+      calendar.events.set(eventId, { event, version: ++version });
+      return json(response, 200, withProperties(event));
+    }
+    if (method === 'DELETE') {
+      calendar.events.delete(eventId);
+      calendar.removed.set(eventId, ++version);
+      extendedProperties.delete(eventId);
+      response.writeHead(204).end();
+      return;
+    }
+    return json(response, 405, { error: { code: 'MethodNotAllowed', message: 'Not in the fake.' } });
+  }
+
+  // `POST /me/calendars`: a calendar the User owns and can edit, listed from then on.
+  function makeCalendar(user: FakeMicrosoftUser, payload: Record<string, unknown>, response: ServerResponse) {
+    const name = typeof payload.name === 'string' ? payload.name.trim() : '';
+    if (!name) {
+      return json(response, 400, {
+        error: { code: 'ErrorInvalidRequest', message: 'A calendar needs a name.' },
+      });
+    }
+    const calendar = { id: `AAMkFake-cal-${++madeCount}=`, name, canEdit: true, isDefaultCalendar: false };
+    const calendars = calendarsByUser.get(user.id) ?? [];
+    calendars.push({ calendar, events: new Map(), removed: new Map() });
+    calendarsByUser.set(user.id, calendars);
+    return json(response, 201, listedCalendar(calendar, user));
+  }
+
+  // `POST /me/calendars/{id}/events`. A transactionId the user's mailbox has already seen gets the
+  // event made for it back, as Graph answers a retried create, rather than a second one.
+  function makeEvent(
+    user: FakeMicrosoftUser,
+    calendarId: string,
+    payload: Record<string, unknown>,
+    response: ServerResponse,
+  ) {
+    const calendar = calendarsByUser.get(user.id)?.find((each) => each.calendar.id === calendarId);
+    if (!calendar) return itemNotFound(response);
+    const transactionId = typeof payload.transactionId === 'string' ? payload.transactionId : null;
+    const already = transactionId && liveEvents(user.id).find((each) => each.transactionId === transactionId);
+    if (already) return json(response, 201, withProperties(already));
+    const { singleValueExtendedProperties, id: _, ...fields } = payload;
+    const id = `AAMkFake-evt-${++madeCount}=`;
+    const now = new Date().toISOString();
+    const event: FakeOutlookEvent = {
+      type: 'singleInstance',
+      isAllDay: false,
+      isCancelled: false,
+      isOrganizer: true,
+      showAs: 'busy',
+      sensitivity: 'normal',
+      attendees: [],
+      responseStatus: { response: 'organizer', time: '0001-01-01T00:00:00Z' },
+      organizer: { emailAddress: { name: user.displayName, address: user.userPrincipalName } },
+      createdDateTime: now,
+      lastModifiedDateTime: now,
+      ...fields,
+      transactionId,
+      originalStartTimeZone: zoneOf(fields.start),
+      originalEndTimeZone: zoneOf(fields.end),
+      id,
+      start: inUtc(fields.start),
+      end: inUtc(fields.end),
+    };
+    calendar.events.set(id, { event, version: ++version });
+    calendar.removed.delete(id);
+    if (Array.isArray(singleValueExtendedProperties))
+      extendedProperties.set(id, singleValueExtendedProperties);
+    return json(response, 201, withProperties(event));
+  }
+
+  // `GET /me/events?$filter=singleValueExtendedProperties/Any(ep: ep/id eq '…' and ep/value eq '…')`:
+  // the user's live events carrying that property (just their ids, as Commander $selects).
+  function markedEvents(user: FakeMicrosoftUser, url: URL, response: ServerResponse) {
+    const filter = url.searchParams.get('$filter') ?? '';
+    const quoted = (name: string) =>
+      new RegExp(`ep/${name} eq '((?:[^']|'')*)'`).exec(filter)?.[1]?.replaceAll("''", "'");
+    const id = quoted('id')?.toLowerCase();
+    const value = quoted('value');
+    const matching = liveEvents(user.id).filter(
+      (event) =>
+        value === undefined ||
+        (extendedProperties.get(event.id) ?? []).some((property) => {
+          const { id: propertyId, value: propertyValue } = property as ExtendedProperty;
+          return propertyValue === value && (!id || String(propertyId).toLowerCase() === id);
+        }),
+    );
+    return json(response, 200, { value: matching.map((event) => ({ id: event.id })) });
+  }
+
   function graph(request: IncomingMessage, url: URL, response: ServerResponse) {
     if (request.method === 'GET') fake.graphRequests.push(decodeURIComponent(url.pathname + url.search));
     const authorization = request.headers.authorization ?? '';
@@ -731,6 +990,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
         .end(JSON.stringify({ error: { code: 'TooManyRequests', message: 'Too many requests.' } }));
       return;
     }
+    if (isCalendarWrite(request, url)) return void calendarWrite(user, request, url, response);
     if (request.method === 'POST') {
       if (url.pathname.startsWith('/v1.0/chats/')) return void chatAction(request, url, response, user);
       if (url.pathname.startsWith('/v1.0/me/events/'))
@@ -828,6 +1088,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       return authorize(url, response);
     if (request.method === 'POST' && url.pathname === `${authority}/token`)
       return void tokenEndpoint(request, response);
+    if (isCalendarWrite(request, url)) return graph(request, url, response);
     if ((request.method === 'GET' || request.method === 'POST') && url.pathname.startsWith('/v1.0/'))
       return graph(request, url, response);
     response.writeHead(404).end();

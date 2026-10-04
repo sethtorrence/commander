@@ -1,5 +1,5 @@
 import { cn } from '@commander/ui';
-import { type CSSProperties, useLayoutEffect, useMemo, useRef } from 'react';
+import { type CSSProperties, type ReactNode, useLayoutEffect, useMemo, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
 import { type AgendaEntry, type CalendarEvent, clock, entryFor } from './agenda';
 import { ClashMark, EventStamp } from './marks';
@@ -165,11 +165,14 @@ export function TimeGrid({
   clashes,
   selectedId,
   onOpen,
+  overlay,
 }: Shared & {
   days: readonly string[];
   events: readonly CalendarEvent[];
   secondTimeZone: string | null;
   today: string;
+  /** More to draw in a day's column (Ares's suggested focus blocks), placed by `top` (minutes → px). */
+  overlay?: (day: string, top: (minutes: number) => number) => ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const columns = useMemo(
@@ -291,6 +294,7 @@ export function TimeGrid({
                   <Block key={`${block.event.id}/${block.day}`} block={block} {...shared} />
                 ))}
               </ul>
+              {overlay?.(day, (minutes) => (minutes / 60) * HOUR)}
               {line && line.column === days.indexOf(day) && (
                 <div
                   data-testid="now-line"

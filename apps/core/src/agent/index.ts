@@ -9,6 +9,7 @@ import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import type { SyncedEvent } from '../sync';
+import { blockTimeForTodosJob } from './block-time-for-todos';
 import { fileIntoProjectsJob } from './file-into-projects';
 import { createFiling, type Filing } from './filing';
 import { prepareMeetingsJob } from './prepare-meetings';
@@ -84,6 +85,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
         onItemsChanged: options.onItemsChanged,
       }),
       suggestInvitationRepliesJob(itemStore, { now }),
+      blockTimeForTodosJob(itemStore, { now }),
     ],
     client: options.client,
     gate: options.gate,

@@ -11,6 +11,7 @@ import type {
   EventDetail,
   FieldSummary,
   FiledBy,
+  FocusSettings,
   GitHubAccess,
   GitHubDiscussion,
   GitHubItemDetail,
@@ -840,3 +841,29 @@ export type HandleRowState = { handle: string; personId: string; pinned: boolean
 // What the People log keeps of the People a change touched: their rows, and their handles' places.
 // A Person a change made (a split's new Person) is kept before it as merged into the one it came from.
 export type PeopleSnapshot = { people: PersonRowState[]; handles: HandleRowState[] };
+
+// Settings → Calendar's focus time (#131), in a single row: the working hours, the Account whose
+// Commander calendar focus blocks go in, and the pairs of Block time across Accounts.
+export const focusSettings = sqliteTable('focus_settings', {
+  id: integer('id').primaryKey(),
+  settings: text('settings', { mode: 'json' }).$type<FocusSettings>().notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Block time across Accounts (#131): the Busy copy each event got on another Account's main calendar,
+// so it is made once, moves and goes with its event, and is never copied again itself. A copy the User
+// deleted at its Source keeps its row (tombstoned), so Commander doesn't put it back.
+export const busyCopies = sqliteTable(
+  'busy_copies',
+  {
+    eventId: text('event_id')
+      .notNull()
+      .references(() => items.id),
+    targetAccount: text('target_account').notNull(),
+    copyId: text('copy_id')
+      .notNull()
+      .references(() => items.id),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.eventId, t.targetAccount] }), index('busy_copies_copy').on(t.copyId)],
+);

@@ -48,6 +48,10 @@ export function describeItemActions(
         return [`Add the ${KIND_NAMES[action.item.kind] ?? action.item.kind} “${action.item.title}”`];
       case 'delete':
         return ['Delete it'];
+      case 'create-event':
+        return action.event.kind === 'focus-block'
+          ? [`Put “${action.event.title}” in your Commander calendar, busy and private`]
+          : ['Put a private Busy copy on your other calendar'];
       case 'update': {
         const { status, title, filing, people } = action.changes;
         return [

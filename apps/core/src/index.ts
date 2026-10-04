@@ -8,6 +8,7 @@ import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
+import { setUpBusyCopies } from './busy-copies';
 import { setUpGitHubDiscussion } from './github-discussion';
 import { setUpGitHubWatch } from './github-watch';
 import { openItemStore } from './item-store';
@@ -172,6 +173,19 @@ sync.engine.onSynced((event) => {
   if (event.source === 'google-calendar' || event.source === 'outlook-calendar') meetings.refresh();
 });
 
+// Block time across Accounts (#131): Busy copies follow each calendar sync, and the pairs in
+// Settings → Calendar (a pair switched on sets its action to Auto). Copies are made through the gate.
+const busyCopies = setUpBusyCopies({ store: itemStore, gate });
+const copiesChanged = (itemIds: string[]) => {
+  if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
+};
+copiesChanged(busyCopies.reconcile());
+sync.engine.onSynced((event) => {
+  if (event.source === 'google-calendar' || event.source === 'outlook-calendar') {
+    copiesChanged(busyCopies.reconcile());
+  }
+});
+
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
   if (models.handle(data)) return;
@@ -182,6 +196,11 @@ port.on('message', ({ data }) => {
   if (githubDiscussion.handle(data)) return;
   let changed: CoreMessage | null = null;
   let changedIds: string[] = [];
+  // Settings → Calendar's focus time as it was, to tell which pairs the User switched on.
+  const focusBefore =
+    (data as { request?: { op?: string } }).request?.op === 'save-focus-settings'
+      ? itemStore.focusSettings.read()
+      : null;
   const reply =
     answerRemoveAccountItems(itemStore, data, sync.forget) ??
     answerItemStoreRequest(itemStore, data, (itemIds) => {
@@ -204,6 +223,9 @@ port.on('message', ({ data }) => {
   }
   // After the reply, so the window that made the change has its answer first.
   if (changed) port.postMessage(changed);
+  if (focusBefore && reply?.type === 'item-store-reply' && reply.response.ok) {
+    copiesChanged(busyCopies.settingsSaved(focusBefore, itemStore.focusSettings.read()));
+  }
   // Today's Daily Note made (Notes opening, or the date passing midnight): its meeting chips go in.
   if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'daily-note')
     meetings.refresh();

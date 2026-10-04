@@ -114,6 +114,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.people.change(request.action) };
       case 'invitations':
         return { ok: true, result: store.invitations() };
+      case 'focus-settings':
+        return { ok: true, result: store.focusSettings.read() };
+      case 'save-focus-settings':
+        return { ok: true, result: store.focusSettings.save(request.settings) };
       case 'set-calendar-enabled':
         return {
           ok: true,

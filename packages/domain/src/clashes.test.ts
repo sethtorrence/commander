@@ -110,6 +110,15 @@ describe('findClashes', () => {
     expect(clashesOf([board, gone])).toEqual({});
   });
 
+  it('leaves out Commander’s busy copies, which stand for an event in the other Account (#131)', () => {
+    const dentist = event(HOME, 'Dentist', '2026-10-05T09:00:00Z', '2026-10-05T10:00:00Z');
+    const copy = event(WORK, 'Busy', '2026-10-05T09:00:00Z', '2026-10-05T10:00:00Z', {
+      createdByCommander: 'busy-block',
+      private: true,
+    });
+    expect(clashesOf([dentist, copy])).toEqual({});
+  });
+
   it('takes one meeting the User is invited to in both Accounts for itself, not a clash', () => {
     const atWork = event(WORK, 'Quarterly review', '2026-10-05T14:00:00Z', '2026-10-05T15:00:00Z');
     const atHome = event(HOME, 'Quarterly Review ', '2026-10-05T14:00:00Z', '2026-10-05T15:00:00Z');

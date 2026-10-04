@@ -19,6 +19,8 @@ import {
   type CalendarSummary,
   type CausedBy,
   type ChatSettingAction,
+  type CommanderEventDraft,
+  type CommanderEventMove,
   compactForLog,
   type DailyNotePage,
   type DailyNoteProjects,
@@ -44,6 +46,7 @@ import {
   type ItemView,
   identitiesOf,
   isGitHubItemDetail,
+  isPendingEventExternalId,
   itemAction,
   itemQuery,
   type LinearCatalog,
@@ -94,10 +97,17 @@ import { type CalendarSettingsStore, calendarSettingsIn } from './calendar-setti
 import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRows } from './calendars';
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
 import { ChatWaitingError, type ChatWaitingStore, chatWaitingIn } from './chat-waiting';
+import {
+  type BusyCopies,
+  commanderEventsIn,
+  movedDetail,
+  queueCommanderEventChanges,
+} from './commander-events';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
 import { emailsIn } from './emails';
 import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
+import { type FocusSettingsStore, focusSettingsIn } from './focus-settings';
 import { type GitHubDiscussionStore, githubDiscussionsIn } from './github-discussions';
 import { githubTodosIn } from './github-todos';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
@@ -148,8 +158,10 @@ export type { NewProposal } from './autonomy';
 export type { CalendarSettingsStore } from './calendar-settings';
 export type { CalendarStore, ListedCalendar } from './calendars';
 export type { ChatSettingsStore } from './chat-settings';
+export type { BusyCopies, BusyCopy } from './commander-events';
 export type { DashboardStore, StoredClear } from './dashboard';
 export type { FilingFeedbackStore } from './filing-feedback';
+export type { FocusSettingsStore } from './focus-settings';
 export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
 export type { MeetingChips, MeetingChipsChange } from './meeting-chips';
@@ -200,6 +212,16 @@ export type ItemStore = {
   sendToLinear(draft: LinearIssueDraft, context: ActionContext): ActivityEntry[];
   // Where the Send to Linear dialog starts for a Todo or Block, or (from the Linear Section) a Project.
   linearSendPrefill(request: { from?: string; projectId?: string | null }): LinearSendPrefill;
+  // Events Commander writes (commander-events.ts): makes a focus block or busy copy's Item and queues its
+  // creation at the Source, as one change. Undoing the entry deletes it there too.
+  createEvent(draft: CommanderEventDraft, context: ActionContext): ActivityEntry;
+  // Moves an event Commander made, queueing its new times for the Source.
+  moveEvent(itemId: string, move: CommanderEventMove, context: ActionContext): ActivityEntry;
+  // The busy copies Commander made, each with the event it copies (Block time across Accounts).
+  busyCopies: BusyCopies;
+  // Settings → Calendar's focus time (focus-settings.ts): working hours, where focus blocks go, and
+  // the pairs of Block time across Accounts.
+  focusSettings: FocusSettingsStore;
   // Records several actions in order, all or none: a refused action rolls back the ones before it.
   recordAll(actions: ItemAction[], context: ActionContext): ActivityEntry[];
   activity(query?: ActivityQuery): ActivityEntry[];
@@ -1208,7 +1230,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         const before = stateOf(item);
         const after: ItemState = { ...before, deletedAt: before.deletedAt ?? at };
         writeState(item, after, at);
-        return log({ ...entry, action: 'delete', itemId: item.id, before, after }, at);
+        // An event Commander made goes from its calendar too.
+        return logAndQueue(item, { ...entry, action: 'delete', itemId: item.id, before, after }, at);
       }
       case 'link':
       case 'unlink': {
@@ -1363,6 +1386,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (refusal) throw new ItemStoreError('invalid', refusal);
     const logged = log(entry, at);
     queueChanges(outgoing, item, entry.before as ItemState, entry.after as ItemState, logged);
+    queueCommanderEventChanges(outgoing, item, entry.before as ItemState, entry.after as ItemState, logged);
     return logged;
   }
 
@@ -1411,6 +1435,42 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       .all()
       .map(toEntry);
   });
+
+  // Events Commander writes (commander-events.ts).
+  const commanderEvents = commanderEventsIn({
+    db,
+    calendars,
+    readItem,
+    insert: (identity, state, at, chosenId) => insertItem(identity, state, at, chosenId),
+    log,
+    outgoing,
+    checkFiling: (filing) => projects.checkFiling(filing),
+    invalid: (message) => new ItemStoreError('invalid', message),
+  });
+
+  const createEvent = sqlite.transaction((draft: CommanderEventDraft, rawContext: ActionContext) => {
+    const context = actionContext.parse(rawContext);
+    return commanderEvents.create(
+      draft,
+      { by: context.by, why: context.why, causedBy: context.causedBy },
+      now(),
+    );
+  });
+
+  const moveEvent = sqlite.transaction(
+    (itemId: string, move: CommanderEventMove, rawContext: ActionContext): ActivityEntry => {
+      const context = actionContext.parse(rawContext);
+      const item = requireItem(itemId);
+      if (item.deletedAt !== null) throw new ItemStoreError('invalid', 'That event is gone');
+      const detail = movedDetail(item, move, (message) => new ItemStoreError('invalid', message));
+      return update(
+        item,
+        { detail },
+        { by: context.by, why: context.why, causedBy: context.causedBy },
+        now(),
+      );
+    },
+  );
 
   function findDailyNote(day: string): Item | undefined {
     const { items, dailyNoteDetails } = schema;
@@ -1717,7 +1777,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     for (const handed of [...threaded.items, ...threaded.moved]) {
       const at = now();
       const incoming = withItemRefs(batch.source, batch.account, handed);
-      const existing = findBySourceIdentity(batch.source, batch.account, incoming.externalId);
+      const existing =
+        findBySourceIdentity(batch.source, batch.account, incoming.externalId) ??
+        madeInCommander(batch.source, batch.account, incoming);
       if (existing && existing.deletedAt !== null && outgoing.queued(existing.id, DELETE_FIELD)) {
         // Deleted in Commander (an undone Send to Linear), on its way to being deleted at the Source.
         result.unchanged.push(existing.id);
@@ -1731,7 +1793,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           people: incoming.people,
           deletedAt: null,
           // Changes made in Commander still on their way to the Source stay on top.
-          ...withQueuedOnTop(outgoing, existing.id, { status: incoming.status, detail: incoming.detail }),
+          ...withQueuedOnTop(outgoing, existing.id, {
+            status: incoming.status,
+            detail: stillCommanders(existing.detail, incoming.detail),
+          }),
         };
         // An email's bodies, beside it: written first, so the search index reads them.
         const bodyChanged = incoming.body ? emails.writeBody(existing.id, incoming.body) : false;
@@ -1831,6 +1896,39 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (item.detail?.kind !== 'review-request') return item;
     const pull = findBySourceIdentity(source, account, item.detail.pullRequest);
     return { ...item, detail: { ...item.detail, pullRequestId: pull?.id ?? null } };
+  }
+
+  // An event Commander made, still under its placeholder external id, that the Source now has (its
+  // answer to the create, or a sync that got there first): the same Item, re-keyed to the Source's id,
+  // with its queued changes. Only ever an event of the same Source and Account that hasn't reached it.
+  function madeInCommander(
+    source: Source,
+    account: string,
+    incoming: { externalId: string; commanderItemId?: string | undefined },
+  ): Item | undefined {
+    if (!incoming.commanderItemId) return undefined;
+    const made = readItem(incoming.commanderItemId);
+    if (
+      made?.kind !== 'event' ||
+      made.source !== source ||
+      made.account !== account ||
+      !isPendingEventExternalId(made.externalId)
+    ) {
+      return undefined;
+    }
+    db.update(schema.items)
+      .set({ externalId: incoming.externalId })
+      .where(eq(schema.items.id, made.id))
+      .run();
+    outgoing.rekey(made.id, incoming.externalId);
+    return { ...made, externalId: incoming.externalId };
+  }
+
+  // An event Commander made stays marked as its own, even if the Source's copy has lost the marker.
+  function stillCommanders(held: ItemDetail | null, incoming: ItemDetail | null): ItemDetail | null {
+    if (held?.kind !== 'event' || incoming?.kind !== 'event') return incoming;
+    if (!held.createdByCommander || incoming.createdByCommander) return incoming;
+    return { ...incoming, createdByCommander: held.createdByCommander };
   }
 
   // Deletes Items as one change: they stay as tombstones, so Links to them show them as gone.
@@ -1983,6 +2081,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     recordAll,
     sendToLinear,
     linearSendPrefill: (request) => linearSend.prefill(request),
+    createEvent,
+    moveEvent,
+    busyCopies: commanderEvents.busyCopies,
+    focusSettings: focusSettingsIn(db, now),
     ensureDailyNote: (day, context, options) =>
       options?.fromTemplate ? ensureFromTemplate(day, context) : ensureDailyNote(day, context),
     dailyNotes,

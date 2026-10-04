@@ -8,11 +8,19 @@ import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { SideCard } from '../../projects/page/SideCard';
 import { useShortcuts } from '../../shortcuts/react';
+import type { AutonomyClient } from '../ares/activity';
 import { supersededNote } from '../linear/editing';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
 import { TodoGroup } from '../todos/TodoGroup';
-import { type AgendaEntry, type CalendarEvent, editUrl, newEventUrl, newOutlookEventUrl } from './agenda';
+import {
+  type AgendaEntry,
+  addDays,
+  type CalendarEvent,
+  editUrl,
+  newEventUrl,
+  newOutlookEventUrl,
+} from './agenda';
 import {
   addressOf,
   type CalendarAccount,
@@ -25,6 +33,8 @@ import {
 import { type CalendarSettingsClient, useSecondTimeZone } from './calendar-settings';
 import { EventDetail } from './EventDetail';
 import { CalendarSwatch, EventRow } from './EventRow';
+import { FocusSuggestionBlocks, FocusSuggestionRows, FocusTimePanel } from './FocusTime';
+import { useFocusTime, withSuggestionDays } from './focus-time';
 import { ANSWER_KEYS, InvitationPanel, RowAnswer, SuggestedReplyCard } from './InvitationAnswer';
 import type { InvitationsClient } from './invitations';
 import { MonthGrid } from './MonthGrid';
@@ -112,6 +122,9 @@ const newEventFor = (account: CalendarAccount) =>
       };
 
 const systemTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+// Without the gate (component tests), Focus time reads nothing.
+const noAutonomy = (() => Promise.reject(new Error('No gate'))) as unknown as AutonomyClient;
+const noActivity = () => () => {};
 const openInBrowser = (url: string) => {
   window.open(url, '_blank', 'noopener,noreferrer');
 };
@@ -132,11 +145,17 @@ export function CalendarSheet({
   open = openInBrowser,
   Prep,
   invitations = null,
+  autonomy,
+  onAresActivity = noActivity,
 }: {
   events: CalendarEvents;
   accounts: CalendarAccountsClient;
   /** Answering invitations and Ares's suggested replies (#129); none in views that don't offer them. */
   invitations?: InvitationsClient | null;
+  /** The gate, for Ares's focus block suggestions (Focus time). */
+  autonomy?: AutonomyClient;
+  /** Calls back whenever Ares did or suggested something. */
+  onAresActivity?: (listener: () => void) => () => void;
   /** The User's time zone (the machine's), which the Agenda's days follow. */
   timeZone?: string;
   /** Settings → Calendar: the second time zone. */
@@ -163,6 +182,14 @@ export function CalendarSheet({
   const several = state.accounts.length > 1;
   const { active } = useSection();
   const secondTimeZone = useSecondTimeZone(settings);
+  const focus = useFocusTime({
+    client: autonomy ?? noAutonomy,
+    onAresActivity,
+    shown: active && !!autonomy,
+    now: now.getTime(),
+    timeZone,
+    onChanged: state.reload,
+  });
 
   useTabCount(state.loaded ? state.toCome : null);
 
@@ -242,6 +269,12 @@ export function CalendarSheet({
   // From the palette: open an event it found.
   useReveal('calendar', (itemId) => void state.reveal(itemId));
 
+  // Days Ares suggests focus blocks on show in the Agenda too.
+  const agendaWithFocus = withSuggestionDays(state.agenda, focus.byDay, {
+    today: state.today,
+    from: state.anchor,
+    last: addDays(state.anchor, state.days - 1),
+  });
   const status = calendarSyncLine(state.accounts, now);
   const syncing = state.accounts.some((account) => calendarSyncOf(account)?.activity === 'syncing');
   const emailOf = new Map(state.accounts.map((account) => [account.id, addressOf(account)]));
@@ -396,6 +429,14 @@ export function CalendarSheet({
                   clashes={state.clashes}
                   selectedId={selectedId}
                   onOpen={openEntry}
+                  overlay={(day, top) => (
+                    <FocusSuggestionBlocks
+                      blocks={focus.byDay.get(day)}
+                      focus={focus}
+                      timeZone={timeZone}
+                      top={top}
+                    />
+                  )}
                 />
               ) : view === 'month' ? (
                 <MonthGrid
@@ -411,7 +452,7 @@ export function CalendarSheet({
                 />
               ) : (
                 <div className="min-w-0 pb-30" data-testid="agenda">
-                  {state.agenda.map((day, index) => (
+                  {agendaWithFocus.map((day, index) => (
                     <TodoGroup
                       key={day.day}
                       no={`D${pad(index + 1)}`}
@@ -456,11 +497,16 @@ export function CalendarSheet({
                             />
                           ))}
                         </ul>
-                      ) : (
+                      ) : focus.byDay.has(day.day) ? null : (
                         <p className="hatch m-0 border-b border-line2 py-2.5 pr-5 pl-13 text-note text-faint">
                           {day.day === state.today ? 'Nothing on today.' : 'Nothing on this day.'}
                         </p>
                       )}
+                      <FocusSuggestionRows
+                        blocks={focus.byDay.get(day.day)}
+                        focus={focus}
+                        timeZone={timeZone}
+                      />
                     </TodoGroup>
                   ))}
                   {state.canShowMore && (
@@ -508,6 +554,7 @@ export function CalendarSheet({
       </SectionSheet>
       <aside className="relative col-span-2 min-w-0" aria-label="Calendars">
         <div className="sticky top-(--body) mr-4 ml-3.5 flex max-h-[calc(100vh-var(--body))] flex-col gap-3.5 overflow-auto pt-3.5 pb-6 [scrollbar-width:none]">
+          {autonomy && <FocusTimePanel focus={focus} timeZone={timeZone} />}
           <SideCard label="Calendars" title="Calendars" note={pad(state.calendars.length)}>
             {state.calendars.length ? (
               <ul className="m-0 list-none p-0" data-testid="calendar-list">

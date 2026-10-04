@@ -1,0 +1,1078 @@
+{
+  "calendarListWithoutCommander": {
+    "request": {
+      "method": "GET",
+      "path": "/users/me/calendarList?maxResults=250"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#calendarList",
+        "etag": "\"p33c9pc2v6qvtg0o\"",
+        "items": [
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000014\"",
+            "id": "alex@gmail.test",
+            "summary": "alex@gmail.test",
+            "timeZone": "Europe/London",
+            "colorId": "14",
+            "backgroundColor": "#9fe1e7",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            },
+            "primary": true
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000002\"",
+            "id": "c_tl_standups@group.calendar.google.com",
+            "summary": "Titanlink Standups",
+            "timeZone": "Europe/London",
+            "colorId": "2",
+            "backgroundColor": "#33b679",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000005\"",
+            "id": "c_0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a@group.calendar.google.com",
+            "summary": "Commander",
+            "description": "Dana’s focus blocks",
+            "timeZone": "Europe/London",
+            "colorId": "5",
+            "backgroundColor": "#fbd75b",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "reader",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          }
+        ],
+        "nextSyncToken": "calendar-list-sync-3"
+      }
+    }
+  },
+  "calendarListWithCommander": {
+    "request": {
+      "method": "GET",
+      "path": "/users/me/calendarList?maxResults=250"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#calendarList",
+        "etag": "\"p33c9pc2v6qvtg0o\"",
+        "items": [
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000014\"",
+            "id": "alex@gmail.test",
+            "summary": "alex@gmail.test",
+            "timeZone": "Europe/London",
+            "colorId": "14",
+            "backgroundColor": "#9fe1e7",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            },
+            "primary": true
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000002\"",
+            "id": "c_tl_standups@group.calendar.google.com",
+            "summary": "Titanlink Standups",
+            "timeZone": "Europe/London",
+            "colorId": "2",
+            "backgroundColor": "#33b679",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000005\"",
+            "id": "c_0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a@group.calendar.google.com",
+            "summary": "Commander",
+            "description": "Dana’s focus blocks",
+            "timeZone": "Europe/London",
+            "colorId": "5",
+            "backgroundColor": "#fbd75b",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "reader",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000009\"",
+            "id": "c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com",
+            "summary": "Commander",
+            "description": "Focus blocks Commander puts in your calendar.",
+            "timeZone": "Europe/London",
+            "colorId": "9",
+            "backgroundColor": "#7986cb",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          }
+        ],
+        "nextSyncToken": "calendar-list-sync-3"
+      }
+    }
+  },
+  "makeCommanderCalendar": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars",
+      "body": {
+        "summary": "Commander",
+        "description": "Focus blocks Commander puts in your calendar."
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#calendar",
+        "etag": "\"Ak3w0kOHGm9DHR5xHj2kMb1yAE8\"",
+        "id": "c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com",
+        "summary": "Commander",
+        "description": "Focus blocks Commander puts in your calendar.",
+        "timeZone": "UTC",
+        "conferenceProperties": {
+          "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+        }
+      }
+    }
+  },
+  "insertFocusBlock": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#event",
+        "etag": "\"3521000000000000\"",
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "status": "confirmed",
+        "htmlLink": "https://www.google.com/calendar/event?eid=NmYxYzJhNGU4YjNkNGU1ZjlhN2IxYzJkM2U0ZjVhNmIgY183ZjNlOWExYjVjMmQ0ZTZmOGEwYjFjMmQzZTRmNWE2YkBncm91cC5jYWxlbmRhci5nb29nbGUuY29t",
+        "created": "2026-10-03T12:00:01.000Z",
+        "updated": "2026-10-03T12:00:01.120Z",
+        "summary": "Focus: Write the Q4 plan",
+        "creator": {
+          "email": "alex@gmail.test",
+          "self": true
+        },
+        "organizer": {
+          "email": "c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com",
+          "displayName": "Commander",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-10-05T13:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T15:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "visibility": "private",
+        "iCalUID": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b@google.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": false
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        },
+        "eventType": "default"
+      }
+    }
+  },
+  "insertFocusBlockAgain": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 409,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "duplicate",
+              "message": "The requested identifier already exists."
+            }
+          ],
+          "code": 409,
+          "message": "The requested identifier already exists."
+        }
+      }
+    }
+  },
+  "getFocusBlock": {
+    "request": {
+      "method": "GET",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events/6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#event",
+        "etag": "\"3521000000000000\"",
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "status": "confirmed",
+        "htmlLink": "https://www.google.com/calendar/event?eid=NmYxYzJhNGU4YjNkNGU1ZjlhN2IxYzJkM2U0ZjVhNmIgY183ZjNlOWExYjVjMmQ0ZTZmOGEwYjFjMmQzZTRmNWE2YkBncm91cC5jYWxlbmRhci5nb29nbGUuY29t",
+        "created": "2026-10-03T12:00:01.000Z",
+        "updated": "2026-10-03T12:00:01.120Z",
+        "summary": "Focus: Write the Q4 plan",
+        "creator": {
+          "email": "alex@gmail.test",
+          "self": true
+        },
+        "organizer": {
+          "email": "c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com",
+          "displayName": "Commander",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-10-05T13:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T15:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "visibility": "private",
+        "iCalUID": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b@google.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": false
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        },
+        "eventType": "default"
+      }
+    }
+  },
+  "insertFocusBlockIntoGoneCalendar": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 404,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "notFound",
+              "message": "Not Found"
+            }
+          ],
+          "code": 404,
+          "message": "Not Found"
+        }
+      }
+    }
+  },
+  "insertMovedFocusBlock": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T16:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#event",
+        "etag": "\"3521000000000002\"",
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "status": "confirmed",
+        "htmlLink": "https://www.google.com/calendar/event?eid=NmYxYzJhNGU4YjNkNGU1ZjlhN2IxYzJkM2U0ZjVhNmIgY183ZjNlOWExYjVjMmQ0ZTZmOGEwYjFjMmQzZTRmNWE2YkBncm91cC5jYWxlbmRhci5nb29nbGUuY29t",
+        "created": "2026-10-03T12:00:01.000Z",
+        "updated": "2026-10-03T12:05:00.000Z",
+        "summary": "Focus: Write the Q4 plan",
+        "creator": {
+          "email": "alex@gmail.test",
+          "self": true
+        },
+        "organizer": {
+          "email": "c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com",
+          "displayName": "Commander",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-10-05T15:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T17:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "visibility": "private",
+        "iCalUID": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b@google.com",
+        "sequence": 1,
+        "reminders": {
+          "useDefault": false
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        },
+        "eventType": "default"
+      }
+    }
+  },
+  "insertSecondFocusBlock": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "b2e4d6f81a3c4e5d8f7a9b0c1d2e3f4a",
+        "summary": "Focus: Review the hiring loop",
+        "start": {
+          "date": "2026-10-06"
+        },
+        "end": {
+          "date": "2026-10-07"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "b2e4d6f8-1a3c-4e5d-8f7a-9b0c1d2e3f4a"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#event",
+        "etag": "\"3521000000000000\"",
+        "id": "b2e4d6f81a3c4e5d8f7a9b0c1d2e3f4a",
+        "status": "confirmed",
+        "htmlLink": "https://www.google.com/calendar/event?eid=YjJlNGQ2ZjgxYTNjNGU1ZDhmN2E5YjBjMWQyZTNmNGEgY183ZjNlOWExYjVjMmQ0ZTZmOGEwYjFjMmQzZTRmNWE2YkBncm91cC5jYWxlbmRhci5nb29nbGUuY29t",
+        "created": "2026-10-03T12:00:01.000Z",
+        "updated": "2026-10-03T12:00:01.120Z",
+        "summary": "Focus: Review the hiring loop",
+        "creator": {
+          "email": "alex@gmail.test",
+          "self": true
+        },
+        "organizer": {
+          "email": "c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com",
+          "displayName": "Commander",
+          "self": true
+        },
+        "start": {
+          "date": "2026-10-06"
+        },
+        "end": {
+          "date": "2026-10-07"
+        },
+        "visibility": "private",
+        "iCalUID": "b2e4d6f81a3c4e5d8f7a9b0c1d2e3f4a@google.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": false
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "b2e4d6f8-1a3c-4e5d-8f7a-9b0c1d2e3f4a"
+          }
+        },
+        "eventType": "default"
+      }
+    }
+  },
+  "insertBusyCopy": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/alex@gmail.test/events",
+      "body": {
+        "id": "d4c3b2a19f8e4d7ca6b50e1f2a3b4c5d",
+        "summary": "Busy",
+        "start": {
+          "dateTime": "2026-10-05T08:30:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T09:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "busy-block",
+            "commanderId": "d4c3b2a1-9f8e-4d7c-a6b5-0e1f2a3b4c5d"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#event",
+        "etag": "\"3521000000000000\"",
+        "id": "d4c3b2a19f8e4d7ca6b50e1f2a3b4c5d",
+        "status": "confirmed",
+        "htmlLink": "https://www.google.com/calendar/event?eid=ZDRjM2IyYTE5ZjhlNGQ3Y2E2YjUwZTFmMmEzYjRjNWQgYWxleEBnbWFpbC50ZXN0",
+        "created": "2026-10-03T12:00:01.000Z",
+        "updated": "2026-10-03T12:00:01.120Z",
+        "summary": "Busy",
+        "creator": {
+          "email": "alex@gmail.test",
+          "self": true
+        },
+        "organizer": {
+          "email": "alex@gmail.test",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-10-05T09:30:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T10:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "visibility": "private",
+        "iCalUID": "d4c3b2a19f8e4d7ca6b50e1f2a3b4c5d@google.com",
+        "sequence": 0,
+        "reminders": {
+          "useDefault": false
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "busy-block",
+            "commanderId": "d4c3b2a1-9f8e-4d7c-a6b5-0e1f2a3b4c5d"
+          }
+        },
+        "eventType": "default"
+      }
+    }
+  },
+  "patchFocusBlock": {
+    "request": {
+      "method": "PATCH",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events/6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+      "body": {
+        "start": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London",
+          "date": null
+        },
+        "end": {
+          "dateTime": "2026-10-05T16:00:00.000Z",
+          "timeZone": "Europe/London",
+          "date": null
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#event",
+        "etag": "\"3521000000000002\"",
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "status": "confirmed",
+        "htmlLink": "https://www.google.com/calendar/event?eid=NmYxYzJhNGU4YjNkNGU1ZjlhN2IxYzJkM2U0ZjVhNmIgY183ZjNlOWExYjVjMmQ0ZTZmOGEwYjFjMmQzZTRmNWE2YkBncm91cC5jYWxlbmRhci5nb29nbGUuY29t",
+        "created": "2026-10-03T12:00:01.000Z",
+        "updated": "2026-10-03T12:05:00.000Z",
+        "summary": "Focus: Write the Q4 plan",
+        "creator": {
+          "email": "alex@gmail.test",
+          "self": true
+        },
+        "organizer": {
+          "email": "c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com",
+          "displayName": "Commander",
+          "self": true
+        },
+        "start": {
+          "dateTime": "2026-10-05T15:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T17:00:00+01:00",
+          "timeZone": "Europe/London"
+        },
+        "visibility": "private",
+        "iCalUID": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b@google.com",
+        "sequence": 1,
+        "reminders": {
+          "useDefault": false
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        },
+        "eventType": "default"
+      }
+    }
+  },
+  "deleteFocusBlock": {
+    "request": {
+      "method": "DELETE",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events/6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b"
+    },
+    "response": {
+      "status": 204,
+      "headers": {},
+      "body": null
+    }
+  },
+  "deleteMissingFocusBlock": {
+    "request": {
+      "method": "DELETE",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events/6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b"
+    },
+    "response": {
+      "status": 404,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "notFound",
+              "message": "Not Found"
+            }
+          ],
+          "code": 404,
+          "message": "Not Found"
+        }
+      }
+    }
+  },
+  "deleteDeletedFocusBlock": {
+    "request": {
+      "method": "DELETE",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events/6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b"
+    },
+    "response": {
+      "status": 410,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "deleted",
+              "message": "Resource has been deleted"
+            }
+          ],
+          "code": 410,
+          "message": "Resource has been deleted"
+        }
+      }
+    }
+  },
+  "deleteMissingFromPrimary": {
+    "request": {
+      "method": "DELETE",
+      "path": "/calendars/primary/events/6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b"
+    },
+    "response": {
+      "status": 404,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "notFound",
+              "message": "Not Found"
+            }
+          ],
+          "code": 404,
+          "message": "Not Found"
+        }
+      }
+    }
+  },
+  "insertRateLimited": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 429,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8",
+        "retry-after": "30"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "usageLimits",
+              "reason": "rateLimitExceeded",
+              "message": "Rate Limit Exceeded"
+            }
+          ],
+          "code": 429,
+          "message": "Rate Limit Exceeded"
+        }
+      }
+    }
+  },
+  "insertQuotaRefused": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 403,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "usageLimits",
+              "reason": "userRateLimitExceeded",
+              "message": "Rate Limit Exceeded"
+            }
+          ],
+          "code": 403,
+          "message": "Rate Limit Exceeded"
+        }
+      }
+    }
+  },
+  "insertSignInRefused": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 401,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "authError",
+              "message": "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential."
+            }
+          ],
+          "code": 401,
+          "message": "Request had invalid authentication credentials. Expected OAuth 2 access token, login cookie or other valid authentication credential."
+        }
+      }
+    }
+  },
+  "insertForbidden": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 403,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "insufficientPermissions",
+              "message": "Insufficient Permission"
+            }
+          ],
+          "code": 403,
+          "message": "Insufficient Permission"
+        }
+      }
+    }
+  },
+  "insertBadRequest": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 400,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "calendar",
+              "reason": "timeRangeEmpty",
+              "message": "The specified time range is empty."
+            }
+          ],
+          "code": 400,
+          "message": "The specified time range is empty."
+        }
+      }
+    }
+  },
+  "insertUnavailable": {
+    "request": {
+      "method": "POST",
+      "path": "/calendars/c_7f3e9a1b5c2d4e6f8a0b1c2d3e4f5a6b@group.calendar.google.com/events",
+      "body": {
+        "id": "6f1c2a4e8b3d4e5f9a7b1c2d3e4f5a6b",
+        "summary": "Focus: Write the Q4 plan",
+        "start": {
+          "dateTime": "2026-10-05T12:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "end": {
+          "dateTime": "2026-10-05T14:00:00.000Z",
+          "timeZone": "Europe/London"
+        },
+        "transparency": "opaque",
+        "visibility": "private",
+        "reminders": {
+          "useDefault": false,
+          "overrides": []
+        },
+        "extendedProperties": {
+          "private": {
+            "commander": "focus-block",
+            "commanderId": "6f1c2a4e-8b3d-4e5f-9a7b-1c2d3e4f5a6b"
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 503,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "errors": [
+            {
+              "domain": "global",
+              "reason": "backendError",
+              "message": "The service is currently unavailable."
+            }
+          ],
+          "code": 503,
+          "message": "The service is currently unavailable."
+        }
+      }
+    }
+  }
+}
