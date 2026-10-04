@@ -14,7 +14,7 @@ async function expectOpen(window: Page, label: string) {
 
 test('the notebook tabs switch Sections on click and on the number keys', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   await expectOpen(window, 'Dashboard');
   await tab(window, 'Todos').click();
@@ -31,7 +31,7 @@ test('the notebook tabs switch Sections on click and on the number keys', async 
 
 test('every Section shows a sheet with its title and part number', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const year = new Date().getFullYear();
 
   for (const [index, label] of SECTIONS.entries()) {
@@ -55,7 +55,7 @@ test('every Section shows a sheet with its title and part number', async () => {
 
 test('the header shows the Ares status module', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   const ares = window.getByTestId('ares-status');
   await expect(ares).toBeVisible();
@@ -68,7 +68,7 @@ test('the header shows the Ares status module', async () => {
 
 test('? opens the cheat sheet listing every shortcut registered', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await expectOpen(window, 'Dashboard');
 
   await window.keyboard.press('?');
@@ -102,7 +102,7 @@ test('? opens the cheat sheet listing every shortcut registered', async () => {
 
 test('typing digits into a field or an editor never switches Sections', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   await openSettings(window);
   const hex = window.getByRole('textbox', { name: 'Hex colour' });
@@ -135,7 +135,7 @@ test('typing digits into a field or an editor never switches Sections', async ()
 
 test('Settings opens from the header and with the comma key, and Esc goes back', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   await tab(window, 'Linear').click();
   await openSettings(window);

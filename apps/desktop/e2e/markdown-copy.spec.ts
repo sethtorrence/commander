@@ -94,7 +94,7 @@ const writePastDay = (page: Page) =>
   }, PAST_DAY);
 
 test('choosing a folder writes each day; edits rewrite it within seconds, over any hand edits', async () => {
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await page.evaluate(() =>
     window.commander.itemStore({ op: 'save-daily-template', template: { blocks: [] } }),
   );
@@ -156,7 +156,7 @@ test('choosing a folder writes each day; edits rewrite it within seconds, over a
 });
 
 test('a folder that can’t be written shows a notice in Settings, and editing carries on', async () => {
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await page.evaluate(() =>
     window.commander.itemStore({ op: 'save-daily-template', template: { blocks: [] } }),
   );
@@ -192,7 +192,7 @@ test('a folder that can’t be written shows a notice in Settings, and editing c
 });
 
 test('Commander’s own data folder is refused, with the reason', async () => {
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await openSettings(page);
   const setting = page.getByTestId('markdown-copy');
   await pickerChooses(commander.app, commander.userDataDir);

@@ -80,7 +80,7 @@ test('with no OAuth app in the build, an API key Account connects, survives a re
   const env = await pointAtFakeLinear(linear, null);
   const first = await launchCommander({ env });
   commander = first;
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   let panel = await openAccounts(window);
 
   // Only the API key path is offered.
@@ -102,7 +102,7 @@ test('with no OAuth app in the build, an API key Account connects, survives a re
 
   // Restart on the same data.
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
-  window = await commander.app.firstWindow();
+  window = await commander.window();
   panel = await openAccounts(window);
   await expect(panel.getByTestId('account-name')).toHaveText(['Acme']);
   expect(readFileSync(join(commander.userDataDir, 'secrets.json'), 'utf8')).toContain(
@@ -122,7 +122,7 @@ test('Connect Linear signs in through the browser, and no token reaches the disk
   const logs: string[] = [];
   commander.app.process().stdout?.on('data', (chunk) => logs.push(String(chunk)));
   commander.app.process().stderr?.on('data', (chunk) => logs.push(String(chunk)));
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   window.on('console', (message) => logs.push(message.text()));
   await standInForTheBrowser(commander.app);
   const panel = await openAccounts(window);

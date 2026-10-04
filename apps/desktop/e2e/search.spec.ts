@@ -74,7 +74,7 @@ async function find(page: Page, text: string) {
 
 test('Ctrl+K finds a Block by its words and opens it in Notes, and a Todo in its detail pane', async () => {
   commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const earlier = await dayFrom(window, -5);
   await seed(window, earlier);
 
@@ -119,7 +119,7 @@ test('Ctrl+K finds a Block by its words and opens it in Notes, and a Todo in its
 
 test('the palette jumps to Sections, runs commands, and / searches the open Section', async () => {
   commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await seed(window, await dayFrom(window, -2));
 
   // Jump to a Section.
@@ -214,7 +214,7 @@ test('ENG-418 opens the issue in Linear, and Search in Linear opens the browser'
     },
   });
   const { app } = commander;
-  const window = await app.firstWindow();
+  const window = await commander.window();
   const openedExternally = await catchTheBrowser(app);
   await openSettings(window);
   const panel = window.getByTestId('accounts-panel');

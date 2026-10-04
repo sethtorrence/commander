@@ -52,7 +52,7 @@ const savedLinks = (page: Page, blockId: string) =>
 
 test('[[ links a Block to a day and a Project: chips, following them, Mentioned in, undo, and a restart', async () => {
   const first = await launchCommander();
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   await createProject(window, 'Longtail', 'LT');
   let sheet = await openNotes(window);
   const yesterday = await dayFrom(window, -1);
@@ -129,7 +129,7 @@ test('[[ links a Block to a day and a Project: chips, following them, Mentioned 
 
   // After a restart the chips and Links are still there.
   const second = await launchCommander({ userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   sheet = await openNotes(window);
   block = sheet.locator(`[data-block-id="${blockId}"]`);
   await expect(block.getByRole('link', { name: yesterday.label })).toBeVisible();

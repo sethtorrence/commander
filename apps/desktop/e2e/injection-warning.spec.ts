@@ -75,7 +75,7 @@ test('an issue with instructions aimed at Ares shows the warning mark, and nothi
       }),
     },
   });
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await connect(page);
 
   // In the Linear Section: the mark on its row, and no other.

@@ -67,7 +67,7 @@ test.afterEach(async () => {
 
 test('without Commander’s Microsoft app in the build, Connect Teams is disabled and points to the README', async () => {
   commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   const teams = await openTeamsAccounts(window);
 
@@ -82,7 +82,7 @@ test('Connect Teams signs in through the browser; the Account survives a restart
   const logs: string[] = [];
   first.app.process().stdout?.on('data', (chunk) => logs.push(String(chunk)));
   first.app.process().stderr?.on('data', (chunk) => logs.push(String(chunk)));
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   window.on('console', (message) => logs.push(message.text()));
   await standInForTheBrowser(first.app);
   let teams = await openTeamsAccounts(window);
@@ -115,7 +115,7 @@ test('Connect Teams signs in through the browser; the Account survives a restart
 
   // Restart on the same data.
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
-  window = await commander.app.firstWindow();
+  window = await commander.window();
   teams = await openTeamsAccounts(window);
   await expect(teams.getByTestId('account-name')).toHaveText(['Teams · sam@contoso.test']);
   const credential = `account:teams:${microsoft.tenantId}:${SAM.id}:credential`;
@@ -131,7 +131,7 @@ test('Connect Teams signs in through the browser; the Account survives a restart
 test('a tenant that needs admin consent is explained, with the permissions and the admin consent link', async () => {
   microsoft.requireAdminConsent('AADSTS90094');
   commander = await launchCommander({ env: pointAtFakeMicrosoft(microsoft) });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await standInForTheBrowser(commander.app);
   const teams = await openTeamsAccounts(window);
 

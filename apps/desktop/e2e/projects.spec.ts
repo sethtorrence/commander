@@ -37,7 +37,7 @@ const savedProjects = (page: Page) =>
 
 test('create a Project, file a Todo with b, filter by it, and undo the filing', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   // Settings → Projects: create Longtail and Titanlink; a taken code is refused.
   await openSettings(window);
@@ -117,7 +117,7 @@ test('create a Project, file a Todo with b, filter by it, and undo the filing', 
 
 test('a Todo added under a selected Project is filed there, and the filter survives a restart', async () => {
   const first = await launchCommander();
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   await openSettings(window);
   await createProject(window, 'Longtail', 'LT');
   await createProject(window, 'Tactics', 'TX');
@@ -139,7 +139,7 @@ test('a Todo added under a selected Project is filed there, and the filter survi
   await first.app.close();
 
   const second = await launchCommander({ userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   todos = await openTodos(window);
   const bar = todos.getByRole('group', { name: 'Project filter' });
   await expect(bar.getByRole('button', { name: /^Tactics/ })).toHaveAttribute('aria-pressed', 'true');
@@ -150,7 +150,7 @@ test('a Todo added under a selected Project is filed there, and the filter survi
 
 test('b and the p keys are in the cheat sheet and never fire while typing', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await openSettings(window);
   await createProject(window, 'Longtail', 'LT');
   await expect(window.getByRole('list', { name: 'Projects' }).getByRole('listitem')).toHaveCount(1);

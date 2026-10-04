@@ -90,7 +90,7 @@ test('Settings → GitHub lists what the app reaches, starts with the repos work
   const env = pointAtFakeGitHub();
   const first = await launchCommander({ env });
   commander = first;
-  let page = await first.app.firstWindow();
+  let page = await first.window();
   await recordTheBrowser(first.app);
   await connectWithTheApp(page);
 
@@ -193,7 +193,7 @@ test('Settings → GitHub lists what the app reaches, starts with the repos work
 
   // Restart on the same data: the choices are as left.
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
-  page = await commander.app.firstWindow();
+  page = await commander.window();
   await openSettings(page);
   await expect(repoBox(page, 'acme-org/web')).toBeChecked();
   await expect(repoBox(page, 'acme-org/made-later')).toBeChecked();
@@ -208,7 +208,7 @@ test('Settings → GitHub lists what the app reaches, starts with the repos work
 
 test('a classic-token Account gets the same page from its own lists', async () => {
   commander = await launchCommander({ env: pointAtFakeGitHub({ app: false }) });
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await openSettings(page);
   const accounts = page.getByTestId('accounts-panel').getByTestId('source-github');
   await accounts

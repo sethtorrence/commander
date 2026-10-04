@@ -98,7 +98,7 @@ test('type, pause, a margin card, Add: the Todo is in Todos with origin Ares; Di
     }),
   );
   commander = await launchCommander({ env });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await connectFakeModel(window);
   // Settings → Ares lists the job, switched on.
   await expect(window.getByRole('switch', { name: 'Suggest Todos' })).toHaveAttribute('aria-checked', 'true');
@@ -168,7 +168,7 @@ test('type, pause, a margin card, Add: the Todo is in Todos with origin Ares; Di
   const userDataDir = commander.userDataDir;
   await commander.app.close();
   commander = await launchCommander({ env, userDataDir });
-  const again = await commander.app.firstWindow();
+  const again = await commander.window();
   const reopened = await openNotes(again);
   await expect(blockRow(reopened, 'maybe book flights for the offsite')).toBeVisible();
   // Long enough for Ares's start-up look (after the 1.5 s pause) to have run.

@@ -96,7 +96,7 @@ const seedDay = (page: Page, day: string, texts: string[]) =>
 
 test('Notes opens on today’s Daily Note: part number, rulers and numbered Blocks, in both themes', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const sheet = await openNotes(window);
   const year = new Date().getFullYear();
 
@@ -121,7 +121,7 @@ test('Notes opens on today’s Daily Note: part number, rulers and numbered Bloc
 
 test('a small outline written with the outliner keys is all back after a restart, ids, nesting and folds included', async () => {
   const first = await launchCommander();
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   let sheet = await openNotes(window);
   const today = await dayFrom(window);
 
@@ -160,7 +160,7 @@ test('a small outline written with the outliner keys is all back after a restart
   await first.app.close();
 
   const second = await launchCommander({ userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   sheet = await openNotes(window);
   await expect.poll(() => shownBlocks(window, today)).toEqual(before);
 
@@ -181,7 +181,7 @@ test('a small outline written with the outliner keys is all back after a restart
 
 test('single-letter app shortcuts never fire while typing in a Block', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const sheet = await openNotes(window);
 
   await sheet.locator('[data-block-text]').first().click();
@@ -196,7 +196,7 @@ test('single-letter app shortcuts never fire while typing in a Block', async () 
 
 test('the arrow keys move between Blocks, and Backspace on an empty Block removes it', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const sheet = await openNotes(window);
   const today = await dayFrom(window);
   const texts = () => shownBlocks(window, today).then((blocks) => blocks.map((b) => b.text));
@@ -224,7 +224,7 @@ test('the arrow keys move between Blocks, and Backspace on an empty Block remove
 
 test('structural changes go in the activity log, and undo reverses the last one, while editing or not', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const sheet = await openNotes(window);
   const today = await dayFrom(window);
   const depthOf = (text: string) =>
@@ -258,7 +258,7 @@ test('structural changes go in the activity log, and undo reverses the last one,
 
 test('earlier days follow today, newest first; the week strip jumps to a day, a blank one opens empty, and past days save edits', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const [yesterday, threeAgo, twoAgo] = [
     await dayFrom(window, -1),
     await dayFrom(window, -3),

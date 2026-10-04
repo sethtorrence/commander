@@ -155,7 +155,7 @@ test('connect Google → events in the Agenda → open one → hand it to Google
   };
   commander = await launchCommander({ env });
   const { app } = commander;
-  const window = await app.firstWindow();
+  const window = await commander.window();
   const openedExternally = await standInForTheBrowser(app, google.authorizeUrl);
 
   // Connect, and the Account's calendars are listed: the primary and owned ones on, holidays off.

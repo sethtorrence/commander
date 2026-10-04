@@ -143,7 +143,7 @@ test('switch views, filter, open an issue and file it into a Project', async () 
     },
   });
   const { app } = commander;
-  const window = await app.firstWindow();
+  const window = await commander.window();
   const openedExternally = await catchTheBrowser(app);
   await connect(window);
   const newProject = window.getByRole('form', { name: 'New Project' });

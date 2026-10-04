@@ -100,7 +100,7 @@ test('Connect GitHub shows a code to enter on GitHub; the Account lists where th
   const env = pointAtFakeGitHub();
   const first = await launchCommander({ env });
   commander = first;
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   const logs = captureLogs(first, window);
   await recordTheBrowser(first.app);
   let section = await openGitHubAccounts(window);
@@ -151,7 +151,7 @@ test('Connect GitHub shows a code to enter on GitHub; the Account lists where th
 
   // Restart on the same data.
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
-  window = await commander.app.firstWindow();
+  window = await commander.window();
   section = await openGitHubAccounts(window);
   await expect(section.getByTestId('account-name')).toHaveText(['octocat']);
   const credential = `account:github:${OCTOCAT.id}:credential`;
@@ -166,7 +166,7 @@ test('Connect GitHub shows a code to enter on GitHub; the Account lists where th
 
 test('a code declined on GitHub is explained, and nothing is connected', async () => {
   commander = await launchCommander({ env: pointAtFakeGitHub() });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await recordTheBrowser(commander.app);
   const section = await openGitHubAccounts(window);
 
@@ -183,7 +183,7 @@ test('without Commander’s GitHub App, only a classic token and gh’s sign-in 
   const env = pointAtFakeGitHub({ app: false });
   const first = await launchCommander({ env });
   commander = first;
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   const logs = captureLogs(first, window);
   let section = await openGitHubAccounts(window);
 
@@ -218,7 +218,7 @@ test('without Commander’s GitHub App, only a classic token and gh’s sign-in 
 
   // Restart on the same data: both still there, and neither was ever refreshed.
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
-  window = await commander.app.firstWindow();
+  window = await commander.window();
   section = await openGitHubAccounts(window);
   await expect(section.getByTestId('account-name')).toHaveText(['octocat', 'mona']);
   await expect(section.getByTestId('account-status')).toHaveText(['Connected', 'Connected']);

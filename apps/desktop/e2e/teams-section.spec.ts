@@ -150,7 +150,7 @@ const chatRequests = (from: number, chatId: string) =>
 
 test('filter the Chats, open one, file it, mute another and exclude a third', async () => {
   commander = await launchCommander({ env: pointAtFakeMicrosoft() });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const openedExternally = await standInForTheBrowser(commander.app);
   await connectTeams(window);
   const newProject = window.getByRole('form', { name: 'New Project' });

@@ -72,7 +72,7 @@ const paste = (page: Page, what: { images?: ('image/png' | 'image/jpeg')[]; text
 
 test('each kind of formatting types with its Markdown and with its shortcut, shows in both themes, and survives a restart', async () => {
   const first = await launchCommander();
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   let sheet = await openNotes(window);
 
   await sheet.locator('[data-block-text]').first().click();
@@ -152,7 +152,7 @@ test('each kind of formatting types with its Markdown and with its shortcut, sho
   await first.app.close();
 
   const second = await launchCommander({ userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   sheet = await openNotes(window);
   await expect.poll(() => storedTexts(window)).toEqual([...expected].sort());
   await check();
@@ -161,7 +161,7 @@ test('each kind of formatting types with its Markdown and with its shortcut, sho
 
 test('a link opens in the system browser on a click, only if it is http(s) or mailto; a URL pasted on selected text makes one', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const sheet = await openNotes(window);
   const opened = await catchOpenedLinks(commander.app);
 
@@ -206,7 +206,7 @@ test('a link opens in the system browser on a click, only if it is http(s) or ma
 
 test('pasted PNG and JPEG images are saved under attachments/, show inline, survive a restart, and come back with undo', async () => {
   const first = await launchCommander();
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   let sheet = await openNotes(window);
 
   await sheet.locator('[data-block-text]').first().click();
@@ -248,7 +248,7 @@ test('pasted PNG and JPEG images are saved under attachments/, show inline, surv
   await first.app.close();
 
   const second = await launchCommander({ userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   sheet = await openNotes(window);
   await expect(sheet.locator('.n-image img')).toHaveCount(2);
   await expect

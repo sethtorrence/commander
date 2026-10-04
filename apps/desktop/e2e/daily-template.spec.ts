@@ -55,7 +55,7 @@ const savedOutline = (page: Page) =>
 
 test('on a fresh database, today’s Daily Note starts with Morning, Meetings, Todos, Ideas and Evening', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await tab(window, 'Notes').click();
   const today = await window.evaluate(() => {
     const d = new Date();
@@ -68,7 +68,7 @@ test('on a fresh database, today’s Daily Note starts with Morning, Meetings, T
 
 test('the template edited in Settings makes the next day, at midnight while running, and leaves today alone', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   // The window's clock, two minutes before midnight, so the test can move it past midnight.
   const lateEvening = new Date(2026, 10, 10, 23, 58);
   const [today, tomorrow] = [keyOf(lateEvening), keyOf(new Date(2026, 10, 11))];
@@ -130,7 +130,7 @@ test('the template edited in Settings makes the next day, at midnight while runn
 
 test('a blank past day opened from the week strip starts empty', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await tab(window, 'Notes').click();
   const twoAgo = await window.evaluate(() => {
     const d = new Date();

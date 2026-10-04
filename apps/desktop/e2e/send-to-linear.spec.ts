@@ -72,7 +72,7 @@ async function setUp(): Promise<Page> {
       }),
     },
   });
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await openSettings(page);
   const panel = page.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);

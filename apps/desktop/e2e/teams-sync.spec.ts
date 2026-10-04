@@ -95,7 +95,7 @@ const chatRequests = () => microsoft.graphRequests.filter((path) => !path.starts
 
 test('connecting Teams brings the Chats in; Settings shows the checks, Sync now checks lightly, and Ctrl+K finds a Chat by what was said', async () => {
   commander = await launchCommander({ env: pointAtFakeMicrosoft() });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await standInForTheBrowser(commander.app);
   const teams = await connectTeams(window);
 
@@ -143,7 +143,7 @@ test('connecting Teams brings the Chats in; Settings shows the checks, Sync now 
 
 test('Teams asking Commander to slow down is shown, and Sync now waits it out', async () => {
   commander = await launchCommander({ env: pointAtFakeMicrosoft() });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await standInForTheBrowser(commander.app);
   const teams = await connectTeams(window);
   const sync = teams.getByTestId('account-sync');

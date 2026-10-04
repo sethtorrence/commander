@@ -122,7 +122,7 @@ test('seeded Todos and Linear issues are ranked into bands; tick, clear, filter 
       }),
     },
   });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await makeTodo(window, 'Send the invoice', -1);
   await makeTodo(window, 'Book the dentist', 0);
 

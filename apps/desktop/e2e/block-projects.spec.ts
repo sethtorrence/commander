@@ -30,7 +30,7 @@ const savedBlocks = (page: Page) =>
 
 test('tag a parent with #LT, its child inherits, the child’s Todo shows the Badge, and the filter narrows Notes', async () => {
   const commander = await launchCommander();
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await openSettings(page);
   await createProject(page, 'Longtail', 'LT');
   await createProject(page, 'Tactics', 'TX');
@@ -135,7 +135,7 @@ test('tag a parent with #LT, its child inherits, the child’s Todo shows the Ba
 
 test('removing #LT returns the Block to inheriting, and undo files it again', async () => {
   const commander = await launchCommander();
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await openSettings(page);
   await createProject(page, 'Longtail', 'LT');
   await expect(page.getByRole('list', { name: 'Projects' }).getByRole('listitem')).toHaveCount(1);
