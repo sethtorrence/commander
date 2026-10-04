@@ -62,8 +62,9 @@ export type Filing = z.infer<typeof filing>;
 export const people = z.array(z.string().min(1));
 
 // Where a Todo came from: one the User added, a suggestion from Ares the User accepted, a Linear
-// issue assigned to the User, or a Block of a Daily Note (made from it, with a made-from Link).
-export const todoOrigins = ['manual', 'ares', 'linear', 'daily-note'] as const;
+// issue assigned to the User, a Block of a Daily Note (made from it, with a made-from Link), or a
+// review asked of the User or an issue assigned to them on GitHub (backed by it).
+export const todoOrigins = ['manual', 'ares', 'linear', 'daily-note', 'github'] as const;
 export const todoOrigin = z.enum(todoOrigins);
 export type TodoOrigin = z.infer<typeof todoOrigin>;
 

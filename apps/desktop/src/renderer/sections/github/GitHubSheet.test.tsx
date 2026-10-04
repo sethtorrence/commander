@@ -159,6 +159,8 @@ beforeEach(() => {
   projects = projectsIn(opened.client);
   accounts = fakeAccounts([octocat()]);
   localStorage.clear();
+  // Most of these work in Pull requests; Your work (the default) has its own tests below.
+  localStorage.setItem('commander.github.view', 'pulls');
   controls.openSection.mockReset();
   controls.setTabCount.mockReset();
   Element.prototype.scrollIntoView = () => {};
@@ -245,7 +247,7 @@ const detail = () =>
 const tab = (name: string) => screen.getByRole('tab', { name: new RegExp(name) });
 
 describe('the GitHub sheet', () => {
-  it('opens on Pull requests, open first by latest activity and Closed collapsed; Issues one click away, remembered', async () => {
+  it('opens on Pull requests when last left there, open first by latest activity and Closed collapsed; Issues one click away, remembered', async () => {
     const { unmount } = renderSheet();
     await waitFor(() =>
       expect(listed()).toEqual([
@@ -636,5 +638,83 @@ describe('People in the GitHub Section', () => {
     expect(field('assignees')).toBe('Priya P.');
     // A reviewer known by nothing more than a login keeps it; a team stays a team.
     expect(field('reviewers')).toBe('@omar · Approvedacme/platform · Asked');
+  });
+});
+
+describe('Your work (#116)', () => {
+  beforeEach(() => {
+    localStorage.removeItem('commander.github.view');
+    // octocat's: a pull request failing checks waiting on Omar, one with changes requested, an issue
+    // assigned to them, and a review asked of their team.
+    save(
+      pull({
+        number: 40,
+        title: 'Paginate exports',
+        author: 'octocat',
+        checks: 'failure',
+        requestedReviewers: [{ kind: 'user', login: 'omar', requestedAt: NOW - 3 * HOUR }],
+        updatedAt: NOW - 4 * HOUR,
+      }),
+      pull({
+        number: 41,
+        title: 'Rename the flag',
+        author: 'octocat',
+        reviewDecision: 'changes-requested',
+        reviews: [{ login: 'omar', state: 'changes-requested', submittedAt: NOW - HOUR }],
+        updatedAt: NOW - 5 * HOUR,
+      }),
+      pull({ number: 42, title: 'Bump the SDK', author: 'dana', updatedAt: NOW - 6 * HOUR }),
+      issue({ number: 31, title: 'Flaky retry test', assignees: ['octocat'] }),
+      reviewRequest(42, undefined, { direct: false, teams: ['acme/backend'] }),
+    );
+  });
+
+  const group = (name: string) =>
+    within(screen.getByRole('region', { name }))
+      .queryAllByTestId('github-work')
+      .map((row) => row.getAttribute('aria-label'));
+
+  it('opens on Your work: the User’s pull requests, reviews asked of them (direct first, the team named) and their assigned issues', async () => {
+    renderSheet();
+    await waitFor(() => expect(group('Your pull requests')).toHaveLength(3));
+    expect(tab('Your work').getAttribute('aria-selected')).toBe('true');
+    expect(group('Your pull requests')).toEqual([
+      'octocat/dotfiles#3 Dotfiles tidy',
+      'acme/api#40 Paginate exports',
+      'acme/api#41 Rename the flag',
+    ]);
+    expect(group('Review requests')).toEqual([
+      'acme/api#12 Retry webhooks with back-off',
+      'acme/api#42 Bump the SDK',
+    ]);
+    expect(group('Assigned issues')).toEqual(['acme/api#31 Flaky retry test']);
+    expect(tab('Your work').textContent).toMatch(/06$/);
+    const paginate = screen.getByRole('listitem', { name: 'acme/api#40 Paginate exports' });
+    expect(within(paginate).getByText('Waiting on omar')).toBeTruthy();
+    expect(within(paginate).getByRole('img', { name: 'Checks: Failing' })).toBeTruthy();
+    const team = screen.getByRole('listitem', { name: 'acme/api#42 Bump the SDK' });
+    expect(within(team).getByText('@acme/backend')).toBeTruthy();
+
+    // The same keys and detail pane as the other views.
+    fireEvent.click(paginate);
+    expect(detail()).toBeTruthy();
+  });
+
+  it('counts direct review requests and the User’s pull requests failing checks or with changes requested on its tab, after each sync', async () => {
+    renderSheet();
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('github', 3));
+    // A sync: the checks pass again.
+    save(
+      pull({
+        number: 40,
+        title: 'Paginate exports',
+        author: 'octocat',
+        checks: 'success',
+        requestedReviewers: [{ kind: 'user', login: 'omar', requestedAt: NOW - 3 * HOUR }],
+        updatedAt: NOW,
+      }),
+    );
+    accounts.change([octocat(syncStatus({ lastSyncedAt: NOW + HOUR }))]);
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('github', 2));
   });
 });

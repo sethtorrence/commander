@@ -57,7 +57,8 @@ import {
     requests, reviews asked of them directly and through their teams, issues assigned to them: ids and
     update times only, about a point), so open work and review requests stay exact; those new or
     changed since are fetched whole. A review request no longer asked (given or withdrawn) is
-    tombstoned.
+    tombstoned at the end of the sync, after its pull request is saved again where the searches below
+    found it changed.
   - Gates, per watched owner: GET /orgs/{org}/repos?sort=pushed and GET /orgs/{org}/issues?filter=all
     (state=all, sort=updated) with If-None-Match; for personal repos, GET /user/repos?sort=pushed and
     each watched repo's issues. A 304 costs nothing, and all 304s end the owner's sync there.
@@ -442,10 +443,10 @@ export function createGitHubSource({
         if (item) requests.push(item);
       }
       const asking = new Set(requests.map((item) => item.externalId));
-      save(
-        [...fetched, ...requests],
-        cursor.reviewRequests.filter((externalId) => !asking.has(externalId)),
-      );
+      save([...fetched, ...requests]);
+      // Review requests no longer asked are tombstoned at the end, once the searches below have saved
+      // their pull requests as they are now (so a review given can be told from a request withdrawn).
+      const ended = cursor.reviewRequests.filter((externalId) => !asking.has(externalId));
       cursor.reviewRequests = [...asking];
       cursor.openWork = Object.fromEntries([...open.values()].map((node) => [node.id, node.updatedAt]));
 
@@ -696,6 +697,7 @@ export function createGitHubSource({
         if (!canSpend()) break;
         await syncOwner(owner);
       }
+      save([], ended);
 
       // Repo health: watched repos only, the last week of commits.
       const catalog: GitHubCatalog = {

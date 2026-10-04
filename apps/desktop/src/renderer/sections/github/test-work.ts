@@ -91,8 +91,12 @@ export function issue({ title, ...changes }: IssueInput): SourceItem {
   };
 }
 
-/** A review asked of the User on a pull request (by its external id). */
-export function reviewRequest(number: number, repo = API): SourceItem {
+/** A review asked of the User on a pull request (by its external id): directly, unless `changes` say. */
+export function reviewRequest(
+  number: number,
+  repo = API,
+  changes: Partial<ReviewRequestDetail> = {},
+): SourceItem {
   const detail: ReviewRequestDetail = {
     kind: 'review-request',
     pullRequest: `${repo.nodeId}:pull/${number}`,
@@ -103,6 +107,7 @@ export function reviewRequest(number: number, repo = API): SourceItem {
     direct: true,
     teams: [],
     requestedAt: NOW - HOUR,
+    ...changes,
   };
   return {
     externalId: `${repo.nodeId}:review-request/${number}`,

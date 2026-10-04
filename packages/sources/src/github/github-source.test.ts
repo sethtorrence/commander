@@ -472,6 +472,18 @@ describe('a sync after changes', () => {
     expect(byId(next.items, 'R_kgDOAcmeApi:release/RE_api_141')).toMatchObject({ kind: 'github-release' });
   });
 
+  it('tombstones a met review request once its pull request is saved as it is now, so its Todo can say why', async () => {
+    const { next } = await afterChanges();
+    const pull = next.pages.findLastIndex((page) =>
+      page.items.some((item) => item.externalId === 'R_kgDOAcmeApi:pull/15'),
+    );
+    const tombstone = next.pages.findIndex((page) =>
+      page.deleted.includes('R_kgDOAcmeApi:review-request/15'),
+    );
+    expect(pull).toBeGreaterThanOrEqual(0);
+    expect(tombstone).toBeGreaterThan(pull);
+  });
+
   it('adds the new commits to the repo’s health and keeps the rest', async () => {
     const { next } = await afterChanges();
     const api = next.catalog?.repos.find((repo) => repo.repo.name === 'api');

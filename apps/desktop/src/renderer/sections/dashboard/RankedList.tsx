@@ -1,4 +1,10 @@
-import { type DashboardBand, dashboardBands, type FiledBy, type Item } from '@commander/domain';
+import {
+  type DashboardBand,
+  dashboardBands,
+  type FiledBy,
+  githubIdentifier,
+  type Item,
+} from '@commander/domain';
 import { AresText, CheckIcon, cn, Kbd, Led } from '@commander/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
@@ -6,6 +12,7 @@ import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { CalendarSwatch } from '../calendar/EventRow';
+import { WorkStateIcon } from '../github/glyphs';
 import { StateIcon } from '../linear/glyphs';
 import { ChatTypeGlyph } from '../teams/ChatRow';
 import { sectionFor } from '../todos/links';
@@ -32,10 +39,15 @@ const SECTION_LABELS: Record<string, string> = {
   linear: 'Linear',
   calendar: 'Calendar',
   teams: 'Teams',
+  github: 'GitHub',
 };
 
 /** The Item to show when a row is opened in its Section: a suggestion's Block, else the row's Item. */
-export const revealId = (row: FeedRow) => row.suggestion?.blockId ?? row.item.id;
+export const revealId = (row: FeedRow) =>
+  row.suggestion?.blockId ??
+  // A review request opens its pull request.
+  (row.item.detail?.kind === 'review-request' ? row.item.detail.pullRequestId : null) ??
+  row.item.id;
 const HOW: Record<FiledBy, string> = {
   user: 'Set by you',
   rule: 'Filed by a Rule',
@@ -45,8 +57,18 @@ const HOW: Record<FiledBy, string> = {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 /** A row's title as the Badge picker and the row name it: a Linear issue with its identifier. */
-export const titleOf = ({ item }: FeedRow) =>
-  item.detail?.kind === 'linear-issue' ? `${item.detail.identifier} ${item.title}` : item.title;
+export const titleOf = ({ item }: FeedRow) => {
+  const prefix = identifierOf(item);
+  return prefix ? `${prefix} ${item.title}` : item.title;
+};
+
+// What people call it, shown before its title: a Linear issue's ENG-418, a GitHub acme/api#12.
+function identifierOf(item: Item): string | null {
+  if (item.detail?.kind === 'linear-issue') return item.detail.identifier;
+  if (item.detail?.kind === 'review-request' || item.detail?.kind === 'pull-request')
+    return githubIdentifier(item.detail.repo, item.detail.number);
+  return null;
+}
 
 /** Which Section an Item opens in, by its id, with its name: ["todos", "Todos"]. A suggestion opens its Block. */
 export function openIn(row: FeedRow): [string, string] | null {
@@ -256,9 +278,9 @@ function Row({
             done ? 'text-faint line-through decoration-1' : 'text-ink',
           )}
         >
-          {item.detail?.kind === 'linear-issue' && (
+          {identifierOf(item) && (
             <span className="mr-[9px] font-mono text-code-lg leading-[22px] font-medium tracking-mono text-muted no-underline">
-              {item.detail.identifier}
+              {identifierOf(item)}
             </span>
           )}
           {item.title}
@@ -363,6 +385,13 @@ function Marker({ row, onTick }: { row: FeedRow; onTick: () => void }) {
         <ChatTypeGlyph type={item.detail.chatType} className="w-6" />
       </span>
     );
+  // The User's pull request: nothing to tick, its state instead.
+  if (item.detail?.kind === 'pull-request')
+    return (
+      <span className="grid h-[22px] place-items-center" title={item.detail.draft ? 'Draft' : 'Open'}>
+        <WorkStateIcon state={item.detail.draft ? 'draft' : 'open'} />
+      </span>
+    );
   return (
     <button
       type="button"
@@ -435,6 +464,7 @@ const barButton =
 function wordsOf(item: Item): string[] {
   if (item.detail?.kind === 'chat')
     return [item.title, ...item.detail.messages.map((message) => message.text)];
+  if (item.detail?.kind === 'pull-request') return [item.title, item.detail.body];
   if (item.detail?.kind !== 'linear-issue') return [item.title];
   const { description, comments } = item.detail;
   return [item.title, description ?? '', ...comments.map((comment) => comment.body)];

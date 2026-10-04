@@ -149,6 +149,10 @@ test('one Person across Linear and GitHub: shown by name, found with Ctrl+K, ren
 
   // And the GitHub Section shows her pull request's author by the same name.
   await tab(window, 'GitHub').click();
+  await window
+    .getByTestId('section-github')
+    .getByRole('tab', { name: /Pull requests/ })
+    .click();
   const githubRows = window.getByTestId('section-github').getByTestId('github-work');
   await expect(githubRows.filter({ hasText: 'Retry webhooks with back-off' })).toContainText('Priya P.');
 

@@ -4,13 +4,14 @@ import type { FilterKey, FilterOption, FilterOptions, WorkFilters, WorkView } fr
 const pad = (n: number) => String(n).padStart(2, '0');
 
 const VIEWS: { view: WorkView; label: string }[] = [
+  { view: 'mine', label: 'Your work' },
   { view: 'pulls', label: 'Pull requests' },
   { view: 'issues', label: 'Issues' },
 ];
 
 /**
  * The view switch under the Project filter, after the prototype's Bucket tabs (.bkts) as the Linear
- * Section draws them: Pull requests and Issues with their open counts, and the thin sync status line
+ * Section draws them: Your work, Pull requests and Issues with their open counts, and the thin sync status line
  * on the right.
  */
 export function ViewSwitch({

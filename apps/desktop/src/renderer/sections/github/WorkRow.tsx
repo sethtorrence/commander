@@ -69,6 +69,7 @@ export function WorkRow({
   selected,
   now,
   reviewAsked = false,
+  note,
   compact = false,
   onOpen,
 }: {
@@ -78,6 +79,8 @@ export function WorkRow({
   now: number;
   /** A review of it is asked of the User. */
   reviewAsked?: boolean;
+  /** Your work's word on it: who the User's pull request waits on, or the team a review was asked of. */
+  note?: string;
   /** Beside the detail pane: the state and review tags make way for the title. */
   compact?: boolean;
   /** Selects the row and opens it in the detail pane. */
@@ -142,6 +145,11 @@ export function WorkRow({
         {reviewAsked && (
           <Tag className="border-ink font-semibold text-ink" title="Your review is asked for">
             Your review
+          </Tag>
+        )}
+        {note && (
+          <Tag className="max-w-[220px] truncate font-semibold text-ink" title={note}>
+            {note}
           </Tag>
         )}
         {!compact && <Tag>{STATE_NAMES[state]}</Tag>}

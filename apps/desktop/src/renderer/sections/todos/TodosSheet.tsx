@@ -88,8 +88,9 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
     if (other.deletedAt !== null) return;
     if (other.kind === 'todo') return state.jumpTo(other.id);
     const section = sectionFor(other.kind);
-    // A Block opens in its Daily Note, scrolled to and highlighted; a Linear issue opens selected.
-    if (section && (other.kind === 'block' || other.kind === 'linear-issue'))
+    // A Block opens in its Daily Note, scrolled to and highlighted; a Linear issue, or a GitHub pull
+    // request, issue or review request (its pull request), opens selected.
+    if (section && (other.kind === 'block' || other.kind === 'linear-issue' || section === 'github'))
       requestReveal(section, other.id);
     if (section) openSection(section);
   };
@@ -154,7 +155,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
           <b>{open.length} open</b>
           {filter !== 'everything' &&
             ` ${filtered ? `in ${filtered.name}` : 'Unfiled'} (of ${state.allOpen.length})`}{' '}
-          · {done.length} done · from Linear, Email, the Daily Note and you
+          · {done.length} done · from Linear, GitHub, Email, the Daily Note and you
         </>
       }
       aside={<Keys />}
@@ -212,6 +213,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
                     }
                   : undefined
               }
+              backing={behind}
               links={state.links}
               history={state.history}
               onRename={(title) => state.rename(title)}

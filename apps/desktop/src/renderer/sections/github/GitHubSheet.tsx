@@ -1,3 +1,4 @@
+import { waitingOn } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useReveal } from '../../frame/reveal';
@@ -16,7 +17,7 @@ import { ViewSwitch, WorkFilterBar } from './ListControls';
 import { useGitHub } from './use-github';
 import { WorkDetail } from './WorkDetail';
 import { WorkRow } from './WorkRow';
-import { identifierOf } from './work';
+import { identifierOf, isPullRequest, type Work, type YourWork } from './work';
 
 // Enter opens the selected one, except on a control that Enter presses (a button, a link).
 const onPressable = () => !!document.activeElement?.closest('button, a[href], summary, [role="button"]');
@@ -56,6 +57,9 @@ const and = (names: string[]) =>
  * the list (open first, Closed collapsed) and, once one is opened, the detail pane with its
  * discussion. Opening the Section asks every GitHub Account to sync.
  *
+ * Your work (#116) is the default view: the User's pull requests, the reviews asked of them and the
+ * issues assigned to them.
+ *
  * `summary` is the slot above the view switch for Ares's oversight summary (#119); open work (#116)
  * and the People view (#122) join the Section later.
  */
@@ -80,7 +84,8 @@ export function GitHubSheet({
   const badges = useBadgePicker(state.apply, state.undo);
   const openSection = useOpenSection();
 
-  useTabCount(state.loaded && state.reviewsWaiting ? state.reviewsWaiting : null);
+  // Direct review requests, and the User's pull requests failing checks or with changes requested.
+  useTabCount(state.loaded && state.tabCount ? state.tabCount : null);
   useRefreshWhenOpened(state.refresh, state.reload);
 
   const file = () =>
@@ -120,7 +125,7 @@ export function GitHubSheet({
   const status = syncLine(state.accounts, now, 'No GitHub Account connected');
   const syncing = state.accounts.some((account) => account.sync?.activity === 'syncing');
   const closed = groups.find((group) => group.id === 'closed');
-  const noun = state.view === 'pulls' ? 'pull requests' : 'issues';
+  const noun = { mine: 'in your work', pulls: 'pull requests', issues: 'issues' }[state.view];
   let number = 0;
 
   return (
@@ -179,6 +184,7 @@ export function GitHubSheet({
                             selected={each.id === selected?.id}
                             now={now.getTime()}
                             reviewAsked={state.reviewAsked.has(each.id)}
+                            note={noteFor(state.yourWork(each), each)}
                             compact={detailOpen}
                             onOpen={() => openWork(each.id)}
                           />
@@ -213,6 +219,15 @@ export function GitHubSheet({
       {badges.picker}
     </SectionSheet>
   );
+}
+
+// What a row in Your work adds: who the User's pull request waits on, or the team a review was asked of.
+function noteFor(where: YourWork | null, work: Work): string | undefined {
+  if (where?.group === 'reviews' && !where.direct)
+    return where.teams.length ? where.teams.map((team) => `@${team}`).join(', ') : 'Your team';
+  if (where?.group !== 'your-pulls' || !isPullRequest(work)) return undefined;
+  const waiting = waitingOn(work.detail);
+  return waiting.length ? `Waiting on ${waiting.join(', ')}` : undefined;
 }
 
 function EmptyGroup({ children }: { children: ReactNode }) {

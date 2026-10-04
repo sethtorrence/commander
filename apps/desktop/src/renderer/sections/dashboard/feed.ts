@@ -3,7 +3,9 @@ import {
   type ChatAttention,
   type ChatType,
   type ClearMark,
+  changesRequested,
   chatAttention,
+  checksFailing,
   clockOf,
   type DashboardBand,
   type DashboardClears,
@@ -14,6 +16,7 @@ import {
   localDay,
   meetingTimes,
   type Ranking,
+  waitingSince,
 } from '@commander/domain';
 import { dateOf } from '../notes/days';
 import { originLabel } from '../todos/origin';
@@ -207,6 +210,9 @@ export function sourceTag(item: Item, suggested = false): { stamp: string; text:
     return { stamp: 'CAL', text: `${item.detail.calendar.name} · ${meetingTimes(item.detail)}` };
   if (item.detail?.kind === 'chat') return { stamp: 'TMS', text: `${CHAT_TYPES[item.detail.chatType]} chat` };
   if (item.detail?.kind === 'linear-issue') return { stamp: 'LIN', text: item.detail.state.name };
+  if (item.detail?.kind === 'review-request')
+    return { stamp: 'GH', text: item.detail.direct ? 'Review requested' : 'Team review' };
+  if (item.detail?.kind === 'pull-request') return { stamp: 'GH', text: 'Your pull request' };
   const due = dueOf(item);
   const origin = originLabel(item);
   return { stamp: 'TODO', text: due ? `${origin} · due ${SHORT_DAYS[dateOf(due).getDay()]}` : origin };
@@ -229,6 +235,14 @@ export function rowMeta(row: FeedRow, now: number): [string, string] {
   if (item.detail?.kind === 'chat') {
     if (!row.focus) return ['—', 'Teams'];
     return [shortAgo(row.focus.at, now), CHAT_WHY[row.focus.why]];
+  }
+  if (item.detail?.kind === 'review-request')
+    return [shortAgo(item.detail.requestedAt ?? item.createdAt, now), item.detail.direct ? 'Review' : 'Team'];
+  if (item.detail?.kind === 'pull-request') {
+    const { detail } = item;
+    if (checksFailing(detail)) return ['Fail', 'Checks'];
+    if (changesRequested(detail)) return ['Chg', 'Changes'];
+    return [shortAgo(waitingSince(detail), now), 'Waiting'];
   }
   const today = localDay(now);
   const due = dueOf(item);

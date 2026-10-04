@@ -99,6 +99,7 @@ import { type DashboardStore, openDashboardStore } from './dashboard';
 import { emailsIn } from './emails';
 import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
 import { type GitHubDiscussionStore, githubDiscussionsIn } from './github-discussions';
+import { githubTodosIn } from './github-todos';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
 import { linearSendIn } from './linear-send';
@@ -1100,6 +1101,32 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     invalid: (message) => new ItemStoreError('invalid', message),
   });
 
+  // GitHub Todos (github-todos.ts): one per review asked of the User and per issue assigned to them,
+  // kept in step by every change below. Who the User is on GitHub: the login Settings → GitHub read.
+  const githubTodos = githubTodosIn({
+    db,
+    now,
+    readItems: (ids) =>
+      ids.length
+        ? withDetails(db.select().from(schema.items).where(inArray(schema.items.id, ids)).all())
+        : [],
+    change(item, after, entry) {
+      const at = now();
+      const before = stateOf(item);
+      const written = writeState(item, after, at);
+      log({ ...entry, itemId: item.id, before, after: written }, at);
+    },
+    create(state, backingId, entry) {
+      const at = now();
+      const identity = { kind: 'todo' as const, source: null, account: null, externalId: null };
+      const { id, state: stored } = insertItem(identity, state, at);
+      log({ ...entry, action: 'create', itemId: id, before: null, after: stored }, at);
+      recordLink({ from: id, linkType: 'made-from', to: backingId }, true, entry, at);
+      return id;
+    },
+    login: (account) => githubWatch.read(account).access?.login ?? null,
+  });
+
   function update(
     item: Item,
     changes: Partial<ItemState>,
@@ -1133,11 +1160,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   // What follows a change made in Commander: a ticked Linear Todo writes through to its issue, and a
-  // changed issue's Todo follows it.
+  // changed issue's Todo follows it; GitHub Todos follow their pull request or issue (filed, say).
   function afterChange(item: Item, before: ItemState, after: ItemState, entry: ActivityEntry) {
     if (item.kind === 'todo') linearTodos.writeThrough(item, before, after, entry);
     if (item.kind === 'linear-issue') {
       linearTodos.follow(requireItem(item.id), before, { by: entry.by, causedBy: { entryId: entry.id } });
+    }
+    if (item.source === 'github') {
+      githubTodos.follow(requireItem(item.id), before, { by: entry.by, causedBy: { entryId: entry.id } });
     }
   }
 
@@ -1159,12 +1189,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       case 'update': {
         const item = requireItem(action.itemId);
         projects.checkFiling(action.changes.filing);
-        // Filing a Linear Todo files its issue, which the Todo follows: the two never disagree.
+        // GitHub is read-only in v1: ticking a GitHub Todo says it changes nothing there.
+        const note = entry.why ? null : githubTodos.tickNote(item, action.changes);
+        const said = note ? { ...entry, why: note } : entry;
+        // Filing a Linear Todo files its issue, which the Todo follows: the two never disagree. So does
+        // filing a GitHub Todo (its pull request or issue) or a review request (its pull request).
         const { filing, ...rest } = action.changes;
-        const issue = filing !== undefined ? linearTodos.issueBehind(item) : null;
-        if (!issue) return update(item, action.changes, entry, at);
+        const issue =
+          filing !== undefined ? (linearTodos.issueBehind(item) ?? githubTodos.filingTarget(item)) : null;
+        if (!issue) return update(item, action.changes, said, at);
         const filed = update(issue, { filing }, entry, at);
-        return Object.keys(rest).length ? update(requireItem(item.id), rest, entry, at) : filed;
+        return Object.keys(rest).length ? update(requireItem(item.id), rest, said, at) : filed;
       }
       case 'edit-fields':
         return editFields(requireItem(action.itemId), action.fields, entry, at);
@@ -1661,14 +1696,18 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const active = rules.list();
     if (batch.me !== undefined) linearTodos.remember(batch.account, batch.me);
     linearTodos.takeChanged();
+    githubTodos.takeChanged();
     const applyRules = (itemId: string, at: number) => {
       const item = requireItem(itemId);
       const filed = ruleFiling(item, active);
       if (filed) fileByRule(item, filed, at);
     };
-    // The Item's Todo (a Linear Todo) follows it, once it is filed.
-    const follow = (itemId: string, before: ItemState | null, entryId?: number) =>
-      linearTodos.follow(requireItem(itemId), before, { by, causedBy: entryId ? { entryId } : null });
+    // The Item's Todo (a Linear or GitHub Todo) follows it, once it is filed.
+    const follow = (itemId: string, before: ItemState | null, entryId?: number) => {
+      const entry = { by, causedBy: entryId ? { entryId } : null };
+      linearTodos.follow(requireItem(itemId), before, entry);
+      githubTodos.follow(requireItem(itemId), before, entry);
+    };
     // Emails are threaded among the Account's mail as they arrive; mail already held that they join
     // to another thread is saved along with them.
     const threaded = emails.thread(batch.source, batch.account, batch.items);
@@ -1754,9 +1793,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       if (existing.kind === 'email') emails.deleteBodies([existing.id]);
       const logged = log({ by, action: 'tombstone', itemId: existing.id, before, after }, at);
       linearTodos.follow(requireItem(existing.id), before, { by, causedBy: { entryId: logged.id } }, true);
+      githubTodos.follow(requireItem(existing.id), before, { by, causedBy: { entryId: logged.id } }, true);
       result.tombstoned.push(existing.id);
     }
-    result.todos = [...new Set(linearTodos.takeChanged())];
+    result.todos = [...new Set([...linearTodos.takeChanged(), ...githubTodos.takeChanged()])];
     // Who the Source said its people are: matched into People in the same transaction.
     people.seen(batch.items.flatMap((item) => identitiesOf(item)));
     return result;
@@ -2097,6 +2137,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         const logged = fileByRule(item, filed, now());
         entries.push(logged);
         linearTodos.follow(requireItem(item.id), stateOf(item), {
+          by: logged.by,
+          causedBy: { entryId: logged.id },
+        });
+        githubTodos.follow(requireItem(item.id), stateOf(item), {
           by: logged.by,
           causedBy: { entryId: logged.id },
         });

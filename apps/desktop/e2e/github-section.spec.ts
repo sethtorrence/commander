@@ -160,8 +160,14 @@ test('switch views, filter, open a pull request with its discussion, and file it
   // The tab counts the reviews waiting on the User.
   await expect(tab(window, 'GitHub').locator('.tc')).toHaveText('01');
 
-  // Pull requests first, open ones by latest activity; the merged one waits behind Closed.
-  await expect(section.getByRole('tab', { name: /Pull requests/ })).toHaveAttribute('aria-selected', 'true');
+  // Your work first (#116): here, the review asked of octocat.
+  await expect(section.getByRole('tab', { name: /Your work/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    section.getByRole('region', { name: 'Review requests' }).getByTestId('github-work'),
+  ).toHaveText([/acme-org\/api#12.*Retry webhooks with back-off/]);
+
+  // Pull requests, open ones by latest activity; the merged one waits behind Closed.
+  await section.getByRole('tab', { name: /Pull requests/ }).click();
   await expect(rows(section)).toHaveText([
     /acme-org\/api#12.*Retry webhooks with back-off.*Your review/,
     /acme-org\/web#7.*Dark mode.*Draft/,
