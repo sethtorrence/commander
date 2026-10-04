@@ -124,12 +124,11 @@ test('Maximise maximises the window, and Restore restores it', async () => {
     window.evaluate(() => globalThis.window.commander.windowFrame().then((frame) => frame.maximised));
   expect(await maximised()).toBe(false);
 
-  // Pressed from the keyboard: Hyprland may undo a maximise right after a synthetic pointer click.
-  await group.getByRole('button', { name: 'Maximise' }).press('Enter');
+  await group.getByRole('button', { name: 'Maximise' }).click();
   await expect(group.getByRole('button', { name: 'Restore' })).toBeVisible();
   expect(await maximised()).toBe(true);
 
-  await group.getByRole('button', { name: 'Restore' }).press('Enter');
+  await group.getByRole('button', { name: 'Restore' }).click();
   await expect(group.getByRole('button', { name: 'Maximise' })).toBeVisible();
   expect(await maximised()).toBe(false);
 
