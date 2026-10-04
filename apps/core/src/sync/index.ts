@@ -185,6 +185,14 @@ export function setUpSync(
           if (parsed.data.endpoints.gmail) gmailUrl = parsed.data.endpoints.gmail;
           listed = parsed.data.accounts;
           engine.setAccounts(parsed.data.accounts);
+          // The User is a Person too, recognised from their Accounts.
+          try {
+            store.people.recogniseUser(
+              parsed.data.accounts.flatMap((account) => (account.own ? [account.own] : [])),
+            );
+          } catch (error) {
+            log(`Could not recognise the User among People: ${String(error)}`);
+          }
           accountsMayHaveChanged();
           return true;
         }

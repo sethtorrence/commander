@@ -3,6 +3,9 @@ import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useRef } from 'react';
 import { shortDate } from '../../frame/calendar';
 import { ItemWarning } from '../../links/ItemWarning';
+import { usePeople } from '../../people/context';
+import { PersonName } from '../../people/PersonName';
+import { type PeopleLookup, shownAs } from '../../people/people';
 import { ItemProject } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { Eyebrow, PaneEmpty, PanePart } from '../todos/detail/parts';
@@ -70,7 +73,12 @@ function dueDate(day: string): string {
   return shortDate(new Date(y ?? 0, (m ?? 1) - 1, d ?? 1));
 }
 
-function fieldValue(key: FieldKey, detail: LinearIssueDetail, mine: boolean): ReactNode {
+function fieldValue(
+  key: FieldKey,
+  detail: LinearIssueDetail,
+  mine: boolean,
+  people: PeopleLookup,
+): ReactNode {
   switch (key) {
     case 'state':
       return (
@@ -86,9 +94,11 @@ function fieldValue(key: FieldKey, detail: LinearIssueDetail, mine: boolean): Re
           {PRIORITY_NAMES[detail.priority] ?? PRIORITY_NAMES[0]}
         </span>
       );
-    case 'assignee':
+    case 'assignee': {
       if (!detail.assignee) return none;
-      return mine ? `You (${detail.assignee.name})` : detail.assignee.name;
+      const shown = shownAs(people, `linear:${detail.assignee.id}`, detail.assignee.name);
+      return <span title={shown.title}>{mine ? `You (${shown.name})` : shown.name}</span>;
+    }
     case 'team':
       return `${detail.team.name} (${detail.team.key})`;
     case 'linearProject':
@@ -249,6 +259,7 @@ export function IssueDetail({
   onOpenLink: (link: IssueLink) => void;
 }) {
   const { projects, archived } = useProjects();
+  const people = usePeople();
   const detail = issue?.detail;
   const pane = useRef<HTMLElement>(null);
   const backToPane = () => pane.current?.focus();
@@ -297,12 +308,18 @@ export function IssueDetail({
             </h2>
             <p className="m-0 font-sans text-[16px] leading-[1.3] font-light text-muted">
               Opened {whenShort(detail.createdAt)}
-              {detail.creator && ` by ${detail.creator.name}`} · updated {whenShort(detail.updatedAt)}
+              {detail.creator && (
+                <>
+                  {' by '}
+                  <PersonName handle={`linear:${detail.creator.id}`} fallback={detail.creator.name} />
+                </>
+              )}{' '}
+              · updated {whenShort(detail.updatedAt)}
             </p>
             <ItemWarning item={issue} variant="pane" className="mt-3" />
             <dl className="mt-3.5 mb-0 border-t border-line">
               {FIELDS.map((field) => {
-                const shown = fieldValue(field.key, detail, mine);
+                const shown = fieldValue(field.key, detail, mine, people);
                 return (
                   <Fact key={field.key} field={field.key} label={field.label}>
                     {editing && field.writable
@@ -342,9 +359,15 @@ export function IssueDetail({
                   {detail.comments.map((comment) => (
                     <li key={comment.id} className="border-b border-line2 px-3.5 py-2.5 last:border-b-0">
                       <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
-                        <span className="font-sans text-note font-semibold text-ink">
-                          {comment.author?.name ?? 'Linear'}
-                        </span>
+                        {comment.author ? (
+                          <PersonName
+                            className="font-sans text-note font-semibold text-ink"
+                            handle={`linear:${comment.author.id}`}
+                            fallback={comment.author.name}
+                          />
+                        ) : (
+                          <span className="font-sans text-note font-semibold text-ink">Linear</span>
+                        )}
                         <time
                           dateTime={new Date(comment.createdAt).toISOString()}
                           className="font-mono text-label-lg whitespace-nowrap text-muted tabular-nums"

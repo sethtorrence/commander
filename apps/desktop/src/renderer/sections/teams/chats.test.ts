@@ -1,5 +1,6 @@
-import type { ChatSetting, Item } from '@commander/domain';
+import type { ChatSetting, Item, Person } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
+import { lookupOf } from '../../people/people';
 import {
   type Chat,
   chatCounts,
@@ -185,6 +186,28 @@ describe('how a Chat reads', () => {
 
   it('names the people in it, the User last', () => {
     expect(peopleIn(launch, SAM.userId)).toBe('Priya Patel, Lee Chen and you');
+  });
+
+  it('names senders and members as their Person once Commander knows them', () => {
+    const priya: Person = {
+      id: 'person-priya',
+      name: 'Priya P.',
+      userName: 'Priya P.',
+      isUser: false,
+      handles: [
+        { handle: 'teams:u-priya', source: 'teams', name: 'Priya Patel' },
+        { handle: 'github:priya-p', source: 'github', name: null },
+      ],
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const people = lookupOf([priya]);
+    const [other] = toChats([unread], []) as [Chat];
+    expect(latestLine(other, SAM.userId, people)).toMatchObject({
+      sender: 'Priya P.',
+      title: 'Priya P. — Teams: Priya Patel · GitHub: @priya-p',
+    });
+    expect(peopleIn(launch, SAM.userId, people)).toBe('Priya P., Lee Chen and you');
   });
 
   it('groups messages by day, oldest first, the latest day last', () => {

@@ -9,8 +9,8 @@ import { z } from 'zod';
     one of their teams. It is tombstoned once the review is given or the request withdrawn.
   - `github-release`: a published release.
 
-  GitHub users are kept as handles (`github:<login>`, and email addresses where GitHub gives them)
-  until People are matched across Sources. Every Item's external id starts with its repo's node id
+  GitHub users are kept as handles (`github:<login>`, and email addresses where GitHub gives them),
+  which belong to People (people.ts). Every Item's external id starts with its repo's node id
   (`githubExternalId`), so unwatching a repo finds its Items.
 
   Repo health is not Items: per watched repo, its default branch, the head commit's check state and

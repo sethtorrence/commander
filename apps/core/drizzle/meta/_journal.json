@@ -218,6 +218,13 @@
       "when": 1791107854615,
       "tag": "0030_chat_waiting",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1791108529597,
+      "tag": "0031_people",
+      "breakpoints": true
     }
   ]
 }

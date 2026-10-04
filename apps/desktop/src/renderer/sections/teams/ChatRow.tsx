@@ -2,6 +2,7 @@ import type { ChatType } from '@commander/domain';
 import { cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
+import { usePeople } from '../../people/context';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { whenShort } from '../todos/when';
@@ -119,7 +120,7 @@ export function ChatRow({
   onOpen: () => void;
 }) {
   const row = useRef<HTMLLIElement>(null);
-  const latest = latestLine(chat, me);
+  const latest = latestLine(chat, me, usePeople());
   const unread = isUnread(chat);
   useEffect(() => {
     if (selected) row.current?.scrollIntoView?.({ block: 'nearest' });
@@ -187,7 +188,10 @@ export function ChatRow({
         >
           {latest ? (
             <>
-              <span className="font-semibold text-text">{latest.sender}:</span> {latest.text}
+              <span className="font-semibold text-text" title={latest.title}>
+                {latest.sender}:
+              </span>{' '}
+              {latest.text}
             </>
           ) : (
             <span className="text-faint">No messages yet</span>

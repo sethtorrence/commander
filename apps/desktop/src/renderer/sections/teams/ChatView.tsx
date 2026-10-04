@@ -2,6 +2,8 @@ import type { ActivityEntry, ChatMessage, ChatReply, OutgoingChange } from '@com
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
+import { usePeople } from '../../people/context';
+import { PersonName } from '../../people/PersonName';
 import { ItemBadge, ItemProject, waitingSuggestion } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { Eyebrow, PanePart } from '../todos/detail/parts';
@@ -87,7 +89,17 @@ function Message({
       )}
     >
       <div className="mb-1 flex items-baseline gap-2.5">
-        <span className="font-sans text-note font-semibold text-ink">{mine ? 'You' : message.from.name}</span>
+        {mine ? (
+          <span className="font-sans text-note font-semibold text-ink">You</span>
+        ) : message.from.userId ? (
+          <PersonName
+            className="font-sans text-note font-semibold text-ink"
+            handle={`teams:${message.from.userId}`}
+            fallback={message.from.name}
+          />
+        ) : (
+          <span className="font-sans text-note font-semibold text-ink">{message.from.name}</span>
+        )}
         {time}
         {message.deleted ? (
           <Mark title="Deleted in Teams">Deleted</Mark>
@@ -268,6 +280,7 @@ export function ChatView({
   ares?: ReactNode;
 }) {
   const { projects, archived, projectOf } = useProjects();
+  const people = usePeople();
   const project = chat ? projectOf(chat.filing) : undefined;
   const webUrl = chat && isWebAddress(chat.detail.webUrl) ? chat.detail.webUrl : null;
   const readFailed = outgoing.find((change) => change.field === 'read' && change.status === 'failed');
@@ -328,7 +341,7 @@ export function ChatView({
                 data-testid="chat-people"
                 className="m-0 font-sans text-[16px] leading-[1.3] font-light text-muted"
               >
-                {peopleIn(chat, me) || 'No one else'}
+                {peopleIn(chat, me, people) || 'No one else'}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 {waitingSuggestion(chat) && <ItemProject item={chat} />}

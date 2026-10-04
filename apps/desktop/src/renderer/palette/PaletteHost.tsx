@@ -4,6 +4,7 @@ import { toast, useAppearance } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { requestReveal } from '../frame/reveal';
 import { useNow } from '../frame/use-now';
+import { PEOPLE_SETTINGS } from '../people/PeopleSettings';
 import { useProjects } from '../projects/context';
 import { inFilter } from '../projects/filter';
 import { SECTIONS } from '../sections';
@@ -108,6 +109,10 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
         return onOpenSection('notes');
       case 'project':
         return openPage?.(action.projectId);
+      case 'person':
+        // Settings → People at the Person, until the People view (#122) gives them a page.
+        onOpenSettings();
+        return requestReveal(PEOPLE_SETTINGS, action.personId);
       case 'command':
         return action.command.run();
       case 'browser':

@@ -1,4 +1,4 @@
-import type { Item, Project, SearchHit, SearchResult } from '@commander/domain';
+import type { Item, Person, Project, SearchHit, SearchResult } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { readQuery } from './query';
 import { type PaletteContext, paletteGroups } from './rows';
@@ -207,6 +207,32 @@ describe('as the User types', () => {
 
   it('lists the Projects the Core matched', () => {
     expect(shape('long', { hits: [], projects: [project] })[0]).toEqual(['Projects', ['Longtail']]);
+  });
+
+  it('lists the People the Core matched as their own group, each opening at their Person', () => {
+    const priya: Person = {
+      id: 'person-priya',
+      name: 'Priya Patel',
+      userName: null,
+      isUser: false,
+      handles: [
+        { handle: 'linear:u-priya', source: 'linear', name: 'Priya Patel' },
+        { handle: 'github:priya-p', source: 'github', name: null },
+        { handle: 'priya@acme.io', source: 'email', name: null },
+      ],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const groups = paletteGroups(context('pri', { hits: [hit(issue)], projects: [], people: [priya] }));
+    expect(groups.find((group) => group.title === 'People')?.rows).toEqual([
+      {
+        key: 'person:person-priya',
+        tag: 'Person',
+        label: 'Priya Patel',
+        hint: 'Linear · GitHub · Email',
+        action: { type: 'person', personId: 'person-priya' },
+      },
+    ]);
   });
 
   it('offers Search in Linear when local results are thin, one row per workspace', () => {

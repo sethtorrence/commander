@@ -3,8 +3,8 @@ import { z } from 'zod';
 // The `chat` kind detail: what Teams sync keeps of each Chat (a one-to-one, group or meeting chat)
 // and its recent messages, as Teams reported them. Message text is plain text converted from Teams'
 // HTML (paragraphs, lists, links and @mentions kept, markup dropped): untrusted Source content, kept
-// as data only. People in a Chat are kept as they are (handles) until People are matched across
-// Sources. Files are links only; Commander never downloads them.
+// as data only. People in a Chat are kept as they are; the Item's handles belong to People
+// (people.ts). Files are links only; Commander never downloads them.
 
 const id = z.string().min(1);
 const timestamp = z.number().int().nonnegative();

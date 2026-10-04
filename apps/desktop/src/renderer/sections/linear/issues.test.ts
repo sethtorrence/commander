@@ -1,5 +1,6 @@
-import type { Filing, Item, SourceItem } from '@commander/domain';
+import type { Filing, Item, Person, SourceItem } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
+import { lookupOf } from '../../people/people';
 import {
   type AccountsById,
   filterOptions,
@@ -189,6 +190,40 @@ describe('the filters', () => {
       { value: 'none', label: 'No cycle', count: 0 },
       { value: CURRENT_CYCLE.id, label: 'ENG · Cycle 41', count: 1 },
       { value: NEXT_CYCLE.id, label: 'ENG · Cycle 42 · Polish', count: 1 },
+    ]);
+  });
+
+  it('offers People as assignees, so one choice covers a Person’s Linear users in every workspace', () => {
+    const priyaGlobex = { ...PRIYA, id: 'user-priya-globex', name: 'P. Patel' };
+    const across = toIssues([
+      item(issue({ identifier: 'ENG-1', assignee: PRIYA })),
+      item(issue({ identifier: 'GLX-1', assignee: priyaGlobex }), GLOBEX),
+      item(issue({ identifier: 'ENG-3', assignee: SAM })),
+    ]);
+    const priya: Person = {
+      id: 'person-priya',
+      name: 'Priya Patel',
+      userName: null,
+      isUser: false,
+      handles: [
+        { handle: `linear:${PRIYA.id}`, source: 'linear', name: 'Priya Patel' },
+        { handle: `linear:${priyaGlobex.id}`, source: 'linear', name: 'P. Patel' },
+        { handle: 'priya@acme.test', source: 'email', name: null },
+      ],
+      createdAt: NOW,
+      updatedAt: NOW,
+    };
+    const people = lookupOf([priya]);
+    const options = filterOptions(across, NO_FILTERS, NOW, me, people);
+    expect(options.assignee).toEqual([
+      { value: 'none', label: 'Unassigned', count: 0 },
+      { value: SAM.id, label: 'You', count: 1 },
+      { value: 'person:person-priya', label: 'Priya Patel', count: 2 },
+    ]);
+    const chosen = { ...NO_FILTERS, assignee: 'person:person-priya' };
+    expect(ids(across.filter((each) => inFilters(each, chosen, NOW, undefined, people)))).toEqual([
+      'ENG-1',
+      'GLX-1',
     ]);
   });
 

@@ -3,6 +3,7 @@ import type { AccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ItemChanges } from '../../item-store/changes';
+import { usePeople } from '../../people/context';
 import { type IssueSync, issueSync } from './editing';
 import {
   type AccountsById,
@@ -138,6 +139,8 @@ export function useLinear({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [history, setHistory] = useState<ActivityEntry[]>([]);
+  // People, so the assignee filter offers a Person once for all their Linear users.
+  const people = usePeople();
   const [links, setLinks] = useState<IssueLink[]>([]);
   const [version, setVersion] = useState(0);
   const undoable = useRef<number[]>([]);
@@ -210,22 +213,24 @@ export function useLinear({
   );
   const narrowed = useMemo(() => viewed.filter(include), [viewed, include]);
   const listed = useMemo(
-    () => narrowed.filter((issue) => inFilters(issue, filters, now)),
-    [narrowed, filters, now],
+    () => narrowed.filter((issue) => inFilters(issue, filters, now, undefined, people)),
+    [narrowed, filters, now, people],
   );
   const groups = useMemo(() => groupIssues(listed), [listed]);
   const options = useMemo(
-    () => filterOptions(narrowed, filters, now, accountsById),
-    [narrowed, filters, now, accountsById],
+    () => filterOptions(narrowed, filters, now, accountsById, people),
+    [narrowed, filters, now, accountsById, people],
   );
   const forProjectFilter = useMemo(
-    () => viewed.filter((issue) => isOpen(issue) && inFilters(issue, filters, now)),
-    [viewed, filters, now],
+    () => viewed.filter((issue) => isOpen(issue) && inFilters(issue, filters, now, undefined, people)),
+    [viewed, filters, now, people],
   );
   const viewCounts = useMemo(() => {
-    const counted = all.filter((issue) => isOpen(issue) && include(issue) && inFilters(issue, filters, now));
+    const counted = all.filter(
+      (issue) => isOpen(issue) && include(issue) && inFilters(issue, filters, now, undefined, people),
+    );
     return { all: counted.length, mine: counted.filter((issue) => isMine(issue, accountsById)).length };
-  }, [all, include, filters, now, accountsById]);
+  }, [all, include, filters, now, accountsById, people]);
   const assignedCount = useMemo(
     () => all.filter((issue) => isOpen(issue) && isMine(issue, accountsById)).length,
     [all, accountsById],
@@ -299,12 +304,12 @@ export function useLinear({
       // Not read yet (it synced since): read again, and let nothing hide it meanwhile.
       if (!issue) reload();
       if (!issue || !inView(issue, view, accountsById)) setViewState('all');
-      if (!issue || !inFilters(issue, filters, now)) setFilters(NO_FILTERS);
+      if (!issue || !inFilters(issue, filters, now, undefined, people)) setFilters(NO_FILTERS);
       if (!issue || !isOpen(issue)) setClosedShown(true);
       setSelectedId(itemId);
       setDetailOpen(true);
     },
-    [all, view, accountsById, filters, now, reload],
+    [all, view, accountsById, filters, now, reload, people],
   );
 
   const apply = useCallback(

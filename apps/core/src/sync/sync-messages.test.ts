@@ -106,6 +106,26 @@ describe('sync messages', () => {
     expect(lastStatus()).toMatchObject({ account: ACME, activity: 'idle', itemCount: 1, lastSyncedAt: T0 });
   });
 
+  it('recognises the User among People from the handles each Account names as theirs', () => {
+    sync.handle({
+      type: 'sync-accounts',
+      accounts: [
+        { id: ACME, source: 'linear', needsReconnect: false, own: { handles: ['linear:u-me'], name: 'Sam' } },
+        {
+          id: TEAMS,
+          source: 'teams',
+          needsReconnect: false,
+          own: { handles: ['teams:u-sam', 'sam@contoso.test'], name: 'Sam Rivera' },
+        },
+      ],
+      endpoints,
+    });
+    const me = store.people.list().filter((person) => person.isUser);
+    expect(me.map((person) => person.handles.map((each) => each.handle))).toEqual([
+      ['linear:u-me', 'teams:u-sam', 'sam@contoso.test'],
+    ]);
+  });
+
   it('runs Sync now and cadence changes', async () => {
     sync.handle(accounts());
     await vi.advanceTimersByTimeAsync(5 * 60_000);

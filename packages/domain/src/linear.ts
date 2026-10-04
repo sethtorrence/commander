@@ -3,7 +3,7 @@ import { z } from 'zod';
 // The `linear-issue` kind detail: what Linear sync keeps of each Linear issue, as Linear reported
 // it. Linear's own groupings (team, Linear project, labels, cycle) stay here as Source groupings
 // for Rules to match; they never file the issue into a Commander Project by themselves. Linear
-// users are kept as they are (handles) until People are matched across Sources.
+// users are kept as they are; the Item's handles (`linear:<id>`) belong to People (people.ts).
 
 const id = z.string().min(1);
 const timestamp = z.number().int().nonnegative();

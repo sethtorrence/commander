@@ -9,6 +9,7 @@ import {
 } from '@commander/ui';
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
+import { PeopleSettings } from '../people/PeopleSettings';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { RulesSettings } from '../rules/RulesSettings';
 import { DailyTemplateSettings } from '../sections/notes/DailyTemplateSettings';
@@ -58,7 +59,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
         title="Settings"
         subtitle={
           <>
-            <b>Appearance, Projects, start-up and security</b> · kept on this machine
+            <b>Appearance, Projects, People, start-up and security</b> · kept on this machine
           </>
         }
       />
@@ -99,6 +100,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
       <GitHubWatchPanel no="13" />
       <TeamsSettings no="14" shown={open} />
       <CalendarSettings no="15" />
+      <PeopleSettings no="16" />
     </Sheet>
   );
 }

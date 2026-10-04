@@ -5,6 +5,7 @@ import { githubIssueDetail, githubReleaseDetail, pullRequestDetail, reviewReques
 import { linearIssueDetail } from './linear';
 import { fieldSummary } from './logged-fields';
 import { meetingPrepDetail } from './meeting-prep';
+import { identity } from './people';
 import { chatDetail } from './teams';
 
 // Items: everything Commander tracks, in one shape (ADR 0001). A shared core plus
@@ -56,7 +57,8 @@ const timestamp = z.number().int().nonnegative();
 export const filing = z.object({ projectId: id, filedBy }).nullable();
 export type Filing = z.infer<typeof filing>;
 
-// People involved, by handle (email address, GitHub or Linear user) until Person matching lands.
+// People involved, by handle (an email address, or a Source's user: `linear:<id>`, `github:<login>`,
+// `teams:<id>`). Each handle belongs to a Person (people.ts), matched across Sources.
 export const people = z.array(z.string().min(1));
 
 // Where a Todo came from: one the User added, a suggestion from Ares the User accepted, a Linear
@@ -165,6 +167,9 @@ export const sourceItem = z.object({
   // An email's bodies, kept beside its Item (never in its detail or the activity log). Left out, the
   // bodies already kept stay as they are.
   body: emailBody.optional(),
+  // Who its people are, where the Source knows more than the detail holds (a GitHub login's email
+  // and name): Person matching reads these first (see people.ts). Not kept on the Item.
+  identities: z.array(identity).optional(),
 });
 export type SourceItem = z.input<typeof sourceItem>;
 

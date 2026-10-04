@@ -7,6 +7,7 @@ import {
   type GitHubRequestedReviewer,
   type GitHubReview,
   githubExternalId,
+  type Identity,
   isRevert,
   type PullRequestDetail,
   type ReviewRequestDetail,
@@ -34,7 +35,12 @@ const repository = z.object({
   owner: z.object({ login: z.string().min(1) }),
 });
 const actor = z
-  .object({ login: z.string().min(1), email: z.string().nullable().optional() })
+  .object({
+    login: z.string().min(1),
+    email: z.string().nullable().optional(),
+    // The GitHub user's profile name (a User's; bots and organisations have none).
+    name: z.string().nullable().optional(),
+  })
   .nullable()
   .optional()
   .default(null);
@@ -337,6 +343,23 @@ function peopleOf(
   return handles;
 }
 
+// Who the logins are, where GitHub said more than the login: the author's public email and profile
+// name, and the head commit's author email for the login it belongs to. Person matching reads these.
+function identitiesOf(
+  people: { login: string | null | undefined; email?: string | null | undefined; name?: string | null }[],
+): Identity[] {
+  const found: Identity[] = [];
+  for (const { login, email, name } of people) {
+    if (!login) continue;
+    const address = usableEmail(email) ? email.toLowerCase() : null;
+    if (!address && !name) continue;
+    found.push({ handle: `github:${login}`, email: address, name: name || null });
+  }
+  return found;
+}
+
+const withIdentities = (identities: Identity[]) => (identities.length ? { identities } : {});
+
 const teamName = (node: { slug?: string | undefined; organization?: { login: string } | undefined }) =>
   node.slug && node.organization ? `${node.organization.login}/${node.slug}` : null;
 
@@ -433,11 +456,16 @@ export function toPullRequestItem(node: PullRequestNode): SourceItem {
       ...(head?.author?.user ? [{ login: head.author.user.login, email: head.author.email }] : []),
     ],
   );
+  const identities = identitiesOf([
+    { login: detail.author, email: node.author?.email, name: node.author?.name },
+    ...(head?.author?.user ? [{ login: head.author.user.login, email: head.author.email }] : []),
+  ]);
   return {
     externalId: pullRequestId(repo.nodeId, node.number),
     kind: 'pull-request',
     title: node.title,
     people,
+    ...withIdentities(identities),
     status: detail.state === 'open' ? 'open' : 'done',
     detail,
   };
@@ -487,6 +515,9 @@ export function toIssueItem(node: IssueNode): SourceItem {
     people: peopleOf(
       [detail.author, ...detail.assignees],
       [{ login: detail.author, email: node.author?.email }],
+    ),
+    ...withIdentities(
+      identitiesOf([{ login: detail.author, email: node.author?.email, name: node.author?.name }]),
     ),
     status: detail.state === 'open' ? 'open' : 'done',
     detail,

@@ -1,4 +1,5 @@
 import type { ChatDetail, ChatMessage, ChatSetting, ChatType, Item } from '@commander/domain';
+import { NO_PEOPLE, type PeopleLookup, shownAs } from '../../people/people';
 
 /*
   The Teams Section's logic, apart from React: which Chats come first, the filters and their
@@ -88,20 +89,30 @@ const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
 export function latestLine(
   chat: Chat,
   me: string | null,
-): { sender: string; text: string; at: number } | null {
+  people: PeopleLookup = NO_PEOPLE,
+): { sender: string; title?: string; text: string; at: number } | null {
   const latest = chat.detail.messages.findLast((message) => message.from !== null && !message.deleted);
   if (!latest?.from) return null;
-  const sender = me !== null && latest.from.userId === me ? 'You' : latest.from.name;
-  return { sender, text: oneLine(latest.text) || '[attachment]', at: latest.createdAt };
+  const text = oneLine(latest.text) || '[attachment]';
+  if (me !== null && latest.from.userId === me) return { sender: 'You', text, at: latest.createdAt };
+  const shown = senderOf(latest.from, people);
+  return { sender: shown.name, ...(shown.person && { title: shown.title }), text, at: latest.createdAt };
+}
+
+/** Someone in a Chat as their Person (by their Microsoft user id), or as Teams names them. */
+export function senderOf(from: { userId: string | null; name: string }, people: PeopleLookup = NO_PEOPLE) {
+  return from.userId ? shownAs(people, `teams:${from.userId}`, from.name) : shownAs(people, '', from.name);
 }
 
 const andList = (names: string[]) =>
   names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 
 /** Who is in the Chat: "Priya Patel, Lee Chen and you". */
-export function peopleIn(chat: Chat, me: string | null): string {
+export function peopleIn(chat: Chat, me: string | null, people: PeopleLookup = NO_PEOPLE): string {
   const members = chat.detail.members;
-  const others = members.filter((member) => me === null || member.userId !== me).map((member) => member.name);
+  const others = members
+    .filter((member) => me === null || member.userId !== me)
+    .map((member) => (member.userId ? senderOf(member, people).name : member.name));
   const withMe = members.some((member) => me !== null && member.userId === me);
   return andList(withMe ? [...others, 'you'] : others);
 }

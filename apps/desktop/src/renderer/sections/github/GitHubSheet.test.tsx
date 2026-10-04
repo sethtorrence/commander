@@ -5,7 +5,10 @@ import type { AccountSyncStatus, GitHubAccountSummary } from '@commander/domain/
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
+import { PeopleProvider } from '../../people/context';
+import { peopleIn } from '../../people/people';
 import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
 import { ShortcutProvider, ShortcutScope, useActiveScopes, useShortcutList } from '../../shortcuts/react';
@@ -23,6 +26,7 @@ let store: ItemStore;
 let work: GitHubWork;
 let projects: ProjectsClient;
 let close: () => void;
+let client: ItemStoreClient;
 let discussionAsked: string[];
 let answer: (itemId: string) => Promise<GitHubDiscussionResponse>;
 const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
@@ -143,7 +147,7 @@ afterEach(() => {
 
 beforeEach(() => {
   const opened = openTestItemStore();
-  ({ store, close } = opened);
+  ({ store, close, client } = opened);
   discussionAsked = [];
   answer = async () => ({ ok: true, discussion: discussion() });
   work = githubWorkIn(opened.client, {
@@ -566,5 +570,71 @@ describe('the GitHub sheet', () => {
     renderSheet();
     await waitFor(() => expect(screen.getByText(/No GitHub Account connected yet/)).toBeTruthy());
     expect(screen.getByTestId('github-sync-status').textContent).toBe('No GitHub Account connected');
+  });
+});
+
+describe('People in the GitHub Section', () => {
+  it('shows authors, assignees and reviewers as their Person, with their handles on hover', async () => {
+    // Linear and GitHub both give Priya's address: @priya is Priya Patel, whom the User renamed.
+    store.saveFromSource({
+      source: 'linear',
+      account: 'linear:org-acme',
+      items: [
+        {
+          externalId: 'issue-1',
+          kind: 'linear-issue',
+          title: 'Fix the login loop',
+          people: ['linear:u-priya'],
+          identities: [{ handle: 'linear:u-priya', email: 'priya@acme.test', name: 'Priya Patel' }],
+        },
+      ],
+    });
+    store.saveFromSource({
+      source: 'github',
+      account: GITHUB,
+      items: [
+        {
+          ...issue({ number: 31, title: 'Docs', author: 'priya' }),
+          identities: [{ handle: 'github:priya', email: 'priya@acme.test' }],
+        },
+      ],
+    });
+    const priya = store.people.list().find((person) => person.name === 'Priya Patel');
+    store.people.change({ type: 'rename', personId: priya?.id ?? '', name: 'Priya P.' });
+    render(
+      <ShortcutProvider>
+        <PeopleProvider client={peopleIn(client)}>
+          <ProjectsProvider client={projects} storage={localStorage}>
+            <FrameControlsProvider value={controls}>
+              <SectionProvider place={place}>
+                <ShortcutScope scope="github" group="GitHub">
+                  <Active>
+                    <GitHubSheet work={work} accounts={accounts.client} />
+                  </Active>
+                </ShortcutScope>
+              </SectionProvider>
+            </FrameControlsProvider>
+          </ProjectsProvider>
+        </PeopleProvider>
+      </ShortcutProvider>,
+    );
+    const row = await waitFor(() => {
+      const found = screen
+        .getAllByTestId('github-work')
+        .find((each) => each.textContent?.includes('Retry webhooks with back-off'));
+      expect(found?.textContent).toContain('Priya P.');
+      return found as HTMLElement;
+    });
+    expect(within(row).getByText('Priya P.').closest('[title]')?.getAttribute('title')).toBe(
+      'Priya P. — Linear: Priya Patel · GitHub: @priya · Email: priya@acme.test',
+    );
+
+    fireEvent.click(screen.getByText('Retry webhooks with back-off'));
+    const pane = detail() as HTMLElement;
+    const field = (name: string) => pane.querySelector(`[data-field="${name}"] dd`)?.textContent;
+    expect(field('author')).toBe('Priya P.');
+    expect(field('assignees')).toBe('Priya P.');
+    // A reviewer known by nothing more than a login keeps it; a team stays a team.
+    expect(field('reviewers')).toBe('@omar · Approvedacme/platform · Asked');
   });
 });

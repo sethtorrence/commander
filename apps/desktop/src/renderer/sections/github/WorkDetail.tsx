@@ -2,6 +2,8 @@ import type { ActivityEntry, GitHubCheck, GitHubDiscussionEntry, GitHubIssueRef 
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
+import { usePeople } from '../../people/context';
+import { shownAs } from '../../people/people';
 import { ItemProject } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { describeIssueEntry } from '../linear/linear-issues';
@@ -65,7 +67,15 @@ const REVIEW_WORDS = {
   pending: 'Pending',
 } as const;
 
-const handle = (login: string | null) => (login ? `@${login}` : '@ghost');
+// A GitHub user as their Person: their name with every handle on hover ("You" for the User), or as
+// `@login` while their Person goes by nothing more than the login; `@ghost` for a deleted user.
+function Login({ login }: { login: string | null }) {
+  const people = usePeople();
+  if (!login) return <>@ghost</>;
+  const shown = shownAs(people, `github:${login}`, `@${login}`, { you: true });
+  const named = shown.person && shown.person.name.toLowerCase() !== login.toLowerCase();
+  return <span title={shown.title}>{named || shown.person?.isUser ? shown.name : `@${login}`}</span>;
+}
 
 function Fact({ field, label, children }: { field: string; label: string; children: ReactNode }) {
   return (
@@ -114,7 +124,7 @@ function PullFacts({ pull }: { pull: PullRequest }) {
             {reviewers.map((reviewer) => (
               <span key={reviewer.name}>
                 <span className="normal-case tracking-normal">
-                  {reviewer.team ? reviewer.name : handle(reviewer.name)}
+                  {reviewer.team ? reviewer.name : <Login login={reviewer.name} />}
                 </span>{' '}
                 <span className="font-medium text-muted">
                   · {reviewer.review ? REVIEW_WORDS[reviewer.review] : 'Asked'}
@@ -257,7 +267,9 @@ function EntryHead({ entry }: { entry: GitHubDiscussionEntry }) {
   return (
     <div className="mb-1.5 flex items-baseline justify-between gap-2.5">
       <span className="min-w-0 font-sans text-note text-ink">
-        <b className="font-semibold">{handle(entry.author)}</b>
+        <b className="font-semibold">
+          <Login login={entry.author} />
+        </b>
         {entry.kind === 'review' && entry.state && (
           <span className="text-muted"> · {REVIEW_WORDS[entry.state]}</span>
         )}
@@ -399,7 +411,7 @@ export function WorkDetail({
               {work.title}
             </h2>
             <p className="m-0 font-sans text-[16px] leading-[1.3] font-light text-muted">
-              Opened {whenShort(work.detail.createdAt)} by {handle(work.detail.author)} · updated{' '}
+              Opened {whenShort(work.detail.createdAt)} by <Login login={work.detail.author} /> · updated{' '}
               {whenShort(work.detail.updatedAt)}
             </p>
             <ItemWarning item={work} variant="pane" className="mt-3" />
@@ -410,7 +422,9 @@ export function WorkDetail({
                 </span>
               </Fact>
               <Fact field="author" label="Author">
-                <span className="normal-case tracking-normal">{handle(work.detail.author)}</span>
+                <span className="normal-case tracking-normal">
+                  <Login login={work.detail.author} />
+                </span>
               </Fact>
               <Fact field="state" label="State">
                 <span className="flex items-center justify-end gap-2">
@@ -426,7 +440,12 @@ export function WorkDetail({
               <Fact field="assignees" label="Assignees">
                 {work.detail.assignees.length ? (
                   <span className="normal-case tracking-normal">
-                    {work.detail.assignees.map(handle).join(', ')}
+                    {work.detail.assignees.map((login, index) => (
+                      <span key={login}>
+                        {index > 0 && ', '}
+                        <Login login={login} />
+                      </span>
+                    ))}
                   </span>
                 ) : (
                   none

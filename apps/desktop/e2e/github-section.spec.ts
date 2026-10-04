@@ -195,7 +195,7 @@ test('switch views, filter, open a pull request with its discussion, and file it
   await expect(pane.locator('[data-field="author"] dd')).toHaveText('@priya');
   await expect(pane.locator('[data-field="branches"] dd')).toHaveText('branch-12 → main');
   await expect(pane.locator('[data-field="labels"] dd')).toHaveText('enhancement');
-  await expect(pane.locator('[data-field="reviewers"] dd')).toHaveText('@omar · Commented@octocat · Asked');
+  await expect(pane.locator('[data-field="reviewers"] dd')).toHaveText('@omar · CommentedYou · Asked');
   await expect(pane.locator('[data-field="size"] dd')).toHaveText('+10 −2 · 1 file');
   const body = pane.getByTestId('github-body');
   await expect(body.locator('strong')).toHaveText('failed');
