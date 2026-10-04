@@ -23,6 +23,8 @@ import type {
   ProjectChangeAction,
   ProposalRecord,
   ProposalStatus,
+  QueuedAbout,
+  QueuedStatus,
   RuleTarget,
   RuleWhen,
   Source,
@@ -30,6 +32,9 @@ import type {
   SyncProblem,
   SyncTrigger,
   TodoOrigin,
+  UpdateGroup,
+  UpdateLine,
+  UpdateSection,
 } from '@commander/domain';
 import { sql } from 'drizzle-orm';
 import {
@@ -503,4 +508,49 @@ export const dashboardClears = sqliteTable('dashboard_clears', {
   band: text('band').$type<DashboardBand>().notNull(),
   at: integer('at').notNull(),
   fingerprint: text('fingerprint'),
+});
+
+// Ares's queue for the Update (#70): each line he wants to tell the User, until it is acted on
+// (done or dismissed), settled elsewhere (resolved) or stops mattering (expired). Queued lines with
+// the same merge key merge into one.
+export const updateQueue = sqliteTable(
+  'update_queue',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    group: text('group').$type<UpdateGroup>().notNull(),
+    mergeKey: text('merge_key').notNull(),
+    about: text('about', { mode: 'json' }).$type<QueuedAbout>().notNull(),
+    itemIds: text('item_ids', { mode: 'json' }).$type<string[]>().notNull(),
+    section: text('section').$type<UpdateSection>().notNull(),
+    importance: real('importance').notNull(),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    expiresAt: integer('expires_at'),
+    snoozedUntil: integer('snoozed_until'),
+    status: text('status').$type<QueuedStatus>().notNull(),
+    settledAt: integer('settled_at'),
+  },
+  (t) => [index('update_queue_status').on(t.status), index('update_queue_merge_key').on(t.mergeKey)],
+);
+
+// Every Update Ares gave, as he gave it, so the User can reopen the last one or any earlier one.
+export const updates = sqliteTable('updates', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  at: integer('at').notNull(),
+  awayMs: integer('away_ms').notNull(),
+  folded: integer('folded', { mode: 'boolean' }).notNull(),
+  voice: text('voice').$type<'ares' | 'template'>().notNull(),
+  lines: text('lines', { mode: 'json' }).$type<UpdateLine[]>().notNull(),
+});
+
+// Where the Updates stand, in a single row: how far the producers have looked (Ares's proposals and
+// the injection-warning entries), and the User's presence across restarts (when they last did
+// something, and the longest stretch without since the last Update).
+export const updateState = sqliteTable('update_state', {
+  id: integer('id').primaryKey(),
+  proposalsCursor: integer('proposals_cursor'),
+  warningsCursor: integer('warnings_cursor'),
+  lastInputAt: integer('last_input_at'),
+  longestGapMs: integer('longest_gap_ms').notNull().default(0),
+  lastGivenAt: integer('last_given_at'),
 });

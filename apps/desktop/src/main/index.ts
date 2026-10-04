@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { attachmentScheme, type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
-import { app, BrowserWindow, dialog, ipcMain, protocol, shell, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, protocol, shell, utilityProcess } from 'electron';
 import { setUpAccounts } from './accounts/set-up-accounts';
 import { attachmentSchemePrivileges, serveAttachment } from './attachments-protocol';
 import { createAutonomyChannels } from './autonomy-channel';
@@ -13,9 +13,12 @@ import { createItemStoreChannel } from './item-store-channel';
 import { launchSwitches } from './launch-switches';
 import { createMarkdownCopyChannel } from './markdown-copy-channel';
 import { setUpModels } from './models';
+import { alwaysHere, watchPresence } from './presence';
 import { revealWhenPainted } from './reveal';
 import { setUpSecretStorage } from './secret-storage';
 import type { Secrets } from './secrets';
+import type { CommanderTray } from './tray';
+import { createUpdatesChannel } from './updates-channel';
 import { windowWebPreferences } from './window-config';
 import {
   frameBehaviour,
@@ -69,6 +72,10 @@ async function diagnostics(): Promise<Diagnostics> {
 // only from the main process (Playwright's app.evaluate), never from the window.
 const testHooks = process.env.COMMANDER_TEST_HOOKS === '1';
 
+// The tray shows Ares's quiet count of what he has queued (the Core's word may come before the tray).
+let tray: CommanderTray | null = null;
+let queued = 0;
+
 function startCore(secrets: Secrets) {
   // The Core keeps the database in userData (which --user-data-dir overrides, e.g. in e2e tests).
   const core = utilityProcess.fork(join(__dirname, 'core.js'), [
@@ -100,6 +107,15 @@ function startCore(secrets: Secrets) {
     },
   });
   ipcMain.handle(ipc.markdownCopy, (_event, request: unknown) => markdownCopy.request(request));
+  // Ares's Updates: the window asks (`U`, the header button, the palette), the Core answers.
+  const updates = createUpdatesChannel((message) => core.postMessage(message));
+  ipcMain.handle(ipc.updates, (_event, request: unknown) => updates.request(request));
+  // Whether the User is at the machine, from powerMonitor, for "You're here / away" and having the
+  // Update ready on return.
+  // The end-to-end tests stand in for powerMonitor (their input never reaches the system).
+  const monitor = process.env.COMMANDER_TEST_PRESENCE === 'here' ? alwaysHere : powerMonitor;
+  const stopPresence = watchPresence({ monitor, send: (report) => core.postMessage(report) });
+  core.on('exit', stopPresence);
   if (testHooks) {
     Object.assign(globalThis, {
       commanderTestHooks: { autonomy: autonomy.test.request, setOnline: accounts.setOnline },
@@ -107,7 +123,7 @@ function startCore(secrets: Secrets) {
   }
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
-    if (markdownCopy.settle(raw)) return;
+    if (markdownCopy.settle(raw) || updates.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.
     if (models(raw)) return;
     if (accounts.fromCore(raw)) return;
@@ -115,6 +131,10 @@ function startCore(secrets: Secrets) {
     if (!parsed.ok) {
       console.warn('Rejected malformed message from core:', parsed.error);
       return;
+    }
+    if (parsed.message.type === 'ares-updates') {
+      queued = parsed.message.queued;
+      tray?.setQueued(queued);
     }
     window?.webContents.send(ipc.coreMessage, parsed.message);
   });
@@ -164,5 +184,15 @@ app.whenReady().then(() => {
   });
   if (process.env.ELECTRON_RENDERER_URL) window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else window.loadFile(join(__dirname, '../renderer/index.html'));
-  runInBackground(window, startCore(secrets));
+  tray = runInBackground(window, startCore(secrets));
+  tray.setQueued(queued);
+  if (testHooks) {
+    // The tray's menu, for the end-to-end tests: its labels, and choosing one.
+    const menu = (tray as CommanderTray).menu;
+    Object.assign((globalThis as { commanderTestHooks?: object }).commanderTestHooks ?? {}, {
+      trayLabels: () => menu().map((item) => item.label ?? null),
+      clickTray: (label: string) =>
+        (menu().find((item) => item.label === label)?.click as (() => void) | undefined)?.(),
+    });
+  }
 });

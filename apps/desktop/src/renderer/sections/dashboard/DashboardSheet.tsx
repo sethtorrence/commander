@@ -8,6 +8,7 @@ import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { SideCard } from '../../projects/page/SideCard';
 import { useShortcuts } from '../../shortcuts/react';
+import { AresQueueCard } from '../../updates/AresQueueCard';
 import { longDate, notePartNumber, weekday } from '../notes/days';
 import { SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { useDashboard } from './context';
@@ -31,7 +32,7 @@ export function useEmptyBandText(): string {
 /**
  * The Dashboard Section's sheet, after the prototype's FEED: "What needs you", the Project filter,
  * then the ranked list in bands (Now, Today, Waiting on others, FYI), driven from the keyboard, with
- * the side column holding today's Daily Note and the open Todos.
+ * the side column holding Ares's queue, today's Daily Note and the open Todos.
  */
 export function DashboardSheet() {
   const dashboard = useDashboard();
@@ -159,8 +160,12 @@ export function DashboardSheet() {
         </PickBadgeProvider>
         {badges.picker}
       </SectionSheet>
-      <aside className="relative col-span-2 min-w-0" aria-label="Today’s Daily Note and your Todos">
+      <aside
+        className="relative col-span-2 min-w-0"
+        aria-label="Ares’s queue, today’s Daily Note and your Todos"
+      >
         <div className="sticky top-(--body) mr-4 ml-3.5 flex max-h-[calc(100vh-var(--body))] flex-col gap-3.5 overflow-auto pt-3.5 pb-6 [scrollbar-width:none]">
+          <AresQueueCard />
           <DailyNoteCard day={today} active={active} openTodos={dashboard.openTodos} />
         </div>
       </aside>

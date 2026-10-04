@@ -8,7 +8,8 @@ import { type ElectronApplication, _electron as electron } from '@playwright/tes
 // so tests never collide with each other, with runs in other checkouts, or with a running
 // Commander; and an instance on a custom folder keeps its commander-show pid file inside it, so
 // tests never signal the real one. Pass the folder from an earlier launch to start Commander
-// again on the same data.
+// again on the same data. The tests' input never reaches the system, so Commander is told the User
+// is at the machine (COMMANDER_TEST_PRESENCE) rather than reading the machine's real idle time.
 export type LaunchedCommander = {
   app: ElectronApplication;
   userDataDir: string;
@@ -25,7 +26,7 @@ export async function launchCommander(
   const args = ['.', `--user-data-dir=${userDataDir}`, ...(options.args ?? [])];
   const app = await electron.launch({
     args,
-    env: options.env ? { ...(process.env as Record<string, string>), ...options.env } : undefined,
+    env: { ...(process.env as Record<string, string>), COMMANDER_TEST_PRESENCE: 'here', ...options.env },
   });
   return {
     app,

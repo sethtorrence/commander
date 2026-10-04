@@ -1,12 +1,12 @@
 import { homedir } from 'node:os';
 import { ipc } from '@commander/domain';
-import { app, type BrowserWindow, ipcMain, type Tray, type UtilityProcess } from 'electron';
+import { app, type BrowserWindow, ipcMain, type UtilityProcess } from 'electron';
 import { autostartPath, isAutostartEnabled, launchAtLoginCommand, setAutostart } from './autostart';
 import { keepInTray, stopCoreOnQuit } from './lifecycle';
 import { ownPidRecord, pidFilePath, removePidFile, writePidFile } from './pid-file';
 import { askWindowToSave } from './save-before-quit';
 import { DESKTOP_ENTRY, focusThroughHyprland, installSummon, summonWindow } from './summon';
-import { createTray } from './tray';
+import { type CommanderTray, createTray } from './tray';
 
 // Wires Commander's always-there behaviour into Electron: one instance, the window class
 // Hyprland binds and focuses by, close to tray, the tray itself, summoning (commander-show and
@@ -25,9 +25,10 @@ export function claimSingleInstance(): boolean {
 // Started at login, Commander waits in the tray.
 export const startsHidden = (argv: string[]) => argv.includes('--hidden');
 
-let tray: Tray | null = null; // Held so the tray icon isn't garbage-collected.
+let tray: CommanderTray | null = null; // Held so the tray icon isn't garbage-collected.
 
-export function runInBackground(window: BrowserWindow, core: UtilityProcess): void {
+// Returns the tray, for Ares's quiet count of what he has queued.
+export function runInBackground(window: BrowserWindow, core: UtilityProcess): CommanderTray {
   keepInTray(window, app);
   const saving = askWindowToSave({
     send: (channel, id) => window.webContents.send(channel, id),
@@ -42,8 +43,17 @@ export function runInBackground(window: BrowserWindow, core: UtilityProcess): vo
     summonWindow(window);
     focusThroughHyprland();
   };
-  tray = createTray({ onOpen: open, onQuit: () => app.quit() });
-  app.on('will-quit', () => tray?.destroy());
+  tray = createTray({
+    onOpen: open,
+    // The window opens and runs the Update Skill, as `U` would.
+    onAskForUpdate: () => {
+      open();
+      window.webContents.send(ipc.askForUpdate);
+    },
+    onQuit: () => app.quit(),
+  });
+  const shown = tray;
+  app.on('will-quit', () => shown.tray.destroy());
   installSummon({
     app,
     signals: process,
@@ -63,6 +73,7 @@ export function runInBackground(window: BrowserWindow, core: UtilityProcess): vo
   }
 
   registerStartAtLogin();
+  return shown;
 }
 
 function registerStartAtLogin(): void {

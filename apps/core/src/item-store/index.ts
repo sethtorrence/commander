@@ -108,6 +108,7 @@ import * as schema from './schema';
 import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
 import { editedState, queueChanges, undoneDetail, withQueuedOnTop } from './synced-changes';
+import { openUpdateStore, type UpdateStore } from './updates';
 
 export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
@@ -117,6 +118,7 @@ export type { InjectionWarningStore } from './injection-warnings';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
+export type { UpdateState, UpdateStore } from './updates';
 
 export type ItemStoreOptions = {
   // The SQLite database file. Created, and migrated to the latest schema, on open.
@@ -244,6 +246,8 @@ export type ItemStore = {
   projectRef(projectId: string): ProjectRef | null;
   // Settings → Notes → Markdown copy folder (markdown-copy-folder.ts), in the same database.
   markdownCopyFolder: MarkdownCopyFolderStore;
+  // Ares's queue for the Update, the Updates he gave, and where the producers stand (updates.ts).
+  updates: UpdateStore;
   close(): void;
 };
 
@@ -1538,6 +1542,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       readItem: (id) =>
         withDetails(db.select().from(schema.items).where(eq(schema.items.id, id)).all())[0] ?? null,
     }),
+    updates: openUpdateStore(db),
     injectionWarnings: {
       flag: sqlite.transaction((itemId: string) => warnings.flag(itemId)),
       since: (after) => warnings.since(after),

@@ -14,6 +14,21 @@ describe('the Ares status module', () => {
     expect(screen.getByTestId('ares-status').dataset.working).toBeUndefined();
   });
 
+  it('shows the quiet count, whether you’re here, and asks for an update only when pressed', () => {
+    let asked = 0;
+    const { rerender } = render(<AresStatus queued={3} presence="here" onAsk={() => asked++} />);
+    expect(screen.getByTestId('ares-queued').textContent).toBe('03');
+    expect(screen.getByTestId('ares-status').textContent).toContain('Ares has 3 things for you');
+    expect(screen.getByTestId('ares-presence').textContent).toBe('You’re here');
+    expect(asked).toBe(0);
+    screen.getByRole('button', { name: 'Ask for an update' }).click();
+    expect(asked).toBe(1);
+
+    rerender(<AresStatus queued={3} presence="away" awaySince={new Date(2026, 9, 3, 18, 40)} />);
+    expect(screen.getByTestId('ares-presence').textContent).toBe('Away · since 18:40');
+    expect(screen.getByTestId('ares-status').textContent).toContain('Ares is holding 3 things for you');
+  });
+
   it('says when Ares is working, and on what', () => {
     render(<AresStatus working={{ working: true, running: ['Suggest Todos'] }} />);
     expect(screen.getByTestId('ares-state').textContent).toBe('Working');

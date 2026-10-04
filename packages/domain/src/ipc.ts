@@ -32,6 +32,10 @@ export const ipc = {
   windowFrameChanged: 'window-frame-changed',
   // Settings → Notes → Markdown copy folder; see markdown-copy-messages.ts for the validated contract.
   markdownCopy: 'markdown-copy',
+  // Ares's Updates; see updates-messages.ts for the validated contract. Main tells the window when
+  // the tray's "Ask for an update" was chosen (askForUpdate), and the window runs the Update Skill.
+  updates: 'updates',
+  askForUpdate: 'ask-for-update',
 } as const;
 
 // What the header's window controls ask for.

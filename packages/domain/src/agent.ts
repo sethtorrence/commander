@@ -51,6 +51,7 @@ export type AgentJobsState = z.infer<typeof agentJobsState>;
 export const AGENT_JOB_NAMES: Record<string, string> = {
   'suggest-todos': 'Suggest Todos',
   'rank-dashboard': 'Rank the Dashboard',
+  'put-updates-together': 'Put Updates together',
 };
 
 export const jobDisplayName = (job: string): string => AGENT_JOB_NAMES[job] ?? job;

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { aresStatus } from './agent';
 import { markdownCopyStatus } from './markdown-copy-messages';
+import { updatesState } from './updates';
 
 // Messages the Core sends to the window.
 // Every message crossing a process seam is validated against this contract.
@@ -19,6 +20,8 @@ const aresStatusChanged = aresStatus.extend({ type: z.literal('ares-status') });
 // Ares's "Rank the Dashboard" job finished a run: the Dashboard reads its ranking again (his, or the
 // rules' when he couldn't rank it).
 const dashboardRanked = z.object({ type: z.literal('dashboard-ranked'), at: z.number().int().nonnegative() });
+// Ares's queue or the User's presence changed: the quiet count and "You're here / away" follow.
+const aresUpdates = updatesState.extend({ type: z.literal('ares-updates') });
 
 // Items were changed in the Item store (by the window, a sync, or Ares through the gate): open
 // views showing them catch up.
@@ -35,6 +38,7 @@ export const coreMessage = z.discriminatedUnion('type', [
   aresActivity,
   aresStatusChanged,
   dashboardRanked,
+  aresUpdates,
   itemsChanged,
   markdownCopyChanged,
 ]);
