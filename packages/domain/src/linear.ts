@@ -83,6 +83,8 @@ export const linearCatalogTeam = z.object({
   id,
   key: z.string(),
   name: z.string(),
+  // The state Linear gives the team's new issues, when known.
+  defaultStateId: id.nullable().optional(),
   // In the team's own order.
   states: z.array(z.object({ id, name: z.string(), type: z.string(), color: z.string() })),
   members: z.array(linearUser),

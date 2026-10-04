@@ -1,7 +1,8 @@
-import { cn, Kbd } from '@commander/ui';
+import { Button, cn, Kbd } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
+import { useCommands } from '../../palette/commands';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
@@ -15,6 +16,7 @@ import { IssueRow } from './IssueRow';
 import { isMine } from './issues';
 import { IssueFilterBar, ViewSwitch } from './ListControls';
 import { type IssueLink, type LinearAccountsClient, type LinearIssues, syncLine } from './linear-issues';
+import { useSendToLinear } from './SendToLinear';
 import { useLinear } from './use-linear';
 
 // Enter opens the selected issue, except on a control that Enter presses (a button, a link).
@@ -30,6 +32,7 @@ const KEYS: [ReactNode, string][] = [
   ],
   [<Kbd key="enter">↵</Kbd>, 'Open'],
   [<Kbd key="b">B</Kbd>, 'Project'],
+  [<Kbd key="c">C</Kbd>, 'New'],
   [<Kbd key="z">Ctrl Z</Kbd>, 'Undo'],
 ];
 
@@ -56,7 +59,7 @@ const and = (names: string[]) =>
  * Opening the Section asks every Linear Account to sync.
  */
 export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accounts: LinearAccountsClient }) {
-  const { filter, include } = useProjectFilter();
+  const { filter, include, filingForNew } = useProjectFilter();
   const { projects, openPage } = useProjects();
   const filtered = projects.find((project) => project.id === filter);
   const now = useNow(60_000);
@@ -65,6 +68,28 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
   const badges = useBadgePicker(state.apply, state.undo);
   const openSection = useOpenSection();
   const several = state.accounts.length > 1;
+
+  // New Linear issue: filed under the Project filter's Project, if one is chosen. It shows at once,
+  // selected, and goes to Linear in the background; undoable here.
+  const linearSend = useSendToLinear({
+    accounts,
+    send: async (draft) => {
+      const entry = await state.apply(() => issues.sendToLinear(draft));
+      return entry && { issueId: entry.itemId, undo: () => void state.undo(entry.id) };
+    },
+    onSent: ({ issueId }) => state.reveal(issueId),
+  });
+  const newIssue = () => linearSend.open(filingForNew ? { filing: filingForNew } : {}, 'New Linear issue');
+  useCommands([
+    {
+      label: 'New Linear issue',
+      keys: 'c',
+      run: () => {
+        openSection('linear');
+        newIssue();
+      },
+    },
+  ]);
 
   useTabCount(state.loaded ? state.assignedCount : null);
   useRefreshWhenOpened(state.refresh, state.reload);
@@ -139,7 +164,14 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
             ` · ${and(workspaces)} ${workspaces.length === 1 ? 'workspace' : 'workspaces'}`}
         </>
       }
-      aside={<Keys />}
+      aside={
+        <div className="flex items-end gap-5">
+          <Button onClick={newIssue}>
+            <Kbd>C</Kbd> New Linear issue
+          </Button>
+          <Keys />
+        </div>
+      }
       className="flex flex-col"
     >
       <SectionProjectFilter items={state.forProjectFilter} />
@@ -221,6 +253,7 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
         </PickBadgeProvider>
       )}
       {badges.picker}
+      {linearSend.dialog}
     </SectionSheet>
   );
 }

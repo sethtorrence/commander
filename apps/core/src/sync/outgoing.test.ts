@@ -233,6 +233,23 @@ describe('a change made in Commander', () => {
     expect(local().priority).toBe(1);
   });
 
+  it('names the Item it saved from the Source’s answer among what the refresh after it changed', async () => {
+    const reported: string[][] = [];
+    engine.onSynced(({ itemIds }) => reported.push(itemIds));
+    // Linear numbers the change its own way (as it numbers a new issue), which the next sync won't see.
+    linear.next(async (request) => {
+      const answer = await linear.applies(request);
+      const item = answer.item as SourceItem;
+      const numbered = { ...item, detail: { ...(item.detail as LinearIssueDetail), identifier: 'ENG-419' } };
+      linear.remote.set(request.externalId, numbered);
+      return { ...answer, item: numbered };
+    });
+    edit({ priority: 1 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(local().identifier).toBe('ENG-419');
+    expect(reported.at(-1)).toContain(issueId());
+  });
+
   it('sends one Item’s changes together, only the fields that changed', async () => {
     store.recordAll(
       [

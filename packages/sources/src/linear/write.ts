@@ -1,17 +1,34 @@
-import { COMMENT_FIELD, LABEL_FIELD, type LinearCatalog, type LinearComment } from '@commander/domain';
+import {
+  COMMENT_FIELD,
+  CREATE_FIELD,
+  DELETE_FIELD,
+  LABEL_FIELD,
+  type LinearCatalog,
+  type LinearComment,
+  linearIssueCreate,
+} from '@commander/domain';
 import { z } from 'zod';
-import type { FieldChange, Superseded, WriteRequest, WriteResult } from '../source';
+import {
+  type FieldChange,
+  type Superseded,
+  WriteRejected,
+  type WriteRequest,
+  type WriteResult,
+} from '../source';
 import type { LinearQuery } from './client';
 import {
   CATALOG,
   COMMENT_CREATE,
   COMMENT_DELETE,
   ISSUE_BY_ID,
+  ISSUE_CREATE,
+  ISSUE_DELETE,
   ISSUE_FOR_WRITE,
   ISSUE_HISTORY,
   ISSUE_UPDATE,
+  ISSUES,
 } from './graphql';
-import { allComments, issue, pageInfo, time, toItem, toUser, user } from './shapes';
+import { allComments, issue, issuesData, pageInfo, time, toItem, toUser, user } from './shapes';
 
 // Linear's write side (Two-way sync): one issue's queued changes at a time, as the User (their token).
 //
@@ -23,6 +40,11 @@ import { allComments, issue, pageInfo, time, toItem, toUser, user } from './shap
 //    `commentCreate` with Commander's own comment id (skipped when Linear already has it, so a retry
 //    never posts twice), and `commentDelete` for a comment the User took back.
 // 4. Return the issue as Linear has it afterwards, so it can be saved at once.
+//
+// Send to Linear: a queued `create` makes the issue first, with Commander's own id for it, unless
+// Linear already has that id (the answer to an earlier attempt was lost), so a retry never makes a
+// second issue; edits made to it meanwhile follow as above. A queued `delete` (an undone send)
+// deletes the issue if Linear has it, and nothing else is sent.
 
 // Linear's record of one change to an issue.
 const historyEntry = z.object({
@@ -53,6 +75,8 @@ const issueData = z.object({ issue });
 const issueUpdateData = z.object({ issueUpdate: z.object({ success: z.boolean(), issue: issue.nullish() }) });
 const commentCreateData = z.object({ commentCreate: z.object({ success: z.boolean() }) });
 const commentDeleteData = z.object({ commentDelete: z.object({ success: z.boolean() }) });
+const issueCreateData = z.object({ issueCreate: z.object({ success: z.boolean(), issue: issue.nullish() }) });
+const issueDeleteData = z.object({ issueDelete: z.object({ success: z.boolean() }) });
 
 // Enough history to judge any edit: Linear keeps every change, so a very old issue is cut off here.
 const MOST_HISTORY_PAGES = 10;
@@ -147,12 +171,70 @@ function inputFor(change: FieldChange): Record<string, unknown> {
   }
 }
 
-export async function writeIssue(
+const write = { write: true };
+
+// The issue with Commander's id for it, as Linear has it (archived and deleted ones too), if at all.
+async function issueWithId(query: LinearQuery, id: string): Promise<z.infer<typeof issue> | null> {
+  const data = await query(
+    ISSUES,
+    'CommanderIssues',
+    { filter: { id: { in: [id] } }, first: 1, after: null, includeArchived: true },
+    issuesData,
+    write,
+  );
+  return data.issues.nodes.find((node) => node.id === id) ?? null;
+}
+
+// Makes a new issue, or deletes an undone one. Returns the result when nothing more is to be sent.
+async function createOrDelete(
   query: LinearQuery,
   request: WriteRequest,
-): Promise<Omit<WriteResult, 'cost'>> {
-  const write = { write: true };
+): Promise<Omit<WriteResult, 'cost'> | null> {
   const id = request.externalId;
+  const create = request.changes.find((change) => change.field === CREATE_FIELD && change.value);
+  const remove = request.changes.some((change) => change.field === DELETE_FIELD && change.value);
+  if (remove) {
+    const found = await issueWithId(query, id);
+    if (found && !found.trashed)
+      await query(ISSUE_DELETE, 'CommanderIssueDelete', { id }, issueDeleteData, write);
+    return { item: null, superseded: [] };
+  }
+  if (!create) return null;
+  const input = linearIssueCreate.safeParse(create.value);
+  if (!input.success) throw new WriteRejected('Commander couldn’t make sense of this new issue.');
+  let made = await issueWithId(query, id);
+  if (made?.trashed) return { item: null, superseded: [] };
+  if (!made) {
+    const answer = await query(
+      ISSUE_CREATE,
+      'CommanderIssueCreate',
+      { input: { id, ...input.data } },
+      issueCreateData,
+      write,
+    );
+    made =
+      answer.issueCreate.issue ??
+      (await query(ISSUE_BY_ID, 'CommanderIssue', { id }, issueData, write)).issue;
+  }
+  const more = request.changes.some(
+    (change) => change.field !== CREATE_FIELD && change.field !== DELETE_FIELD,
+  );
+  return more ? null : { item: toItem(made, await allComments(query, made)), superseded: [] };
+}
+
+export async function writeIssue(
+  query: LinearQuery,
+  original: WriteRequest,
+): Promise<Omit<WriteResult, 'cost'>> {
+  const id = original.externalId;
+  const created = await createOrDelete(query, original);
+  if (created) return created;
+  const request: WriteRequest = {
+    ...original,
+    changes: original.changes.filter(
+      (change) => change.field !== CREATE_FIELD && change.field !== DELETE_FIELD,
+    ),
+  };
   const { issue: current } = await query(
     ISSUE_FOR_WRITE,
     'CommanderIssueForWrite',
@@ -236,6 +318,7 @@ const catalogData = z.object({
         id: z.string(),
         key: z.string(),
         name: z.string(),
+        defaultIssueState: z.object({ id: z.string() }).nullish(),
         states: z.object({
           nodes: z.array(
             z.object({
@@ -292,6 +375,7 @@ export async function fetchCatalog(query: LinearQuery, now: number): Promise<Lin
       id: team.id,
       key: team.key,
       name: team.name,
+      ...(team.defaultIssueState !== undefined && { defaultStateId: team.defaultIssueState?.id ?? null }),
       states: [...team.states.nodes]
         .sort((a, b) => a.position - b.position)
         .map(({ id, name, type, color }) => ({ id, name, type, color })),

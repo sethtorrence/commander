@@ -383,4 +383,64 @@ describe('Rules from the window', () => {
     });
     expect(store.query({ kinds: ['linear-issue'] })[0]?.filing).toBeNull();
   });
+
+  it('sends a Block to Linear as the User, says what changed, starts the dialog, and finds the Block’s issues', () => {
+    const ENG = { id: 'team-eng', key: 'ENG', name: 'Engineering' };
+    const todo = { id: 'state-todo', name: 'Todo', type: 'unstarted', color: '#e2e2e2' };
+    store.syncState.saveCatalog(
+      'linear:org-acme',
+      'linear',
+      {
+        kind: 'linear',
+        teams: [{ ...ENG, states: [todo], members: [], labels: [], cycles: [], linearProjects: [] }],
+      },
+      1,
+    );
+    const note = store.ensureDailyNote('2026-10-03', { by: { kind: 'user' } });
+    const blockId = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e04';
+    const detail = {
+      kind: 'block',
+      dailyNoteId: note.id,
+      parentId: null,
+      position: 'a0',
+      text: 'Write it',
+      folded: false,
+    };
+    ask(1, {
+      op: 'record',
+      action: { type: 'create', item: { id: blockId, kind: 'block', title: '', detail } },
+    });
+
+    expect(ask(2, { op: 'linear-send-prefill', from: blockId })).toMatchObject({
+      response: { ok: true, result: { title: 'Write it', projectId: null, team: null } },
+    });
+    const changed: string[][] = [];
+    const sent = answerItemStoreRequest(
+      store,
+      {
+        type: 'item-store-request',
+        id: 3,
+        request: {
+          op: 'send-to-linear',
+          draft: {
+            from: blockId,
+            account: 'linear:org-acme',
+            team: ENG,
+            title: 'Write it',
+            assignee: null,
+            state: todo,
+          },
+        },
+      },
+      (ids) => changed.push(ids),
+    );
+    expect(sent).toMatchObject({
+      response: { ok: true, result: [{ action: 'create', by: { kind: 'user' } }, { action: 'link' }] },
+    });
+    const issue = store.query({ kinds: ['linear-issue'] })[0];
+    expect(changed).toEqual([[issue?.id, blockId]]);
+    expect(ask(4, { op: 'block-issues', dailyNoteIds: [note.id] })).toMatchObject({
+      response: { ok: true, result: [{ blockId, issue: { id: issue?.id, kind: 'linear-issue' } }] },
+    });
+  });
 });

@@ -8,6 +8,7 @@ import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
+import { useSendToLinear } from '../linear/SendToLinear';
 import { SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { AddTodo } from './AddTodo';
 import { TodoDetail } from './detail/TodoDetail';
@@ -43,6 +44,18 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
   const issue = behind?.deletedAt === null ? linearIssueOf(behind) : null;
   const linearStates = useLinearStates(todos, issue);
   const [stateMenuOpen, setStateMenuOpen] = useState(false);
+  // Send to Linear: the selected Todo becomes a new issue, and is backed by it. Undone here too.
+  const linearSend = useSendToLinear({
+    send: async (draft) => {
+      const entry = await state.apply(() => todos.sendToLinear(draft));
+      return entry && { issueId: entry.itemId, undo: () => void undo(entry.id) };
+    },
+  });
+  const canSend = !!selected && !issue;
+  const sendToLinear = () => {
+    if (!selected || issue) return;
+    linearSend.open({ from: selected.id });
+  };
 
   useTabCount(state.list ? state.openCount : null);
   useRefreshWhenShown(refresh);
@@ -116,6 +129,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
       },
     },
     { label: 'Set Linear state…', when: () => !!issue, run: chooseLinearState },
+    { label: 'Send Todo to Linear', keys: 'l', when: () => canSend, run: sendToLinear },
   ]);
 
   useShortcuts([
@@ -203,6 +217,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
               onRename={(title) => state.rename(title)}
               onTick={() => tick()}
               onDelete={remove}
+              onSendToLinear={canSend ? sendToLinear : undefined}
               onClose={() => setDetailOpen(false)}
               onOpenLink={openLink}
             />
@@ -210,6 +225,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
         </div>
       </PickBadgeProvider>
       {badges.picker}
+      {linearSend.dialog}
     </SectionSheet>
   );
 }

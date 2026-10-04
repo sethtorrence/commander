@@ -6,6 +6,9 @@
 // catalog, labels as deltas), `commentCreate` with the caller's id (a second post with the same id
 // is refused, as Linear refuses a duplicate id), `commentDelete`, and what the pickers offer. Every
 // change records history entries with who made it and when, as Linear's IssueHistory does.
+//
+// Send to Linear: `issueCreate` with the caller's id (refused for an id it already has, as Linear
+// refuses a duplicate), numbered in its team, and `issueDelete`, which moves the issue to the trash.
 
 export type FakeUser = { id: string; name: string; displayName: string; email: string | null };
 
@@ -71,6 +74,8 @@ export type FakeHistoryEntry = {
 // What a team offers the pickers.
 export type FakeTeamCatalog = {
   team: { id: string; key: string; name: string };
+  // The state the team's new issues get (Linear's defaultIssueState), when set.
+  defaultStateId?: string;
   states: FakeIssue['state'][];
   members: FakeUser[];
   labels: FakeIssue['labels']['nodes'];
@@ -290,37 +295,39 @@ export function createFakeIssues(now: () => number = Date.now) {
     comments: page(issue.comments, commentsFirst, null),
   });
 
+  function add(workspaceId: string, input: FakeIssueInput): FakeIssue {
+    const id = input.id ?? `issue-${nextId++}`;
+    const at = stamp();
+    const issue: FakeIssue = {
+      id,
+      url: `https://linear.app/fake/issue/${input.identifier}`,
+      description: null,
+      priority: 0,
+      estimate: null,
+      dueDate: null,
+      createdAt: at,
+      updatedAt: at,
+      startedAt: null,
+      completedAt: null,
+      canceledAt: null,
+      archivedAt: null,
+      trashed: null,
+      team: ENG,
+      state: TODO,
+      assignee: null,
+      creator: null,
+      labels: { nodes: [] },
+      cycle: null,
+      project: null,
+      comments: [],
+      ...input,
+    };
+    byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), issue]);
+    return issue;
+  }
+
   return {
-    add(workspaceId: string, input: FakeIssueInput): FakeIssue {
-      const id = input.id ?? `issue-${nextId++}`;
-      const at = stamp();
-      const issue: FakeIssue = {
-        id,
-        url: `https://linear.app/fake/issue/${input.identifier}`,
-        description: null,
-        priority: 0,
-        estimate: null,
-        dueDate: null,
-        createdAt: at,
-        updatedAt: at,
-        startedAt: null,
-        completedAt: null,
-        canceledAt: null,
-        archivedAt: null,
-        trashed: null,
-        team: ENG,
-        state: TODO,
-        assignee: null,
-        creator: null,
-        labels: { nodes: [] },
-        cycle: null,
-        project: null,
-        comments: [],
-        ...input,
-      };
-      byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), issue]);
-      return issue;
-    },
+    add,
 
     // Changes an issue the way an edit in Linear does (by `by`, when given), moving its updatedAt on
     // and recording what changed in its history. `quietly` leaves updatedAt alone, so a sync asking
@@ -363,7 +370,8 @@ export function createFakeIssues(now: () => number = Date.now) {
         case 'CommanderIssues': {
           const visible = issues.filter(
             (issue) =>
-              (variables.includeArchived || !issue.archivedAt) && matches(issue, variables.filter as Filter),
+              (variables.includeArchived || (!issue.archivedAt && !issue.trashed)) &&
+              matches(issue, variables.filter as Filter),
           );
           const result = page(newestFirst(visible), first, cursor);
           return { issues: { ...result, nodes: result.nodes.map((issue) => node(issue)) } };
@@ -402,6 +410,45 @@ export function createFakeIssues(now: () => number = Date.now) {
           change(issue, changesFrom(teamOf(workspaceId, issue, viewer), issue, input), viewer);
           return { issueUpdate: { success: true, issue: node(issue) } };
         }
+        case 'CommanderIssueCreate': {
+          const input = (variables.input ?? {}) as Record<string, unknown> & { id?: string; teamId?: string };
+          const team = catalogOf(workspaceId, viewer).find((each) => each.team.id === input.teamId);
+          if (!team) throw new FakeLinearRefusal('Could not find referenced Team.');
+          const id = input.id ?? `issue-${nextId++}`;
+          if ([...byWorkspace.values()].some((all) => all.some((each) => each.id === id))) {
+            throw new FakeLinearRefusal('Entity already exists.');
+          }
+          const numbers = issues
+            .filter((each) => each.team.id === team.team.id)
+            .map((each) => Number(each.identifier.split('-').at(-1)) || 0);
+          const identifier = `${team.team.key}-${Math.max(0, ...numbers) + 1}`;
+          const state =
+            team.states.find((each) => each.id === (input.stateId ?? team.defaultStateId)) ?? team.states[0];
+          if (!state) throw new FakeLinearRefusal('An issue needs a workflow state.');
+          const blank = { labels: { nodes: [] } } as unknown as FakeIssue;
+          const changes = changesFrom(team, blank, {
+            ...('assigneeId' in input && { assigneeId: input.assigneeId }),
+            ...('priority' in input && { priority: input.priority }),
+          });
+          const issue = add(workspaceId, {
+            id,
+            identifier,
+            title: String(input.title ?? ''),
+            description: (input.description as string | null | undefined) ?? null,
+            url: `https://linear.app/fake/issue/${identifier}`,
+            team: team.team,
+            state,
+            creator: viewer,
+            ...changes,
+          });
+          return { issueCreate: { success: true, issue: node(issue) } };
+        }
+        case 'CommanderIssueDelete': {
+          const issue = issues.find((each) => each.id === variables.id);
+          if (!issue) throw new FakeLinearRefusal('Could not find referenced Issue.');
+          Object.assign(issue, { trashed: true, updatedAt: stamp() });
+          return { issueDelete: { success: true } };
+        }
         case 'CommanderCommentCreate': {
           const input = (variables.input ?? {}) as { id?: string; issueId?: string; body?: string };
           const issue = issues.find((each) => each.id === input.issueId);
@@ -427,6 +474,7 @@ export function createFakeIssues(now: () => number = Date.now) {
             teams: {
               nodes: teams.map((team) => ({
                 ...team.team,
+                defaultIssueState: team.defaultStateId ? { id: team.defaultStateId } : null,
                 states: { nodes: team.states.map((state, position) => ({ ...state, position })) },
                 members: { nodes: team.members.map((member) => ({ ...member, active: true })) },
                 cycles: { nodes: team.cycles.filter((cycle) => !gt || after(cycle.endsAt, gt)) },

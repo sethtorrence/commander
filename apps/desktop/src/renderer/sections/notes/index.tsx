@@ -17,12 +17,15 @@ import { requestReveal, useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { itemChangesFromCore } from '../../item-store/changes';
 import { useDayMentions } from '../../links/use-mentions';
+import { useCommands } from '../../palette/commands';
 import { BadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import type { ProjectFilter } from '../../projects/filter';
 import { useShortcuts } from '../../shortcuts/react';
+import { useSendToLinear } from '../linear/SendToLinear';
 import { type SectionDefinition, useHeaderSlot, useSection } from '../section';
+import { BlockIssuesContext, useBlockIssues } from './BlockLinear';
 import { useOutlineLinks } from './BlockLinks';
 import { effectiveFilings, filterView, noteCounts } from './block-projects';
 import { type DayMargin, type DayProjects, DaySheet } from './DaySheet';
@@ -295,13 +298,16 @@ function NotesSection() {
   const noteFilter = useNoteFilter(state.days, savedProjects);
   const { keep } = noteFilter;
   const blockPicker = useBlockPicker(notebook);
-  // A Block clicked into stays shown under the Project filter while the User writes in it.
+  // A Block clicked into stays shown under the Project filter while the User writes in it. The last
+  // one is what Send Block to Linear sends.
   const stream = useRef<HTMLDivElement>(null);
+  const lastBlock = useRef<string | null>(null);
   useEffect(() => {
     const element = stream.current;
     if (!element) return;
     const onFocus = (event: FocusEvent) => {
       const id = event.target instanceof HTMLElement ? event.target.dataset.blockId : undefined;
+      if (id) lastBlock.current = id;
       if (id) keep(id);
     };
     element.addEventListener('focusin', onFocus);
@@ -388,6 +394,31 @@ function NotesSection() {
     focusText(element, caret.offset);
   }, []);
   useLayoutEffect(applyFocus);
+  // Send to Linear from a Block (its margin menu, Ctrl+Shift+L, the palette): saved first, so the issue
+  // is made from the Block as it reads; its chip appears once it is sent.
+  const linearSend = useSendToLinear();
+  const openLinearSend = linearSend.open;
+  const sendToLinear = useCallback(
+    (blockId: string) => {
+      void notebook.flush().then(() => openLinearSend({ from: blockId }));
+    },
+    [notebook, openLinearSend],
+  );
+  useCommands([
+    {
+      label: 'Send Block to Linear',
+      keys: 'Ctrl+Shift+l',
+      inFields: true,
+      when: () =>
+        active &&
+        !!lastBlock.current &&
+        notebook.snapshot().days.some((d) => d.outline.has(lastBlock.current ?? '')),
+      run: () => lastBlock.current && sendToLinear(lastBlock.current),
+    },
+  ]);
+  const noteIds = useMemo(() => state.days.flatMap((d) => (d.noteId ? [d.noteId] : [])), [state.days]);
+  const blockIssues = useBlockIssues(window.commander.itemStore, noteIds, itemChangesFromCore);
+
   const outlineProjects = useMemo<OutlineProjects>(
     () => ({ list: projects, pick: blockPicker.open }),
     [projects, blockPicker.open],
@@ -404,8 +435,9 @@ function NotesSection() {
       },
       projects: outlineProjects,
       links,
+      sendToLinear: (_day, block) => sendToLinear(block.id),
     }),
-    [notebook, applyFocus, keep, outlineProjects, links],
+    [notebook, applyFocus, keep, outlineProjects, links, sendToLinear],
   );
 
   useShortcuts([
@@ -459,47 +491,50 @@ function NotesSection() {
   const sheets = Math.max(state.days.length, 1 + state.olderTotal);
   return (
     <OutlineContext.Provider value={controls}>
-      <div className="col-span-8 min-w-0" data-testid="section-notes">
-        <h1 className="sr-only">Daily Notes</h1>
-        {active &&
-          slot &&
-          createPortal(
-            <WeekStrip
-              week={week}
-              today={today}
-              active={reading}
-              written={written}
-              onWeek={setWeek}
-              onDay={(day) => void goToDay(day)}
-              onToday={() => {
-                setWeek(today);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-            />,
-            slot,
-          )}
-        <div className="n-stream" data-notes-stream="" ref={stream}>
-          <Dimensions today={today} ready={state.started} />
-          <div className="n-filter n-g8">
-            <SectionProjectFilter className="n-pflt" counts={noteFilter.counts} />
+      <BlockIssuesContext.Provider value={blockIssues}>
+        <div className="col-span-8 min-w-0" data-testid="section-notes">
+          <h1 className="sr-only">Daily Notes</h1>
+          {active &&
+            slot &&
+            createPortal(
+              <WeekStrip
+                week={week}
+                today={today}
+                active={reading}
+                written={written}
+                onWeek={setWeek}
+                onDay={(day) => void goToDay(day)}
+                onToday={() => {
+                  setWeek(today);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />,
+              slot,
+            )}
+          <div className="n-stream" data-notes-stream="" ref={stream}>
+            <Dimensions today={today} ready={state.started} />
+            <div className="n-filter n-g8">
+              <SectionProjectFilter className="n-pflt" counts={noteFilter.counts} />
+            </div>
+            {state.days.map((day, index) => (
+              <DaySheet
+                key={day.day}
+                state={day}
+                today={today}
+                sheet={[index + 1, sheets]}
+                projects={noteFilter.views.get(day.day)}
+                mentions={mentions.get(day.day)}
+                label={links.label}
+                onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
+                margin={marginOf(day.outline)}
+              />
+            ))}
+            <StreamEnd notebook={notebook} state={state} />
           </div>
-          {state.days.map((day, index) => (
-            <DaySheet
-              key={day.day}
-              state={day}
-              today={today}
-              sheet={[index + 1, sheets]}
-              projects={noteFilter.views.get(day.day)}
-              mentions={mentions.get(day.day)}
-              label={links.label}
-              onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
-              margin={marginOf(day.outline)}
-            />
-          ))}
-          <StreamEnd notebook={notebook} state={state} />
+          {blockPicker.picker}
+          {linearSend.dialog}
         </div>
-        {blockPicker.picker}
-      </div>
+      </BlockIssuesContext.Provider>
     </OutlineContext.Provider>
   );
 }

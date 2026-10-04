@@ -25,6 +25,7 @@ export function TodoDetail({
   onRename,
   onTick,
   onDelete,
+  onSendToLinear,
   onClose,
   onOpenLink,
 }: {
@@ -45,6 +46,8 @@ export function TodoDetail({
   onRename: (title: string) => void;
   onTick: () => void;
   onDelete: () => void;
+  /** Send to Linear, for a Todo no issue backs yet. */
+  onSendToLinear?: () => void;
   onClose: () => void;
   onOpenLink: (link: TodoLink) => void;
 }) {
@@ -61,6 +64,11 @@ export function TodoDetail({
               <Action keys="Del" onClick={onDelete}>
                 Delete
               </Action>
+              {onSendToLinear && (
+                <Action keys="L" onClick={onSendToLinear}>
+                  Send to Linear
+                </Action>
+              )}
             </>
           )}
           <span className="flex-1" />
