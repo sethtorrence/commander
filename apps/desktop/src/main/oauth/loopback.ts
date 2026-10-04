@@ -1,12 +1,16 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { SignInError } from './sign-in-error';
 
-// The browser half of the OAuth sign-in: a one-shot listener on the fixed, registered loopback
-// port. Linear redirects the browser to http://localhost:<port>/callback?code=…&state=…; the first
-// callback settles the sign-in and the listener closes, whatever the outcome.
+// The browser half of an OAuth sign-in: a one-shot listener on a loopback port. The Source
+// redirects the browser to http://localhost:<port><path>?code=…&state=…; the first reply settles the
+// sign-in and the listener closes, whatever the outcome. The port is either fixed (registered with
+// the Source, as Linear needs) or 0 for any free one (Microsoft ignores the port of http://localhost).
 
 export type RedirectListener = {
   redirectUri: string;
+  // The port listened on (the one the system picked, when asked for 0).
+  port: number;
   // Resolves with the authorization code, or rejects with a SignInError.
   result: Promise<{ code: string }>;
   // Cancels the sign-in (if still waiting) and stops listening.
@@ -18,6 +22,8 @@ export type RedirectListener = {
 const HOSTS = ['127.0.0.1', '::1'];
 // IPv6 may be switched off; then the IPv4 listener is enough.
 const IGNORABLE = new Set(['EADDRNOTAVAIL', 'EAFNOSUPPORT']);
+// A port the system picked for IPv4 may already be taken on IPv6: pick again, this many times.
+const PICK_ATTEMPTS = 5;
 
 const page = (heading: string, body: string) =>
   `<!doctype html><meta charset="utf-8"><title>Commander</title>` +
@@ -41,13 +47,52 @@ function listen(server: Server, port: number, host: string): Promise<boolean> {
   });
 }
 
+const closeAll = (servers: Server[]) =>
+  Promise.all(
+    servers.map(
+      (server) =>
+        new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        }),
+    ),
+  );
+
+// Listens on every loopback address on one port; for port 0, on one the system picks.
+async function listenOnLoopback(port: number, handle: Parameters<typeof createServer>[1]) {
+  for (let attempt = 1; ; attempt++) {
+    const servers: Server[] = [];
+    let chosen = port;
+    try {
+      for (const host of HOSTS) {
+        const server = createServer(handle);
+        if (!(await listen(server, chosen, host))) continue;
+        servers.push(server);
+        chosen = (server.address() as AddressInfo).port;
+      }
+      return { servers, port: chosen };
+    } catch (error) {
+      await closeAll(servers);
+      const inUse = (error as NodeJS.ErrnoException).code === 'EADDRINUSE';
+      if (!(port === 0 && inUse && attempt < PICK_ATTEMPTS)) throw error;
+    }
+  }
+}
+
 export async function listenForRedirect({
   port,
+  path = '/callback',
   state,
+  sourceName,
   timeoutMs = 5 * 60_000,
 }: {
+  // The registered port, or 0 for any free one.
   port: number;
+  // The redirect's path: '/callback' for Linear, '/' for a bare http://localhost:<port>.
+  path?: string;
   state: string;
+  // The Source, as the browser page and the messages name it ("Linear", "Microsoft").
+  sourceName: string;
   timeoutMs?: number;
 }): Promise<RedirectListener> {
   let settle!: { resolve: (value: { code: string }) => void; reject: (error: SignInError) => void };
@@ -58,19 +103,11 @@ export async function listenForRedirect({
   result.catch(() => {});
 
   let done = false;
-  const servers: Server[] = [];
+  let servers: Server[] = [];
   // Resolves once the port is free again.
   const stop = () => {
     clearTimeout(timer);
-    return Promise.all(
-      servers.map(
-        (server) =>
-          new Promise<void>((resolve) => {
-            server.close(() => resolve());
-            server.closeAllConnections();
-          }),
-      ),
-    );
+    return closeAll(servers);
   };
   // Settles only after the listener has closed, so the port is free for the next sign-in.
   const finish = (outcome: { code: string } | SignInError) => {
@@ -86,7 +123,10 @@ export async function listenForRedirect({
 
   const handle = (request: IncomingMessage, response: ServerResponse) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
-    if (url.pathname !== '/callback' || done) {
+    const params = url.searchParams;
+    // Anything but a reply to the sign-in (a favicon, a bare visit) is ignored.
+    const isReply = ['state', 'code', 'error'].some((name) => params.has(name));
+    if (url.pathname !== path || !isReply || done) {
       response.writeHead(404).end();
       return;
     }
@@ -94,7 +134,6 @@ export async function listenForRedirect({
       response
         .writeHead(status, { 'content-type': 'text/html; charset=utf-8', connection: 'close' })
         .end(page(heading, body));
-    const params = url.searchParams;
     if (params.get('state') !== state) {
       reply(400, 'Sign-in refused', 'This sign-in didn’t start in Commander, so it was refused. Try again.');
       finish(
@@ -107,21 +146,32 @@ export async function listenForRedirect({
     }
     const error = params.get('error');
     if (error) {
-      reply(200, 'Linear not connected', 'You can close this tab and return to Commander.');
+      reply(200, `${sourceName} not connected`, 'You can close this tab and return to Commander.');
+      const sourceError = { code: error, description: params.get('error_description') ?? '' };
       finish(
         error === 'access_denied'
-          ? new SignInError('declined', 'You declined access in Linear, so no Account was connected.')
-          : new SignInError('exchange-failed', `Linear refused the sign-in (${error}). Try again.`),
+          ? new SignInError(
+              'declined',
+              `You declined access in ${sourceName}, so no Account was connected.`,
+              {
+                sourceError,
+              },
+            )
+          : new SignInError('exchange-failed', `${sourceName} refused the sign-in (${error}). Try again.`, {
+              sourceError,
+            }),
       );
       return;
     }
     const code = params.get('code');
     if (!code) {
-      reply(400, 'Sign-in failed', 'Linear sent no authorization code. Try again from Commander.');
-      finish(new SignInError('exchange-failed', 'Linear sent no authorization code. Try connecting again.'));
+      reply(400, 'Sign-in failed', `${sourceName} sent no authorization code. Try again from Commander.`);
+      finish(
+        new SignInError('exchange-failed', `${sourceName} sent no authorization code. Try connecting again.`),
+      );
       return;
     }
-    reply(200, 'Linear approved', 'You can close this tab and return to Commander.');
+    reply(200, `${sourceName} approved`, 'You can close this tab and return to Commander.');
     finish({ code });
   };
 
@@ -129,25 +179,26 @@ export async function listenForRedirect({
     () => finish(new SignInError('timed-out', 'The sign-in timed out waiting for the browser. Try again.')),
     timeoutMs,
   );
+  let listening: { servers: Server[]; port: number };
   try {
-    for (const host of HOSTS) {
-      const server = createServer(handle);
-      if (await listen(server, port, host)) servers.push(server);
-    }
+    listening = await listenOnLoopback(port, handle);
   } catch (error) {
     done = true;
-    void stop();
+    clearTimeout(timer);
     const code = (error as NodeJS.ErrnoException).code;
     throw code === 'EADDRINUSE'
       ? new SignInError(
           'port-in-use',
-          `Commander couldn't listen for Linear's reply because port ${port} is in use by another program. Close it and try again.`,
+          `Commander couldn't listen for ${sourceName}'s reply because port ${port} is in use by another program. Close it and try again.`,
         )
       : error;
   }
+  servers = listening.servers;
 
   return {
-    redirectUri: `http://localhost:${port}/callback`,
+    // A bare http://localhost:<port> carries no path: Entra matches the registered one exactly.
+    redirectUri: `http://localhost:${listening.port}${path === '/' ? '' : path}`,
+    port: listening.port,
     result,
     close: () => finish(new SignInError('cancelled', 'The sign-in was cancelled.')),
   };

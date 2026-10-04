@@ -9,7 +9,7 @@ import {
   type Source,
 } from '@commander/domain';
 import { z } from 'zod';
-import { type AccessToken, AccessTokenError } from '../linear/linear-accounts';
+import { type AccessToken, AccessTokenError } from './source-accounts';
 
 type Pending = { resolve: (removed: number) => void; reject: (error: Error) => void; timer: NodeJS.Timeout };
 

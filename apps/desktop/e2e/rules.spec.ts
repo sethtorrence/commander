@@ -67,7 +67,7 @@ test('create a Rule, preview and accept re-filing, see the Badges change, undo; 
   await openSettings(window);
   const accounts = window.getByTestId('accounts-panel');
   await accounts.getByLabel('Linear personal API key').fill(API_KEY);
-  await accounts.getByRole('button', { name: 'Connect' }).click();
+  await accounts.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(accounts.getByTestId('account-synced')).toHaveText(/3 issues/);
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Titanlink');

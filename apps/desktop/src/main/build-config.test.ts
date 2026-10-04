@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { linearConfig, parseBuildConfig } from './build-config';
+import { linearConfig, microsoftConfig, parseBuildConfig } from './build-config';
 
 const repoRoot = join(import.meta.dirname, '../../../..');
 
@@ -14,8 +14,31 @@ describe('the build config', () => {
   });
 
   it('reads a client ID and port', () => {
-    expect(parseBuildConfig({ linear: { clientId: 'abc123', redirectPort: 48613 } })).toEqual({
-      linear: { clientId: 'abc123', redirectPort: 48613 },
+    expect(parseBuildConfig({ linear: { clientId: 'abc123', redirectPort: 48613 } }).linear).toEqual({
+      clientId: 'abc123',
+      redirectPort: 48613,
+    });
+  });
+
+  it('commits no Microsoft app either, so a fresh checkout can’t connect Teams', () => {
+    const example = parseBuildConfig(JSON.parse(readFileSync(join(repoRoot, 'config/example.json'), 'utf8')));
+
+    expect(example.microsoft).toEqual({ clientId: null, tenantId: null });
+  });
+
+  it('reads Commander’s Microsoft app: its client ID and its tenant', () => {
+    const build = parseBuildConfig({
+      linear: { clientId: null, redirectPort: 48613 },
+      microsoft: { clientId: ' app-id ', tenantId: 'tenant-id' },
+    });
+
+    expect(build.microsoft).toEqual({ clientId: 'app-id', tenantId: 'tenant-id' });
+  });
+
+  it('keeps reading a config from before Teams, which has no Microsoft app', () => {
+    expect(parseBuildConfig({ linear: { clientId: 'abc123', redirectPort: 48613 } }).microsoft).toEqual({
+      clientId: null,
+      tenantId: null,
     });
   });
 
@@ -30,7 +53,10 @@ describe('the build config', () => {
 });
 
 describe('the Linear sign-in settings', () => {
-  const build = { linear: { clientId: 'abc123', redirectPort: 48613 } };
+  const build = {
+    linear: { clientId: 'abc123', redirectPort: 48613 },
+    microsoft: { clientId: null, tenantId: null },
+  };
 
   it('use Linear’s real endpoints with the build’s client ID and port', () => {
     expect(linearConfig(build, {})).toEqual({
@@ -64,6 +90,46 @@ describe('the Linear sign-in settings', () => {
     };
 
     expect(() => linearConfig(build, { COMMANDER_TEST_LINEAR: JSON.stringify(elsewhere) })).toThrow(
+      /loopback/,
+    );
+  });
+});
+
+describe('the Microsoft sign-in settings', () => {
+  const build = {
+    linear: { clientId: null, redirectPort: 48613 },
+    microsoft: { clientId: 'app-id', tenantId: 'tenant-id' },
+  };
+
+  it('use Microsoft’s real identity platform and Graph with the build’s app', () => {
+    expect(microsoftConfig(build, {})).toEqual({
+      clientId: 'app-id',
+      tenantId: 'tenant-id',
+      loginUrl: 'https://login.microsoftonline.com',
+      graphUrl: 'https://graph.microsoft.com/v1.0',
+    });
+  });
+
+  it('can point at a fake Microsoft on this machine, for the end-to-end tests', () => {
+    const fake = {
+      clientId: 'fake-app',
+      tenantId: 'fake-tenant',
+      loginUrl: 'http://127.0.0.1:50000',
+      graphUrl: 'http://[::1]:50000/v1.0',
+    };
+
+    expect(microsoftConfig(build, { COMMANDER_TEST_MICROSOFT: JSON.stringify(fake) })).toEqual(fake);
+  });
+
+  it('never lets that override send sign-ins anywhere but this machine', () => {
+    const elsewhere = {
+      clientId: 'x',
+      tenantId: 'y',
+      loginUrl: 'https://login.microsoftonline.com',
+      graphUrl: 'http://127.0.0.1:50000/v1.0',
+    };
+
+    expect(() => microsoftConfig(build, { COMMANDER_TEST_MICROSOFT: JSON.stringify(elsewhere) })).toThrow(
       /loopback/,
     );
   });

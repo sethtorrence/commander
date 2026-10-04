@@ -89,11 +89,11 @@ test('with no OAuth app in the build, an API key Account connects, survives a re
 
   // A wrong key is refused, with the reason.
   await panel.getByLabel('Linear personal API key').fill('lin_api_typo');
-  await panel.getByRole('button', { name: 'Connect' }).click();
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(panel.getByTestId('accounts-error')).toContainText('didn’t accept that API key');
 
   await panel.getByLabel('Linear personal API key').fill('lin_api_e2e_acme_key');
-  await panel.getByRole('button', { name: 'Connect' }).click();
+  await panel.getByRole('button', { name: 'Connect', exact: true }).click();
   const account = panel.getByTestId('account');
   await expect(panel.getByTestId('account-name')).toHaveText(['Acme']);
   await expect(account.getByTestId('account-status')).toHaveText('Connected');

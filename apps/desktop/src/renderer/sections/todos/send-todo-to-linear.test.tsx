@@ -55,7 +55,10 @@ beforeEach(() => {
   Object.assign(window, {
     commander: {
       itemStore: opened.client,
-      accounts: async () => ({ ok: true, state: { accounts: [acme], linearOAuth: false } }),
+      accounts: async () => ({
+        ok: true,
+        state: { accounts: [acme], sources: [{ source: 'linear', oauth: false, apiKey: true }] },
+      }),
       onAccountsChanged: () => () => {},
     },
   });

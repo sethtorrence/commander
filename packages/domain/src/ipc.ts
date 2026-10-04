@@ -53,21 +53,45 @@ export type ModelKeyStatus = { saved: boolean };
 export type SaveModelKeyResult = { ok: true } | { ok: false; error: string };
 
 // Accounts, as the window sees them: never a token or an API key.
+// The Sources the User can connect Accounts to so far (see account-messages.ts).
+export type AccountSource = 'linear' | 'teams';
 export type AccountMethod = 'oauth' | 'api-key';
 // 'needs-reconnect': its sign-in failed for good (revoked, or a refresh past the replay window).
 export type AccountStatus = 'connected' | 'needs-reconnect';
-export type AccountSummary = {
+type AccountSummaryBase = {
   id: string;
-  source: 'linear';
+  // What the User sees: a Linear workspace's name; "Teams · <user principal name>".
   name: string;
-  urlKey: string;
   method: AccountMethod;
   status: AccountStatus;
-  // Who the User is in the Account (their Linear user), for "assigned to me"; null until known.
+  // Who the User is in the Account (their Linear user; their Teams user), for "assigned to me" and
+  // "mentions me"; null until known.
   user: { id: string; name: string } | null;
   // Where the Account's syncing stands; null until the Core first reports it.
   sync: AccountSyncStatus | null;
 };
+export type LinearAccountSummary = AccountSummaryBase & {
+  source: 'linear';
+  // The workspace's URL key (linear.app/<urlKey>).
+  urlKey: string;
+};
+export type TeamsAccountSummary = AccountSummaryBase & {
+  source: 'teams';
+  // The work account signed in with (its user principal name, usually its email address).
+  userPrincipalName: string;
+};
+export type AccountSummary = LinearAccountSummary | TeamsAccountSummary;
+// How this build can connect each Source's Accounts.
+export type SourceSignIn = {
+  source: AccountSource;
+  // Through the browser: this build has the Source's app registration (in config/local.json).
+  oauth: boolean;
+  // With a personal API key instead (Linear only).
+  apiKey: boolean;
+};
+// The Source's organisation needs an administrator to approve Commander before the User can sign
+// in: which permissions to approve, and the organisation's admin consent page for Commander's app.
+export type AdminConsentNeeded = { permissions: string[]; url: string };
 // An Account's sync, as the Core reports it (validated in sync-messages.ts).
 export type AccountSyncStatus = {
   account: string;
@@ -84,14 +108,15 @@ export type AccountSyncStatus = {
 };
 export type AccountsState = {
   accounts: AccountSummary[];
-  // Whether this build has a Linear OAuth app configured; without one only API keys are offered.
-  linearOAuth: boolean;
+  // Each Source's ways of connecting in this build, in the order Settings → Accounts shows them.
+  sources: SourceSignIn[];
 };
 export type AccountsRequest =
   | { op: 'list' }
-  // `reconnect` names the Account being reconnected: the sign-in must be for its workspace.
-  | { op: 'connect-linear'; method: 'oauth'; reconnect?: string }
-  | { op: 'connect-linear'; method: 'api-key'; apiKey: string; reconnect?: string }
+  // `reconnect` names the Account being reconnected: the sign-in must be for the same identity
+  // (Linear: its workspace; Teams: its user).
+  | { op: 'connect'; source: AccountSource; method: 'oauth'; reconnect?: string }
+  | { op: 'connect'; source: 'linear'; method: 'api-key'; apiKey: string; reconnect?: string }
   | { op: 'cancel-sign-in' }
   | { op: 'remove'; accountId: string }
   // Syncs the Account at once (Sync now; Sections call it when they open).
@@ -100,7 +125,15 @@ export type AccountsRequest =
   | { op: 'set-sync-cadence'; accountId: string; minutes: number };
 export type AccountsResponse =
   | { ok: true; state: AccountsState }
-  | { ok: false; error: string; state: AccountsState };
+  // `source`: the Source the failure is about, when it is about one. `adminConsent`: the sign-in
+  // needs an administrator's approval first.
+  | {
+      ok: false;
+      error: string;
+      source?: AccountSource;
+      adminConsent?: AdminConsentNeeded;
+      state: AccountsState;
+    };
 
 // How the window reaches the screen. 'xwayland' means a Wayland session fell back to X11.
 export type DisplayServer = 'wayland' | 'xwayland' | 'x11' | 'other';

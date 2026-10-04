@@ -1,21 +1,34 @@
 import { z } from 'zod';
-import type { AccountsRequest } from './ipc';
-import { source } from './items';
+import type { AccountSource, AccountsRequest } from './ipc';
+import { type Source, source } from './items';
 
 // Accounts across the process seams. Tokens and API keys live in the main process (the keyring);
 // the window only ever sees AccountSummary, and the Core borrows access tokens, in memory only.
 
+// The Sources the User can connect Accounts to so far; the others follow (GitHub next).
+export const accountSources = ['linear', 'teams'] as const satisfies readonly Source[];
+export const accountSource = z.enum(accountSources);
+// The zod-free AccountSource type in ipc.ts must match.
+const _sourceMatches: [AccountSource] extends [z.infer<typeof accountSource>]
+  ? [z.infer<typeof accountSource>] extends [AccountSource]
+    ? true
+    : never
+  : never = true;
+void _sourceMatches;
+
 // Window → main process: Settings → Accounts. An API key passes this way once, to be checked and
-// stored; nothing secret ever comes back.
+// stored; nothing secret ever comes back. Only Linear takes API keys.
 export const accountsRequest = z.union([
   z.object({ op: z.literal('list') }),
   z.object({
-    op: z.literal('connect-linear'),
+    op: z.literal('connect'),
+    source: accountSource,
     method: z.literal('oauth'),
     reconnect: z.string().min(1).optional(),
   }),
   z.object({
-    op: z.literal('connect-linear'),
+    op: z.literal('connect'),
+    source: z.literal('linear'),
     method: z.literal('api-key'),
     apiKey: z.string().max(500),
     reconnect: z.string().min(1).optional(),
