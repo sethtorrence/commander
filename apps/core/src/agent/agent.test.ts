@@ -198,4 +198,55 @@ describe('the Agent', () => {
     await wait(5_000);
     expect(rankCalls()).toHaveLength(2);
   });
+
+  it('plans meeting prep again after each calendar sync: a meeting synced 20 minutes ahead is prepared at once', async () => {
+    const prepares = () =>
+      calls.filter((call) => call.messages[0]?.content.includes('prepare the User for a meeting'));
+    const start = clock + 20 * 60_000;
+    store.saveFromSource({
+      source: 'google-calendar',
+      account: 'google:1',
+      items: [
+        {
+          externalId: 'sync',
+          kind: 'event',
+          title: '1:1 with Priya',
+          detail: {
+            kind: 'event',
+            calendar: { id: 'primary', name: 'Primary', colour: '#9fe1e7' },
+            accountEmail: 'alex@acme.test',
+            start: { at: start, timeZone: null, date: null },
+            end: { at: start + 30 * 60_000, timeZone: null, date: null },
+            allDay: false,
+            location: null,
+            description: null,
+            organiser: { email: 'alex@acme.test', name: null, self: true },
+            attendees: [
+              {
+                email: 'priya@acme.test',
+                name: 'Priya',
+                self: false,
+                response: 'accepted',
+                organiser: false,
+                optional: false,
+                resource: false,
+              },
+            ],
+            myResponse: 'accepted',
+            meetingUrl: null,
+            busy: true,
+            private: false,
+            seriesId: null,
+            webUrl: null,
+            createdByCommander: null,
+          },
+        },
+      ],
+    });
+    await wait(0);
+    expect(prepares()).toHaveLength(0);
+    agent.synced({ source: 'google-calendar', account: 'google:1', outcome: 'synced', itemIds: [] });
+    await wait(0);
+    expect(prepares()).toHaveLength(1);
+  });
 });

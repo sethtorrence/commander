@@ -50,7 +50,7 @@ function answerWindow(gate: Gate, raw: unknown, jobs?: JobsForWindow, filing?: F
       case 'set-job-enabled':
         return { jobs: runner().setEnabled(request.job, request.enabled), status: runner().status() };
       case 'run-job':
-        runner().run(request.job);
+        runner().run(request.job, request.itemIds);
         return { jobs: runner().jobs(), status: runner().status() };
       case 'settings':
         return { settings: gate.settings(), actions: gate.actions() };

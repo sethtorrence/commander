@@ -11,6 +11,7 @@ import type { KnownSecrets } from '../safety/known-secrets';
 import type { SyncedEvent } from '../sync';
 import { fileIntoProjectsJob } from './file-into-projects';
 import { createFiling, type Filing } from './filing';
+import { prepareMeetingsJob } from './prepare-meetings';
 import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
 import { createSeriesFiling } from './series-filing';
@@ -69,6 +70,11 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       rankDashboardJob(itemStore, { now }),
       spotStuckLinearJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}), me: options.me }),
       fileIntoProjectsJob(itemStore, { now }),
+      prepareMeetingsJob(itemStore, {
+        now,
+        enqueue: options.enqueue ?? (() => {}),
+        onItemsChanged: options.onItemsChanged,
+      }),
     ],
     client: options.client,
     gate: options.gate,
@@ -124,6 +130,8 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   // Anything the User wrote while Commander was closed (or before it last ran): once the pause is
   // up, the jobs that follow typing look at what changed since their last run.
   runner.trigger({ kind: 'typing', itemIds: [] });
+  // The meetings ahead, for the jobs that run before them (meeting prep).
+  runner.replan();
 
   return {
     runner,
@@ -147,6 +155,8 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     synced({ source, account, itemIds }) {
       dismissStale();
       runner.trigger({ kind: 'source-sync', source, account });
+      // A calendar sync may have moved, added or cancelled meetings: the times before them follow.
+      if (source === 'google-calendar' || source === 'outlook-calendar') runner.replan();
       // What a sync brought (new and changed Items) is for Ares to file.
       if (itemIds.length) runner.trigger({ kind: 'items-arrived', itemIds });
       // Once Ares has looked, a series he filed brings its other instances along.

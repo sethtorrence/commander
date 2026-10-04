@@ -6,7 +6,13 @@
 // stands and what it has looked at) through the Item store.
 //
 // - Triggers: a pause in the User's typing (debounced per job), a Source sync, Items arriving, the
-//   machine idle (catch-up work), Todos changing (debounced per job), and on request.
+//   machine idle (catch-up work), Todos changing (debounced per job), given times (`at`), and on
+//   request (about given Items, when named).
+// - Timed runs (`at`, #130): a job asks to run at given times (30 minutes before each meeting), each
+//   with a key and a time past which it no longer matters. The runner asks again on `replan` (after a
+//   calendar sync) and hourly, and looks for due times every 30 seconds, which also catches up after
+//   the machine slept: a missed time runs if it still matters and is dropped otherwise. Each key runs
+//   once; one whose call failed (or that waits out earlier failures) is tried again on a later tick.
 // - A queue with de-duplication: a job triggered again before it starts runs once, with every
 //   trigger merged; one triggered while running runs once more afterwards. At most `concurrency`
 //   jobs run at once, and never two runs of the same job.
@@ -15,9 +21,10 @@
 //   logged, never acted on; so are proposals the job or the gate refuses.
 // - Batches: a job with more material than one call should carry splits its input (`batch`); each
 //   part is a prompt and a call of its own, and a failed part fails the run.
-// - A job whose result is a view rather than a change to Items (ranking the Dashboard) `apply`s
-//   every part's reply at once instead of proposing: no Item changes, so nothing goes to the gate,
-//   and it applies at any level above Off.
+// - A job whose result is a view rather than a change to Items (ranking the Dashboard, a meeting's
+//   prep) `apply`s every part's reply at once: nothing goes to the gate, and it applies at any level
+//   above Off (ADR 0004's amendments). It may propose as well (the Todos a meeting asks for); those
+//   go to the gate as any proposal does, under the action they name if not the job's own.
 // - Prompt-injection defences (#69, ADR 0004): every prompt is built by the prompt builder
 //   (prompt.ts), which refuses material holding a token or key the Core holds (nothing is sent).
 //   Every reply schema carries a `steering` flag: the outside Items the model says try to steer Ares
@@ -59,8 +66,22 @@ export type Trigger =
   | { kind: 'todos-changed'; itemIds: string[] }
   // The machine is idle: time for catch-up work.
   | { kind: 'idle' }
-  | { kind: 'request' };
+  // A time the job asked to run at came (or was missed while the machine slept and still matters).
+  | ({ kind: 'at' } & PlannedRun)
+  // Asked for by the User, about these Items when given (Prepare now on one meeting).
+  | { kind: 'request'; itemIds?: string[] };
 export type TriggerKind = Trigger['kind'];
+
+// One time a job asks to run at (`at`), as it plans them.
+export type PlannedRun = {
+  // What the time is for (an event at its start time): each key runs once.
+  key: string;
+  at: number;
+  // Past this it no longer matters (the meeting has started): dropped if it was missed.
+  until: number;
+  // The Items it is for.
+  itemIds: string[];
+};
 
 // The triggers a job runs on, besides a request (which every job takes).
 export type JobTriggers = {
@@ -69,6 +90,9 @@ export type JobTriggers = {
   'items-arrived'?: true;
   idle?: true;
   'todos-changed'?: { pauseMs: number };
+  // Given times (30 minutes before each meeting): asked for again on each re-plan (after a calendar
+  // sync, and hourly).
+  at?: { plan(now: number): PlannedRun[] };
 };
 
 // The triggers a job hears of only once they stop coming for its pause.
@@ -89,9 +113,12 @@ export type GatherContext = {
 };
 
 // A proposal as a job makes it: the runner adds the job's action, and its Section unless the
-// proposal names its own (a job working across Sections, like filing, follows each Item's).
+// proposal names its own (a job working across Sections, like filing, follows each Item's). It may
+// name another registered action instead (meeting prep proposes the Todos a meeting asks for to
+// Suggest Todos).
 export type JobProposal = Omit<Proposal, 'actionKind' | 'action' | 'section'> & {
   section?: AutonomySection | null;
+  as?: Pick<Proposal, 'action' | 'actionKind' | 'section'>;
 };
 
 export type AgentJob<Input extends JobInput = JobInput, Output = unknown> = {
@@ -114,8 +141,8 @@ export type AgentJob<Input extends JobInput = JobInput, Output = unknown> = {
   // Turns each part's validated output into proposals; anything it can't use goes in `dropped`, in
   // plain words, to be logged.
   proposals?(output: Output, input: Input): { proposals: JobProposal[]; dropped: string[] };
-  // For a job whose result is a view, not a change to Items (ranking the Dashboard): takes every
-  // part's validated output at once, in place of proposals.
+  // For a job whose result is a view, not a change to Items (ranking the Dashboard, a meeting's prep):
+  // takes every part's validated output at once, before any proposals.
   apply?(answers: { output: Output; input: Input }[], input: Input): { dropped: string[] };
 };
 
@@ -139,13 +166,20 @@ export type JobRunnerOptions = {
   // Where problems go: job names, outcomes and plain messages only, never a prompt, reply or key.
   log?: (message: string) => void;
   onStatus?: (status: AresStatus) => void;
+  // How often it looks for timed runs that are due (which also catches up after the machine slept);
+  // null for no timer (tests tick by hand).
+  tickMs?: number | null;
 };
 
 export type JobRunner = {
   // Something happened that jobs may run on.
   trigger(trigger: Trigger): void;
-  // Runs a job now, on request (even after failures).
-  run(job: string): void;
+  // Runs a job now, on request (even after failures), about these Items when given.
+  run(job: string, itemIds?: string[]): void;
+  // Asks the timed jobs for their times again (after a calendar sync), and runs any already due.
+  replan(): void;
+  // Runs the timed runs that are due, and drops those that stopped mattering.
+  tick(): void;
   jobs(): AgentJobInfo[];
   // Switches a job on or off (Settings → Ares). Off, it never runs.
   setEnabled(job: string, enabled: boolean): AgentJobInfo[];
@@ -157,6 +191,10 @@ export type JobRunner = {
 
 const MINUTE = 60_000;
 const MAX_BACKOFF = 60 * MINUTE;
+// How often timed runs are looked for, and how often the timed jobs are asked for their times again
+// even without a calendar sync.
+const TICK_MS = 30_000;
+const REPLAN_MS = 60 * MINUTE;
 
 // After the first failure the next trigger tries again; after more, automatic triggers wait.
 const backoff = (failures: number) =>
@@ -251,6 +289,12 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
   const typing = new Map<string, { timer: ReturnType<typeof setTimeout>; itemIds: Set<string> }>();
   let waiters: (() => void)[] = [];
   let stopped = false;
+  // Timed runs: each timed job's planned times, the keys already run (or dropped), when it last
+  // planned, and the jobs whose last run should be tried again (its call failed).
+  const planned = new Map<string, PlannedRun[]>();
+  const fired = new Map<string, Set<string>>();
+  let plannedAt: number | null = null;
+  const retry = new Set<string>();
 
   const status = (): AresStatus => ({
     working: running.size > 0,
@@ -286,10 +330,16 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       if (!job) continue;
       running.add(name);
       reportStatus();
+      retry.delete(name);
       void runJob(job, triggers)
         .catch((error) => log(`Ares's job “${job.name}” stopped: ${message(error)}`))
         .finally(() => {
           running.delete(name);
+          // A timed run whose call failed (or that waits out earlier failures) is tried again on a
+          // later tick, while it still matters.
+          if (retry.delete(name)) {
+            for (const trigger of triggers) if (trigger.kind === 'at') fired.get(name)?.delete(trigger.key);
+          }
           reportStatus();
           pump();
         });
@@ -319,6 +369,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       failures,
       retryAt: wait ? now() + wait : null,
     });
+    if (outcome === 'failed' || outcome === 'over-cap') retry.add(job.job);
     log(`Ares's job “${job.name}”: ${outcome}. ${problem}`);
   }
 
@@ -326,7 +377,10 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
     const state = store.job(job.job);
     if (!state.enabled || isOff(job)) return;
     const requested = triggers.some((trigger) => trigger.kind === 'request');
-    if (!requested && state.retryAt !== null && now() < state.retryAt) return;
+    if (!requested && state.retryAt !== null && now() < state.retryAt) {
+      retry.add(job.job);
+      return;
+    }
 
     const input = job.gather({
       triggers,
@@ -360,24 +414,27 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       );
       for (const reason of dropped) log(`Ares's job “${job.name}” left something out: ${reason}`);
     }
-    for (const answer of job.apply ? [] : answers) {
+    for (const answer of answers) {
       const { proposals, dropped } = job.proposals?.(answer.output, answer.input) ?? {
         proposals: [],
         dropped: [],
       };
       for (const reason of dropped) log(`Ares's job “${job.name}” dropped a suggestion: ${reason}`);
       for (const raw of proposals) {
-        const proposal = checked(raw, answer.prompt);
-        if (typeof proposal === 'string') {
-          log(`Ares's job “${job.name}” dropped a suggestion: ${proposal}`);
+        const checkedProposal = checked(raw, answer.prompt);
+        if (typeof checkedProposal === 'string') {
+          log(`Ares's job “${job.name}” dropped a suggestion: ${checkedProposal}`);
           continue;
         }
+        const { as, ...proposal } = checkedProposal;
         try {
           const outcome = gate.propose({
             ...proposal,
-            action,
-            actionKind,
-            section: proposal.section === undefined ? section : proposal.section,
+            ...(as ?? {
+              action,
+              actionKind,
+              section: proposal.section === undefined ? section : proposal.section,
+            }),
           });
           if (outcome.decision === 'ask') proposalIds.set(proposal.itemId, outcome.suggestion.id);
           if (outcome.decision === 'auto') proposalIds.set(proposal.itemId, outcome.done.id);
@@ -481,6 +538,47 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
     typing.set(key, { timer, itemIds: ids });
   }
 
+  // Asks each timed job for its times; keys it no longer plans are forgotten. Then runs what is due.
+  function replan() {
+    if (stopped) return;
+    plannedAt = now();
+    for (const job of jobs.values()) {
+      const at = job.triggers.at;
+      if (!at) continue;
+      let runs: PlannedRun[];
+      try {
+        runs = at.plan(plannedAt);
+      } catch (error) {
+        log(`Ares's job “${job.name}” couldn’t plan its times: ${message(error)}`);
+        continue;
+      }
+      planned.set(job.job, runs);
+      const keys = new Set(runs.map((run) => run.key));
+      const done = fired.get(job.job);
+      if (done) for (const key of done) if (!keys.has(key)) done.delete(key);
+    }
+    tick();
+  }
+
+  // Each planned time once: run when due (late, on waking, if it still matters), dropped when not.
+  function tick() {
+    if (stopped) return;
+    if (planned.size && plannedAt !== null && now() - plannedAt >= REPLAN_MS) return replan();
+    const at = now();
+    for (const [name, runs] of planned) {
+      const done = fired.get(name) ?? new Set<string>();
+      fired.set(name, done);
+      for (const run of runs) {
+        if (done.has(run.key) || at < run.at) continue;
+        done.add(run.key);
+        if (at < run.until) enqueue(name, { kind: 'at', ...run });
+      }
+    }
+  }
+
+  const tickMs = options.tickMs === undefined ? TICK_MS : options.tickMs;
+  const ticker = tickMs ? setInterval(tick, tickMs) : null;
+
   return {
     trigger(trigger) {
       if (stopped) return;
@@ -496,9 +594,12 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       }
     },
 
-    run(name) {
-      enqueue(name, { kind: 'request' });
+    run(name, itemIds) {
+      enqueue(name, itemIds?.length ? { kind: 'request', itemIds } : { kind: 'request' });
     },
+
+    replan,
+    tick,
 
     jobs: () => [...jobs.values()].map(info),
 
@@ -516,6 +617,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
 
     stop() {
       stopped = true;
+      if (ticker) clearInterval(ticker);
       for (const { timer } of typing.values()) clearTimeout(timer);
       typing.clear();
       queued.clear();

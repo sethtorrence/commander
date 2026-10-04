@@ -53,6 +53,7 @@ export const AGENT_JOB_NAMES: Record<string, string> = {
   'rank-dashboard': 'Rank the Dashboard',
   'put-updates-together': 'Put Updates together',
   'spot-stuck-linear': 'Spot stuck Linear issues',
+  'prepare-meetings': 'Prepare for meetings',
 };
 
 export const jobDisplayName = (job: string): string => AGENT_JOB_NAMES[job] ?? job;

@@ -4,6 +4,7 @@ import { emailBody, emailDetail } from './email';
 import { githubIssueDetail, githubReleaseDetail, pullRequestDetail, reviewRequestDetail } from './github';
 import { linearIssueDetail } from './linear';
 import { fieldSummary } from './logged-fields';
+import { meetingPrepDetail } from './meeting-prep';
 import { chatDetail } from './teams';
 
 // Items: everything Commander tracks, in one shape (ADR 0001). A shared core plus
@@ -22,6 +23,8 @@ export const itemKinds = [
   'todo',
   'daily-note',
   'block',
+  // Made by Ares: his preparation for a meeting (meeting-prep.ts).
+  'meeting-prep',
 ] as const;
 export const itemKind = z.enum(itemKinds);
 export type ItemKind = z.infer<typeof itemKind>;
@@ -105,6 +108,7 @@ export const itemDetail = z.discriminatedUnion('kind', [
   reviewRequestDetail,
   githubReleaseDetail,
   emailDetail,
+  meetingPrepDetail,
 ]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 
@@ -353,6 +357,8 @@ export const itemQuery = z.object({
   includeDeleted: z.boolean().optional(),
   // Only these Items.
   ids: z.array(id).max(1000).optional(),
+  // Only Items involving any of these people, by handle (an email address, case-insensitive).
+  people: z.array(z.string().min(1)).max(200).optional(),
   limit: z.number().int().positive().max(1000).optional(),
 });
 export type ItemQuery = z.input<typeof itemQuery>;

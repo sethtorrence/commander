@@ -287,6 +287,68 @@ describe('ranking', () => {
     expect(prompt).not.toContain('Someone else’s issue');
   });
 
+  it('reads the next few hours’ meetings and their preps as context, not as Items to rank', async () => {
+    const meeting = (id: string, title: string, start: number): SourceItem => ({
+      externalId: id,
+      kind: 'event',
+      title,
+      detail: {
+        kind: 'event',
+        calendar: { id: 'primary', name: 'Primary', colour: '#9fe1e7' },
+        accountEmail: 'sam@acme.test',
+        start: { at: start, timeZone: null, date: null },
+        end: { at: start + HOUR / 2, timeZone: null, date: null },
+        allDay: false,
+        location: null,
+        description: null,
+        organiser: null,
+        attendees: [],
+        myResponse: 'accepted',
+        meetingUrl: null,
+        busy: true,
+        private: false,
+        seriesId: null,
+        webUrl: null,
+        createdByCommander: null,
+      },
+    });
+    store.saveFromSource({
+      source: 'google-calendar',
+      account: 'google:1',
+      items: [meeting('soon', '1:1 with Priya', NOW + HOUR), meeting('tomorrow', 'Planning', NOW + DAY)],
+    });
+    const [soon] = store.fromSource({ source: 'google-calendar', account: 'google:1' }, ['soon']);
+    store.record(
+      {
+        type: 'create',
+        item: {
+          kind: 'meeting-prep',
+          title: 'Prep: 1:1 with Priya',
+          detail: {
+            kind: 'meeting-prep',
+            eventId: soon?.id as string,
+            revision: 'r',
+            preparedAt: NOW,
+            about: { text: 'The launch checklist', sources: [soon?.id as string] },
+            lastTime: [],
+            open: [],
+            raise: [{ text: 'Priya needs the runbook first', sources: [soon?.id as string] }],
+          },
+        },
+      },
+      { by: { kind: 'ares' } },
+    );
+    await rank();
+    const [system, prompt] = calls[0]?.messages.map((message) => message.content) ?? [];
+    expect(system).toContain('Meeting');
+    expect(prompt).toMatch(/label="Meeting at 15:02 · 1:1 with Priya" source="outside">/);
+    expect(prompt).toMatch(/label="Prep for the meeting at 15:02" source="outside">/);
+    expect(prompt).toContain('Priya needs the runbook first');
+    expect(prompt).not.toContain('Planning');
+    // Context only: the Items ranked are the same.
+    expect(refsIn(calls[0] as ProviderRequest).size).toBe(6);
+  });
+
   it('falls back to the rules for every entry that doesn’t hold up, and for Items it left out', async () => {
     replies.push((refs) => ({
       ranking: [

@@ -24,6 +24,7 @@ import { isoWeek } from '../../frame/calendar';
 import { requestReveal, useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { itemChangesFromCore } from '../../item-store/changes';
+import { useMeetingPreps, usePrepActions } from '../../links/meeting-prep';
 import { useEvents } from '../../links/use-events';
 import { useDayMentions } from '../../links/use-mentions';
 import { useCommands } from '../../palette/commands';
@@ -34,12 +35,14 @@ import type { ProjectFilter } from '../../projects/filter';
 import { useShortcuts } from '../../shortcuts/react';
 import { useSendToLinear } from '../linear/SendToLinear';
 import { type SectionDefinition, useHeaderSlot, useOpenSection, useSection } from '../section';
+import { sectionFor } from '../todos/links';
 import { BlockIssuesContext, useBlockIssues } from './BlockLinear';
 import { useOutlineLinks } from './BlockLinks';
 import { effectiveFilings, filterView, noteCounts } from './block-projects';
 import { type DayMargin, type DayProjects, DaySheet } from './DaySheet';
 import { dailyNotesIn } from './daily-notes';
 import { dateOf, dayKey, longDate, notePartNumber, weekday, weekOf } from './days';
+import { type ChipPrep, ChipPrepContext } from './MeetingPrep';
 import { useMarginSuggestions } from './margin-suggestions';
 import { createNotebook, type DayState, type Notebook, type NotebookSnapshot } from './notebook';
 import { focusText, OutlineContext, type OutlineControls, type OutlineProjects } from './OutlineView';
@@ -77,6 +80,17 @@ function linkedEventIds(days: readonly DayState[]): string[] {
   for (const day of days)
     for (const block of day.outline.values())
       for (const { target } of blockLinksIn(block.text)) if (target.type === 'event') ids.add(target.eventId);
+  return [...ids];
+}
+
+// The events today's meeting chips (and past days' chips) stand for, for their Prep (#130).
+function chipEventIds(days: readonly DayState[]): string[] {
+  const ids = new Set<string>();
+  for (const day of days)
+    for (const block of day.outline.values()) {
+      const eventId = meetingChipEventId(block.text);
+      if (eventId) ids.add(eventId);
+    }
   return [...ids];
 }
 
@@ -455,6 +469,27 @@ function NotesSection() {
     meetingChips: onMeetingChips,
     active,
   });
+  // Each meeting chip's Prep (#130): Ares's prep for its event, the Todos it asks for, Prepare now.
+  const chipEvents = useMemo(() => chipEventIds(state.days), [state.days]);
+  const preps = useMeetingPreps(window.commander.itemStore, chipEvents, {
+    changes: itemChangesFromCore,
+    active,
+  });
+  const prepActions = usePrepActions(window.commander.autonomy, window.commander.onCoreMessage, active);
+  const chipPrep = useMemo<ChipPrep>(
+    () => ({
+      preps,
+      actions: prepActions,
+      events: events.byId,
+      openSource(item) {
+        const section = sectionFor(item.kind);
+        if (!section) return;
+        requestReveal(section, item.id);
+        openSection(section);
+      },
+    }),
+    [preps, prepActions, events.byId, openSection],
+  );
   const links = useOutlineLinks(
     today,
     useCallback((target: BlockLinkTarget) => void follow(target), [follow]),
@@ -570,49 +605,51 @@ function NotesSection() {
   return (
     <OutlineContext.Provider value={controls}>
       <BlockIssuesContext.Provider value={blockIssues}>
-        <div className="col-span-8 min-w-0" data-testid="section-notes">
-          <h1 className="sr-only">Daily Notes</h1>
-          {active &&
-            slot &&
-            createPortal(
-              <WeekStrip
-                week={week}
-                today={today}
-                active={reading}
-                written={written}
-                onWeek={setWeek}
-                onDay={(day) => void goToDay(day)}
-                onToday={() => {
-                  setWeek(today);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-              />,
-              slot,
-            )}
-          <div className="n-stream" data-notes-stream="" ref={stream}>
-            <Dimensions today={today} ready={state.started} />
-            <div className="n-filter n-g8">
-              <SectionProjectFilter className="n-pflt" counts={noteFilter.counts} />
+        <ChipPrepContext.Provider value={chipPrep}>
+          <div className="col-span-8 min-w-0" data-testid="section-notes">
+            <h1 className="sr-only">Daily Notes</h1>
+            {active &&
+              slot &&
+              createPortal(
+                <WeekStrip
+                  week={week}
+                  today={today}
+                  active={reading}
+                  written={written}
+                  onWeek={setWeek}
+                  onDay={(day) => void goToDay(day)}
+                  onToday={() => {
+                    setWeek(today);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />,
+                slot,
+              )}
+            <div className="n-stream" data-notes-stream="" ref={stream}>
+              <Dimensions today={today} ready={state.started} />
+              <div className="n-filter n-g8">
+                <SectionProjectFilter className="n-pflt" counts={noteFilter.counts} />
+              </div>
+              {state.days.map((day, index) => (
+                <DaySheet
+                  key={day.day}
+                  state={day}
+                  today={today}
+                  sheet={[index + 1, sheets]}
+                  projects={noteFilter.views.get(day.day)}
+                  mentions={mentions.get(day.day)}
+                  label={links.label}
+                  meetings={meetingsIn(day, events.byId)}
+                  onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
+                  margin={marginOf(day.outline)}
+                />
+              ))}
+              <StreamEnd notebook={notebook} state={state} />
             </div>
-            {state.days.map((day, index) => (
-              <DaySheet
-                key={day.day}
-                state={day}
-                today={today}
-                sheet={[index + 1, sheets]}
-                projects={noteFilter.views.get(day.day)}
-                mentions={mentions.get(day.day)}
-                label={links.label}
-                meetings={meetingsIn(day, events.byId)}
-                onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
-                margin={marginOf(day.outline)}
-              />
-            ))}
-            <StreamEnd notebook={notebook} state={state} />
+            {blockPicker.picker}
+            {linearSend.dialog}
           </div>
-          {blockPicker.picker}
-          {linearSend.dialog}
-        </div>
+        </ChipPrepContext.Provider>
       </BlockIssuesContext.Provider>
     </OutlineContext.Provider>
   );

@@ -1,4 +1,10 @@
-import { type Filing, imageAttachmentOf, isOwnFiling, type Project } from '@commander/domain';
+import {
+  type Filing,
+  imageAttachmentOf,
+  isOwnFiling,
+  meetingChipEventId,
+  type Project,
+} from '@commander/domain';
 import { cn } from '@commander/ui';
 import {
   type ClipboardEvent,
@@ -28,6 +34,7 @@ import {
   showEdit,
 } from './block-editor';
 import { caretX, onFirstLine, onLastLine, placeCaret, placeCaretAtX, selectionIn } from './caret';
+import { MeetingPrep } from './MeetingPrep';
 import { headingLevel, toggleMark } from './markdown';
 import type { Notebook } from './notebook';
 import { type Block, blockNumbers, type Caret, descendantCount, type Outline, treeOf } from './outline';
@@ -382,6 +389,7 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
   };
 
   const image = imageAttachmentOf(block.text);
+  const meeting = meetingChipEventId(block.text);
   return (
     <div
       className={cn(
@@ -438,6 +446,8 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
         <BlockIssueChips blockId={block.id} />
         {sendToLinear && <BlockMenu label={block.text} onSendToLinear={() => sendToLinear(day, block)} />}
       </div>
+      {/* A meeting chip's Prep (#130): under its row, not a Block. */}
+      {meeting && <MeetingPrep eventId={meeting} />}
       {hasKids && !folded && (
         <div className={cn('n-kids', opening && 'opening')}>
           {children.map((child) => (

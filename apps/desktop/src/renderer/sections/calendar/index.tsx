@@ -3,6 +3,7 @@ import type { SectionDefinition } from '../section';
 import { CalendarSheet } from './CalendarSheet';
 import { calendarAccountsIn, calendarEventsIn } from './calendar-events';
 import { calendarSettingsIn } from './calendar-settings';
+import { EventPrep } from './EventPrep';
 
 // The Calendar Section: the events of every calendar switched on in every connected Google and
 // Outlook Account, as one Agenda, opened into a detail pane and filed into Projects. Making and
@@ -13,7 +14,7 @@ function CalendarSection() {
   const events = useMemo(() => calendarEventsIn(window.commander.itemStore), []);
   const accounts = useMemo(() => calendarAccountsIn(window.commander), []);
   const settings = useMemo(() => calendarSettingsIn(window.commander.itemStore), []);
-  return <CalendarSheet events={events} accounts={accounts} settings={settings} />;
+  return <CalendarSheet events={events} accounts={accounts} settings={settings} Prep={EventPrep} />;
 }
 
 export const calendar: SectionDefinition = {

@@ -1,6 +1,6 @@
 import type { ActivityEntry, EventPerson } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
-import { type ReactNode, useRef } from 'react';
+import { type ComponentType, type ReactNode, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
 import { ItemProject } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
@@ -65,6 +65,7 @@ export function EventDetail({
   onFile,
   onClose,
   onOpenLink,
+  Prep,
 }: {
   event: CalendarEvent | null;
   /** Where Edit opens the event (Google Calendar or Outlook on the web, as its Account); null without a link. */
@@ -81,6 +82,8 @@ export function EventDetail({
   onFile: () => void;
   onClose: () => void;
   onOpenLink: (link: EventLink) => void;
+  /** The meeting's prep (#130), where the window has one to show. */
+  Prep?: ComponentType<{ event: CalendarEvent }>;
 }) {
   const { projects, archived } = useProjects();
   const pane = useRef<HTMLElement>(null);
@@ -183,6 +186,7 @@ export function EventDetail({
                 <span>{clashText(other)}</span>
               </p>
             ))}
+            {Prep && <Prep event={event} />}
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact field="calendar" label="Calendar">
                 {detail.calendar.name}

@@ -10,6 +10,7 @@ import { StateIcon } from '../linear/glyphs';
 import { ChatTypeGlyph } from '../teams/ChatRow';
 import { sectionFor } from '../todos/links';
 import { type FeedRow, rowMeta, sourceTag } from './feed';
+import { RowPrep } from './RowPrep';
 
 /*
   The ranked list, after the prototype's FEED (.band, .it): band headers with their counts, then the
@@ -309,6 +310,8 @@ function Row({
             </span>
           )}
         </div>
+        {/* A meeting's prep (#130), folded under its row. */}
+        <RowPrep item={item} />
       </div>
       <div className="pt-px text-right">
         <b className="block font-mono text-[12px] leading-5 font-semibold tracking-badge uppercase tabular-nums text-ink">

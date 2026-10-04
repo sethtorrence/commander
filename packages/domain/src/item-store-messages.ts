@@ -157,6 +157,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // plain-text bodies.
   z.object({ op: z.literal('email-threads'), query: emailThreadQuery.default({}) }),
   z.object({ op: z.literal('email-thread'), account: z.string().min(1), threadKey: z.string().min(1) }),
+  // Ares's meeting preps (#130) for these events: at most one each.
+  z.object({ op: z.literal('meeting-preps'), eventIds: z.array(z.string().min(1)).max(500) }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -211,6 +213,7 @@ export type ItemStoreResults = {
   'save-calendar-settings': CalendarSettings;
   'email-threads': EmailThreadList;
   'email-thread': EmailThread | null;
+  'meeting-preps': Item[];
 };
 
 export const itemStoreResult = {
@@ -254,6 +257,7 @@ export const itemStoreResult = {
   'save-calendar-settings': calendarSettings,
   'email-threads': emailThreadList,
   'email-thread': emailThread.nullable(),
+  'meeting-preps': z.array(item),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

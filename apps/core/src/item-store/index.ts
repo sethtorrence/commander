@@ -116,6 +116,7 @@ import {
   type ItemState,
   itemColumns,
   linearIssueDetailOf,
+  meetingPrepDetailOf,
   stateOf,
   todoDetailOf,
   toEntry,
@@ -261,6 +262,9 @@ export type ItemStore = {
   meetingChips: MeetingChips;
   // Settings → Calendar (calendar-settings.ts): the opt-in heads-up before each meeting.
   calendarSettings: CalendarSettingsStore;
+  // Ares's live meeting preps (#130) for these events, at most one each (the prep's detail names its
+  // event; its about Link points at it too).
+  meetingPreps(eventIds: string[]): Item[];
   // The Account's live events on one calendar.
   calendarEvents(account: { source: Source; account: string }, calendarId: string): Item[];
   // Switches a calendar on or off, as the User. Off hides its events at once (they stay as
@@ -628,6 +632,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const emailIds = idsOf('email');
     if (emailIds.length)
       for (const [itemId, detail] of emails.readDetails(emailIds)) details.set(itemId, detail);
+    const prepIds = idsOf('meeting-prep');
+    if (prepIds.length) {
+      const { meetingPrepDetails } = schema;
+      const found = db
+        .select()
+        .from(meetingPrepDetails)
+        .where(inArray(meetingPrepDetails.itemId, prepIds))
+        .all();
+      for (const row of found) details.set(row.itemId, meetingPrepDetailOf(row));
+    }
     // The warning mark: an Item's own, or (for a Todo) the Item's behind it.
     const backedBy = (id: string) => {
       const detail = details.get(id);
@@ -706,6 +720,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (detail?.kind !== 'linear-issue')
       db.delete(linearIssueDetails).where(eq(linearIssueDetails.itemId, id)).run();
     emails.writeDetail(id, detail?.kind === 'email' ? detail : null);
+    if (detail?.kind !== 'meeting-prep')
+      db.delete(schema.meetingPrepDetails).where(eq(schema.meetingPrepDetails.itemId, id)).run();
     if (isGitHubItemDetail(detail)) {
       const { githubDetails } = schema;
       const identifier =
@@ -720,6 +736,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     }
     db.delete(schema.githubDetails).where(eq(schema.githubDetails.itemId, id)).run();
     switch (detail?.kind) {
+      case 'meeting-prep': {
+        const { meetingPrepDetails } = schema;
+        const { kind: _kind, ...data } = detail;
+        const values = { eventId: detail.eventId, data };
+        db.insert(meetingPrepDetails)
+          .values({ itemId: id, ...values })
+          .onConflictDoUpdate({ target: meetingPrepDetails.itemId, set: values })
+          .run();
+        return;
+      }
       case 'todo': {
         const values = { origin: detail.origin, dueOn: detail.dueOn, backedBy: detail.backedBy };
         db.insert(todoDetails)
@@ -1825,6 +1851,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
             query.source ? eq(items.source, query.source) : undefined,
             query.account ? eq(items.account, query.account) : undefined,
             query.statuses ? inArray(items.status, query.statuses) : undefined,
+            query.people?.length
+              ? sql`EXISTS (SELECT 1 FROM json_each(${items.people}) WHERE lower(json_each.value) IN (${sql.join(
+                  query.people.map((handle) => sql`${handle.toLowerCase()}`),
+                  sql`, `,
+                )}))`
+              : undefined,
             query.titleContains
               ? sql`${items.title} LIKE ${`%${query.titleContains.replace(/[\\%_]/g, '\\$&')}%`} ESCAPE '\\'`
               : undefined,
@@ -1891,6 +1923,25 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     events: (query) => withDetails(eventRows(db, query)),
+    meetingPreps(eventIds) {
+      if (!eventIds.length) return [];
+      const { items, meetingPrepDetails } = schema;
+      const rows = db
+        .select({ item: items })
+        .from(meetingPrepDetails)
+        .innerJoin(items, eq(items.id, meetingPrepDetails.itemId))
+        .where(and(inArray(meetingPrepDetails.eventId, eventIds), isNull(items.deletedAt)))
+        .orderBy(desc(items.updatedAt))
+        .all();
+      // One per event: the newest, should there ever be two.
+      const seen = new Set<string>();
+      return withDetails(rows.map((row) => row.item)).filter((item) => {
+        const eventId = item.detail?.kind === 'meeting-prep' ? item.detail.eventId : null;
+        if (!eventId || seen.has(eventId)) return false;
+        seen.add(eventId);
+        return true;
+      });
+    },
 
     calendars,
     meetingChips,

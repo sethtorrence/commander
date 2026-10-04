@@ -125,6 +125,30 @@ describe('indexing as the Item store writes', () => {
     expect(titles({ text: 'login' })).toEqual([]);
   });
 
+  it('leaves out Ares’s meeting preps: they are shown with their meeting, not found on their own', () => {
+    store.record(
+      {
+        type: 'create',
+        item: {
+          kind: 'meeting-prep',
+          title: 'Prep: Launch review',
+          detail: {
+            kind: 'meeting-prep',
+            eventId: 'event-1',
+            revision: 'r',
+            preparedAt: clock,
+            about: { text: 'The launch checklist', sources: ['event-1'] },
+            lastTime: [],
+            open: [],
+            raise: [],
+          },
+        },
+      },
+      { by: { kind: 'ares' } },
+    );
+    expect(titles({ text: 'launch' })).toEqual([]);
+  });
+
   it("indexes a Block's text, and says which day it belongs to", () => {
     const id = addBlock('2026-09-30', 'Call Priya about the rate limiter');
     const [hit] = store.search.query({ text: 'rate limiter' }).hits;
