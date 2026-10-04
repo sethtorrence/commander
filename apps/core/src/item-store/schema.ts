@@ -9,6 +9,7 @@ import type {
   ItemStatus,
   LinearCatalog,
   LinearIssueDetail,
+  LinkTargetType,
   LinkType,
   ModelCall,
   ModelProvider,
@@ -28,6 +29,7 @@ import type {
 import { sql } from 'drizzle-orm';
 import {
   type AnySQLiteColumn,
+  check,
   index,
   integer,
   real,
@@ -97,6 +99,8 @@ export const blockDetails = sqliteTable(
   (t) => [index('block_details_daily_note').on(t.dailyNoteId)],
 );
 
+// Links between Items. A refers-to Link may point at a Project instead (ADR 0002): the target type
+// says which, and exactly one of to_item_id and to_project_id is set.
 export const links = sqliteTable(
   'links',
   {
@@ -105,14 +109,20 @@ export const links = sqliteTable(
       .notNull()
       .references(() => items.id),
     type: text('type').$type<LinkType>().notNull(),
-    toItemId: text('to_item_id')
-      .notNull()
-      .references(() => items.id),
+    targetType: text('target_type').$type<LinkTargetType>().notNull().default('item'),
+    toItemId: text('to_item_id').references(() => items.id),
+    toProjectId: text('to_project_id').references((): AnySQLiteColumn => projects.id),
     createdAt: integer('created_at').notNull(),
   },
   (t) => [
     uniqueIndex('links_identity').on(t.fromItemId, t.type, t.toItemId),
+    uniqueIndex('links_project_identity').on(t.fromItemId, t.type, t.toProjectId),
     index('links_backlinks').on(t.toItemId),
+    index('links_project_backlinks').on(t.toProjectId),
+    check(
+      'links_target',
+      sql`(${t.targetType} = 'item' AND ${t.toItemId} IS NOT NULL AND ${t.toProjectId} IS NULL) OR (${t.targetType} = 'project' AND ${t.type} = 'refers-to' AND ${t.toProjectId} IS NOT NULL AND ${t.toItemId} IS NULL)`,
+    ),
   ],
 );
 
@@ -131,6 +141,8 @@ export const activity = sqliteTable(
       .notNull()
       .references(() => items.id),
     otherItemId: text('other_item_id').references(() => items.id),
+    // For a Link to a Project (ADR 0002): the Project it points at.
+    otherProjectId: text('other_project_id').references((): AnySQLiteColumn => projects.id),
     why: text('why'),
     causedByItemId: text('caused_by_item_id').references(() => items.id),
     causedByEntryId: integer('caused_by_entry_id').references((): AnySQLiteColumn => activity.id),

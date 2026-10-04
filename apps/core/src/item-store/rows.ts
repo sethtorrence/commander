@@ -128,12 +128,13 @@ export function toEntry(row: ActivityRow): ActivityEntry {
     action: row.action,
     itemId: row.itemId,
     otherItemId: row.otherItemId,
+    otherProjectId: row.otherProjectId,
     why: row.why,
     causedBy,
     undoes: row.undoes,
     // A Link entry records the Link, and a creation has no state before it.
     changes:
-      row.otherItemId === null && row.before && row.after
+      row.otherItemId === null && row.otherProjectId === null && row.before && row.after
         ? changesBetween(row.before as ItemState, row.after as ItemState)
         : [],
   };

@@ -57,7 +57,7 @@ const and = (names: string[]) =>
  */
 export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accounts: LinearAccountsClient }) {
   const { filter, include } = useProjectFilter();
-  const { projects } = useProjects();
+  const { projects, openPage } = useProjects();
   const filtered = projects.find((project) => project.id === filter);
   const now = useNow(60_000);
   const state = useLinear({ issues, accounts, include, now: now.getTime() });
@@ -78,6 +78,7 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
     });
 
   const openLink = ({ other }: IssueLink) => {
+    if (other.kind === 'project') return openPage?.(other.id);
     if (other.deletedAt !== null) return;
     const section = sectionFor(other.kind);
     if (section && section !== 'linear') openSection(section);

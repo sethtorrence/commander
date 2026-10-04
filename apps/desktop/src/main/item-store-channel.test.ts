@@ -9,6 +9,7 @@ const activityEntry = {
   action: 'create',
   itemId: 'todo-1',
   otherItemId: null,
+  otherProjectId: null,
   why: null,
   causedBy: null,
   undoes: null,

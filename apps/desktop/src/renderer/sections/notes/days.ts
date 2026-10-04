@@ -46,11 +46,13 @@ export function longDate(day: string): string {
 /** "DN-2026-274": the Daily Note's part number, from its day of the year. */
 export const notePartNumber = (day: string) => partNumber('DN', dateOf(day));
 
-/** The sheet's eyebrow: "Today", "Yesterday", "2 days ago". */
+/** The sheet's eyebrow: "Today", "Yesterday", "2 days ago"; ahead, "Tomorrow", "In 6 days". */
 export function dayLabel(day: string, today: string): string {
   const days = Math.round((dateOf(today).getTime() - dateOf(day).getTime()) / 86_400_000);
   if (days === 0) return 'Today';
   if (days === 1) return 'Yesterday';
+  if (days === -1) return 'Tomorrow';
+  if (days < 0) return `In ${-days} days`;
   return `${days} days ago`;
 }
 

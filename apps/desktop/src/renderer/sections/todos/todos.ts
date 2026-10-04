@@ -5,7 +5,7 @@ import type {
   Item,
   ItemAction,
   ItemChange,
-  ItemRef,
+  LinkEnd,
   LinkType,
   Project,
   Source,
@@ -26,8 +26,8 @@ export interface TodoLink {
   type: LinkType;
   /** True when the Link points at the Todo from the other Item. */
   backlink: boolean;
-  /** The Item at the other end. */
-  other: ItemRef;
+  /** The Item at the other end, or the Project (a refers-to Link to one). */
+  other: LinkEnd;
 }
 
 export interface Todos {

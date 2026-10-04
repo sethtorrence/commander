@@ -21,6 +21,8 @@ function show(spans: Span[]): string {
           return `{${span.text}}`;
         case 'link':
           return `link<${span.href}>(${show(span.children)})`;
+        case 'chip':
+          return `chip<${span.text}>`;
         default:
           return `${span.type}(${show(span.children)})`;
       }

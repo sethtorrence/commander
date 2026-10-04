@@ -2,6 +2,7 @@ import { attachmentMaxBytes, attachmentTypes, isOpenableLink } from '@commander/
 import { toast } from '@commander/ui';
 import type { ClipboardEvent, KeyboardEvent, MouseEvent } from 'react';
 import { selectionIn } from './caret';
+import { besideChip, type LabelChip } from './chips';
 import { blockHtml, linkSelection, type Mark, pastedUrl, type TextEdit } from './markdown';
 
 /*
@@ -16,7 +17,9 @@ function pointAt(element: HTMLElement, offset: number): [Node, number] {
   let seen = 0;
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const length = node.nodeValue?.length ?? 0;
-    if (seen + length >= offset) return [node, Math.max(0, offset - seen)];
+    // A `[[` chip is one piece: a position in it goes before or after it.
+    if (seen + length >= offset)
+      return besideChip(element, node, offset - seen) ?? [node, Math.max(0, offset - seen)];
     seen += length;
   }
   return [element, element.childNodes.length];
@@ -33,17 +36,20 @@ export function selectText(element: HTMLElement, start: number, end = start): vo
   selection.addRange(range);
 }
 
-/** Shows a Block's text rendered in its row, keeping the selection where it was in the text. */
-export function renderBlockText(element: HTMLElement, text: string): void {
+/**
+ * Shows a Block's text rendered in its row (its chips labelled by `label`), keeping the selection
+ * where it was in the text.
+ */
+export function renderBlockText(element: HTMLElement, text: string, label?: LabelChip): void {
   const editing = document.activeElement === element;
   const [start, end] = editing ? selectionIn(element) : [0, 0];
-  element.innerHTML = blockHtml(text);
+  element.innerHTML = blockHtml(text, label);
   if (editing) selectText(element, start, end);
 }
 
 /** Shows an edit made by a shortcut or a paste: the new text, with its selection. */
-export function showEdit(element: HTMLElement, edit: TextEdit): void {
-  element.innerHTML = blockHtml(edit.text);
+export function showEdit(element: HTMLElement, edit: TextEdit, label?: LabelChip): void {
+  element.innerHTML = blockHtml(edit.text, label);
   selectText(element, edit.start, edit.end);
 }
 

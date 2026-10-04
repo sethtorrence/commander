@@ -37,6 +37,11 @@ describe('days', () => {
     expect(dayLabel('2026-10-01', '2026-10-03')).toBe('2 days ago');
   });
 
+  it('say how far ahead they are (a day opened from a [[day]] chip)', () => {
+    expect(dayLabel('2026-10-04', '2026-10-03')).toBe('Tomorrow');
+    expect(dayLabel('2026-10-09', '2026-10-03')).toBe('In 6 days');
+  });
+
   it('belong to a week from Monday to Sunday', () => {
     expect(weekOf('2026-10-01')).toEqual([
       '2026-09-28',

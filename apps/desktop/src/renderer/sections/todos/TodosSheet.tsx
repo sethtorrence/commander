@@ -29,7 +29,7 @@ const onPressable = () => !!document.activeElement?.closest('button, a[href], su
 export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemChanges }) {
   // Projects (projects/): the filter narrows the list, `b` or a Badge click files a Todo.
   const { filter, include, filingForNew } = useProjectFilter();
-  const { projects } = useProjects();
+  const { projects, openPage } = useProjects();
   const filtered = projects.find((project) => project.id === filter);
   const state = useTodos(todos, include);
   const { open, done, selected, detailOpen, setDetailOpen, undo, refresh } = state;
@@ -64,6 +64,7 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
   };
 
   const openLink = ({ other }: TodoLink) => {
+    if (other.kind === 'project') return openPage?.(other.id);
     if (other.deletedAt !== null) return;
     if (other.kind === 'todo') return state.jumpTo(other.id);
     const section = sectionFor(other.kind);

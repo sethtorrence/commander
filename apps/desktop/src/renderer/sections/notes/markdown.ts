@@ -1,4 +1,5 @@
-import { imageAttachmentOf, isOpenableLink } from '@commander/domain';
+import { type BlockLinkTarget, blockLinksIn, imageAttachmentOf, isOpenableLink } from '@commander/domain';
+import { chipHtml, type LabelChip } from './chips';
 
 /*
   A Block's formatting is Markdown, kept in the Block's own text: headings (`# `, `## `, `### ` at the
@@ -10,14 +11,16 @@ import { imageAttachmentOf, isOpenableLink } from '@commander/domain';
   `# `, `](url)`) sit in their own spans, faint while the Block is being edited and hidden otherwise.
   So the caret's offsets, and what is saved, are always offsets into the Markdown.
 
-  `#` straight before letters (`#LT`) is not a heading: that's the Project shorthand.
+  `#` straight before letters (`#LT`) is not a heading: that's the Project shorthand. A `[[` link token
+  (`[[2026-10-09]]`, `[[project:<id>]]`) is drawn as a chip (chips.ts), its token kept in it.
 */
 
 export type Span =
   | { type: 'text'; text: string }
   | { type: 'mark'; text: string }
   | { type: 'strong' | 'em' | 'code'; children: Span[] }
-  | { type: 'link'; href: string; children: Span[] };
+  | { type: 'link'; href: string; children: Span[] }
+  | { type: 'chip'; text: string; target: BlockLinkTarget };
 
 export interface ParsedBlock {
   /** 1–3 for a heading, 0 for anything else. */
@@ -145,6 +148,15 @@ function inline(src: string, links = true): Span[] {
       }
     }
 
+    if (char === '[' && src[i + 1] === '[') {
+      const token = blockLinksIn(rest)[0];
+      if (token?.start === 0) {
+        push({ type: 'chip', text: rest.slice(0, token.end), target: token.target });
+        i += token.end;
+        continue;
+      }
+    }
+
     if (links && char === '[') {
       const match = MARKDOWN_LINK.exec(rest);
       if (match) {
@@ -197,21 +209,27 @@ const escapeHtml = (text: string) =>
     (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c,
   );
 
-function spansHtml(spans: Span[]): string {
+// Without labels (the Markdown tests, say), a chip shows its token's target as it is.
+const plainLabel: LabelChip = (target) =>
+  target.type === 'day' ? { text: target.day, title: target.day } : { text: 'Project', title: 'A Project' };
+
+function spansHtml(spans: Span[], label: LabelChip): string {
   return spans
     .map((span) => {
       switch (span.type) {
         case 'text':
           return escapeHtml(span.text);
+        case 'chip':
+          return chipHtml(span.text, span.target, label);
         case 'mark':
           return `<span class="n-mk">${escapeHtml(span.text)}</span>`;
         case 'link': {
           const href = escapeHtml(span.href);
           const tone = isOpenableLink(span.href) ? '' : ' n-link-off';
-          return `<span class="n-link${tone}" data-href="${href}" title="${href}">${spansHtml(span.children)}</span>`;
+          return `<span class="n-link${tone}" data-href="${href}" title="${href}">${spansHtml(span.children, label)}</span>`;
         }
         default:
-          return `<${span.type}>${spansHtml(span.children)}</${span.type}>`;
+          return `<${span.type}>${spansHtml(span.children, label)}</${span.type}>`;
       }
     })
     .join('');
@@ -220,10 +238,14 @@ function spansHtml(spans: Span[]): string {
 /**
  * The markup a Block's row shows for its text. Its text content is exactly the Block's text. Links
  * are spans that carry their target (`data-href`), never anchors, so nothing in the page follows them.
+ * `label` says what each `[[` chip reads.
  */
-export function blockHtml(text: string): string {
-  // A new line at the very end needs something after it to show as a line.
-  return spansHtml(parseBlock(text).spans) + (text.endsWith('\n') ? '<br>' : '');
+export function blockHtml(text: string, label: LabelChip = plainLabel): string {
+  // A new line at the very end needs something after it to show as a line, and a chip at the very
+  // end needs something after it for the caret to go there (the browser won't put it after a
+  // non-editable element that ends the line). A trailing <br> adds no line and no text.
+  const endsWithChip = blockLinksIn(text).some((token) => token.end === text.length);
+  return spansHtml(parseBlock(text).spans, label) + (text.endsWith('\n') || endsWithChip ? '<br>' : '');
 }
 
 // ---- editing ----

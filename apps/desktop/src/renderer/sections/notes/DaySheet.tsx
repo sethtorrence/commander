@@ -1,6 +1,9 @@
+import type { Mention } from '@commander/domain';
 import { cn, Kbd, Led, SectionHeader, Sheet, SheetStrip } from '@commander/ui';
 import type { ReactNode } from 'react';
 import { dayOfYear, isoWeek } from '../../frame/calendar';
+import type { LabelChip } from '../../links/block-text';
+import { MentionedIn } from '../../links/MentionedIn';
 import { dateOf, dayLabel, longDate, notePartNumber, weekday } from './days';
 import type { DayState } from './notebook';
 import { OutlineView, type ProjectView } from './OutlineView';
@@ -97,6 +100,7 @@ function Legend() {
       <Key keys={<Kbd>[ ]</Kbd>}>start a line, get a Todo</Key>
       <Key keys={<Kbd>#LT</Kbd>}>file it under a Project</Key>
       <Key keys={<Kbd>Ctrl ↵</Kbd>}>make a Todo, tick it</Key>
+      <Key keys={<Kbd>[[</Kbd>}>link a day or a Project</Key>
       <Key keys={<Kbd>Ctrl .</Kbd>}>fold, unfold</Key>
       <Key
         keys={
@@ -121,6 +125,11 @@ export interface DaySheetProps {
   sheet: readonly [number, number];
   /** Its Blocks' Projects and the Project filter (#51). */
   projects?: DayProjects;
+  /** The Blocks on other days that link to this day (`[[day]]`), for "Mentioned in". */
+  mentions?: readonly Mention[];
+  /** How chips are labelled. */
+  label?: LabelChip;
+  onOpenMention?(mention: Mention): void;
 }
 
 export interface DayProjects {
@@ -165,7 +174,7 @@ function CollapsedDay({ state, today, projects }: { state: DayState; today: stri
 }
 
 /** One Daily Note on the drawing: spec (A), the sheet (B–E) and its margin (F–H). */
-export function DaySheet({ state, today, sheet, projects }: DaySheetProps) {
+export function DaySheet({ state, today, sheet, projects, mentions, label, onOpenMention }: DaySheetProps) {
   const { day, outline } = state;
   const isToday = day === today;
   if (projects?.collapsed) return <CollapsedDay state={state} today={today} projects={projects} />;
@@ -196,9 +205,18 @@ export function DaySheet({ state, today, sheet, projects }: DaySheetProps) {
           <OutlineView
             day={day}
             outline={outline}
-            placeholder={isToday ? 'Nothing yet. Start typing.' : 'Nothing written this day.'}
+            placeholder={
+              isToday
+                ? 'Nothing yet. Start typing.'
+                : day > today
+                  ? 'Nothing written yet.'
+                  : 'Nothing written this day.'
+            }
             projectView={projects?.view}
           />
+          {mentions && label && onOpenMention && (
+            <MentionedIn mentions={mentions} today={today} label={label} onOpen={onOpenMention} />
+          )}
         </div>
       </Sheet>
       <div className="n-gutter">{isToday && <Legend />}</div>

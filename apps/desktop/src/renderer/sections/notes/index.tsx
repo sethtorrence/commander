@@ -1,6 +1,6 @@
 import './notes.css';
 import './formatting.css';
-import type { DailyNoteProjects, Filing } from '@commander/domain';
+import type { BlockLinkTarget, DailyNoteProjects, Filing } from '@commander/domain';
 import { DimensionLine, toast } from '@commander/ui';
 import {
   useCallback,
@@ -13,15 +13,17 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { isoWeek } from '../../frame/calendar';
-import { useReveal } from '../../frame/reveal';
+import { requestReveal, useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { itemChangesFromCore } from '../../item-store/changes';
+import { useDayMentions } from '../../links/use-mentions';
 import { BadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import type { ProjectFilter } from '../../projects/filter';
 import { useShortcuts } from '../../shortcuts/react';
 import { type SectionDefinition, useHeaderSlot, useSection } from '../section';
+import { useOutlineLinks } from './BlockLinks';
 import { effectiveFilings, filterView, noteCounts } from './block-projects';
 import { type DayProjects, DaySheet } from './DaySheet';
 import { dailyNotesIn } from './daily-notes';
@@ -333,6 +335,22 @@ function NotesSection() {
   // Typing held back for a pause is saved before Commander quits.
   useEffect(() => window.commander.onSaveBeforeQuit?.(() => notebook.flush()), [notebook]);
 
+  // Following a `[[` chip: a day comes on screen (a day ahead too, blank) and is scrolled to; a
+  // Project opens its page.
+  const { openPage } = useProjects();
+  const follow = useCallback(
+    async (target: BlockLinkTarget) => {
+      if (target.type === 'project') return openPage?.(target.projectId);
+      await notebook.showDay(target.day);
+      requestAnimationFrame(() => scrollToDay(target.day));
+    },
+    [notebook, openPage],
+  );
+  const links = useOutlineLinks(
+    today,
+    useCallback((target: BlockLinkTarget) => void follow(target), [follow]),
+  );
+
   // The caret goes where the Notebook says, once the Block is on screen.
   const pendingFocus = useRef<Caret | null>(null);
   const applyFocus = useCallback(() => {
@@ -359,8 +377,9 @@ function NotesSection() {
         requestAnimationFrame(applyFocus);
       },
       projects: outlineProjects,
+      links,
     }),
-    [notebook, applyFocus, keep, outlineProjects],
+    [notebook, applyFocus, keep, outlineProjects, links],
   );
 
   useShortcuts([
@@ -370,6 +389,8 @@ function NotesSection() {
 
   // The week strip follows the day being read; its arrows browse other weeks.
   const dayKeys = useMemo(() => state.days.map((d) => d.day), [state.days]);
+  // "Mentioned in" at the foot of each day's sheet.
+  const mentions = useDayMentions(window.commander.itemStore, dayKeys, itemChangesFromCore);
   const reading = useActiveDay(dayKeys, active);
   const [week, setWeek] = useState(today);
   useEffect(() => {
@@ -443,6 +464,9 @@ function NotesSection() {
               today={today}
               sheet={[index + 1, sheets]}
               projects={noteFilter.views.get(day.day)}
+              mentions={mentions.get(day.day)}
+              label={links.label}
+              onOpenMention={(mention) => requestReveal('notes', mention.block.id)}
             />
           ))}
           <StreamEnd notebook={notebook} state={state} />

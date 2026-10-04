@@ -72,6 +72,8 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.dailyNoteProjects() };
       case 'project-blocks':
         return { ok: true, result: store.projectBlocks(request.projectId) };
+      case 'mentions':
+        return { ok: true, result: store.mentions(request.query) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

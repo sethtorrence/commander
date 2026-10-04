@@ -13,6 +13,7 @@ import {
   useRef,
 } from 'react';
 import { BlockImage } from './BlockImage';
+import { type OutlineLinks, useBlockLinks } from './BlockLinks';
 import { BlockMargin } from './BlockMargin';
 import { TodoCheck, TodoTag } from './BlockTodo';
 import {
@@ -45,6 +46,8 @@ export interface OutlineControls {
   focus(caret: Caret | null): void;
   /** Block Projects, where Blocks have them (the Notes Section, not the daily template). */
   projects?: OutlineProjects;
+  /** `[[` links: the picker's targets, chip labels and following a chip (BlockLinks.tsx). */
+  links?: OutlineLinks;
 }
 
 /** Block Projects in the outline (#51): the `#` picker, the inline Badges and the margin's picker. */
@@ -175,19 +178,27 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
     focus({ id: block.id, offset });
   });
 
+  // Draws the text, `[[` chips included, and runs the `[[` picker (BlockLinks.tsx).
+  const links = useBlockLinks({ day, block, notebook, focus, links: controls.links });
+  const { label } = links;
+
   // The text is the browser's while typing (rendered again from it as it changes, markdown.ts); it is
-  // set from the outline only when they differ (after an undo, a join or a split).
+  // set from the outline only when they differ (after an undo, a join or a split), or drawn again
+  // when its chips' labels change (a Project renamed).
+  const drawnWith = useRef<typeof label | null>(null);
   useLayoutEffect(() => {
     const element = ref.current;
-    if (element && element.textContent !== block.text) renderBlockText(element, block.text);
-  }, [block.text]);
+    if (!element || (element.textContent === block.text && drawnWith.current === label)) return;
+    drawnWith.current = label;
+    renderBlockText(element, block.text, label);
+  }, [block.text, label]);
   // `#LT` in the text is drawn as LT's Badge, again whenever the text changes.
   const projects = controls.projects?.list;
   // biome-ignore lint/correctness/useExhaustiveDependencies: the text is read from the element, which follows `block.text`
   useLayoutEffect(() => {
     const element = ref.current;
     if (element && projects) highlightTags(element, projects);
-  }, [block.text, projects]);
+  }, [block.text, projects, label]);
   useEffect(() => {
     const element = ref.current;
     return () => {
@@ -197,7 +208,7 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
 
   // A formatting shortcut or a pasted link: shown at once, and saved like typing.
   const apply = (element: HTMLElement, edit: { text: string; start: number; end: number }) => {
-    showEdit(element, edit);
+    showEdit(element, edit, label);
     notebook.type(day, block.id, edit.text);
   };
   const attach = (files: File[]) =>
@@ -206,7 +217,7 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
       .then(focus);
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.nativeEvent.isComposing) return;
+    if (event.nativeEvent.isComposing || links.onKeyDown(event)) return;
     if (tags.onKeyDown(event)) return;
     const element = event.currentTarget;
     const mod = event.ctrlKey || event.metaKey;
@@ -292,15 +303,17 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
       onInput={(event) => {
         const element = event.currentTarget;
         const text = element.textContent ?? '';
-        if (!(event.nativeEvent as InputEvent).isComposing) renderBlockText(element, text);
+        if (!(event.nativeEvent as InputEvent).isComposing) renderBlockText(element, text, label);
         // `[] ` typed at the start makes the Block a Todo: the mark goes, and the caret stays put.
         focus(notebook.type(day, block.id, text, selectionIn(element)[0]));
         tags.onInput(element);
+        links.afterInput(element);
       }}
       onCompositionEnd={(event) =>
-        renderBlockText(event.currentTarget, event.currentTarget.textContent ?? '')
+        renderBlockText(event.currentTarget, event.currentTarget.textContent ?? '', label)
       }
       onKeyDown={onKeyDown}
+      onKeyUp={links.onKeyUp}
       onPaste={(event) => {
         const images = imageFiles(event.clipboardData);
         if (!images.length) return pasteText(event, (edit) => apply(event.currentTarget, edit));
@@ -313,14 +326,16 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
         if (images.length) attach(images);
       }}
       onMouseDown={(event) => {
-        if (linkClicked(event)) event.preventDefault();
+        if (links.onMouseDown(event) || linkClicked(event)) event.preventDefault();
       }}
       onClick={(event) => {
+        if (links.onClick(event)) return;
         const href = linkClicked(event);
         if (href) openBlockLink(href);
       }}
       onBlur={() => {
         tags.close();
+        links.close();
         void notebook.flush();
       }}
     />
@@ -329,6 +344,7 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
     <>
       {editor}
       {tags.popup}
+      {links.picker}
     </>
   );
 });

@@ -11,7 +11,9 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { SettingRow, SettingsGroup } from '../../settings/parts';
+import { useOutlineLinks } from './BlockLinks';
 import { TEMPLATE_DAY, templateIn } from './daily-template';
+import { dayKey } from './days';
 import { createNotebook } from './notebook';
 import { focusText, OutlineContext, type OutlineControls, OutlineView } from './OutlineView';
 import type { Caret } from './outline';
@@ -47,6 +49,8 @@ export function DailyTemplateSettings({ no }: { no: string }) {
     focusText(element, caret.offset);
   }, []);
   useLayoutEffect(applyFocus);
+  // `[[` in the template links Projects only: a template has no day of its own to count from.
+  const links = useOutlineLinks(dayKey(new Date()), undefined, { days: false });
   const controls = useMemo<OutlineControls>(
     () => ({
       notebook,
@@ -55,8 +59,9 @@ export function DailyTemplateSettings({ no }: { no: string }) {
         pendingFocus.current = caret;
         requestAnimationFrame(applyFocus);
       },
+      links,
     }),
-    [notebook, applyFocus],
+    [notebook, applyFocus, links],
   );
 
   const outline = state.days[0]?.outline;

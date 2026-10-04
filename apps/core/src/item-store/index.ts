@@ -12,6 +12,7 @@ import {
   type BlockDetail,
   type BlockTodo,
   type BlockTodoQuery,
+  blockLinksIn,
   blockTodoQuery,
   type CausedBy,
   type DailyNotePage,
@@ -32,12 +33,19 @@ import {
   itemAction,
   itemQuery,
   type Link,
+  type LinkEnd,
+  type LinkTarget,
+  type LinkTargetType,
   type LinkType,
+  type Mention,
+  type MentionQuery,
+  mentionQuery,
   type Project,
   type ProjectAction,
   type ProjectBlock,
   type ProjectChange,
   type ProjectQuery,
+  type ProjectRef,
   type RefileCandidate,
   type Rule,
   type RuleAction,
@@ -113,8 +121,17 @@ export type ItemStore = {
   query(query?: ItemQuery): Item[];
   // An Item with its Links and backlinks; tombstones included.
   get(itemId: string): ItemView | null;
-  // Links two Items: shorthand for recording a link action.
-  link(link: { from: string; linkType: LinkType; to: string }, context: ActionContext): ActivityEntry;
+  // Links two Items (or an Item to a Project, for refers-to): shorthand for recording a link action.
+  link(
+    link: { from: string; linkType: LinkType; to: string; targetType?: LinkTargetType },
+    context: ActionContext,
+  ): ActivityEntry;
+  // The one backlinks query: every Link pointing at an Item or a Project, oldest first. A Project's
+  // include those to Projects merged into it.
+  backlinks(target: LinkTarget): Link[];
+  // Live Blocks whose `[[` links point at these targets, each with its day: newest day first, then
+  // in outline order, target by target.
+  mentions(query: MentionQuery): Mention[];
   // Every change made in Commander goes through here, and each one records an activity entry.
   record(action: ItemAction, context: ActionContext): ActivityEntry;
   // Records several actions in order, all or none: a refused action rolls back the ones before it.
@@ -141,7 +158,8 @@ export type ItemStore = {
   undoRefile(entryIds: number[]): ActivityEntry[];
   // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet. With
   // `fromTemplate` (the day is being made as today), a new one starts with copies of the daily
-  // template's Blocks, made in the same transaction; a Daily Note that already exists never does.
+  // template's Blocks, made in the same transaction. One that already exists does only if it has
+  // never held a Block (made ahead of time as a `[[day]]` link's target).
   ensureDailyNote(day: string, context: ActionContext, options?: { fromTemplate?: boolean }): Item;
   // Daily Notes, newest first.
   dailyNotes(query?: DailyNoteQuery): DailyNotePage;
@@ -193,7 +211,10 @@ export class ItemStoreError extends Error {
   }
 }
 
-type LinkState = { from: string; linkType: LinkType; to: string };
+// A Link as the activity log records it. `targetType` is there only for a Link to a Project.
+type LinkState = { from: string; linkType: LinkType; to: string; targetType?: 'project' };
+
+const isProjectLink = (link: LinkState) => link.targetType === 'project';
 
 function refOf(item: Item): ItemRef {
   return { id: item.id, kind: item.kind, title: item.title, source: item.source, deletedAt: item.deletedAt };
@@ -204,6 +225,7 @@ type NewEntry = {
   action: ActivityAction;
   itemId: string;
   otherItemId?: string | null;
+  otherProjectId?: string | null;
   why?: string | null;
   causedBy?: CausedBy | null;
   undoes?: number | null;
@@ -556,6 +578,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         action: entry.action,
         itemId: entry.itemId,
         otherItemId: entry.otherItemId ?? null,
+        otherProjectId: entry.otherProjectId ?? null,
         why: entry.why ?? null,
         causedByItemId: entry.causedBy?.itemId ?? null,
         causedByEntryId: entry.causedBy?.entryId ?? null,
@@ -568,29 +591,160 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return toEntry(row);
   }
 
-  function readLinks(where: 'from' | 'to', itemId: string): Link[] {
-    const { links } = schema;
-    const rows = db
-      .select()
-      .from(links)
-      .where(eq(where === 'from' ? links.fromItemId : links.toItemId, itemId))
-      .orderBy(links.id)
-      .all();
-    return rows.map((row) => ({
-      type: row.type,
-      from: refOf(requireItem(row.fromItemId)),
-      to: refOf(requireItem(row.toItemId)),
-      createdAt: row.createdAt,
-    }));
+  // A Project as the far end of a Link: the one it was merged into, if it was.
+  function projectRefOf(projectId: string): ProjectRef {
+    const { projects } = schema;
+    let row = db.select().from(projects).where(eq(projects.id, projectId)).get();
+    for (let hops = 0; row?.mergedInto && hops < 100; hops++) {
+      const into: string = row.mergedInto;
+      row = db.select().from(projects).where(eq(projects.id, into)).get();
+    }
+    if (!row) throw new ItemStoreError('not-found', `No Project ${projectId}`);
+    const { id, name, code, accent, archived } = row;
+    return { kind: 'project', id, title: name, code, accent, archived };
   }
 
-  function findLink({ from, linkType, to }: LinkState) {
+  // The Project and every Project merged into it, however many merges back.
+  function projectAndMerged(projectId: string): string[] {
+    const { projects } = schema;
+    const ids = [projectId];
+    for (let i = 0; i < ids.length; i++) {
+      const merged = db
+        .select({ id: projects.id })
+        .from(projects)
+        .where(eq(projects.mergedInto, ids[i] as string))
+        .all();
+      for (const { id } of merged) if (!ids.includes(id)) ids.push(id);
+    }
+    return ids;
+  }
+
+  function toLink(row: typeof schema.links.$inferSelect): Link {
+    const to: LinkEnd =
+      row.targetType === 'project'
+        ? projectRefOf(row.toProjectId as string)
+        : refOf(requireItem(row.toItemId as string));
+    return { type: row.type, from: refOf(requireItem(row.fromItemId)), to, createdAt: row.createdAt };
+  }
+
+  function linksFrom(itemId: string): Link[] {
     const { links } = schema;
+    return db.select().from(links).where(eq(links.fromItemId, itemId)).orderBy(links.id).all().map(toLink);
+  }
+
+  function backlinks(target: LinkTarget): Link[] {
+    const { links } = schema;
+    const pointsAt =
+      target.targetType === 'project'
+        ? and(eq(links.targetType, 'project'), inArray(links.toProjectId, projectAndMerged(target.id)))
+        : and(eq(links.targetType, 'item'), eq(links.toItemId, target.id));
+    return db.select().from(links).where(pointsAt).orderBy(links.id).all().map(toLink);
+  }
+
+  function findLink(link: LinkState) {
+    const { links } = schema;
+    const to = isProjectLink(link)
+      ? and(eq(links.targetType, 'project'), eq(links.toProjectId, link.to))
+      : and(eq(links.targetType, 'item'), eq(links.toItemId, link.to));
     return db
       .select()
       .from(links)
-      .where(and(eq(links.fromItemId, from), eq(links.type, linkType), eq(links.toItemId, to)))
+      .where(and(eq(links.fromItemId, link.from), eq(links.type, link.linkType), to))
       .get();
+  }
+
+  // The activity entry columns naming a Link's far end.
+  const otherEndOf = (link: LinkState) =>
+    isProjectLink(link) ? { otherProjectId: link.to } : { otherItemId: link.to };
+
+  // Makes a Link present (link) or absent (unlink), and records it in the activity log.
+  function recordLink(
+    link: LinkState,
+    present: boolean,
+    entry: Pick<NewEntry, 'by' | 'why' | 'causedBy'>,
+    at: number,
+  ): ActivityEntry {
+    const existed = setLink(link, present, at);
+    const action = present ? 'link' : 'unlink';
+    const after = present ? link : null;
+    const logged = log(
+      { ...entry, action, itemId: link.from, ...otherEndOf(link), before: existed, after },
+      at,
+    );
+    if (after) blockFiling.afterLink(after, logged, at);
+    return logged;
+  }
+
+  /*
+    Keeps a Block's `[[` links in step with its text (ADR 0002): a refers-to Link for each day or
+    Project token in it, and none for a token no longer there. A day's token makes that day's Daily
+    Note if it has none yet. It runs whenever a Block's text is written, by anyone, so undo, redo and
+    moves need nothing of their own. Other refers-to Links from the Block (to other kinds of Item) are
+    left alone.
+  */
+  function syncBlockLinks(
+    blockId: string,
+    text: string,
+    entry: Pick<NewEntry, 'by' | 'causedBy'>,
+    at: number,
+  ) {
+    const { links, items } = schema;
+    const why = 'A [[ link in the Block';
+    const wanted = new Map<string, LinkState>();
+    for (const { target } of blockLinksIn(text)) {
+      if (target.type === 'project') {
+        if (!projects.exists(target.projectId)) continue;
+        wanted.set(`project:${target.projectId}`, {
+          from: blockId,
+          linkType: 'refers-to',
+          to: target.projectId,
+          targetType: 'project',
+        });
+        continue;
+      }
+      const note = ensureDailyNote(target.day, {
+        by: entry.by,
+        why: 'Linked from a Block',
+        causedBy: entry.causedBy ?? undefined,
+      });
+      wanted.set(`item:${note.id}`, { from: blockId, linkType: 'refers-to', to: note.id });
+    }
+    const present = db
+      .select({ targetType: links.targetType, toItemId: links.toItemId, toProjectId: links.toProjectId })
+      .from(links)
+      .leftJoin(items, eq(items.id, links.toItemId))
+      .where(
+        and(
+          eq(links.fromItemId, blockId),
+          eq(links.type, 'refers-to'),
+          or(eq(links.targetType, 'project'), eq(items.kind, 'daily-note')),
+        ),
+      )
+      .all();
+    for (const row of present) {
+      const project = row.targetType === 'project';
+      const key = project ? `project:${row.toProjectId}` : `item:${row.toItemId}`;
+      if (wanted.delete(key)) continue;
+      const link: LinkState = project
+        ? { from: blockId, linkType: 'refers-to', to: row.toProjectId as string, targetType: 'project' }
+        : { from: blockId, linkType: 'refers-to', to: row.toItemId as string };
+      recordLink(link, false, { ...entry, why }, at);
+    }
+    for (const link of wanted.values()) recordLink(link, true, { ...entry, why }, at);
+  }
+
+  // After an Item's state is written (from `before`, or newly made): a Block's `[[` links follow its
+  // text, when that text is new or changed.
+  function afterWrite(
+    itemId: string,
+    state: ItemState,
+    entry: Pick<NewEntry, 'by' | 'causedBy'>,
+    at: number,
+    before: ItemState | null = null,
+  ) {
+    if (state.detail?.kind !== 'block') return;
+    if (before?.detail?.kind === 'block' && before.detail.text === state.detail.text) return;
+    syncBlockLinks(itemId, state.detail.text, entry, at);
   }
 
   const record = sqlite.transaction((input: ItemAction, rawContext: ActionContext): ActivityEntry => {
@@ -604,7 +758,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         projects.checkFiling(fields.filing);
         const identity = { kind, source: null, account: null, externalId: null };
         const { id, state } = insertItem(identity, { ...fields, deletedAt: null }, at, chosenId);
-        return log({ ...entry, action: 'create', itemId: id, before: null, after: state }, at);
+        const created = log({ ...entry, action: 'create', itemId: id, before: null, after: state }, at);
+        afterWrite(id, state, entry, at);
+        return created;
       }
       case 'update': {
         const item = requireItem(action.itemId);
@@ -614,6 +770,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         const after = writeState(item, changed, at);
         const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
         blockFiling.afterUpdate({ ...item, ...after }, before, logged, at);
+        afterWrite(item.id, after, entry, at, before);
         return logged;
       }
       case 'edit-fields': {
@@ -636,20 +793,21 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       case 'link':
       case 'unlink': {
         const link: LinkState = { from: action.from, linkType: action.linkType, to: action.to };
+        if (action.targetType === 'project') link.targetType = 'project';
         requireItem(link.from);
-        requireItem(link.to);
-        if (link.from === link.to) throw new ItemStoreError('invalid', 'An Item cannot link to itself');
+        if (isProjectLink(link)) {
+          if (link.linkType !== 'refers-to') {
+            throw new ItemStoreError('invalid', 'Only a refers-to Link can point at a Project');
+          }
+          if (!projects.exists(link.to)) throw new ItemStoreError('not-found', `No Project ${link.to}`);
+        } else {
+          requireItem(link.to);
+          if (link.from === link.to) throw new ItemStoreError('invalid', 'An Item cannot link to itself');
+        }
         if (action.type === 'unlink' && !findLink(link)) {
           throw new ItemStoreError('not-found', `No ${link.linkType} Link from ${link.from} to ${link.to}`);
         }
-        const existed = setLink(link, action.type === 'link', at);
-        const after = action.type === 'link' ? link : null;
-        const logged = log(
-          { ...entry, action: action.type, itemId: link.from, otherItemId: link.to, before: existed, after },
-          at,
-        );
-        if (after) blockFiling.afterLink(after, logged, at);
-        return logged;
+        return recordLink(link, action.type === 'link', entry, at);
       }
       case 'undo':
         return undo(action.entryId, entry, at);
@@ -661,8 +819,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const { links } = schema;
     const existing = findLink(link);
     if (present && !existing) {
+      const to = isProjectLink(link)
+        ? { targetType: 'project' as const, toProjectId: link.to }
+        : { targetType: 'item' as const, toItemId: link.to };
       db.insert(links)
-        .values({ fromItemId: link.from, type: link.linkType, toItemId: link.to, createdAt: at })
+        .values({ fromItemId: link.from, type: link.linkType, ...to, createdAt: at })
         .run();
     }
     if (!present && existing) db.delete(links).where(eq(links.id, existing.id)).run();
@@ -683,14 +844,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     }
     const undoEntry = { ...entry, action: 'undo' as const, itemId: target.itemId, undoes: entryId };
 
-    if (target.otherItemId !== null) {
+    if (target.otherItemId !== null || target.otherProjectId !== null) {
       const wanted = target.before as LinkState | null;
       const link = (target.before ?? target.after) as LinkState;
       const existed = setLink(link, wanted !== null, at);
-      const logged = log(
-        { ...undoEntry, otherItemId: target.otherItemId, before: existed, after: wanted },
-        at,
-      );
+      const logged = log({ ...undoEntry, ...otherEndOf(link), before: existed, after: wanted }, at);
       if (wanted) blockFiling.afterLink(wanted, logged, at);
       return logged;
     }
@@ -712,6 +870,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const settled = writeState(item, blockFiling.settled(item.id, item.kind, restored), at);
     const logged = logAndQueue(item, { ...undoEntry, before: current, after: settled }, at);
     blockFiling.afterUpdate({ ...item, ...settled }, current, logged, at);
+    afterWrite(item.id, settled, entry, at, current);
     return logged;
   }
 
@@ -768,6 +927,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         },
         at,
       );
+      afterWrite(id, state, entry, at);
     }
   }
 
@@ -799,13 +959,50 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return requireItem(id);
   });
 
-  // A Daily Note made as today: if there was none for the day at all, it starts with the template.
+  // Whether a Daily Note has ever held a Block (deleted ones count: the User wrote in it).
+  function everWritten(dailyNoteId: string): boolean {
+    const { blockDetails } = schema;
+    return !!db
+      .select({ id: blockDetails.itemId })
+      .from(blockDetails)
+      .where(eq(blockDetails.dailyNoteId, dailyNoteId))
+      .get();
+  }
+
+  // A Daily Note made as today starts with the template if there was none for the day at all, or if
+  // the one there was made ahead of time (as a `[[day]]` link's target) and was never written in.
   const ensureFromTemplate = sqlite.transaction((input: string, rawContext: ActionContext): Item => {
-    const isNew = !findDailyNote(calendarDay.parse(input));
+    const existing = findDailyNote(calendarDay.parse(input));
+    const fresh = !existing || (existing.deletedAt === null && !everWritten(existing.id));
     const note = ensureDailyNote(input, rawContext);
-    if (isNew) copyTemplate(note.id, actionContext.parse(rawContext), now());
+    if (fresh) copyTemplate(note.id, actionContext.parse(rawContext), now());
     return note;
   });
+
+  function mentions(input: MentionQuery): Mention[] {
+    const query = mentionQuery.parse(input);
+    const { items, blockDetails, dailyNoteDetails } = schema;
+    const found: Mention[] = [];
+    for (const target of query.targets) {
+      const blockIds = backlinks(target)
+        .filter((link) => link.type === 'refers-to' && link.from.kind === 'block')
+        .map((link) => link.from.id);
+      if (!blockIds.length) continue;
+      const rows = db
+        .select({ item: items, day: dailyNoteDetails.day })
+        .from(items)
+        .innerJoin(blockDetails, eq(blockDetails.itemId, items.id))
+        .innerJoin(dailyNoteDetails, eq(dailyNoteDetails.itemId, blockDetails.dailyNoteId))
+        .where(and(inArray(items.id, blockIds), isNull(items.deletedAt)))
+        .orderBy(desc(dailyNoteDetails.day), asc(blockDetails.position), asc(items.id))
+        .all();
+      const blocksFound = withDetails(rows.map((row) => row.item));
+      rows.forEach((row, i) => {
+        found.push({ target, block: blocksFound[i] as Item, day: row.day });
+      });
+    }
+    return found;
+  }
 
   function dailyNotes(input: DailyNoteQuery = {}): DailyNotePage {
     const query = dailyNoteQuery.parse(input);
@@ -1065,12 +1262,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     get(itemId) {
       const item = readItem(itemId);
       if (!item) return null;
-      return { item, links: readLinks('from', itemId), backlinks: readLinks('to', itemId) };
+      return { item, links: linksFrom(itemId), backlinks: backlinks({ targetType: 'item', id: itemId }) };
     },
 
     link(link, context) {
       return record({ type: 'link', ...link }, context);
     },
+
+    backlinks,
+    mentions,
 
     record,
     recordAll,
