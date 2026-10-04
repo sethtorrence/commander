@@ -2,6 +2,7 @@ export * from './account-messages';
 export * from './attachments';
 export * from './autonomy';
 export * from './autonomy-messages';
+export * from './block-links';
 export * from './block-projects';
 export * from './core-messages';
 export * from './daily-template';

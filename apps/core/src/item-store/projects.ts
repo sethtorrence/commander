@@ -28,6 +28,8 @@ export type Projects = {
   change(action: ProjectAction): ProjectChange;
   // Throws unless the filing names a Project that exists (or is Unfiled).
   checkFiling(filing: Filing | undefined): void;
+  // Whether there is a Project with this id, archived or merged away included (a Link to it holds).
+  exists(projectId: string): boolean;
 };
 
 // What Projects need from the Items side of the store, for merging and undoing a merge.
@@ -288,5 +290,7 @@ export function projectsIn(
     checkFiling(filing) {
       if (filing && !byId(filing.projectId)) throw invalid(`No Project ${filing.projectId}`);
     },
+
+    exists: (projectId) => !!anyById(projectId),
   };
 }

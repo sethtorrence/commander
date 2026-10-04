@@ -19,6 +19,9 @@ import {
   itemAction,
   itemQuery,
   itemView,
+  type Mention,
+  mention,
+  mentionQuery,
   type ProjectBlock,
   projectBlock,
 } from './items';
@@ -96,6 +99,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('daily-note-projects') }),
   // A Project page's Notes list: the Project's written Blocks, by day.
   z.object({ op: z.literal('project-blocks'), projectId: z.string().min(1) }),
+  // The Blocks whose `[[` links point at these days' Daily Notes or Projects ("Mentioned in").
+  z.object({ op: z.literal('mentions'), query: mentionQuery }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -126,6 +131,7 @@ export type ItemStoreResults = {
   'source-catalog': LinearCatalog | null;
   'daily-note-projects': DailyNoteProjects[];
   'project-blocks': ProjectBlock[];
+  mentions: Mention[];
 };
 
 export const itemStoreResult = {
@@ -154,6 +160,7 @@ export const itemStoreResult = {
   'source-catalog': linearCatalog.nullable(),
   'daily-note-projects': z.array(dailyNoteProjects),
   'project-blocks': z.array(projectBlock),
+  mentions: z.array(mention),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

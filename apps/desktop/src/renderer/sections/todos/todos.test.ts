@@ -197,6 +197,7 @@ describe('describing an activity entry', () => {
     action: 'update',
     itemId: 't',
     otherItemId: null,
+    otherProjectId: null,
     why: null,
     causedBy: null,
     undoes: null,

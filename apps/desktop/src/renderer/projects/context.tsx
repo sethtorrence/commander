@@ -121,6 +121,11 @@ export function ProjectsProvider({
   );
 }
 
+/** The Projects, or null where there is no <ProjectsProvider> (a component tested on its own). */
+export function useProjectsIfAny(): ProjectsApi | null {
+  return useContext(ProjectsContext);
+}
+
 export function useProjects(): ProjectsApi {
   const api = useContext(ProjectsContext);
   if (!api) throw new Error('useProjects needs a <ProjectsProvider> above it');

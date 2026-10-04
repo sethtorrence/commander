@@ -1,10 +1,16 @@
 import type { Item, Project } from '@commander/domain';
 import { Badge, Kbd, SectionHeader, Sheet, SheetStripCell, toast } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { requestReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
+import type { ItemChanges } from '../../item-store/changes';
 import type { ItemStoreClient } from '../../item-store/client';
+import { chipLabel, type LabelChip } from '../../links/block-text';
+import { MentionRows } from '../../links/MentionedIn';
+import { useProjectMentions } from '../../links/use-mentions';
 import { MappingRules } from '../../rules/MappingRules';
 import { ProjectRankedList } from '../../sections/dashboard/ProjectRankedList';
+import { dayKey } from '../../sections/notes/days';
 import { TodoGroup } from '../../sections/todos/TodoGroup';
 import { TodoList } from '../../sections/todos/TodoList';
 import { todosIn } from '../../sections/todos/todos';
@@ -32,6 +38,8 @@ export interface ProjectPageProps {
   back: { label: string; onClick: () => void };
   /** Opens a Section (a per-Section count opens it scoped to the Project). */
   onOpenSection: (sectionId: string) => void;
+  /** Word of Items changed anywhere, so "Mentioned in" keeps up. */
+  changes?: ItemChanges;
 }
 
 /**
@@ -41,7 +49,14 @@ export interface ProjectPageProps {
  * Rules, and the controls to rename, recolour, archive and merge it. Its schedule joins it with the
  * Calendar milestone.
  */
-export function ProjectPage({ projectId, active, itemStore, back, onOpenSection }: ProjectPageProps) {
+export function ProjectPage({
+  projectId,
+  active,
+  itemStore,
+  back,
+  onOpenSection,
+  changes,
+}: ProjectPageProps) {
   const { projectById, setFilter, openPage, loaded } = useProjects();
   const project = projectById(projectId);
   const todos = useMemo(() => todosIn(itemStore), [itemStore]);
@@ -51,6 +66,13 @@ export function ProjectPage({ projectId, active, itemStore, back, onOpenSection 
   const badges = useBadgePicker(state.apply, undo);
   const items = useProjectItems(itemStore, projectId, state.list);
   const today = useNow(60_000);
+  // "Mentioned in": the Blocks whose `[[` links point at this Project.
+  const mentions = useProjectMentions(itemStore, projectId, changes, active);
+  const day = dayKey(today);
+  const label = useMemo<LabelChip>(
+    () => (target) => chipLabel(target, { today: day, projectById }),
+    [day, projectById],
+  );
 
   // Back in view: read everything again, for changes made in the Sections meanwhile.
   const wasActive = useRef(active);
@@ -196,7 +218,20 @@ export function ProjectPage({ projectId, active, itemStore, back, onOpenSection 
                 onTick={tick}
               />
             </TodoGroup>
-            {/* #52 adds "Mentioned in" here: the refers-to Links that point at this Project. */}
+            {mentions.length > 0 && (
+              <TodoGroup no="G2" title="Mentioned in" count={mentions.length}>
+                <MentionRows
+                  className="pr-5 pl-13"
+                  mentions={mentions}
+                  today={day}
+                  label={label}
+                  onOpen={(mention) => {
+                    requestReveal('notes', mention.block.id);
+                    onOpenSection('notes');
+                  }}
+                />
+              </TodoGroup>
+            )}
           </div>
         </PickBadgeProvider>
         {badges.picker}

@@ -1,4 +1,4 @@
-import type { ItemRef, LinkType } from '@commander/domain';
+import type { LinkEnd, LinkType } from '@commander/domain';
 import { SOURCE_NAMES, type TodoLink } from './todos';
 
 // How the detail pane words a Todo's Links and the Items at their other ends.
@@ -29,6 +29,8 @@ const KINDS: Record<string, { tag: string; section: string | null }> = {
   todo: { tag: 'TDO', section: 'todos' },
   block: { tag: 'DN', section: 'notes' },
   'daily-note': { tag: 'DN', section: 'notes' },
+  // Not an Item: a refers-to Link may point at a Project, which opens its Project page.
+  project: { tag: 'PRJ', section: null },
 };
 
 /** The short code an Item's kind is tagged with, as on the prototype's tags: EML, LIN, DN. */
@@ -42,7 +44,7 @@ export function sectionFor(kind: string): string | null {
 }
 
 /** "deleted in Gmail" for a tombstone, "deleted" for an Item deleted in Commander, else null. */
-export function goneNote(item: ItemRef): string | null {
-  if (item.deletedAt === null) return null;
+export function goneNote(item: LinkEnd): string | null {
+  if (item.kind === 'project' || item.deletedAt === null) return null;
   return item.source ? `deleted in ${SOURCE_NAMES[item.source]}` : 'deleted';
 }

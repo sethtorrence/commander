@@ -150,7 +150,34 @@ export type LinkType = z.infer<typeof linkType>;
 export const itemRef = item.pick({ id: true, kind: true, title: true, source: true, deletedAt: true });
 export type ItemRef = z.infer<typeof itemRef>;
 
-export const link = z.object({ type: linkType, from: itemRef, to: itemRef, createdAt: timestamp });
+// What a Link points at: an Item, or (a refers-to Link only, such as a `[[Project]]` link from a Block)
+// a Project, which is not an Item (ADR 0002). Both are kept in the one Link table.
+export const linkTargetTypes = ['item', 'project'] as const;
+export const linkTargetType = z.enum(linkTargetTypes);
+export type LinkTargetType = z.infer<typeof linkTargetType>;
+
+// The thing a Link points at, for the backlinks query: an Item or a Project, by id.
+export const linkTarget = z.object({ targetType: linkTargetType, id });
+export type LinkTarget = z.infer<typeof linkTarget>;
+
+// A short view of a Project at the end of a Link. A Link to a Project merged into another shows the
+// Project it was merged into.
+export const projectRef = z.object({
+  kind: z.literal('project'),
+  id,
+  // The Project's name, so it reads like an Item's title.
+  title: z.string(),
+  code: z.string(),
+  accent: z.string(),
+  archived: z.boolean(),
+});
+export type ProjectRef = z.infer<typeof projectRef>;
+
+// The far end of a Link: an Item, or a Project (kind `project`). Every Link consumer handles both.
+export const linkEnd = z.union([itemRef, projectRef]);
+export type LinkEnd = z.infer<typeof linkEnd>;
+
+export const link = z.object({ type: linkType, from: itemRef, to: linkEnd, createdAt: timestamp });
 export type Link = z.infer<typeof link>;
 
 // An Item with its Links (from it) and backlinks (to it).
@@ -191,7 +218,8 @@ export const itemChanges = z
   })
   .partial();
 
-const linkEnds = { from: id, linkType, to: id };
+// `to` is an Item's id, or a Project's with `targetType: 'project'` (refers-to Links only).
+const linkEnds = { from: id, linkType, to: id, targetType: linkTargetType.optional() };
 
 // Every change made in Commander is one of these actions, and each records an activity entry.
 export const itemAction = z.discriminatedUnion('type', [
@@ -240,6 +268,8 @@ export const activityEntry = z.object({
   itemId: id,
   // The Item a Link points to, for link and unlink (and their undos).
   otherItemId: id.nullable(),
+  // The Project a Link points to instead, for a refers-to Link to a Project (ADR 0002).
+  otherProjectId: id.nullable(),
   why: z.string().nullable(),
   causedBy: causedBy.nullable(),
   // For an undo: the entry it reversed.
@@ -331,3 +361,11 @@ export type DailyNoteProjects = z.infer<typeof dailyNoteProjects>;
 // A Block filed under a Project, with its Daily Note's day (a Project page's Notes list).
 export const projectBlock = z.object({ block: item, day: z.iso.date() });
 export type ProjectBlock = z.infer<typeof projectBlock>;
+// Blocks that mention something: refers-to Links from live Blocks (a `[[` link in their text) to an
+// Item or Project, each with the Block and its Daily Note's day. "Mentioned in", on a day's sheet and
+// a Project page.
+export const mentionQuery = z.object({ targets: z.array(linkTarget).min(1).max(1000) });
+export type MentionQuery = z.input<typeof mentionQuery>;
+
+export const mention = z.object({ target: linkTarget, block: item, day: z.iso.date() });
+export type Mention = z.infer<typeof mention>;

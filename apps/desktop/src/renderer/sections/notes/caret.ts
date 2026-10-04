@@ -1,3 +1,5 @@
+import { besideChip } from './chips';
+
 // The caret inside a Block's editable text, as character offsets into its text.
 
 /** The selection inside `element` as [start, end] offsets, or [0, 0] when it is elsewhere. */
@@ -24,7 +26,10 @@ export function placeCaret(element: HTMLElement, offset: number): void {
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const length = node.nodeValue?.length ?? 0;
     if (seen + length >= offset) {
-      range.setStart(node, Math.max(0, offset - seen));
+      // A chip (a non-editable `[[` link) is one piece: the caret goes before or after it.
+      const beside = besideChip(element, node, offset - seen);
+      if (beside) range.setStart(...beside);
+      else range.setStart(node, Math.max(0, offset - seen));
       range.collapse(true);
       selection.removeAllRanges();
       selection.addRange(range);

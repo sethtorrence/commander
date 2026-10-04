@@ -111,6 +111,7 @@ describe('the note when Linear’s change won', () => {
     action: 'update',
     itemId: 'issue',
     otherItemId: null,
+    otherProjectId: null,
     why,
     causedBy: null,
     undoes: null,

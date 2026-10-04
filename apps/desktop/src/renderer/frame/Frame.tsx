@@ -1,5 +1,6 @@
 import { DrawingGrid, RulerX, RulerY } from '@commander/ui';
 import { type ComponentProps, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import { itemChangesFromCore } from '../item-store/changes';
 import { PaletteHost } from '../palette/PaletteHost';
 import { ProjectsProvider, useProjects } from '../projects/context';
 import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
@@ -241,6 +242,7 @@ export function Frame() {
                 itemStore={window.commander.itemStore}
                 back={back}
                 onOpenSection={openSection}
+                changes={itemChangesFromCore}
               />
             </ShortcutScope>
           </section>

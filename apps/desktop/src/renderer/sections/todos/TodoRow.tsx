@@ -1,6 +1,9 @@
 import type { Item } from '@commander/domain';
+import { labelBlockLinks } from '@commander/domain';
 import { CheckIcon, cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
+import { ChipText } from '../../links/MentionedIn';
+import { useChipLabel } from '../../links/use-chip-label';
 import { originLabel } from './origin';
 import { TodoBadge } from './project';
 import type { MadeFrom } from './todos';
@@ -30,6 +33,9 @@ export function TodoRow({
 }) {
   const row = useRef<HTMLLIElement>(null);
   const done = todo.status === 'done';
+  // A Todo made from a Block has its text as title, `[[` links included: they read as chips.
+  const label = useChipLabel();
+  const title = labelBlockLinks(todo.title, (target) => label(target).text);
   useEffect(() => {
     if (selected) row.current?.scrollIntoView?.({ block: 'nearest' });
   }, [selected]);
@@ -64,13 +70,7 @@ export function TodoRow({
           onSelect();
         }}
       >
-        <input
-          type="checkbox"
-          checked={done}
-          onChange={onTick}
-          aria-label={todo.title}
-          className="peer sr-only"
-        />
+        <input type="checkbox" checked={done} onChange={onTick} aria-label={title} className="peer sr-only" />
         <span
           aria-hidden="true"
           className={cn(
@@ -90,7 +90,7 @@ export function TodoRow({
           done ? 'text-faint line-through decoration-1' : 'text-text',
         )}
       >
-        {todo.title}
+        <ChipText text={todo.title} label={label} />
       </span>
       <span className="mt-[5px] ml-3 inline-flex h-5 flex-none items-center border border-line bg-sheet px-[7px] font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted">
         {originLabel(todo, madeFrom)}

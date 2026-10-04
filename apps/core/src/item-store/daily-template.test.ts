@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -94,12 +95,31 @@ describe('the daily template', () => {
     expect(outline(note.id)).toEqual([]);
   });
 
-  it('never fills a Daily Note that already exists, even an empty one', () => {
-    const blank = store.ensureDailyNote('2026-10-03', user);
+  // A Daily Note made ahead of time (a `[[day]]` link to a future day) and never written in still
+  // starts from the template when its day comes (#52).
+  it('fills a Daily Note that already exists only if it has never held a Block', () => {
+    const ahead = store.ensureDailyNote('2026-10-03', user);
     const again = store.ensureDailyNote('2026-10-03', user, asToday);
 
-    expect(again.id).toBe(blank.id);
-    expect(outline(blank.id)).toEqual([]);
+    expect(again.id).toBe(ahead.id);
+    expect(outline(ahead.id)).toEqual(['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening']);
+  });
+
+  it('never fills a Daily Note that has held Blocks, even if they were all deleted', () => {
+    const written = store.ensureDailyNote('2026-10-03', user);
+    const id = randomUUID();
+    const detail = {
+      kind: 'block' as const,
+      dailyNoteId: written.id,
+      parentId: null,
+      position: 'a0',
+      text: 'x',
+      folded: false,
+    };
+    store.record({ type: 'create', item: { id, kind: 'block', title: 'x', detail } }, user);
+    store.record({ type: 'delete', itemId: id }, user);
+
+    expect(outline(store.ensureDailyNote('2026-10-03', user, asToday).id)).toEqual([]);
   });
 
   it('does not fill a deleted Daily Note that comes back', () => {

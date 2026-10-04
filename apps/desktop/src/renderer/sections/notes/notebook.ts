@@ -1,4 +1,5 @@
-import { attachmentMarkdown, type Project } from '@commander/domain';
+import { attachmentMarkdown, type BlockLinkTarget, type Project } from '@commander/domain';
+import { insertLink, type LinkQuery, removeLinkAt } from '../../links/block-text';
 import { fileBlock, withTags } from './block-projects';
 import { enterTodo, makeTodo, removeTodo, tickTodo, typeTodoMark } from './block-todos';
 import type { DailyNotes } from './daily-notes';
@@ -119,6 +120,16 @@ export interface Notebook {
    * A `#LT` in its text changes with it. Returns false if nothing changed.
    */
   file(day: string, id: string, projectId: string | null): boolean;
+  /**
+   * A target chosen in the `[[` picker: the typed `[[query` becomes the target's token (the chip), saved
+   * at once as one step, so its Link is made now. Returns the caret, just after the chip.
+   */
+  link(day: string, id: string, at: LinkQuery, target: BlockLinkTarget): Caret | null;
+  /**
+   * Backspace just after a chip, or Delete just before one: the chip goes whole, and its Link with it,
+   * as one step. Null (nothing done) when the caret isn't at a chip.
+   */
+  unlink(day: string, id: string, caret: number, direction: 'backward' | 'forward'): Caret | null;
   /** Reads the days on screen again, for changes made elsewhere (the Todos Section). */
   refresh(): Promise<void>;
   /** Makes sure the day holding a Block is on screen, and returns that day (null if it isn't found). */
@@ -291,6 +302,21 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     return commit(day, make(outlineOfDay(day)), why, focusBefore);
   }
 
+  // A change to one Block's text made as its own step (not held back like typing), and saved at once.
+  function replaceText(
+    day: string,
+    id: string,
+    why: string,
+    focusBefore: Caret,
+    text: string,
+    caret: number,
+  ) {
+    return edit(day, why, focusBefore, (outline) => {
+      const changed = setText(outline, id, text);
+      return changed && { ...changed, focus: { id, offset: caret } };
+    });
+  }
+
   const removeCheckbox = (day: string, id: string) =>
     edit(day, 'Remove the Todo', { id, offset: 0 }, (outline) => removeTodo(outline, id));
 
@@ -336,7 +362,12 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     },
 
     async showDay(day) {
-      if (findDay(day) || day > state.today) return;
+      if (findDay(day)) return;
+      // A day ahead (followed from a `[[day]]` chip) opens blank, above today.
+      if (day > state.today) {
+        addDays([{ day, noteId: null, outline: EMPTY }]);
+        return;
+      }
       try {
         const oldest = oldestLoaded();
         if (state.hasMore && (!oldest || day < oldest)) await loadOlder(day);
@@ -354,8 +385,14 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       try {
         const noteId = await api.ensure(day, { fromTemplate: true });
         const existing = findDay(day);
-        if (existing) setDay(day, { noteId });
-        else addDays(await load([{ day, noteId }]));
+        if (existing?.outline.size) setDay(day, { noteId });
+        else {
+          // A day already on screen but blank (opened ahead from a `[[day]]` chip) may just have
+          // been given the daily template's Blocks.
+          const [loaded] = await load([{ day, noteId }]);
+          if (loaded && existing) setDay(day, loaded);
+          else if (loaded) addDays([loaded]);
+        }
       } catch (error) {
         onError(message(error));
       }
@@ -479,6 +516,24 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
       return !!edit(day, projectId ? 'File under a Project' : 'Unfile', caret, (outline) =>
         fileBlock(outline, id, projectId, projects()),
       );
+    },
+
+    link(day, id, at, target) {
+      flushTyping();
+      const text = outlineOfDay(day).get(id)?.text;
+      if (text === undefined) return null;
+      const linked = insertLink(text, at, target);
+      const before = { id, offset: at.start + 2 + at.query.length };
+      return replaceText(day, id, 'Link', before, linked.text, linked.caret);
+    },
+
+    unlink(day, id, caret, direction) {
+      const text = outlineOfDay(day).get(id)?.text;
+      const removed = text === undefined ? null : removeLinkAt(text, caret, direction);
+      // Not at a chip: nothing happens, and typing held back stays one step with what follows.
+      if (!removed) return null;
+      flushTyping();
+      return replaceText(day, id, 'Remove the link', { id, offset: caret }, removed.text, removed.caret);
     },
 
     refresh() {

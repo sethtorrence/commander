@@ -1,0 +1,169 @@
+/*
+  `[[` links: chips in a Block's text, the picker, and "Mentioned in". Ported from the locked prototype
+  (prototype/daily-note-look, round-3/industrial.html: .wl for a link in the text, .acpop for the
+  picker), with a Project's Badge before a Project chip.
+*/
+@layer components {
+  /* A chip: its token is kept in the text (hidden), and its label drawn after it. */
+  .n-chip {
+    position: relative;
+    display: inline;
+    margin: 0 1px;
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: underline;
+    text-decoration-color: var(--muted);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+    cursor: pointer;
+  }
+  .n-chip:hover {
+    background: var(--raise);
+    text-decoration-color: var(--ink);
+  }
+  .n-chip[data-label]::after {
+    content: attr(data-label);
+  }
+  /* The token itself: in the text, taking no room. */
+  .n-chip-raw {
+    font-size: 0;
+    letter-spacing: 0;
+  }
+  /* A Project chip leads with its Badge: the code on the accent. */
+  .n-chip[data-code]::before {
+    content: attr(data-code);
+    display: inline-block;
+    margin-right: 6px;
+    padding: 3px 4px 2px;
+    vertical-align: 2px;
+    background: var(--accent);
+    color: var(--on-chip, var(--on-accent));
+    font: 700 9px / 1 var(--mono);
+    letter-spacing: 0.06em;
+    text-decoration: none;
+  }
+  .n-chip[data-chip="project"][data-gone] {
+    color: var(--faint);
+    text-decoration-style: dashed;
+  }
+
+  /* The picker (.acpop). */
+  .n-acpop {
+    position: fixed;
+    z-index: 50;
+    min-width: 260px;
+    max-width: 360px;
+    background: var(--sheet);
+    border: 1px solid var(--ink);
+    font-size: 13.5px;
+    line-height: 20px;
+  }
+  .n-acpop .ah,
+  .n-acpop .gh {
+    height: 26px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--line);
+    font: 600 9px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .n-acpop .gh {
+    height: 22px;
+    border-bottom: 0;
+    border-top: 1px solid var(--line2);
+    color: var(--faint);
+  }
+  .n-acpop .opt {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .n-acpop .opt .pg {
+    flex: none;
+    width: 25px;
+    height: 16px;
+    border: 1px solid var(--line);
+    font: 600 9px / 1 var(--mono);
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+  }
+  .n-acpop .opt .hint {
+    margin-left: auto;
+    padding-left: 12px;
+    font: 500 10px / 1 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .n-acpop .opt.sel {
+    background: var(--ink);
+    color: var(--sheet);
+  }
+  .n-acpop .opt.sel .pg,
+  .n-acpop .opt.sel .hint {
+    border-color: var(--sheet);
+    color: var(--sheet);
+  }
+  .n-acpop .none {
+    padding: 8px 10px;
+    color: var(--faint);
+  }
+
+  /* "Mentioned in": the Blocks on other days that link here. */
+  .n-mentions {
+    margin: 26px 0 0;
+    border-top: 1px solid var(--line);
+  }
+  .n-mentions-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 30px;
+    font: 600 9px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .n-mentions-head .n {
+    margin-left: auto;
+    color: var(--faint);
+  }
+  .n-mention {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    width: 100%;
+    padding: 6px 0;
+    border: 0;
+    border-top: 1px solid var(--line2);
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    font: inherit;
+    line-height: 22px;
+    cursor: pointer;
+  }
+  .n-mention:hover {
+    background: var(--raise);
+    color: var(--ink);
+  }
+  .n-mention .when {
+    flex: none;
+    width: 84px;
+    font: 500 10px / 22px var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .n-mention .n-chip {
+    cursor: inherit;
+  }
+}
