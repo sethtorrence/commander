@@ -1,0 +1,123 @@
+@layer components {
+  /* ================= Margin: Ares's suggestions (after the prototype's .agent-card) ================= */
+  .n-acs {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .n-ac {
+    position: absolute;
+    top: 0;
+    left: calc(100% / 3 + 14px);
+    right: 16px;
+    max-width: 360px;
+    pointer-events: auto;
+    background: var(--sheet);
+    border: 1px solid var(--line);
+    transition:
+      top 0.28s cubic-bezier(0.3, 0.7, 0.2, 1),
+      border-color 0.15s;
+  }
+  .n-ac:hover {
+    border-color: var(--signal);
+  }
+  .n-ac-head {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    height: 28px;
+    padding-right: 10px;
+    border-bottom: 1px solid var(--line2);
+    font: 600 9px / 1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--signal-ink);
+    white-space: nowrap;
+  }
+  .n-ac-tag {
+    align-self: stretch;
+    display: grid;
+    place-items: center;
+    padding: 0 8px;
+    background: var(--signal);
+    color: var(--on-signal);
+  }
+  .n-ac-src {
+    margin-left: auto;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .n-ac-body {
+    padding: 12px 14px 2px;
+  }
+  .n-ac-todo {
+    display: flex;
+    gap: 10px;
+    font: 600 15px / 20px var(--sans);
+    color: var(--ink);
+    letter-spacing: -0.008em;
+  }
+  .n-ac-todo .bx {
+    flex: none;
+    width: 13px;
+    height: 13px;
+    margin-top: 3px;
+    border: 1.5px dashed var(--signal);
+  }
+  .n-ac-kind {
+    font: 600 9.5px / 1 var(--mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .n-ac-why {
+    margin: 6px 0 0 23px;
+    font-size: 13px;
+    line-height: 19px;
+    color: var(--muted);
+  }
+  .n-ac-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    margin-top: 13px;
+    border-top: 1px solid var(--line2);
+    min-height: 34px;
+  }
+  .n-ac-actions button {
+    height: 34px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font: 600 9.5px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .n-ac-add {
+    color: var(--signal-ink);
+  }
+  .n-ac-add:hover,
+  .n-ac-add:focus-visible {
+    background: var(--signal);
+    color: var(--on-signal);
+  }
+  .n-ac-actions .n-ac-dismiss {
+    border-left: 1px solid var(--line2);
+    color: var(--muted);
+  }
+  .n-ac-dismiss:hover,
+  .n-ac-dismiss:focus-visible {
+    background: var(--raise);
+    color: var(--ink);
+  }
+  /* The Block a card is for, while the card is pointed at. */
+  [data-ares-mark] {
+    background: var(--signal-focus);
+    box-shadow: inset 3px 0 0 var(--signal);
+  }
+
+  @media (max-width: 1440px) {
+    .n-ac {
+      left: 14px;
+    }
+  }
+}

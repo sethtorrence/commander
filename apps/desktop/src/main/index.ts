@@ -74,6 +74,10 @@ function startCore(secrets: Secrets) {
   const core = utilityProcess.fork(join(__dirname, 'core.js'), [
     `--data-dir=${app.getPath('userData')}`,
     ...(testHooks ? ['--test-hooks'] : []),
+    // The end-to-end tests shorten Ares's pause after typing (the Core honours it only with test hooks).
+    ...(testHooks && process.env.COMMANDER_TEST_ARES_PAUSE_MS
+      ? [`--ares-typing-pause-ms=${process.env.COMMANDER_TEST_ARES_PAUSE_MS}`]
+      : []),
   ]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));

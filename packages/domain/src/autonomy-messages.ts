@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type AgentJobsState, agentJobsState } from './agent';
 import {
   type AresActivity,
   type AutonomySettings,
@@ -28,6 +29,11 @@ export const autonomyRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('dismiss'), proposalId }),
   z.object({ op: z.literal('accept-all'), proposalIds: z.array(proposalId).min(1) }),
   z.object({ op: z.literal('undo'), proposalId }),
+  // Ares's jobs (agent.ts): the list with whether he is working, switching one on or off in
+  // Settings → Ares, and running one now.
+  z.object({ op: z.literal('jobs') }),
+  z.object({ op: z.literal('set-job-enabled'), job: z.string().min(1), enabled: z.boolean() }),
+  z.object({ op: z.literal('run-job'), job: z.string().min(1) }),
 ]);
 export type AutonomyRequest = z.input<typeof autonomyRequest>;
 export type AutonomyOp = AutonomyRequest['op'];
@@ -44,6 +50,9 @@ export type AutonomyResults = {
   dismiss: ProposalRecord;
   'accept-all': ProposalRecord[];
   undo: AresActivity;
+  jobs: AgentJobsState;
+  'set-job-enabled': AgentJobsState;
+  'run-job': AgentJobsState;
 };
 
 export const autonomyResult = {
@@ -54,6 +63,9 @@ export const autonomyResult = {
   dismiss: proposalRecord,
   'accept-all': z.array(proposalRecord),
   undo: aresActivity,
+  jobs: agentJobsState,
+  'set-job-enabled': agentJobsState,
+  'run-job': agentJobsState,
 } satisfies Record<AutonomyOp, z.ZodType>;
 
 // For end-to-end tests only: the main process accepts these from the test harness, never from the

@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { CoreMessage } from '@commander/domain';
 import { createAccessTokens } from './access-tokens';
 import { answerRemoveAccountItems } from './account-requests';
+import { setUpAgent } from './agent';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { openItemStore } from './item-store';
@@ -64,8 +65,26 @@ sync.engine.onSynced(({ itemIds }) => {
 const testHooks = process.argv.includes('--test-hooks');
 const gate = openGate({
   itemStore,
-  onChange: () => port.postMessage({ type: 'ares-activity', at: Date.now() } satisfies CoreMessage),
+  onChange: (itemIds) => {
+    port.postMessage({ type: 'ares-activity', at: Date.now() } satisfies CoreMessage);
+    // What Ares added (or the User accepted, or undid) shows in every open Section.
+    if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
+    // And in the Markdown copy: an Ares Todo puts a checkbox on its Block there too.
+    markdownCopy.itemsChanged(itemIds);
+  },
 });
+
+// Ares's jobs, on their triggers. The end-to-end tests may shorten the pause after typing.
+const typingPauseMs = Number(
+  process.argv.find((arg) => arg.startsWith('--ares-typing-pause-ms='))?.split('=')[1] ?? Number.NaN,
+);
+const agent = setUpAgent(itemStore, {
+  gate,
+  client: models.client,
+  send: (message) => port.postMessage(message),
+  typingPauseMs: testHooks && Number.isFinite(typingPauseMs) ? typingPauseMs : undefined,
+});
+sync.engine.onSynced((event) => agent.synced(event));
 
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
@@ -79,8 +98,10 @@ port.on('message', ({ data }) => {
     answerItemStoreRequest(itemStore, data, (itemIds) => {
       changed = { type: 'items-changed', itemIds };
       changedIds = itemIds;
+      // The window's changes are the User's: typing in a Daily Note, say.
+      agent.userChanged(itemIds);
     }) ??
-    answerAutonomyRequest(gate, data, { testHooks });
+    answerAutonomyRequest(gate, data, { testHooks, jobs: agent.runner });
   if (reply) port.postMessage(reply);
   // After the reply, so the window that made the change has its answer first.
   if (changed) port.postMessage(changed);
@@ -96,6 +117,7 @@ let closed = false;
 const closeStore = () => {
   if (closed) return;
   closed = true;
+  agent.stop();
   sync.stop();
   markdownCopy.stop();
   itemStore.close();

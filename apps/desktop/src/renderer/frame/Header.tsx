@@ -22,26 +22,38 @@ export interface AresStatusProps {
   presence?: 'here' | 'away';
   /** When the User went away. */
   awaySince?: Date;
+  /** Whether one of Ares's jobs is running, and which. */
+  working?: AresWork;
   /** Opens Ares's activity page. */
   onOpen?: () => void;
 }
+
+export type AresWork = { working: boolean; running: readonly string[] };
 
 const things = (n: number) => `${n} thing${n === 1 ? '' : 's'}`;
 const hhmm = (date: Date) => clockTime(date).slice(0, 5);
 
 /**
- * The Ares status module (.ttn): what he is holding, whether you're here, and Ask for an update.
- * A placeholder until Updates arrive: nothing is queued and the button does nothing yet.
+ * The Ares status module (.ttn): whether he is working or idle, what he is holding, whether you're
+ * here, and Ask for an update. The queue, presence and the button arrive with Updates.
  */
-export function AresStatus({ queued = 0, presence = 'here', awaySince, onOpen }: AresStatusProps) {
+export function AresStatus({ queued = 0, presence = 'here', awaySince, working, onOpen }: AresStatusProps) {
   const away = presence === 'away';
-  const line = !queued
-    ? 'Ares has nothing for you right now'
-    : away
-      ? `Ares is holding ${things(queued)} for you`
-      : `Ares has ${things(queued)} for you`;
+  const busy = !!working?.working;
+  const line = busy
+    ? `Ares is working on ${working?.running.join(', ') || 'something'}`
+    : !queued
+      ? 'Ares has nothing for you right now'
+      : away
+        ? `Ares is holding ${things(queued)} for you`
+        : `Ares has ${things(queued)} for you`;
   return (
-    <section className={cn('f-ares', !queued && 'empty')} aria-label="Ares" data-testid="ares-status">
+    <section
+      className={cn('f-ares', !queued && 'empty')}
+      aria-label="Ares"
+      data-testid="ares-status"
+      data-working={busy || undefined}
+    >
       {/* Covers the count and the lines: the whole module opens Ares's activity page. */}
       <button type="button" className="f-ares-open" onClick={onOpen} aria-label="Ares’s activity" />
       <div className="f-ares-count" title="Things Ares is holding for you">
@@ -51,6 +63,9 @@ export function AresStatus({ queued = 0, presence = 'here', awaySince, onOpen }:
       <div className="f-ares-info">
         <div className="f-ares-l1">
           <span>Ares</span>
+          <span className={cn('state', busy && 'busy')} data-testid="ares-state" aria-live="polite">
+            {busy ? 'Working' : 'Idle'}
+          </span>
           <span className="pres" data-testid="ares-presence">
             <Led size="sm" state={away ? 'off' : 'on'} />
             {away ? `Away${awaySince ? ` · since ${hhmm(awaySince)}` : ''}` : 'You’re here'}

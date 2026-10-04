@@ -104,6 +104,60 @@ describe('requests from the window', () => {
   });
 });
 
+describe('Ares’s jobs, from the window', () => {
+  // Stands in for the job runner: its interface is tested in ../agent.
+  const jobs = {
+    enabled: true,
+    ran: [] as string[],
+    jobs() {
+      return [
+        {
+          job: 'suggest-todos',
+          name: 'Suggest Todos',
+          tier: 'quick' as const,
+          enabled: this.enabled,
+          lastRunAt: null,
+          lastOutcome: null,
+          lastProblem: null,
+        },
+      ];
+    },
+    setEnabled(_job: string, enabled: boolean) {
+      this.enabled = enabled;
+      return this.jobs();
+    },
+    run(job: string) {
+      this.ran.push(job);
+    },
+    status: () => ({ working: false, running: [] }),
+  };
+
+  it('lists them with whether Ares is working, switches one off and runs one', () => {
+    const ask = (request: unknown) =>
+      answerAutonomyRequest(gate, fromWindow(request), { testHooks: false, jobs })?.response;
+    expect(ask({ op: 'jobs' })).toEqual({
+      ok: true,
+      result: {
+        jobs: [expect.objectContaining({ job: 'suggest-todos', enabled: true })],
+        status: { working: false, running: [] },
+      },
+    });
+    expect(ask({ op: 'set-job-enabled', job: 'suggest-todos', enabled: false })).toMatchObject({
+      ok: true,
+      result: { jobs: [{ enabled: false }] },
+    });
+    expect(ask({ op: 'run-job', job: 'suggest-todos' })).toMatchObject({ ok: true });
+    expect(jobs.ran).toEqual(['suggest-todos']);
+  });
+
+  it('says so when the Core has no job runner', () => {
+    expect(answerAutonomyRequest(gate, fromWindow({ op: 'jobs' }), { testHooks: false })?.response).toEqual({
+      ok: false,
+      error: 'Ares’s jobs aren’t running',
+    });
+  });
+});
+
 describe('requests from end-to-end tests', () => {
   it('are refused unless the Core was started with test hooks', () => {
     expect(answerAutonomyRequest(gate, register, { testHooks: false })?.response).toEqual({

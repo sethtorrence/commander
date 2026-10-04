@@ -20,6 +20,7 @@ import {
 } from '@commander/ui';
 import { type FormEvent, type ReactNode, useEffect, useReducer, useState } from 'react';
 import { Readout, ReadoutRow, SettingRow, SettingsGroup } from '../parts';
+import { AresJobs } from './AresJobs';
 import { formatLatency, formatUsd } from './format';
 import { UsagePanel } from './UsagePanel';
 
@@ -421,6 +422,7 @@ export function AresSettings({ no, usageNo }: { no: string; usageNo: string }) {
         <ApiKeyRow onChange={refreshUsage} />
         <TestRow onCall={refreshUsage} />
         <ModelSettingsForm onSaved={refreshUsage} />
+        <AresJobs />
       </SettingsGroup>
       <UsagePanel no={usageNo} version={usageVersion} />
     </>

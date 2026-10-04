@@ -1,8 +1,10 @@
 // Answers the gate's requests, relayed by the main process: the window's (settings, Ares's
-// activity, accepting and undoing) and, only when the Core runs with --test-hooks, the end-to-end
+// activity, accepting and undoing, and his jobs: listing, switching off and running one) and,
+// only when the Core runs with --test-hooks, the end-to-end
 // tests' (registering actions and proposing as Ares's jobs would). Validated again here.
 import { AUTONOMY_MESSAGES, autonomyRequest, autonomyTestRequest } from '@commander/domain';
 import { z } from 'zod';
+import type { JobRunner } from '../agent/runner';
 import type { Gate } from './gate';
 
 type Response = { ok: true; result: unknown } | { ok: false; error: string };
@@ -25,12 +27,26 @@ function attempt(run: () => unknown): Response {
   }
 }
 
-function answerWindow(gate: Gate, raw: unknown): Response {
+// What the window may ask of Ares's jobs (the job runner, ../agent).
+export type JobsForWindow = Pick<JobRunner, 'jobs' | 'setEnabled' | 'run' | 'status'>;
+
+function answerWindow(gate: Gate, raw: unknown, jobs?: JobsForWindow): Response {
   const parsed = autonomyRequest.safeParse(raw);
   if (!parsed.success) return { ok: false, error: `Malformed autonomy request: ${parsed.error.message}` };
   const request = parsed.data;
   return attempt(() => {
+    const runner = () => {
+      if (!jobs) throw new Error('Ares’s jobs aren’t running');
+      return jobs;
+    };
     switch (request.op) {
+      case 'jobs':
+        return { jobs: runner().jobs(), status: runner().status() };
+      case 'set-job-enabled':
+        return { jobs: runner().setEnabled(request.job, request.enabled), status: runner().status() };
+      case 'run-job':
+        runner().run(request.job);
+        return { jobs: runner().jobs(), status: runner().status() };
       case 'settings':
         return { settings: gate.settings(), actions: gate.actions() };
       case 'set-level':
@@ -64,14 +80,14 @@ function answerTests(gate: Gate, raw: unknown): Response {
 export function answerAutonomyRequest(
   gate: Gate,
   message: unknown,
-  { testHooks }: { testHooks: boolean },
+  { testHooks, jobs }: { testHooks: boolean; jobs?: JobsForWindow },
 ): AutonomyReply | null {
   const parsed = envelope.safeParse(message);
   if (!parsed.success) return null;
   const { request } = message as { request?: unknown };
   const { id, type } = parsed.data;
   if (type === AUTONOMY_MESSAGES.window.request) {
-    return { type: AUTONOMY_MESSAGES.window.reply, id, response: answerWindow(gate, request) };
+    return { type: AUTONOMY_MESSAGES.window.reply, id, response: answerWindow(gate, request, jobs) };
   }
   const response: Response = testHooks
     ? answerTests(gate, request)

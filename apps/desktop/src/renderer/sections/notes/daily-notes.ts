@@ -86,7 +86,10 @@ export function dailyNotesIn(itemStore: ItemStoreClient): DailyNotes {
       for (const item of items) {
         const block = blockOf(item);
         const todo = todos.get(item.id);
-        if (todo && block) block.todo = { id: todo.id, done: todo.status === 'done' };
+        if (todo && block) {
+          const ares = todo.detail?.kind === 'todo' && todo.detail.origin === 'ares';
+          block.todo = { id: todo.id, done: todo.status === 'done', ...(ares && { ares }) };
+        }
         if (block && item.detail?.kind === 'block') byNote.get(item.detail.dailyNoteId)?.push(block);
       }
       return byNote;

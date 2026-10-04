@@ -186,6 +186,56 @@ describe('the Todo’s title and the Block’s text', () => {
   });
 });
 
+describe('a Todo Ares added for a Block', () => {
+  // As the gate carries out a "Suggest Todos" proposal for a Block the User wrote.
+  async function aresAdds(notebook: Notebook, blockId: string, title: string) {
+    const [todo] = store.recordAll(
+      [
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title,
+            detail: { kind: 'todo', origin: 'ares', dueOn: null, backedBy: null },
+          },
+        },
+      ],
+      { by: { kind: 'ares' } },
+    );
+    store.link(
+      { from: todo?.itemId as string, linkType: 'made-from', to: blockId },
+      { by: { kind: 'ares' } },
+    );
+    await notebook.refresh();
+    return todo?.itemId as string;
+  }
+
+  it('shows as the Block’s checkbox, and ticks from the note', async () => {
+    const notebook = await open();
+    const { id } = notebook.begin(TODAY, 'need to send Dana the Q3 numbers');
+    await notebook.flush();
+    const todo = await aresAdds(notebook, id, 'Send Dana the Q3 numbers');
+
+    expect(lines(notebook)).toEqual(['[ ] need to send Dana the Q3 numbers']);
+    expect(blockIn(notebook, id).todo).toEqual({ id: todo, done: false, ares: true });
+    notebook.tick(TODAY, id);
+    await notebook.flush();
+    expect(store.get(todo)?.item.status).toBe('done');
+  });
+
+  it('keeps its own title when the User edits the Block', async () => {
+    const notebook = await open();
+    const { id } = notebook.begin(TODAY, 'need to send Dana the Q3 numbers');
+    await notebook.flush();
+    const todo = await aresAdds(notebook, id, 'Send Dana the Q3 numbers');
+
+    notebook.type(TODAY, id, 'need to send Dana the Q3 numbers by Friday');
+    await notebook.flush();
+    expect(store.get(todo)?.item.title).toBe('Send Dana the Q3 numbers');
+    expect(store.get(id)?.item.title).toBe('need to send Dana the Q3 numbers by Friday');
+  });
+});
+
 describe('ticking', () => {
   it('in the note ticks the Todo in Todos, and undo in the note unticks it', async () => {
     const notebook = await open();

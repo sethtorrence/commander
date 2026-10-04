@@ -67,6 +67,7 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 import { openSearch, type Search } from '../search';
+import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
@@ -97,6 +98,7 @@ import { openSyncStateStore, type SyncStateStore } from './sync-state';
 import { editedState, queueChanges, undoneDetail, withQueuedOnTop } from './synced-changes';
 
 export type { Search } from '../search';
+export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { Snapshot } from './snapshots';
@@ -201,6 +203,8 @@ export type ItemStore = {
   outgoing: OutgoingStore;
   // The Autonomy settings and the gate's proposals, in the same database.
   autonomy: AutonomyStore;
+  // Where Ares's jobs stand and what they have looked at, in the same database.
+  agent: AgentStore;
   // Global search over the live Items, kept current by every write here.
   search: Search;
   // A Project as a Link (or a `[[` link token) shows it: the one it was merged into, if it was. Null
@@ -1312,6 +1316,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     syncState,
     outgoing,
     autonomy: openAutonomyStore(db, now),
+    agent: openAgentStore(db, now),
     search: { query: (query) => search.query(query) },
 
     saveFromSource,

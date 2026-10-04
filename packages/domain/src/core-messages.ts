@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { aresStatus } from './agent';
 import { markdownCopyStatus } from './markdown-copy-messages';
 
 // Messages the Core sends to the window.
@@ -12,7 +13,11 @@ const heartbeat = z.object({
 // Ares did or suggested something (through the gate): views of his activity reload.
 const aresActivity = z.object({ type: z.literal('ares-activity'), at: z.number().int().nonnegative() });
 
-// Items were changed in the Item store (by the window, or a sync): open views showing them catch up.
+// Ares started or finished a job: the Ares status module shows him working or idle.
+const aresStatusChanged = aresStatus.extend({ type: z.literal('ares-status') });
+
+// Items were changed in the Item store (by the window, a sync, or Ares through the gate): open
+// views showing them catch up.
 const itemsChanged = z.object({
   type: z.literal('items-changed'),
   itemIds: z.array(z.string().min(1)).min(1),
@@ -24,6 +29,7 @@ const markdownCopyChanged = z.object({ type: z.literal('markdown-copy-status'), 
 export const coreMessage = z.discriminatedUnion('type', [
   heartbeat,
   aresActivity,
+  aresStatusChanged,
   itemsChanged,
   markdownCopyChanged,
 ]);
