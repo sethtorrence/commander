@@ -1,9 +1,11 @@
 import {
   type ActivityEntry,
   aresRanker,
+  type ChatSetting,
   type DashboardBand,
   type DashboardState,
   type Item,
+  mutedChatIds,
   type Ranker,
   type Ranking,
   rankingOrigin,
@@ -26,6 +28,7 @@ import {
   type BandCounts,
   bandCounts,
   type Clears,
+  clearHolds,
   clearRow,
   type FeedRow,
   feedRows,
@@ -36,8 +39,8 @@ import { type SuggestedTodo, withSuggestions } from './suggested-todos';
 /*
   "What needs you" for the whole window: the frame mounts one <DashboardProvider>, and the Dashboard
   Section, the header's band meter and a Project page read it through `useDashboard()`. It reads the
-  open Items and the Linear Accounts, and from the Core Ares's ranking, the cleared rows and his
-  pending suggested Todos. It ranks with Ares's ranking, falling back to the band rules for what he
+  open Items (Teams Chats among them, less the muted ones) and the Linear and Teams Accounts, and
+  from the Core Ares's ranking, the cleared rows and his pending suggested Todos. It ranks with Ares's ranking, falling back to the band rules for what he
   hasn't ranked and whenever his ranking can't be used (aresRanker), and keeps the cleared rows (in
   the Core, so Ares leaves them out) and the rows ticked here. It reads again after every sync, when
   Ares ranks again or suggests something, when another Section or page is opened, when the window
@@ -66,7 +69,10 @@ export interface DashboardApi {
   events: readonly Item[];
   /** Ticks a Todo, or unticks one ticked here; a ticked row stays, struck through, until the Dashboard is left. */
   tick(row: FeedRow): Promise<void>;
-  /** Clears a row from the Dashboard: it stays in its Section, and comes back if its band changes. */
+  /**
+   * Clears a row from the Dashboard: it stays in its Section, and comes back if its band changes (a
+   * Chat: when it gets a newer qualifying message).
+   */
   clear(row: FeedRow): void;
   /** Brings back every row cleared under the Project filter. */
   bringBack(): void;
@@ -80,6 +86,8 @@ export interface DashboardApi {
   leave(): void;
   /** Reads everything again. */
   reload(): void;
+  /** Asks every connected Teams Account for a light sync: opening the Dashboard checks Teams. */
+  refreshTeams(): void;
   /** What today's Daily Note holds so far (its top Blocks' text), or null with none yet. */
   dailyNote(day: string): Promise<string[] | null>;
   /** The band the header asked to jump to, as a new object each time. */
@@ -113,6 +121,7 @@ export function DashboardProvider({
 }) {
   const { include } = useProjectFilter();
   const [items, setItems] = useState<Item[] | null>(null);
+  const [chatSettings, setChatSettings] = useState<ChatSetting[]>([]);
   const [accounts, setAccounts] = useState<AccountSummary[] | null>(null);
   const [core, setCore] = useState<DashboardState | null>(null);
   const [suggested, setSuggested] = useState<{ item: Item; suggestion: SuggestedTodo }[]>([]);
@@ -128,14 +137,18 @@ export function DashboardProvider({
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload
   useEffect(() => {
     let current = true;
-    Promise.all([client.items(), client.state(), client.suggestions()]).then(([next, state, pending]) => {
-      if (!current) return;
-      setItems(next);
-      setCore(state);
-      setClears(state.clears);
-      setSuggested(pending);
-      setNow(clock());
-    }, report);
+    Promise.all([client.items(), client.state(), client.suggestions(), client.chatSettings()]).then(
+      ([next, state, pending, settings]) => {
+        if (!current) return;
+        setItems(next);
+        setChatSettings(settings);
+        setCore(state);
+        setClears(state.clears);
+        setSuggested(pending);
+        setNow(clock());
+      },
+      report,
+    );
     return () => {
       current = false;
     };
@@ -195,6 +208,8 @@ export function DashboardProvider({
 
   const loaded = items !== null && accounts !== null && core !== null;
   const users = useMemo(() => usersOf(accounts ?? []), [accounts]);
+  // Muted Chats never reach the Dashboard, whoever ranked them.
+  const muted = useMemo(() => mutedChatIds(items ?? [], chatSettings), [items, chatSettings]);
   const rank = useMemo(() => ranker ?? aresRanker(core?.ranking ?? null), [ranker, core]);
   const origin = rankingOrigin(ranker ? null : (core?.ranking ?? null), now);
   // The open Items, with Ares's suggested Todos as the Todos they would add.
@@ -205,8 +220,8 @@ export function DashboardProvider({
     const decided = new Set(
       origin.by === 'ares' ? (core?.ranking.entries.map((entry) => entry.itemId) ?? []) : [],
     );
-    return withSuggestions(rank(ranked, { now, users }), suggested, decided);
-  }, [loaded, rank, ranked, now, users, suggested, origin.by, core]);
+    return withSuggestions(rank(ranked, { now, users, muted }), suggested, decided);
+  }, [loaded, rank, ranked, now, users, muted, suggested, origin.by, core]);
   const suggestions = useMemo(
     () => new Map(suggested.map(({ item, suggestion }) => [item.id, suggestion])),
     [suggested],
@@ -223,13 +238,13 @@ export function DashboardProvider({
   // Clears whose Item moved to another band are forgotten, so the row is back.
   useEffect(() => {
     if (!loaded) return;
-    const kept = keepClears(clears, rankings, now);
+    const kept = keepClears(clears, rankings, now, ranked, users);
     if (kept !== clears) changeClears(kept);
-  }, [loaded, clears, rankings, now, changeClears]);
+  }, [loaded, clears, rankings, now, ranked, users, changeClears]);
 
   const rows = useMemo(
-    () => feedRows(rankings, ranked, clears, tickedHere, suggestions),
-    [rankings, ranked, clears, tickedHere, suggestions],
+    () => feedRows(rankings, ranked, clears, tickedHere, suggestions, { users, now }),
+    [rankings, ranked, clears, tickedHere, suggestions, users, now],
   );
   const shown = useMemo(() => rows.filter((row) => include(row.item)), [rows, include]);
   const counts = useMemo(() => bandCounts(shown), [shown]);
@@ -238,9 +253,11 @@ export function DashboardProvider({
     () =>
       rankings.filter((ranking) => {
         const item = byId.get(ranking.itemId);
-        return item && clears[ranking.itemId]?.band === ranking.band && include(item);
+        return (
+          item && clearHolds(clears[ranking.itemId], ranking.band, item, { users, now }) && include(item)
+        );
       }),
-    [rankings, byId, clears, include],
+    [rankings, byId, clears, include, users, now],
   );
   const openTodos = useMemo(
     () => (items ?? []).filter((item) => item.kind === 'todo' && include(item)).length,
@@ -295,6 +312,10 @@ export function DashboardProvider({
       }
       if (item.kind === 'event') {
         toast(`${item.title} is a meeting: open it (Enter) or clear it (E)`);
+        return;
+      }
+      if (item.kind === 'chat') {
+        toast('A Chat has nothing to tick: open it (Enter) to answer, or clear it (E)');
         return;
       }
       // A Linear row is a Linear Todo's issue: ticking ticks that Todo, which moves the issue.
@@ -406,6 +427,9 @@ export function DashboardProvider({
   );
 
   const leave = useCallback(() => setTickedHere((now) => (now.size ? new Map() : now)), []);
+  const refreshTeams = useCallback(() => {
+    client.refreshTeams().catch(report);
+  }, [client]);
   const jumpToBand = useCallback((band: DashboardBand) => setJump({ band }), []);
 
   const api = useMemo<DashboardApi>(
@@ -427,12 +451,14 @@ export function DashboardProvider({
       undo,
       leave,
       reload,
+      refreshTeams,
       dailyNote: client.dailyNote,
       jump,
       jumpToBand,
     }),
     [
       client,
+      refreshTeams,
       loaded,
       now,
       origin.by,

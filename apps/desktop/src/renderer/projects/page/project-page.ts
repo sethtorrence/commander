@@ -6,18 +6,21 @@ import { dayOfYear } from '../../frame/calendar';
   Notes' Blocks; the Sections that come later (Email, Linear, Calendar, GitHub) add their own counts.
 */
 
-/** Per-Section counts: open Todos, and Blocks in the Notes. */
+/** Per-Section counts: open Todos, Blocks in the Notes, and Teams Chats. */
 export function sectionCounts(items: readonly Pick<Item, 'kind' | 'status'>[]): {
   todos: number;
   notes: number;
+  teams: number;
 } {
   let todos = 0;
   let notes = 0;
+  let teams = 0;
   for (const { kind, status } of items) {
     if (kind === 'todo' && status === 'open') todos += 1;
     if (kind === 'block') notes += 1;
+    if (kind === 'chat') teams += 1;
   }
-  return { todos, notes };
+  return { todos, notes, teams };
 }
 
 /** How the Items were filed: by a Rule, by Ares, by the User, or inherited from their source. */

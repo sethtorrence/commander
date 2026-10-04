@@ -59,6 +59,12 @@ export function DashboardSheet() {
     wasActive.current = active;
   }, [active, dashboard.reload, dashboard.leave]);
 
+  // Opening the Dashboard (at start, too) checks Teams, so mentions show without waiting on another sync.
+  const { refreshTeams } = dashboard;
+  useEffect(() => {
+    if (active) refreshTeams();
+  }, [active, refreshTeams]);
+
   // The header's band meter jumps to a band: its first row selected, its header in view.
   const { jump } = dashboard;
   const { select } = selection;
@@ -78,7 +84,7 @@ export function DashboardSheet() {
     const section = openIn(row);
     if (!section) return;
     openSection(section[0]);
-    requestReveal(section[0], revealId(row));
+    requestReveal(section[0], revealId(row), row.focus?.messageId);
   };
   const settle = (row: FeedRow, op: 'accept' | 'dismiss') => void dashboard.settleSuggestion(row, op);
   useShortcuts([
@@ -134,7 +140,7 @@ export function DashboardSheet() {
               : `Ranked by rules · ${clockTime(now).slice(0, 5)}`}
           </SheetStripCell>
         }
-        meta={<SheetStripCell>Todos, Linear and meetings merged</SheetStripCell>}
+        meta={<SheetStripCell>Todos, Linear, meetings and Teams merged</SheetStripCell>}
         subtitle={
           <>
             {weekday(today)} {longDate(today)} ·{' '}

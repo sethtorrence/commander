@@ -454,3 +454,29 @@ describe('the Teams sheet', () => {
     expect(listed()).toHaveLength(4);
   });
 });
+
+describe('opened from the Dashboard (#107)', () => {
+  it('opens the Chat scrolled to the message that put it on the Dashboard, marked', async () => {
+    const { requestReveal } = await import('../../frame/reveal');
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    renderSheet();
+    await waitFor(() => expect(listed()).toHaveLength(4));
+    const launch = store.get(chatId('Launch crew'))?.item;
+    const mention = launch?.detail?.kind === 'chat' ? launch.detail.messages.at(-1) : undefined;
+    act(() => requestReveal('teams', chatId('Launch crew'), mention?.id));
+    await waitFor(() =>
+      expect(within(view() as HTMLElement).getByRole('heading', { level: 2 })).toBeTruthy(),
+    );
+    const focused = await waitFor(() => {
+      const found = view()?.querySelector('[data-focused]');
+      expect(found).toBeTruthy();
+      return found as Element;
+    });
+    expect(focused.getAttribute('data-message-id')).toBe(mention?.id);
+    expect(focused.getAttribute('aria-label')).toMatch(/^Priya Patel at /);
+    expect(scrolled).toContain(focused);
+  });
+});

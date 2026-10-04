@@ -1,4 +1,11 @@
-import type { Item, LinearIssueDetail, Ranking } from '@commander/domain';
+import {
+  type ChatDetail,
+  type ChatMessage,
+  chatFlags,
+  type Item,
+  type LinearIssueDetail,
+  type Ranking,
+} from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import {
   bandCounts,
@@ -243,5 +250,99 @@ describe('a meeting on the Dashboard', () => {
   it('says when it starts, then when it ends', () => {
     expect(rowMeta(row, NOW)).toEqual(['12M', 'Starts']);
     expect(rowMeta(row, start + 60_000)).toEqual(['Now', 'Ends 12:22']);
+  });
+});
+
+describe('Chats on the Dashboard (#107)', () => {
+  const TEAMS = 'teams:tenant:sam';
+  const users = { [TEAMS]: 'u-sam' };
+  const SAM = { userId: 'u-sam', name: 'Sam Rivera' };
+  const DANA = { userId: 'u-dana', name: 'Dana Whitfield' };
+  const PRIYA = { userId: 'u-priya', name: 'Priya Patel' };
+  let n = 0;
+  const message = (from: typeof SAM, at: number, mentions: (typeof SAM)[] = []): ChatMessage => {
+    n += 1;
+    return {
+      id: `m${n}`,
+      from,
+      event: null,
+      createdAt: at,
+      modifiedAt: at,
+      deleted: false,
+      text: 'hi',
+      mentions,
+      reactions: [],
+      attachments: [],
+      replyTo: null,
+    };
+  };
+  function chatItem(id: string, chatType: ChatDetail['chatType'], messages: ChatMessage[]): Item {
+    return {
+      ...todo(id),
+      kind: 'chat',
+      source: 'teams',
+      account: TEAMS,
+      externalId: `19:${id}`,
+      title: chatType === 'one-on-one' ? 'Dana Whitfield' : 'Launch crew',
+      detail: {
+        kind: 'chat',
+        chatType,
+        topic: null,
+        webUrl: null,
+        members: [],
+        lastReadAt: null,
+        hidden: false,
+        joinUrl: null,
+        messages,
+        ...chatFlags({ messages, lastReadAt: null }, SAM.userId),
+      },
+    };
+  }
+  const chats = { users, now: NOW };
+
+  it('opens a Chat’s row at the message that put it there', () => {
+    const first = message(DANA, NOW - 2 * HOUR);
+    const last = message(DANA, NOW - HOUR);
+    const dana = chatItem('dana', 'one-on-one', [first, last]);
+    const [row] = feedRows([ranking('dana', 'today')], [dana], {}, new Map(), new Map(), chats);
+    expect(row?.focus).toEqual({ messageId: last.id, at: last.createdAt, why: 'unanswered' });
+  });
+
+  it('opens a Chat Ares placed (no rule would) at its latest message', () => {
+    const latest = message(PRIYA, NOW - HOUR);
+    const launch = chatItem('launch', 'group', [message(DANA, NOW - 2 * HOUR), latest]);
+    const [row] = feedRows([ranking('launch', 'waiting')], [launch], {}, new Map(), new Map(), chats);
+    expect(row?.focus).toEqual({ messageId: latest.id, at: latest.createdAt, why: 'latest' });
+  });
+
+  it('keeps a cleared Chat off until a newer qualifying message, whatever its band', () => {
+    const dana = chatItem('dana', 'one-on-one', [message(DANA, NOW - HOUR)]);
+    const clears: Clears = { dana: { band: 'today', at: NOW - 30 * 60_000 } };
+    expect(feedRows([ranking('dana', 'now')], [dana], clears, new Map(), new Map(), chats)).toEqual([]);
+    expect(keepClears(clears, [ranking('dana', 'now')], NOW, [dana], users)).toBe(clears);
+
+    // Dana writes again: the row is back, and the clear is forgotten.
+    const again = chatItem('dana', 'one-on-one', [message(DANA, NOW - HOUR), message(DANA, NOW - 60_000)]);
+    expect(feedRows([ranking('dana', 'today')], [again], clears, new Map(), new Map(), chats)).toHaveLength(
+      1,
+    );
+    expect(keepClears(clears, [ranking('dana', 'today')], NOW, [again], users)).toEqual({});
+  });
+
+  it('stamps a Chat TMS with its type, and says on the right why and since when', () => {
+    const dana = chatItem('dana', 'one-on-one', [message(DANA, NOW - 40 * 60_000)]);
+    const launch = chatItem('launch', 'group', [message(PRIYA, NOW - 3 * HOUR, [SAM])]);
+    expect(sourceTag(dana)).toEqual({ stamp: 'TMS', text: 'One-to-one chat' });
+    expect(sourceTag(launch)).toEqual({ stamp: 'TMS', text: 'Group chat' });
+    const [danaRow, launchRow] = feedRows(
+      [ranking('dana', 'today', 1), ranking('launch', 'today', 2)],
+      [dana, launch],
+      {},
+      new Map(),
+      new Map(),
+      chats,
+    );
+    expect(danaRow && rowMeta(danaRow, NOW)).toEqual(['40M', 'Unanswered']);
+    expect(launchRow && rowMeta(launchRow, NOW)).toEqual(['3H', 'Mention']);
   });
 });

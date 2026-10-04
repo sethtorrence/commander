@@ -119,3 +119,18 @@ export const chatSettingAction = z.object({
   change: z.enum(chatSettingChanges),
 });
 export type ChatSettingAction = z.infer<typeof chatSettingAction>;
+
+/** The Item ids of the muted Chats among `items` (matched by Account and Teams id), for the Dashboard to leave off. */
+export function mutedChatIds(
+  items: readonly { id: string; kind: string; account: string | null; externalId: string | null }[],
+  settings: readonly Pick<ChatSetting, 'account' | 'chatId' | 'muted'>[],
+): Set<string> {
+  const muted = new Set(
+    settings.filter((each) => each.muted).map((each) => `${each.account}\n${each.chatId}`),
+  );
+  return new Set(
+    items
+      .filter((item) => item.kind === 'chat' && muted.has(`${item.account}\n${item.externalId}`))
+      .map((item) => item.id),
+  );
+}

@@ -9,7 +9,7 @@ const item = (kind: Item['kind'], status: Item['status'], filedBy: FiledBy = 'us
 });
 
 describe('a Project page’s numbers', () => {
-  it('counts open Todos and the Notes’ Blocks, by kind', () => {
+  it('counts open Todos, the Notes’ Blocks and the Teams Chats, by kind', () => {
     expect(
       sectionCounts([
         item('todo', 'open'),
@@ -17,9 +17,10 @@ describe('a Project page’s numbers', () => {
         item('todo', 'done'),
         item('block', 'open'),
         item('email', 'open'),
+        item('chat', 'open'),
       ]),
-    ).toEqual({ todos: 2, notes: 1 });
-    expect(sectionCounts([])).toEqual({ todos: 0, notes: 0 });
+    ).toEqual({ todos: 2, notes: 1, teams: 1 });
+    expect(sectionCounts([])).toEqual({ todos: 0, notes: 0, teams: 0 });
   });
 
   it('counts how its Items were filed: by a Rule, by Ares, by the User, or inherited', () => {

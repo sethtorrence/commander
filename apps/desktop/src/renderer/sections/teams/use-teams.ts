@@ -36,8 +36,13 @@ export interface TeamsState {
   /** The selected Chat: always one that is listed, unless it is open. */
   selected: Chat | null;
   select(itemId: string): void;
-  /** Selects and opens a Chat, clearing the filters if they hide it. */
-  reveal(itemId: string): void;
+  /**
+   * Selects and opens a Chat, clearing the filters if they hide it, scrolled to a message when one
+   * is given (the Dashboard opens a Chat at the message that put it there).
+   */
+  reveal(itemId: string, messageId?: string): void;
+  /** The message the open Chat was asked to show, while it is open; a new object for each ask. */
+  focus: MessageFocus | null;
   moveSelection(step: 1 | -1): void;
   open: boolean;
   setOpen(open: boolean): void;
@@ -56,6 +61,9 @@ export interface TeamsState {
   /** Asks every connected Teams Account for a light sync now (the sync engine's refresh). */
   refresh(): void;
 }
+
+/** A message to show in a Chat; `nonce` tells one ask from the next. */
+export type MessageFocus = { chatId: string; messageId: string; nonce: number };
 
 // A change made here that can be undone: an activity entry (filing), or a mute to reverse.
 type Undoable = { kind: 'entry'; entryId: number } | { kind: 'mute'; chat: Chat; muted: boolean };
@@ -89,6 +97,7 @@ export function useTeams({
   const [filters, setFilterState] = useState<ChatFilters>(NO_FILTERS);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [focusAsked, setFocusAsked] = useState<MessageFocus | null>(null);
   const [history, setHistory] = useState<ActivityEntry[]>([]);
   const [links, setLinks] = useState<ChatLink[]>([]);
   const [version, setVersion] = useState(0);
@@ -182,15 +191,20 @@ export function useTeams({
   );
 
   const reveal = useCallback(
-    (itemId: string) => {
+    (itemId: string, messageId?: string) => {
       const chat = all.find((one) => one.id === itemId);
       if (!chat) reload();
       if (!chat || !inFilters(chat, filters)) setFilterState(NO_FILTERS);
       setSelectedId(itemId);
       setOpen(true);
+      setFocusAsked((was) =>
+        messageId ? { chatId: itemId, messageId, nonce: (was?.nonce ?? 0) + 1 } : null,
+      );
     },
     [all, filters, reload],
   );
+  // The message asked for stands while its Chat is the one open.
+  const focus = focusAsked && open && focusAsked.chatId === selectedItemId ? focusAsked : null;
 
   const apply = useCallback(
     async (change: () => Promise<ActivityEntry>) => {
@@ -301,6 +315,7 @@ export function useTeams({
     selected,
     select: setSelectedId,
     reveal,
+    focus,
     moveSelection,
     open,
     setOpen,

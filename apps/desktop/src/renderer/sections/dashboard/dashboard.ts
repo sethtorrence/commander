@@ -1,5 +1,5 @@
-import type { ActivityEntry, CoreMessage, DashboardState, Item } from '@commander/domain';
-import type { AccountSummary } from '@commander/domain/ipc';
+import type { ActivityEntry, ChatSetting, CoreMessage, DashboardState, Item } from '@commander/domain';
+import type { AccountSummary, AccountsState } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import type { AutonomyClient } from '../ares/activity';
 import { addDays, dayKey, dayStart } from '../calendar/agenda';
@@ -10,20 +10,28 @@ import { type SuggestedTodo, suggestedTodoOf } from './suggested-todos';
 
 /*
   The Dashboard's view of the app: everything it reads or changes goes through here, so components
-  never build requests themselves. It reads the open Items a Ranker looks at from the Item store, who
-  the User is in each Linear Account from the Accounts, and Ares's ranking, the cleared rows and his
-  pending suggested Todos from the Core; it ticks Todos, clears rows, adds or dismisses suggestions
-  and undoes. Reached only through the window's bridge, so every change is the User's.
+  never build requests themselves. It reads the open Items a Ranker looks at and the muted Chats from
+  the Item store, who the User is in each Linear and Teams Account from the Accounts, and Ares's
+  ranking, the cleared rows and his pending suggested Todos from the Core; it ticks Todos, clears
+  rows, adds or dismisses suggestions, undoes, and asks Teams for a light sync when the Dashboard
+  opens. Reached only through the window's bridge, so every change is the User's.
 */
 
 export interface DashboardClient {
   /**
-   * The open Items the Dashboard ranks: open Todos and open Linear issues, not deleted, and today's and
-   * tomorrow's events (its schedule; the next meeting is ranked into Now).
+   * The open Items the Dashboard ranks: open Todos, Linear issues and Teams Chats, not deleted, and
+   * today's and tomorrow's events (its schedule; the next meeting is ranked into Now).
    */
   items(): Promise<Item[]>;
-  /** The Linear Accounts, each with who the User is there (for "assigned to me") and its syncing. */
+  /** The Chats the User muted or excluded (muted ones never reach the Dashboard). */
+  chatSettings(): Promise<ChatSetting[]>;
+  /**
+   * The Linear and Teams Accounts, each with who the User is there (for "assigned to me" and
+   * "mentions me") and its syncing.
+   */
   accounts: LinearAccountsClient;
+  /** Asks every connected Teams Account for a light sync (opening the Dashboard checks Teams). */
+  refreshTeams(): Promise<void>;
   /** Ticks a Todo (done) or unticks it. */
   setDone(itemId: string, done: boolean): Promise<ActivityEntry>;
   /** Reverses what an activity entry changed. */
@@ -97,15 +105,25 @@ export function dashboardIn(
       const today = dayKey(clock(), timeZone);
       const from = dayStart(today, timeZone);
       const to = dayStart(addDays(today, 2), timeZone);
-      const [todos, issues, events] = await Promise.all([
+      const [todos, issues, events, chats] = await Promise.all([
         itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'events', query: { from, to, limit: MOST } }),
+        itemStore({ op: 'query', query: { kinds: ['chat'], statuses: ['open'], limit: MOST } }),
       ]);
-      return [...todos, ...issues, ...events];
+      return [...todos, ...issues, ...events, ...chats];
     },
 
+    chatSettings: () => itemStore({ op: 'chat-settings' }),
+
     accounts,
+
+    async refreshTeams() {
+      const teams = (await accounts.list()).filter(
+        (account) => account.source === 'teams' && account.status === 'connected',
+      );
+      await Promise.all(teams.map((account) => accounts.syncNow(account.id)));
+    },
 
     setDone(itemId, done) {
       return itemStore({
@@ -134,7 +152,27 @@ export function dashboardIn(
   };
 }
 
-/** Who the User is in each Linear Account, by Account id: the ranking's "assigned to me". */
+type AccountsBridge = Pick<Window['commander'], 'accounts' | 'onAccountsChanged'>;
+
+const ranksBy = (state: AccountsState): AccountSummary[] =>
+  state.accounts.filter((account) => account.source === 'linear' || account.source === 'teams');
+
+/** The Accounts the Dashboard ranks by: the Linear ones ("assigned to me") and the Teams ones ("mentions me"). */
+export function dashboardAccountsIn(bridge: AccountsBridge): LinearAccountsClient {
+  return {
+    async list() {
+      return ranksBy((await bridge.accounts({ op: 'list' })).state);
+    },
+    async syncNow(accountId) {
+      await bridge.accounts({ op: 'sync-now', accountId });
+    },
+    onChange(listener) {
+      return bridge.onAccountsChanged((state) => listener(ranksBy(state)));
+    },
+  };
+}
+
+/** Who the User is in each Linear and Teams Account, by Account id: "assigned to me", "mentions me". */
 export function usersOf(accounts: readonly AccountSummary[]): Record<string, string> {
   return Object.fromEntries(
     accounts.flatMap((account) => (account.user ? [[account.id, account.user.id] as const] : [])),
