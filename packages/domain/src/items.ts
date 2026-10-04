@@ -21,7 +21,15 @@ export const itemKinds = [
 export const itemKind = z.enum(itemKinds);
 export type ItemKind = z.infer<typeof itemKind>;
 
-export const sources = ['gmail', 'outlook', 'google-calendar', 'teams', 'linear', 'github'] as const;
+export const sources = [
+  'gmail',
+  'outlook',
+  'google-calendar',
+  'outlook-calendar',
+  'teams',
+  'linear',
+  'github',
+] as const;
 export const source = z.enum(sources);
 export type Source = z.infer<typeof source>;
 

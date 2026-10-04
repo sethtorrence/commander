@@ -34,7 +34,8 @@ const buildConfig = z.object({
     // Registered with the app as http://localhost:<redirectPort>/callback.
     redirectPort: port,
   }),
-  // Commander's Entra app (a public client in one tenant). Either blank: Teams can't be connected.
+  // Commander's Entra app (a public client in one tenant), for Teams and Outlook. Either blank: neither
+  // can be connected.
   // Optional, so a config/local.json from before Teams still builds.
   microsoft: z
     .object({ clientId: optionalId, tenantId: optionalId })

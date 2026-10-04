@@ -60,8 +60,9 @@ export type SaveModelKeyResult = { ok: true } | { ok: false; error: string };
 
 // Accounts, as the window sees them: never a token or an API key.
 // The kinds of Account the User can connect so far (see account-messages.ts). Most are named after
-// the one Source they carry; a Google Account carries two (Gmail and Google Calendar).
-export type AccountSource = 'linear' | 'teams' | 'github' | 'google';
+// the one Source they carry; a Google Account carries two (Gmail and Google Calendar), and so does an
+// Outlook Account (Outlook mail and Outlook Calendar).
+export type AccountSource = 'linear' | 'teams' | 'github' | 'google' | 'outlook';
 export type AccountMethod = 'oauth' | 'api-key';
 // 'needs-reconnect': its sign-in failed for good (revoked, or a refresh past the replay window).
 export type AccountStatus = 'connected' | 'needs-reconnect';
@@ -100,8 +101,8 @@ export type GitHubAccountSummary = AccountSummaryBase & {
   installUrl: string | null;
 };
 // One of the Sources an Account carries, sharing its sign-in. `granted`: the User gave Commander
-// every permission it needs (Google lets them untick some); `enabled`: the User has it switched on.
-// Only a granted Source can be on.
+// every permission it needs (Google lets them untick some; a Microsoft administrator may approve only
+// some); `enabled`: the User has it switched on. Only a granted Source can be on.
 export type CarriedSource = { source: AccountSyncStatus['source']; granted: boolean; enabled: boolean };
 export type GoogleAccountSummary = AccountSummaryBase & {
   source: 'google';
@@ -110,11 +111,19 @@ export type GoogleAccountSummary = AccountSummaryBase & {
   // Gmail and Google Calendar.
   sources: CarriedSource[];
 };
+export type OutlookAccountSummary = AccountSummaryBase & {
+  source: 'outlook';
+  // The Microsoft account signed in with (its user principal name, usually its email address).
+  userPrincipalName: string;
+  // Outlook (mail) and Outlook Calendar.
+  sources: CarriedSource[];
+};
 export type AccountSummary =
   | LinearAccountSummary
   | TeamsAccountSummary
   | GitHubAccountSummary
-  | GoogleAccountSummary;
+  | GoogleAccountSummary
+  | OutlookAccountSummary;
 // How this build can connect each Source's Accounts.
 export type SourceSignIn = {
   source: AccountSource;
@@ -134,7 +143,7 @@ export type AdminConsentNeeded = { permissions: string[]; url: string };
 // An Account's sync, as the Core reports it (validated in sync-messages.ts).
 export type AccountSyncStatus = {
   account: string;
-  source: 'gmail' | 'outlook' | 'google-calendar' | 'teams' | 'linear' | 'github';
+  source: 'gmail' | 'outlook' | 'google-calendar' | 'outlook-calendar' | 'teams' | 'linear' | 'github';
   activity: 'idle' | 'syncing' | 'backing-off' | 'offline' | 'asleep' | 'needs-reconnect';
   cadenceMinutes: number;
   cadenceChoices: number[];

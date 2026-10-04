@@ -6,6 +6,7 @@ import type {
   AdminConsentNeeded,
   CarriedSource,
   GoogleAccountSummary,
+  OutlookAccountSummary,
   SourceSignIn,
 } from '@commander/domain/ipc';
 import {
@@ -51,13 +52,19 @@ const SOURCES: Record<AccountSource, { name: string; items: string }> = {
   teams: { name: 'Microsoft Teams', items: 'Teams Chats' },
   github: { name: 'GitHub', items: 'GitHub pull requests and issues' },
   google: { name: 'Google', items: 'emails and calendar events' },
+  outlook: { name: 'Outlook', items: 'emails and calendar events' },
 };
 
 // The Sources an Account can carry, as the User knows them.
 const CARRIED_NAMES: Partial<Record<CarriedSource['source'], string>> = {
   gmail: 'Gmail',
   'google-calendar': 'Google Calendar',
+  outlook: 'Outlook',
+  'outlook-calendar': 'Outlook Calendar',
 };
+
+// Where the User gives the permissions of an Account carrying several Sources.
+const GRANTED_IN = { google: 'Google', outlook: 'Microsoft' } as const;
 
 const linearMethods = { oauth: 'Signed in with Linear', 'api-key': 'Personal API key' } as const;
 
@@ -71,18 +78,20 @@ function describeAccount(account: AccountSummary): string {
       return `Microsoft work account · ${account.user?.name ?? account.userPrincipalName} · Signed in with Microsoft`;
     case 'google':
       return `Google account · ${account.user?.name ?? account.email} · Signed in with Google`;
+    case 'outlook':
+      return `Microsoft account · ${account.user?.name ?? account.userPrincipalName} · Signed in with Microsoft`;
   }
 }
 
-// The Sources a Google Account carries: each switchable, and Grant access for one whose permissions
-// the User didn't give (signing in again for this Account asks for them).
+// The Sources a Google or Outlook Account carries: each switchable, and Grant access for one whose
+// permissions weren't given (signing in again for this Account asks for them).
 function CarriedSources({
   account,
   busy,
   onGrant,
   request,
 }: {
-  account: GoogleAccountSummary;
+  account: GoogleAccountSummary | OutlookAccountSummary;
   busy: boolean;
   onGrant: (() => void) | null;
   request: (request: AccountsRequest) => void;
@@ -110,7 +119,7 @@ function CarriedSources({
               <span className="text-note text-muted">{carried.enabled ? 'On' : 'Off'}</span>
             ) : (
               <>
-                <span className="text-note text-muted">Not allowed in Google</span>
+                <span className="text-note text-muted">Not allowed in {GRANTED_IN[account.source]}</span>
                 <Button disabled={busy || !onGrant} onClick={() => onGrant?.()}>
                   Grant access
                 </Button>
@@ -201,7 +210,7 @@ function AccountRow({
         </ButtonGroup>
       </div>
       {children}
-      {account.source === 'google' && (
+      {(account.source === 'google' || account.source === 'outlook') && (
         <CarriedSources account={account} busy={busy} onGrant={onReconnect} request={request} />
       )}
       <AccountSync account={account} request={request} />
@@ -507,6 +516,23 @@ export function AccountsPanel({ no }: { no: string }) {
           <Note>This build has no Google sign-in set up. See “Connecting Google” in the README.</Note>
         )}
         {problemFor('google')}
+      </SettingRow>
+    ),
+    outlook: (signIn) => (
+      <SettingRow
+        label="Outlook"
+        description="Connect a Microsoft account once for both Outlook mail and Outlook Calendar. Each account is its own Account; connect as many as you use."
+      >
+        {waiting('outlook') ? (
+          <WaitingForBrowser />
+        ) : signIn.oauth ? (
+          <Button variant="primary" disabled={busy !== null} onClick={() => connectWithBrowser('outlook')}>
+            Connect Outlook
+          </Button>
+        ) : (
+          <Note>This build has no Microsoft app set up. See “Connecting Outlook” in the README.</Note>
+        )}
+        {problemFor('outlook')}
       </SettingRow>
     ),
   };

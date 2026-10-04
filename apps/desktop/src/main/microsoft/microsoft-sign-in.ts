@@ -9,9 +9,9 @@ import {
 import { SignInError } from '../oauth/sign-in-error';
 import type { MicrosoftConfig } from './microsoft-config';
 
-// Signing in with the Microsoft identity platform, for every Microsoft Source (Teams now; Outlook
-// and Microsoft calendars later, each with its own scopes). Commander's Entra app is a public client
-// in one tenant: authorization code with PKCE (S256), no client secret, the single-tenant authority
+// Signing in with the Microsoft identity platform, for every Microsoft Source (Teams; Outlook mail
+// and calendar), each with its own scopes. Commander's Entra app is a public client in one tenant:
+// authorization code with PKCE (S256), no client secret, the single-tenant authority
 // https://login.microsoftonline.com/<tenantId>/oauth2/v2.0/, and http://localhost:<any port> as the
 // redirect (registered as http://localhost under "Mobile and desktop applications"; Entra ignores
 // its port, and the path must match exactly, so there is none).
@@ -33,6 +33,8 @@ export type MicrosoftApp = {
 export type MicrosoftSignIn = TokenSet & {
   // The tenant signed in to, from the ID token's `tid` (the app's tenant, for a single-tenant app).
   tenantId: string;
+  // The scopes the access token covers, when Microsoft says (never stored).
+  scope?: string;
 };
 
 // Microsoft's answers when the tenant requires an administrator to approve the app first.
@@ -95,11 +97,7 @@ export async function signInWithMicrosoft({
   now?: () => number;
 }): Promise<MicrosoftSignIn> {
   try {
-    const {
-      idToken,
-      scope: _scope,
-      ...tokens
-    } = await signInWithBrowser({ client: client(app, scopes), ...options });
+    const { idToken, ...tokens } = await signInWithBrowser({ client: client(app, scopes), ...options });
     return { ...tokens, tenantId: tenantOf(idToken, app.tenantId) };
   } catch (error) {
     if (error instanceof SignInError && ADMIN_CONSENT_CODES.test(error.sourceError?.description ?? '')) {

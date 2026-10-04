@@ -6,14 +6,16 @@ import { type Source, source } from './items';
 // the window only ever sees AccountSummary, and the Core borrows access tokens, in memory only.
 
 // The kinds of Account the User can connect so far; the others follow. Each carries the Sources
-// listed here, sharing its sign-in: a Google Account carries Gmail and Google Calendar.
-export const accountSources = ['linear', 'teams', 'github', 'google'] as const;
+// listed here, sharing its sign-in: a Google Account carries Gmail and Google Calendar, an Outlook
+// Account Outlook (mail) and Outlook Calendar.
+export const accountSources = ['linear', 'teams', 'github', 'google', 'outlook'] as const;
 export const accountSource = z.enum(accountSources);
 export const SOURCES_OF_ACCOUNT: Record<z.infer<typeof accountSource>, readonly Source[]> = {
   linear: ['linear'],
   teams: ['teams'],
   github: ['github'],
   google: ['gmail', 'google-calendar'],
+  outlook: ['outlook', 'outlook-calendar'],
 };
 // The zod-free AccountSource type in ipc.ts must match.
 const _sourceMatches: [AccountSource] extends [z.infer<typeof accountSource>]

@@ -75,6 +75,37 @@ describe('the Core sync channel', () => {
     ]);
   });
 
+  it('pauses both Sources of an Outlook Account that needs reconnecting, keeping its identity', () => {
+    const { sync, sent } = channel();
+    sync.setAccounts([
+      {
+        id: 'outlook:tenant-1:u-sam',
+        source: 'outlook',
+        status: 'needs-reconnect',
+        user: { id: 'u-sam', name: 'Sam' },
+        sources: [
+          { source: 'outlook', granted: true, enabled: true },
+          { source: 'outlook-calendar', granted: true, enabled: true },
+        ],
+      },
+    ]);
+
+    expect(sent).toEqual([
+      {
+        type: 'sync-accounts',
+        accounts: [
+          {
+            id: 'outlook:tenant-1:u-sam',
+            sources: ['outlook', 'outlook-calendar'],
+            needsReconnect: true,
+            me: 'u-sam',
+          },
+        ],
+        endpoints,
+      },
+    ]);
+  });
+
   it('keeps a status for each Source of an Account', () => {
     const { sync } = channel();
     const gmail = { ...status, account: 'google:1045', source: 'gmail' as const };
