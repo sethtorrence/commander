@@ -46,7 +46,7 @@ const savedTodos = (page: Page) =>
 
 test('[] makes a Todo: tick it in Todos, see it ticked in the note, jump back to the Block, and it all survives a restart', async () => {
   const first = await launchCommander();
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   let sheet = await openNotes(window);
   const day = await today(window);
 
@@ -99,7 +99,7 @@ test('[] makes a Todo: tick it in Todos, see it ticked in the note, jump back to
   await first.app.close();
 
   const second = await launchCommander({ userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   sheet = await openNotes(window);
   await expect(blockRow(sheet, 'Call Dana')).toHaveClass(/\bdone\b/);
   await expect(blockRow(sheet, 'Morning').getByRole('checkbox')).toHaveCount(0);
@@ -108,7 +108,7 @@ test('[] makes a Todo: tick it in Todos, see it ticked in the note, jump back to
 
 test('the Block and its Todo follow each other: title, removing the checkbox, and deleting the Todo', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   let sheet = await openNotes(window);
 
   await sheet.locator('[data-block-text]').first().click();

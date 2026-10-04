@@ -125,7 +125,7 @@ test('sync → a reassignment and a stuck issue, both in the Update; Reconnect q
       }),
     },
   });
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await connectFakeModel(page, server);
 
   // Connect Linear: the sync brings both issues as the User's Linear Todos, and Ares looks after it.

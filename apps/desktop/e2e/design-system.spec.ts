@@ -15,7 +15,7 @@ const rootVariable = (window: Page, name: string) =>
 
 test('the design gallery shows every plate in both themes, with the bundled fonts', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const cspViolations: string[] = [];
   window.on('console', (message) => {
     if (/Content Security Policy/i.test(message.text())) cspViolations.push(message.text());
@@ -49,7 +49,7 @@ test('the design gallery shows every plate in both themes, with the bundled font
 
 test('the theme toggle switches light and dark, and the choice survives a restart', async () => {
   const first = await launchCommander();
-  const window = await first.app.firstWindow();
+  const window = await first.window();
   await openGallery(window);
 
   await expect(window.locator('html')).toHaveAttribute('data-theme', 'dark');
@@ -59,7 +59,7 @@ test('the theme toggle switches light and dark, and the choice survives a restar
   await first.app.close();
 
   const again = await launchCommander({ userDataDir: first.userDataDir });
-  const reopened = await again.app.firstWindow();
+  const reopened = await again.window();
   await expect(reopened.getByRole('navigation', { name: 'Sections' })).toBeVisible();
   await expect(reopened.locator('html')).toHaveAttribute('data-theme', 'light');
   await again.close();
@@ -67,7 +67,7 @@ test('the theme toggle switches light and dark, and the choice survives a restar
 
 test('picking a signal colour recolours live things at once and is remembered', async () => {
   const first = await launchCommander();
-  const window = await first.app.firstWindow();
+  const window = await first.window();
   await openGallery(window);
 
   const liveEyebrow = window
@@ -83,7 +83,7 @@ test('picking a signal colour recolours live things at once and is remembered', 
   await first.app.close();
 
   const again = await launchCommander({ userDataDir: first.userDataDir });
-  const reopened = await again.app.firstWindow();
+  const reopened = await again.window();
   await expect(reopened.getByRole('navigation', { name: 'Sections' })).toBeVisible();
   await expect.poll(() => rootVariable(reopened, '--signal')).toBe('#00E676');
   await again.close();

@@ -122,7 +122,7 @@ const queuedCount = (page: Page) => page.getByTestId('ares-status').getByTestId(
 test('a quiet count, and the Update only when asked: U, the header, the tray and the palette all give it', async () => {
   commander = await launchCommander({ env });
   const { app } = commander;
-  const window = await app.firstWindow();
+  const window = await commander.window();
   await switchOffSuggestTodos(window);
 
   await suggestTodo(app, window, 'need to send Dana the Q3 numbers', 'Send Dana the Q3 numbers');
@@ -218,7 +218,7 @@ test('with a fake model: queued suggestions, U, accept one in place, the count d
   server.respondWith(aresVoice);
   commander = await launchCommander({ env });
   const { app } = commander;
-  const window = await app.firstWindow();
+  const window = await commander.window();
   await switchOffSuggestTodos(window);
   await connectFakeModel(window, server.baseUrl);
 

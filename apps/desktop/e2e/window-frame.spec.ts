@@ -1,9 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { type ElectronApplication, expect, type Page, test } from '@playwright/test';
-import { configProvider } from '../src/main/summon';
 import { openSettings } from './frame';
-import { launchCommander } from './launch-commander';
+import { launchCommander, placeWindow } from './launch-commander';
 
 // The window has no Electron or system frame: the header is the title bar, and its window controls
 // reach main through the preload bridge.
@@ -20,41 +17,6 @@ async function beats(window: Page): Promise<number> {
   const heartbeat = window.getByTestId('core-heartbeat');
   await expect(heartbeat).toHaveText(/\d+/, { timeout: 10_000 });
   return Number(await heartbeat.textContent());
-}
-
-const hyprctl = (args: string[]) => promisify(execFile)('hyprctl', args).then(({ stdout }) => stdout.trim());
-
-// The workspace Hyprland has the window on, or null while it hasn't mapped it.
-async function hyprlandWorkspace(pid: number): Promise<string | null> {
-  const clients = JSON.parse(await hyprctl(['clients', '-j'])) as {
-    pid: number;
-    workspace: { name: string };
-  }[];
-  return clients.find((client) => client.pid === pid)?.workspace.name ?? null;
-}
-
-// Commander shows its window only once the first frame is painted (reveal.ts), and the header can be
-// clicked before that. On Hyprland, maximising a window the compositor hasn't mapped yet does
-// nothing. And Hyprland un-maximises a window whenever another one opens on its workspace
-// (misc:on_focus_under_fullscreen), such as a Commander from another test run. So wait until the
-// window is shown and mapped, then give it a hidden workspace of its own.
-async function readyToMaximise(app: ElectronApplication): Promise<void> {
-  await expect.poll(() => visible(app)).toEqual([true]);
-  if (!process.env.HYPRLAND_INSTANCE_SIGNATURE) return;
-  const pid = app.process().pid as number;
-  await expect.poll(() => hyprlandWorkspace(pid)).not.toBeNull();
-  const workspace = `special:commander-e2e-${pid}`;
-  // Older Hyprland versions don't know `status`, and those only have the text config.
-  const status = await hyprctl(['-j', 'status']).catch(() => '');
-  const move =
-    configProvider(status) === 'lua'
-      ? [
-          'dispatch',
-          `hl.dsp.window.move({ workspace = "${workspace}", follow = false, window = "pid:${pid}" })`,
-        ]
-      : ['dispatch', 'movetoworkspacesilent', `${workspace},pid:${pid}`];
-  expect(await hyprctl(move)).toBe('ok');
-  await expect.poll(() => hyprlandWorkspace(pid)).toBe(workspace);
 }
 
 const controls = (window: Page) => window.getByRole('group', { name: 'Window' });
@@ -160,7 +122,8 @@ test('Maximise maximises the window, and Restore restores it', async () => {
   const group = controls(window);
   const maximised = () =>
     window.evaluate(() => globalThis.window.commander.windowFrame().then((frame) => frame.maximised));
-  await readyToMaximise(commander.app);
+  // Shown, mapped and alone on its workspace, so Hyprland maximises it and keeps it maximised.
+  await placeWindow(commander.app);
   expect(await maximised()).toBe(false);
 
   await group.getByRole('button', { name: 'Maximise' }).click();

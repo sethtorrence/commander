@@ -63,7 +63,7 @@ test('create a Rule, preview and accept re-filing, see the Badges change, undo; 
       }),
     },
   });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await openSettings(window);
   const accounts = window.getByTestId('accounts-panel');
   await accounts.getByLabel('Linear personal API key').fill(API_KEY);

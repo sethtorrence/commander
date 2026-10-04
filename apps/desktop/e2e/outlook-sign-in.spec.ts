@@ -73,7 +73,7 @@ test.afterEach(async () => {
 
 test('without Commander’s Microsoft app in the build, Connect Outlook is hidden and the README is named', async () => {
   commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   const outlook = await openOutlookAccounts(window);
 
@@ -87,7 +87,7 @@ test('Connect Outlook signs in through the browser; the Account lists Outlook an
   const logs: string[] = [];
   commander.app.process().stdout?.on('data', (chunk) => logs.push(String(chunk)));
   commander.app.process().stderr?.on('data', (chunk) => logs.push(String(chunk)));
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   window.on('console', (message) => logs.push(message.text()));
   await standInForTheBrowser(commander.app);
   const outlook = await openOutlookAccounts(window);
@@ -140,7 +140,7 @@ test('Connect Outlook signs in through the browser; the Account lists Outlook an
 test('a tenant that needs admin consent is explained, with the mail and calendar permissions and the admin consent link', async () => {
   microsoft.requireAdminConsent('AADSTS90094');
   commander = await launchCommander({ env: pointAtFakeMicrosoft(microsoft) });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await standInForTheBrowser(commander.app);
   const outlook = await openOutlookAccounts(window);
 

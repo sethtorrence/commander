@@ -193,7 +193,7 @@ test('sync, Ares’s bands and reasons, Add a suggested Todo, clear a row; at Of
       }),
     },
   });
-  const page = await commander.app.firstWindow();
+  const page = await commander.window();
   await connectFakeModel(page, server);
   // A Todo with no due date (the rules leave it off) and a suggestion of Ares's, waiting.
   await page.evaluate(() =>

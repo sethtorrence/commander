@@ -51,7 +51,7 @@ function everythingWritten(userDataDir: string): string {
 
 test('the Quick and Deep tiers default to low and high thinking, and changes persist', async () => {
   const first = await launchCommander();
-  const window = await first.app.firstWindow();
+  const window = await first.window();
   await openSettings(window);
 
   await expect(thinking(window, 'Quick', 'Low')).toHaveAttribute('aria-checked', 'true');
@@ -73,7 +73,7 @@ test('the Quick and Deep tiers default to low and high thinking, and changes per
   await first.app.close();
 
   const again = await launchCommander({ userDataDir: first.userDataDir });
-  const reopened = await again.app.firstWindow();
+  const reopened = await again.window();
   await openSettings(reopened);
   await expect(thinking(reopened, 'Deep', 'Max')).toHaveAttribute('aria-checked', 'true');
   await expect(thinking(reopened, 'Quick', 'Low')).toHaveAttribute('aria-checked', 'true');
@@ -85,7 +85,7 @@ test('the Quick and Deep tiers default to low and high thinking, and changes per
 
 test('Test without a saved key says how to add one', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await openSettings(window);
   await pointTiersAtFakeServer(window);
   await saveSettings(window);
@@ -107,7 +107,7 @@ test('a key saved in Settings → Ares reaches the model through the Core, never
     app.process().stderr?.on('data', (chunk: Buffer) => output.push(chunk.toString()));
   };
   capture(commander.app);
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   window.on('console', (message) => output.push(message.text()));
   await openSettings(window);
   await pointTiersAtFakeServer(window);
@@ -147,7 +147,7 @@ test('a key saved in Settings → Ares reaches the model through the Core, never
   const userDataDir = commander.userDataDir;
   commander = await launchCommander({ userDataDir });
   capture(commander.app);
-  const reopened = await commander.app.firstWindow();
+  const reopened = await commander.window();
   await openSettings(reopened);
   await expect(reopened.getByTestId('model-key-status')).toHaveText('A key is saved in the keyring.');
   await expect(usage(reopened).getByTestId('usage-month')).toHaveText('$0.0005 · 1 call');

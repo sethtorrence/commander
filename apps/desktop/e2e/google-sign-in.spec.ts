@@ -69,7 +69,7 @@ test.afterEach(async () => {
 
 test('without Commander’s Google client in the build, Connect Google is hidden and the README is named', async () => {
   commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   const section = await openGoogleAccounts(window);
 
@@ -83,7 +83,7 @@ test('Connect Google signs in through the browser; the Account lists Gmail and G
   const logs: string[] = [];
   commander.app.process().stdout?.on('data', (chunk) => logs.push(String(chunk)));
   commander.app.process().stderr?.on('data', (chunk) => logs.push(String(chunk)));
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   window.on('console', (message) => logs.push(message.text()));
   await standInForTheBrowser(commander.app);
   const section = await openGoogleAccounts(window);
@@ -131,7 +131,7 @@ test('Connect Google signs in through the browser; the Account lists Gmail and G
 test('a permission unticked on Google’s consent screen leaves that Source off, and Grant access switches it on', async () => {
   google.untick([GMAIL]);
   commander = await launchCommander({ env: pointAtFakeGoogle(google) });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await standInForTheBrowser(commander.app);
   const section = await openGoogleAccounts(window);
 
@@ -155,7 +155,7 @@ test('a permission unticked on Google’s consent screen leaves that Source off,
 test('a Workspace whose admin has blocked Commander is explained plainly', async () => {
   google.block('admin_policy_enforced');
   commander = await launchCommander({ env: pointAtFakeGoogle(google) });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await standInForTheBrowser(commander.app);
   const section = await openGoogleAccounts(window);
 

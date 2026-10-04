@@ -119,7 +119,7 @@ test('assigned issues become Linear Todos; ticking completes the issue; a reassi
       }),
     },
   });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await connect(window);
 
   // The issues assigned to the User in a Todo state are Todos, labelled with their identifiers.

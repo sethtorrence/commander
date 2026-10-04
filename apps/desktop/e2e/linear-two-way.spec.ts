@@ -164,7 +164,7 @@ const remote = () => linear.issues.get('issue-418');
 
 test('edit every writable field and comment from the detail pane, and undo writes the old value back', async () => {
   commander = await launchCommander({ env: await environment() });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const openedExternally = await catchTheBrowser(commander.app);
   await connect(window);
   const pane = await openIssue(window);
@@ -248,7 +248,7 @@ test('changes made offline keep their edit time, survive a restart, and send on 
   const env = await environment({ COMMANDER_TEST_HOOKS: '1' });
   const first = await launchCommander({ env });
   commander = first;
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   await connect(window);
   let pane = await openIssue(window);
 
@@ -268,7 +268,7 @@ test('changes made offline keep their edit time, survive a restart, and send on 
     userDataDir: first.userDataDir,
     env: { ...env, COMMANDER_TEST_OFFLINE: '1' },
   });
-  window = await commander.app.firstWindow();
+  window = await commander.window();
   pane = await openIssue(window);
   await expect(field(pane, 'priority')).toHaveText('Urgent');
   await expect(pane.getByLabel('Estimate')).toHaveValue('8');
@@ -297,7 +297,7 @@ test('changes made offline keep their edit time, survive a restart, and send on 
 
 test('a change Linear refuses shows Couldn’t sync, and Retry sends it again', async () => {
   commander = await launchCommander({ env: await environment() });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await connect(window);
   const pane = await openIssue(window);
 

@@ -91,7 +91,7 @@ async function choose(window: Page, cell: string, level: string) {
 
 test('the Autonomy grid greys out levels above the hard limits, lists registered actions and keeps its choices', async () => {
   const first = await launchCommander(testHooks);
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   await registerSuggestTodos(first.app);
   await openSettings(window);
   const grid = window.getByRole('table', { name: 'Autonomy settings' });
@@ -133,7 +133,7 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
 
   // Restart on the same data: the choices are still there.
   const second = await launchCommander({ ...testHooks, userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   await registerSuggestTodos(second.app);
   await openSettings(window);
   await expect(window.getByRole('combobox', { name: 'Suggest Todos' })).toHaveText('Ask');
@@ -146,7 +146,7 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
 test('fixture proposals: Auto is undone from Ares’s activity page, Ask is accepted there, and a chained one shows its cause', async () => {
   const commander = await launchCommander(testHooks);
   const { app } = commander;
-  const window = await app.firstWindow();
+  const window = await commander.window();
   await registerSuggestTodos(app);
   const dana = await writeBlock(window, 'need to send Dana the Q3 numbers');
   const flights = await writeBlock(window, 'maybe book flights for the offsite');

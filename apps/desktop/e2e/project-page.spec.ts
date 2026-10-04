@@ -31,7 +31,7 @@ const savedProjects = (page: Page) =>
 
 test('open a Project page, rename the Project from it, and archive it', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const tabs = window.getByRole('navigation', { name: 'Sections' });
   const page = window.getByTestId('project-page');
 
@@ -138,7 +138,7 @@ test('open a Project page, rename the Project from it, and archive it', async ()
 
 test('merge one Project into another from its page, and undo it', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await openSettings(window);
   await createProject(window, 'Longtail', 'LT');
   await createProject(window, 'Tactics', 'TX');

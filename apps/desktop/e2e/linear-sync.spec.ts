@@ -96,7 +96,7 @@ test.afterEach(async () => {
 test('a connected Account’s issues arrive as Items, and Sync now picks up what changed in Linear', async () => {
   const env = await pointAtFakeLinear(linear);
   commander = await launchCommander({ env });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const panel = await openAccounts(window);
 
   await connectWithKey(panel);
@@ -134,7 +134,7 @@ test('the sync cadence can be set to 30 or 60 minutes, and stays set after a res
   const env = await pointAtFakeLinear(linear);
   const first = await launchCommander({ env });
   commander = first;
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   let panel = await openAccounts(window);
   await connectWithKey(panel);
   await expect(panel.getByTestId('account-synced')).toHaveText(/2 issues/);
@@ -143,7 +143,7 @@ test('the sync cadence can be set to 30 or 60 minutes, and stays set after a res
   await first.app.close();
 
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
-  window = await commander.app.firstWindow();
+  window = await commander.window();
   panel = await openAccounts(window);
   await expect(panel.getByRole('combobox', { name: 'How often to sync Acme' })).toHaveText('Every 30 min');
   await expect(panel.getByTestId('account-synced')).toHaveText(/2 issues/);
@@ -152,7 +152,7 @@ test('the sync cadence can be set to 30 or 60 minutes, and stays set after a res
 test('an API key revoked in Linear shows Reconnect', async () => {
   const env = await pointAtFakeLinear(linear);
   commander = await launchCommander({ env });
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const panel = await openAccounts(window);
   await connectWithKey(panel);
   await expect(panel.getByTestId('account-synced')).toHaveText(/2 issues/);

@@ -40,7 +40,7 @@ const link = (page: Page, from: string, linkType: LinkType, to: string) =>
 
 test('a Todo typed in the Todos Section is saved as a manual, Unfiled Todo and listed after a restart', async () => {
   const first = await launchCommander();
-  let window = await first.app.firstWindow();
+  let window = await first.window();
   let todos = await openTodos(window);
 
   await todos.getByRole('textbox', { name: 'New Todo' }).fill('Book the dentist');
@@ -53,7 +53,7 @@ test('a Todo typed in the Todos Section is saved as a manual, Unfiled Todo and l
   await first.app.close();
 
   const second = await launchCommander({ userDataDir: first.userDataDir });
-  window = await second.app.firstWindow();
+  window = await second.window();
   todos = await openTodos(window);
   const row = todos.getByRole('region', { name: 'Open' }).getByRole('listitem');
   await expect(row).toHaveText([/Book the dentist.*Manual/]);
@@ -64,7 +64,7 @@ test('a Todo typed in the Todos Section is saved as a manual, Unfiled Todo and l
 
 test('Todos: move with j/k, open with Enter, edit the title, tick into Done, delete, and undo each', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   const todos = await openTodos(window);
   const count = tab(window, 'Todos').locator('.tc');
   const open = todos.getByRole('region', { name: 'Open' });
@@ -174,7 +174,7 @@ test('Todos: move with j/k, open with Enter, edit the title, tick into Done, del
 
 test('the detail pane lists a Todo’s Links both ways, and a Link jumps to the Todo at its other end', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
 
   const prep = await makeTodo(window, 'Prep for the Acme call');
   const deck = await makeTodo(window, 'Send the deck');
@@ -199,7 +199,7 @@ test('the detail pane lists a Todo’s Links both ways, and a Link jumps to the 
 
 test('the Todos keys are in the cheat sheet', async () => {
   const commander = await launchCommander();
-  const window = await commander.app.firstWindow();
+  const window = await commander.window();
   await openTodos(window);
 
   await window.keyboard.press('?');
