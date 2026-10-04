@@ -86,8 +86,8 @@ function describeAccount(account: AccountSummary): string {
 }
 
 // The Sources a Google or Outlook Account carries: each switchable, and Grant access for one whose
-// permissions weren't given (signing in again for this Account asks for them). Google Calendar, when
-// on, lists the Account's calendars, each with its own switch.
+// permissions weren't given (signing in again for this Account asks for them). Google Calendar and
+// Outlook Calendar, when on, list the Account's calendars, each with its own switch.
 function CarriedSources({
   account,
   busy,
@@ -130,13 +130,14 @@ function CarriedSources({
                 </Button>
               </>
             )}
-            {carried.source === 'google-calendar' && carried.enabled && (
-              <CalendarSwitches
-                account={account.id}
-                switches={switches}
-                syncedAt={carried.sync?.lastSyncedAt ?? null}
-              />
-            )}
+            {(carried.source === 'google-calendar' || carried.source === 'outlook-calendar') &&
+              carried.enabled && (
+                <CalendarSwitches
+                  account={account.id}
+                  switches={switches}
+                  syncedAt={carried.sync?.lastSyncedAt ?? null}
+                />
+              )}
           </li>
         );
       })}

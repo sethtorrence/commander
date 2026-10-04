@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calendarOnByDefault, type EventDetail, eventDetail, eventRuleFields } from './calendar';
 import type { Item } from './items';
-import { describeRule, ruleCondition, ruleMatches } from './rules';
+import { describeRule, RULE_FIELDS, RULE_SOURCES, ruleCondition, ruleMatches } from './rules';
 
 const detail: EventDetail = {
   kind: 'event',
@@ -71,13 +71,40 @@ describe('calendar Rule fields', () => {
     ]);
   });
 
-  it('reads nothing from another Source’s events, so Outlook can register the same readers', () => {
-    const outlook = { ...event, source: 'outlook-calendar' as const };
-    expect(fields.get('google-calendar.calendar')?.read(outlook)).toEqual([]);
-    const outlookFields = eventRuleFields('outlook-calendar');
+  it('reads the events of every calendar Source alike, and nothing from other Items', () => {
+    const outlook = { ...event, source: 'outlook-calendar' as const, account: 'outlook:t:u' };
+    const outlookFields = new Map(eventRuleFields('outlook-calendar').map((field) => [field.id, field]));
+    for (const name of ['calendar', 'organiser', 'attendee', 'title', 'account']) {
+      expect(outlookFields.get(`outlook-calendar.${name}`)?.read(outlook)).toEqual(
+        fields.get(`google-calendar.${name}`)?.read(outlook),
+      );
+      expect(fields.get(`google-calendar.${name}`)?.read(outlook)).not.toEqual([]);
+    }
+    const issue = { ...event, kind: 'linear-issue' as const, source: 'linear' as const, detail: null };
+    expect(fields.get('google-calendar.title')?.read(issue)).toEqual([]);
+  });
+
+  it('are registered for both calendar Sources, and one Rule files Google and Outlook events alike', () => {
+    expect(RULE_FIELDS.has('outlook-calendar.organiser')).toBe(true);
+    expect(RULE_FIELDS.has('google-calendar.organiser')).toBe(true);
+    const when = {
+      join: 'and' as const,
+      terms: [
+        ruleCondition.parse({
+          field: 'google-calendar.organiser',
+          op: 'is',
+          value: 'dana@titanlink.test',
+          label: 'Dana Ruiz',
+        }),
+      ],
+    };
+    const outlook = { ...event, source: 'outlook-calendar' as const, account: 'outlook:t:u' };
+    expect(ruleMatches(when, event)).toBe(true);
+    expect(ruleMatches(when, outlook)).toBe(true);
+    // The editor offers the calendar fields once.
     expect(
-      outlookFields.find((field) => field.id === 'outlook-calendar.calendar')?.read(outlook),
-    ).toHaveLength(1);
+      RULE_SOURCES.filter((each) => each.fields.some((field) => field.id.includes('calendar.'))),
+    ).toEqual([expect.objectContaining({ name: 'Calendar' })]);
   });
 
   it('are registered for Rules: “calendar is Titanlink Standups” matches its events', () => {

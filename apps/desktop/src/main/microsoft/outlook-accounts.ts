@@ -65,6 +65,9 @@ export type OutlookAccounts = SourceAccounts;
 
 export type OutlookAccountsOptions = SourceAccountsOptions & { config: MicrosoftConfig };
 
+// The tenant every personal Microsoft account (outlook.com, hotmail.com) signs in through.
+export const PERSONAL_ACCOUNTS_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
+
 const upnOf = (record: AccountRecord | null) => record?.details.userPrincipalName ?? null;
 
 export function outlookSource(config: MicrosoftConfig): AccountSourceDefinition<MicrosoftSignIn> {
@@ -113,6 +116,7 @@ export function outlookSource(config: MicrosoftConfig): AccountSourceDefinition<
       status,
       user,
       sources: sources ?? OUTLOOK_SOURCES.map((source) => ({ source, granted: false, enabled: false })),
+      personal: details.tenantId === PERSONAL_ACCOUNTS_TENANT,
     }),
     describe: (record) => `the Outlook Account for ${upnOf(record) ?? record.name}`,
     wrongIdentity: (signedIn, expected) => {

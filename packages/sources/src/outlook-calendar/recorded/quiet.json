@@ -1,0 +1,143 @@
+[
+  {
+    "request": {
+      "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+        "value": [
+          {
+            "id": "AAMkAGI2-cal-default=",
+            "name": "Calendar",
+            "color": "auto",
+            "hexColor": "",
+            "isDefaultCalendar": true,
+            "changeKey": "ck-Calendar",
+            "canShare": true,
+            "canViewPrivateItems": true,
+            "canEdit": true,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": true,
+            "isRemovable": false,
+            "owner": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          {
+            "id": "AAMkAGI2-cal-titanlink=",
+            "name": "Titanlink",
+            "color": "lightGreen",
+            "hexColor": "#33b679",
+            "isDefaultCalendar": false,
+            "changeKey": "ck-Titanlink",
+            "canShare": true,
+            "canViewPrivateItems": true,
+            "canEdit": true,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": true,
+            "isRemovable": true,
+            "owner": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          }
+        ],
+        "@odata.nextLink": "https://graph.test/v1.0/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50&$skiptoken=cal-page-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50&$skiptoken=cal-page-2"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+        "value": [
+          {
+            "id": "AAMkAGI2-cal-usholidays=",
+            "name": "United States holidays",
+            "color": "lightOrange",
+            "hexColor": "",
+            "isDefaultCalendar": false,
+            "changeKey": "ck-United States holidays",
+            "canShare": false,
+            "canViewPrivateItems": false,
+            "canEdit": false,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": false,
+            "isRemovable": true,
+            "owner": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          {
+            "id": "AAMkAGI2-cal-dana=",
+            "name": "Dana Ruiz",
+            "color": "lightBlue",
+            "hexColor": "#4F9EE8",
+            "isDefaultCalendar": false,
+            "changeKey": "ck-Dana Ruiz",
+            "canShare": false,
+            "canViewPrivateItems": false,
+            "canEdit": false,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": false,
+            "isRemovable": true,
+            "owner": {
+              "name": "Dana Ruiz",
+              "address": "dana@titanlink.test"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/calendars/AAMkAGI2-cal-default=/calendarView/delta?$deltatoken=default-delta-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#Collection(event)",
+        "@odata.deltaLink": "https://graph.test/v1.0/me/calendars/AAMkAGI2-cal-default=/calendarView/delta?$deltatoken=default-delta-1b",
+        "value": []
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/calendars/AAMkAGI2-cal-titanlink=/calendarView/delta?$deltatoken=projects-delta-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#Collection(event)",
+        "@odata.deltaLink": "https://graph.test/v1.0/me/calendars/AAMkAGI2-cal-titanlink=/calendarView/delta?$deltatoken=projects-delta-1b",
+        "value": []
+      }
+    }
+  }
+]

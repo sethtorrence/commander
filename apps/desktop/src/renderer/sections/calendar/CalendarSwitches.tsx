@@ -5,8 +5,9 @@ import type { CalendarSwitches as Switches } from './calendar-events';
 import { CalendarSwatch } from './EventRow';
 
 /**
- * Settings → Accounts, under a Google Account's Google Calendar: each of its calendars with a switch.
- * Primary and owned calendars start on, subscribed ones (holidays, a colleague's) off. Off stops
+ * Settings → Accounts, under a Google Account's Google Calendar or an Outlook Account's Outlook
+ * Calendar: each of its calendars with a switch. Primary (Outlook's default) and owned calendars
+ * start on, subscribed and shared ones (holidays, a colleague's) off. Off stops
  * syncing the calendar and hides its events at once; on syncs it again. The list is read again after
  * each sync (`syncedAt`), which is when new calendars show up.
  */

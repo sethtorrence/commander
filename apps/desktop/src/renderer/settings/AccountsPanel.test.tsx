@@ -668,6 +668,68 @@ describe('Outlook in Settings → Accounts', () => {
     );
   });
 
+  it('lists Outlook Calendar’s calendars, each with a switch that turns it on or off', async () => {
+    const on: OutlookAccountSummary = {
+      ...samOutlook,
+      sources: [{ source: 'outlook-calendar', granted: true, enabled: true }],
+    };
+    state = { accounts: [on], sources: withOutlook(true) };
+    const calendars = [
+      {
+        account: on.id,
+        source: 'outlook-calendar',
+        id: 'AAMk-default=',
+        name: 'Calendar',
+        colour: '#0078d4',
+        primary: true,
+        accessRole: 'owner',
+        on: true,
+      },
+      {
+        account: on.id,
+        source: 'outlook-calendar',
+        id: 'AAMk-dana=',
+        name: 'Dana Ruiz',
+        colour: '#4f9ee8',
+        primary: false,
+        accessRole: 'reader',
+        on: false,
+      },
+    ];
+    const asked: unknown[] = [];
+    Object.assign(window.commander, {
+      itemStore: async (request: { op: string; calendarId?: string; on?: boolean }) => {
+        asked.push(request);
+        if (request.op === 'set-calendar-enabled') {
+          return calendars.map((each) =>
+            each.id === request.calendarId ? { ...each, on: request.on } : each,
+          );
+        }
+        return calendars;
+      },
+    });
+    render(<AccountsPanel no="02" />);
+    const list = await waitFor(() => within(outlook().getByTestId('calendar-switches')));
+
+    expect(
+      list
+        .getAllByRole('switch')
+        .map((each) => [each.getAttribute('aria-label'), each.getAttribute('aria-checked')]),
+    ).toEqual([
+      ['Calendar', 'true'],
+      ['Dana Ruiz', 'false'],
+    ]);
+    fireEvent.click(list.getByRole('switch', { name: 'Dana Ruiz' }));
+    await waitFor(() =>
+      expect(asked).toContainEqual({
+        op: 'set-calendar-enabled',
+        account: on.id,
+        calendarId: 'AAMk-dana=',
+        on: true,
+      }),
+    );
+  });
+
   it('offers Reconnect for an Outlook Account whose sign-in was refused for good', async () => {
     state = { accounts: [{ ...samOutlook, status: 'needs-reconnect' }], sources: withOutlook(true) };
     render(<AccountsPanel no="02" />);

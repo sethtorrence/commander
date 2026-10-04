@@ -7,5 +7,10 @@ export {
 } from './google-calendar/google-calendar-source';
 export type { ListedCalendar } from './google-calendar/shapes';
 export { createLinearSource, LINEAR_CADENCE, type LinearSourceOptions } from './linear/linear-source';
+export {
+  createOutlookCalendarSource,
+  OUTLOOK_CALENDAR_CADENCE,
+  type OutlookCalendarSourceOptions,
+} from './outlook-calendar/outlook-calendar-source';
 export * from './source';
 export { createTeamsSource, TEAMS_CADENCE, type TeamsSourceOptions } from './teams/teams-source';

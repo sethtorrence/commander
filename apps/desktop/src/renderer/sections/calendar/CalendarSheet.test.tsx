@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
 import type { EventDetail, Project, SourceItem } from '@commander/domain';
-import type { AccountSyncStatus, GoogleAccountSummary } from '@commander/domain/ipc';
+import type { AccountSyncStatus, GoogleAccountSummary, OutlookAccountSummary } from '@commander/domain/ipc';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -12,7 +12,12 @@ import { ShortcutProvider, ShortcutScope, useActiveScopes } from '../../shortcut
 import { FrameControlsProvider, SectionProvider } from '../section';
 import { calendar as definition } from '.';
 import { CalendarSheet } from './CalendarSheet';
-import { type CalendarAccountsClient, type CalendarEvents, calendarEventsIn } from './calendar-events';
+import {
+  type CalendarAccount,
+  type CalendarAccountsClient,
+  type CalendarEvents,
+  calendarEventsIn,
+} from './calendar-events';
 
 // The Calendar Section against a real Item store on a temporary database, with events saved the way
 // Google Calendar sync saves them (saveFromSource), a stand-in for the Google Accounts, a fixed clock
@@ -96,9 +101,9 @@ const alex = (sync: AccountSyncStatus | null = syncStatus()): GoogleAccountSumma
   ],
 });
 
-function fakeAccounts(initial: GoogleAccountSummary[]) {
+function fakeAccounts(initial: CalendarAccount[]) {
   let accounts = initial;
-  const listeners = new Set<(accounts: GoogleAccountSummary[]) => void>();
+  const listeners = new Set<(accounts: CalendarAccount[]) => void>();
   const refreshed: string[] = [];
   const client: CalendarAccountsClient = {
     list: async () => accounts,
@@ -113,7 +118,7 @@ function fakeAccounts(initial: GoogleAccountSummary[]) {
   return {
     client,
     refreshed,
-    change(next: GoogleAccountSummary[]) {
+    change(next: CalendarAccount[]) {
       accounts = next;
       act(() => {
         for (const listener of listeners) listener(next);
@@ -345,6 +350,82 @@ describe('the Calendar sheet', () => {
     expect(JSON.parse(localStorage.getItem('commander.calendar.hidden') ?? '[]')).toEqual([
       `${ALEX}/${STANDUPS}`,
     ]);
+  });
+
+  it('shows an Outlook Account’s events beside Google’s, groups the calendars by Account, and hands Outlook events to Outlook on the web', async () => {
+    const SAM = 'outlook:fake-tenant-0001:6f1c2a40-0000-4000-8000-00000000a001';
+    const UPN = 'sam@contoso.test';
+    const outlookSync = syncStatus({ account: SAM, source: 'outlook-calendar' });
+    const sam: OutlookAccountSummary = {
+      id: SAM,
+      source: 'outlook',
+      name: `Outlook · ${UPN}`,
+      userPrincipalName: UPN,
+      method: 'oauth',
+      status: 'connected',
+      user: { id: '6f1c2a40-0000-4000-8000-00000000a001', name: 'Sam Rivera' },
+      sync: null,
+      sources: [
+        { source: 'outlook', granted: true, enabled: false },
+        { source: 'outlook-calendar', granted: true, enabled: true, sync: outlookSync },
+      ],
+      personal: false,
+    };
+    accounts = fakeAccounts([alex(), sam]);
+    store.calendars.listed(SAM, 'outlook-calendar', [
+      { id: 'AAMk-default=', name: 'Calendar', colour: '#0078d4', primary: true, accessRole: 'owner' },
+    ]);
+    const webUrl = 'https://outlook.office365.com/owa/?itemid=AAMk-1on1%3D&exvsurl=1&path=/calendar/item';
+    const oneOnOne = event('1on1', '1:1 with Dana', '2026-10-05T10:00:00Z', '2026-10-05T10:30:00Z', {
+      calendar: { id: 'AAMk-default=', name: 'Calendar', colour: '#0078d4' },
+      accountEmail: UPN,
+      webUrl,
+    });
+    store.saveFromSource({
+      source: 'outlook-calendar',
+      account: SAM,
+      items: [{ ...oneOnOne, externalId: 'AAMk-1on1=' }],
+    });
+    renderSheet();
+
+    await waitFor(() =>
+      expect(days()[0]).toEqual([
+        'Today · Monday 5 October',
+        [
+          '09:00–09:15 TL standup',
+          '11:00–11:30 1:1 with Dana',
+          '12:30–13:30 Lunch with Priya',
+          '14:00–15:00 Design review',
+        ],
+      ]),
+    );
+    expect(controls.setTabCount).toHaveBeenLastCalledWith('calendar', 3);
+    await waitFor(() => expect(accounts.refreshed).toEqual([ALEX, SAM]));
+
+    // The side column: each Account's calendars under its address.
+    const groups = screen.getAllByTestId('calendar-group');
+    expect(groups.map((group) => group.querySelector('p')?.textContent)).toEqual([
+      `${PRIMARY} · Google`,
+      `${UPN} · Outlook`,
+    ]);
+    expect(
+      within(groups[1] as HTMLElement)
+        .getAllByRole('switch')
+        .map((each) => each.getAttribute('aria-label')),
+    ).toEqual(['Show Calendar']);
+
+    // New event for each Account at its own provider; Edit opens the Outlook event at its web link.
+    fireEvent.click(screen.getByRole('button', { name: `New event · ${UPN}` }));
+    expect(opened).toEqual([
+      'https://outlook.office.com/calendar/deeplink/compose?login_hint=sam%40contoso.test',
+    ]);
+    fireEvent.click(screen.getByRole('listitem', { name: /1:1 with Dana/ }));
+    fireEvent.click(await waitFor(() => screen.getByRole('button', { name: /Edit in Outlook/ })));
+    expect(opened[1]).toBe(`${webUrl}&login_hint=sam%40contoso.test`);
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    expect(accounts.refreshed).toEqual([ALEX, SAM, SAM]);
   });
 
   it('reads the events again when a sync finishes, and says when one fails', async () => {

@@ -6,7 +6,7 @@ import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { Tag } from '../linear/IssueRow';
 import type { AgendaEntry } from './agenda';
 
-/** The calendar's colour, as a small square (Google's colour for it). */
+/** The calendar's colour, as a small square (the colour its Source gives it). */
 export function CalendarSwatch({ colour, className }: { colour: string; className?: string }) {
   return (
     <span

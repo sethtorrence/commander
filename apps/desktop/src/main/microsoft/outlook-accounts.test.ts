@@ -12,6 +12,7 @@ import {
   grantedOutlookSources,
   OUTLOOK_SCOPES,
   type OutlookAccounts,
+  PERSONAL_ACCOUNTS_TENANT,
 } from './outlook-accounts';
 
 const PRIYA: FakeMicrosoftUser = {
@@ -122,10 +123,25 @@ describe('connecting Outlook through the browser', () => {
       status: 'connected',
       user: { id: SAM.id, name: 'Sam Rivera' },
       sources: BOTH_ON,
+      // A work account: Outlook on the web is outlook.office.com.
+      personal: false,
     };
     expect(account).toEqual(expected);
     expect(await accounts.list()).toEqual([expected]);
     expect(microsoft.graphRequests).toEqual(['/v1.0/me?$select=id,displayName,userPrincipalName']);
+  });
+
+  it('marks a personal Microsoft account (signed in through the consumer tenant) as personal', async () => {
+    await microsoft.close();
+    microsoft = await startFakeMicrosoft({ tenantId: PERSONAL_ACCOUNTS_TENANT });
+    config = {
+      ...config,
+      tenantId: microsoft.tenantId,
+      loginUrl: microsoft.loginUrl,
+      graphUrl: microsoft.graphUrl,
+    };
+    const account = await start().connectWithBrowser();
+    expect(account).toMatchObject({ source: 'outlook', personal: true });
   });
 
   it('survives a restart', async () => {

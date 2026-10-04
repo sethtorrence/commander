@@ -15,7 +15,7 @@ import { CalendarSwatch } from './EventRow';
 
 /*
   The detail pane beside the Agenda, after the Linear Section's: actions along the top (Edit in
-  Google Calendar, the meeting link, Project, Close), then the event's calendar and Account, title,
+  Google Calendar or Outlook, the meeting link, Project, Close), then the event's calendar and Account, title,
   when it is, its fields, attendees and their answers, description, Links and activity log. The
   description is the Source's text (untrusted), shown through the same safe rendering as Linear
   descriptions: plain text with links that open in the system browser, and no images.
@@ -63,7 +63,7 @@ export function EventDetail({
   onOpenLink,
 }: {
   event: CalendarEvent | null;
-  /** Where Edit opens the event (Google Calendar, as its Account); null when it has no link. */
+  /** Where Edit opens the event (Google Calendar or Outlook on the web, as its Account); null without a link. */
   editUrl: string | null;
   timeZone: string;
   links: EventLink[];
@@ -97,7 +97,8 @@ export function EventDetail({
                   onClick={() => onEdit(editUrl)}
                   className={cn(action, 'bg-ink text-sheet hover:bg-ink hover:opacity-90')}
                 >
-                  Edit in Google Calendar <span aria-hidden="true">↗</span>
+                  Edit in {event.source === 'outlook-calendar' ? 'Outlook' : 'Google Calendar'}{' '}
+                  <span aria-hidden="true">↗</span>
                 </button>
               )}
               {detail.meetingUrl && (
