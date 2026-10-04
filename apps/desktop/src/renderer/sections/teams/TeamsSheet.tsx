@@ -129,7 +129,13 @@ export function TeamsSheet({
   useRefreshWhenOpened(state.refresh, state.reload);
 
   const file = () =>
-    selected && badges.open({ id: selected.id, title: selected.title, filing: selected.filing });
+    selected &&
+    badges.open({
+      id: selected.id,
+      title: selected.title,
+      filing: selected.filing,
+      filingSuggestion: selected.filingSuggestion,
+    });
 
   const openLink = ({ other }: ChatLink) => {
     if (other.kind === 'project') return openPage?.(other.id);

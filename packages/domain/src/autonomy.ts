@@ -40,9 +40,8 @@ export const HARD_LIMITS: Record<ActionKind, AutonomyLevel> = {
 // Auto when sure acts only at or above this confidence. Built in: not User-tunable in v1.
 export const CONFIDENCE_BAR = 0.8;
 
-// The Sections an Autonomy setting can be overridden in: those holding Items Ares acts on. Teams
-// joins with its Section.
-export const autonomySections = ['notes', 'todos', 'linear', 'email', 'calendar', 'github'] as const;
+// The Sections an Autonomy setting can be overridden in: those holding Items Ares acts on.
+export const autonomySections = ['notes', 'todos', 'linear', 'email', 'calendar', 'github', 'teams'] as const;
 export const autonomySection = z.enum(autonomySections);
 export type AutonomySection = z.infer<typeof autonomySection>;
 
@@ -53,6 +52,7 @@ export const AUTONOMY_SECTION_NAMES: Record<AutonomySection, string> = {
   email: 'Email',
   calendar: 'Calendar',
   github: 'GitHub',
+  teams: 'Teams',
 };
 
 // An action a job has registered: its id (what proposals name), its Action kind and the name the

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   type ActionContext,
+  type ChatMember,
   type LinearIssueDetail,
   type Project,
   ruleSuggestionDraft,
@@ -62,6 +63,41 @@ function issue(team = OPS, labels: { id: string; name: string; color: string }[]
     source: 'linear',
     account: ACCOUNT,
     items: [{ externalId: id, kind: 'linear-issue', title: `Issue ${id}`, detail }],
+  }).created[0] as string;
+}
+
+const TEAMS = 'teams:tenant-1:u-sam';
+const SAM: ChatMember = { userId: 'u-sam', name: 'Sam Rivera', email: 'sam@contoso.test' };
+const OMAR: ChatMember = { userId: 'u-omar', name: 'Omar Haddad', email: 'omar@titanlink.io' };
+
+// A Teams Chat with these people, as Teams sync saves it.
+function chat(...members: ChatMember[]): string {
+  const id = `19:chat-${next++}`;
+  return store.saveFromSource({
+    source: 'teams',
+    account: TEAMS,
+    items: [
+      {
+        externalId: id,
+        kind: 'chat',
+        title: `Chat ${id}`,
+        detail: {
+          kind: 'chat',
+          chatType: 'group',
+          topic: `Chat ${id}`,
+          webUrl: null,
+          members,
+          lastReadAt: null,
+          hidden: false,
+          joinUrl: null,
+          messages: [],
+          unreadCount: 0,
+          mentionsMe: false,
+          latestFromMe: false,
+          lastMessageAt: null,
+        },
+      },
+    ],
   }).created[0] as string;
 }
 
@@ -183,5 +219,35 @@ describe('Rule suggestions', () => {
         (line) => line.about.kind === 'rule-suggestion' && `${line.about.field} ${line.about.label}`,
       ),
     ).toEqual(['linear.label billing']);
+  });
+
+  it('five consistent answers on Chats with one person queue "Always file Chats with Omar Haddad under TL?"', () => {
+    const others = [1, 2, 3, 4, 5].map((n) => ({
+      userId: `u-${n}`,
+      name: `Person ${n}`,
+      email: `person${n}@contoso.test`,
+    }));
+    for (const other of others) answer(chat(SAM, OMAR, other), tx, tl);
+    suggestions.sweep();
+
+    // Only Omar is in all five; the User, in every Chat, is never suggested.
+    const lines = queued();
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatchObject({
+      section: 'teams',
+      about: {
+        field: 'teams.person',
+        value: 'omar@titanlink.io',
+        label: 'Omar Haddad',
+        code: 'TL',
+        count: 5,
+      },
+    });
+    expect(templateText(lines[0] as never, () => null)).toBe(
+      'You filed 5 Chats with Omar Haddad under TL. Always file Chats with Omar Haddad under TL?',
+    );
+    expect(ruleSuggestionDraft(lines[0]?.about as never).when.terms).toEqual([
+      { field: 'teams.person', op: 'is', value: 'omar@titanlink.io', label: 'Omar Haddad' },
+    ]);
   });
 });

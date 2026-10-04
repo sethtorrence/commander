@@ -14,11 +14,14 @@ import {
   type CausedBy,
   FILE_INTO_PROJECTS,
   type Filing,
+  type FilingCounts,
   type FilingFeedback,
   type FilingRecord,
   type FilingSuggestion,
   type Item,
   type ItemState,
+  type Source,
+  sources,
 } from '@commander/domain';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -34,7 +37,8 @@ type NewFeedback = {
 };
 
 export type FilingFeedbackStore = {
-  // Ares's filing record: Items he filed on his own, suggestions he left, and the User's answers.
+  // Ares's filing record: Items he filed on his own, suggestions he left, and the User's answers;
+  // in all and by Source.
   record(): FilingRecord;
   // Every correction and confirmation, newest first.
   feedback(): FilingFeedback[];
@@ -44,7 +48,7 @@ export function filingFeedbackIn(
   db: BetterSQLite3Database<typeof schema>,
   log: (entry: NewFeedback, at: number) => ActivityEntry,
 ) {
-  const { proposals, activity } = schema;
+  const { proposals, activity, items } = schema;
 
   const projectOf = (steps: unknown): string | null => {
     const step = (steps as { type: string; changes?: { filing?: Filing } }[])[0];
@@ -120,27 +124,55 @@ export function filingFeedbackIn(
     );
   }
 
-  const count = (rows: { n: number } | undefined) => Number(rows?.n ?? 0);
+  const counted = (key: keyof FilingCounts, rows: { source: Source | null; n: number }[]) =>
+    rows.map((row) => ({ key, source: row.source, n: Number(row.n) }));
 
   const store: FilingFeedbackStore = {
     record() {
-      const proposalsWhere = (where: ReturnType<typeof sql>) =>
-        count(
+      // Each count by the Source of the Item it is about.
+      const proposalsWhere = (key: keyof FilingCounts, where: ReturnType<typeof sql>) =>
+        counted(
+          key,
           db
-            .select({ n: sql<number>`count(*)` })
+            .select({ source: items.source, n: sql<number>`count(*)` })
             .from(proposals)
+            .innerJoin(items, eq(items.id, proposals.itemId))
             .where(and(eq(proposals.action, FILE_INTO_PROJECTS), where))
-            .get(),
+            .groupBy(items.source)
+            .all(),
         );
-      const answers = (action: 'correction' | 'confirmation') =>
-        count(
-          db.select({ n: sql<number>`count(*)` }).from(activity).where(eq(activity.action, action)).get(),
+      const answers = (key: keyof FilingCounts, action: 'correction' | 'confirmation') =>
+        counted(
+          key,
+          db
+            .select({ source: items.source, n: sql<number>`count(*)` })
+            .from(activity)
+            .innerJoin(items, eq(items.id, activity.itemId))
+            .where(eq(activity.action, action))
+            .groupBy(items.source)
+            .all(),
         );
+      const rows = [
+        ...proposalsWhere('filed', sql`${proposals.status} = 'done'`),
+        ...proposalsWhere('suggested', sql`${proposals.decision} = 'ask'`),
+        ...answers('confirmed', 'confirmation'),
+        ...answers('corrected', 'correction'),
+      ];
+      const none = (): FilingCounts => ({ filed: 0, suggested: 0, confirmed: 0, corrected: 0 });
+      const total = none();
+      const bySource = new Map<Source | null, FilingCounts>();
+      for (const { key, source, n } of rows) {
+        total[key] += n;
+        const each = bySource.get(source) ?? none();
+        each[key] += n;
+        bySource.set(source, each);
+      }
+      const order = (source: Source | null) => (source === null ? sources.length : sources.indexOf(source));
       return {
-        filed: proposalsWhere(sql`${proposals.status} = 'done'`),
-        suggested: proposalsWhere(sql`${proposals.decision} = 'ask'`),
-        confirmed: answers('confirmation'),
-        corrected: answers('correction'),
+        ...total,
+        bySource: [...bySource]
+          .sort(([a], [b]) => order(a) - order(b))
+          .map(([source, each]) => ({ source, ...each })),
       };
     },
 

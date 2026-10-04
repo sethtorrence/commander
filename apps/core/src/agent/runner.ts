@@ -88,8 +88,11 @@ export type GatherContext = {
   seen(itemId: string, fingerprint: string): boolean;
 };
 
-// A proposal as a job makes it: the runner adds the job's action.
-export type JobProposal = Omit<Proposal, 'actionKind' | 'action' | 'section'>;
+// A proposal as a job makes it: the runner adds the job's action, and its Section unless the
+// proposal names its own (a job working across Sections, like filing, follows each Item's).
+export type JobProposal = Omit<Proposal, 'actionKind' | 'action' | 'section'> & {
+  section?: AutonomySection | null;
+};
 
 export type AgentJob<Input extends JobInput = JobInput, Output = unknown> = {
   // Its id: the usage ledger's job, and the key for per-job thinking overrides.
@@ -370,7 +373,12 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
           continue;
         }
         try {
-          const outcome = gate.propose({ ...proposal, action, actionKind, section });
+          const outcome = gate.propose({
+            ...proposal,
+            action,
+            actionKind,
+            section: proposal.section === undefined ? section : proposal.section,
+          });
           if (outcome.decision === 'ask') proposalIds.set(proposal.itemId, outcome.suggestion.id);
           if (outcome.decision === 'auto') proposalIds.set(proposal.itemId, outcome.done.id);
         } catch (error) {

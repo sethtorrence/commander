@@ -153,14 +153,14 @@ async function run(itemIds: string[] = []) {
 }
 
 describe('File into Projects', () => {
-  it('registers as Organise in Linear, a Quick job at low thinking, run when Items arrive', () => {
+  it('registers as Organise (each filing in its Item’s Section), a Quick job at low thinking, run when Items arrive', () => {
     const job = fileIntoProjectsJob(store);
     expect(job).toMatchObject({
       job: FILE_INTO_PROJECTS,
       name: 'File into Projects',
       tier: 'quick',
       reasoningEffort: 'low',
-      action: { action: FILE_INTO_PROJECTS, actionKind: 'organise', section: 'linear' },
+      action: { action: FILE_INTO_PROJECTS, actionKind: 'organise', section: null },
       triggers: { 'items-arrived': true },
     });
     expect(gate.actions().map((action) => action.action)).toContain(FILE_INTO_PROJECTS);
@@ -223,7 +223,12 @@ describe('File into Projects', () => {
     const unsure = ids['OPS-4'] as string;
     expect(filingOf(unsure)).toBeNull();
     const [pending] = gate.activity({ itemId: unsure, statuses: ['pending'] });
-    expect(pending).toMatchObject({ action: FILE_INTO_PROJECTS, decision: 'ask', chained: false });
+    expect(pending).toMatchObject({
+      action: FILE_INTO_PROJECTS,
+      decision: 'ask',
+      chained: false,
+      section: 'linear',
+    });
     expect(store.get(unsure)?.item.filingSuggestion).toEqual({ proposalId: pending?.id, projectId: tx.id });
     // A Todo behind the issue wears it too.
     store.record(

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { eventRuleFields } from './calendar';
 import { filing, type Item, itemRef } from './items';
+import { teamsRuleFields } from './teams-rules';
 
 // Rules: conditions the User sets that file matching Items into a Project. They sit in one list the
 // User orders, and the first match from the top wins. A Rule's conditions name fields from a
@@ -131,8 +132,11 @@ export type RuleField = {
   // The editor's label for it: "Team".
   label: string;
   ops: readonly RuleOperator[];
-  // The values the Item has for the field; none when it is not that Source's.
-  read(item: Pick<Item, 'kind' | 'source' | 'account' | 'title' | 'detail'>): RuleFieldValue[];
+  // The values the Item has for the field; none when it is not that Source's. (A Chat is named by
+  // its Teams id, the Item's external id.)
+  read(
+    item: Pick<Item, 'kind' | 'source' | 'account' | 'title' | 'detail'> & Partial<Pick<Item, 'externalId'>>,
+  ): RuleFieldValue[];
 };
 
 const linearIssue = (item: Pick<Item, 'detail'>) =>
@@ -221,10 +225,9 @@ export const outlookCalendarRuleFields: readonly RuleField[] = eventRuleFields('
 // Every Source's fields, by id. A Source adds its fields here (email: sender, domain; GitHub: org,
 // repo); matching and describing need nothing more.
 export const RULE_FIELDS: ReadonlyMap<string, RuleField> = new Map(
-  [...linearRuleFields, ...googleCalendarRuleFields, ...outlookCalendarRuleFields].map((field) => [
-    field.id,
-    field,
-  ]),
+  [...linearRuleFields, ...googleCalendarRuleFields, ...outlookCalendarRuleFields, ...teamsRuleFields].map(
+    (field) => [field.id, field],
+  ),
 );
 
 // The Sources whose fields Rules can use, with their fields in the editor's order. The calendar
@@ -233,6 +236,7 @@ export const RULE_FIELDS: ReadonlyMap<string, RuleField> = new Map(
 export const RULE_SOURCES: readonly { source: string; name: string; fields: readonly RuleField[] }[] = [
   { source: 'linear', name: 'Linear', fields: linearRuleFields },
   { source: 'calendar', name: 'Calendar', fields: googleCalendarRuleFields },
+  { source: 'teams', name: 'Teams', fields: teamsRuleFields },
 ];
 
 // ---------------------------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import type { ActivityEntry, ChatMessage, ChatReply, OutgoingChange } from '@com
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
-import { ItemBadge } from '../../projects/badges';
+import { ItemBadge, ItemProject, waitingSuggestion } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { Eyebrow, PanePart } from '../todos/detail/parts';
 import { TodoLinks } from '../todos/detail/TodoLinks';
@@ -15,7 +15,8 @@ import type { MessageFocus } from './use-teams';
 
 /*
   The Chat view beside the list, after the prototype's reader: the Chat's actions along the top
-  (Open in Teams, Project, Mute, Exclude), its name, the people in it and its marks, then its
+  (Open in Teams, Project, Mute, Exclude), its name, the people in it and its marks (with Ares's
+  dashed Badge, Confirm and Change while his filing suggestion waits, #108), then its
   messages by day, newest at the bottom, and a side panel with its Project, Links both ways and
   activity log, as in the other detail panes. Message text is untrusted Source content, shown by
   MessageText (text only, no images, web and mail links only).
@@ -322,6 +323,7 @@ export function ChatView({
                 {peopleIn(chat, me) || 'No one else'}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
+                {waitingSuggestion(chat) && <ItemProject item={chat} />}
                 {chat.muted && <Mark title="Muted: kept and synced, but not counted as unread">Muted</Mark>}
                 <ItemWarning item={chat} variant="pane" />
               </div>
@@ -386,7 +388,7 @@ export function ChatView({
                 onClick={onFile}
                 className="mt-2 flex w-full cursor-pointer items-center gap-[9px] border border-line bg-transparent px-2.5 py-1.5 text-left text-note text-text hover:bg-raise"
               >
-                <ItemBadge filing={chat.filing} />
+                <ItemBadge filing={chat.filing} suggestion={waitingSuggestion(chat)} />
                 {project ? project.name : 'Unfiled'}
               </button>
               <TodoLinks links={links} onOpen={onOpenLink} />
