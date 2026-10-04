@@ -12,6 +12,7 @@ import { useNow } from '../frame/use-now';
 import { ProjectsSettings } from '../projects/ProjectsSettings';
 import { RulesSettings } from '../rules/RulesSettings';
 import { DailyTemplateSettings } from '../sections/notes/DailyTemplateSettings';
+import { TeamsSettings } from '../sections/teams/TeamsSettings';
 import { AccountsPanel } from './AccountsPanel';
 import { AutonomyPanel } from './AutonomyPanel';
 import { AresSettings } from './ares/AresSettings';
@@ -95,6 +96,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
       <DailyTemplateSettings no="11" />
       <RulesSettings no="12" shown={open} />
       <GitHubWatchPanel no="13" />
+      <TeamsSettings no="14" shown={open} />
     </Sheet>
   );
 }

@@ -44,7 +44,8 @@ describe('the Item at the other end', () => {
     expect(sectionFor('linear-issue')).toBe('linear');
     expect(sectionFor('review-request')).toBe('github');
     expect(sectionFor('block')).toBe('notes');
-    expect(sectionFor('chat')).toBeNull();
+    expect(sectionFor('chat')).toBe('teams');
+    expect(sectionFor('channel-post')).toBeNull();
   });
 
   it('says where it was deleted, if it was', () => {

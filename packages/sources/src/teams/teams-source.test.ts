@@ -78,7 +78,8 @@ async function sync(
     cursor = null,
     mode = 'light',
     messagesPerChat,
-  }: { cursor?: unknown; mode?: SyncMode; messagesPerChat?: number } = {},
+    excluded,
+  }: { cursor?: unknown; mode?: SyncMode; messagesPerChat?: number; excluded?: string[] } = {},
 ) {
   const pages: SyncPage[] = [];
   // Every sync starts at NOW; pacing moves the clock on within it.
@@ -113,6 +114,7 @@ async function sync(
           : [];
       }),
     accessToken: async () => token,
+    excluded,
     save: (page) => {
       pages.push(page);
       for (const item of page.items) held.set(item.externalId, item);
@@ -196,6 +198,31 @@ async function cursorBeforeTheCheck(): Promise<TeamsCursor> {
 describe('the cadence', () => {
   it('syncs fully once a day, and checks whenever another Source syncs', () => {
     expect(TEAMS_CADENCE).toEqual({ defaultMinutes: 1440, choices: [1440], alsoAfterOtherSources: true });
+  });
+});
+
+describe('Chats the User excluded', () => {
+  const without = (chatId: string) =>
+    (firstSync as Exchange[]).filter((exchange) => !exchange.request.path.startsWith(`/chats/${chatId}/`));
+
+  it('fetches nothing for them, hands none over, and forgets them, so including one again fetches it afresh', async () => {
+    const graph = replay(without(LAUNCH));
+    const { items, pages, result } = await sync(graph.fetch, { mode: 'full', excluded: [LAUNCH] });
+
+    expect(graph.remaining()).toBe(0);
+    expect(items.map((item) => item.externalId)).toEqual([PRIYA_CHAT, STANDUP, OLD]);
+    expect(pages.flatMap((page) => page.deleted)).toEqual([]);
+    expect(Object.keys((result.cursor as TeamsCursor).chats)).not.toContain(LAUNCH);
+  });
+
+  it('drops one excluded since the last sync without treating it as left', async () => {
+    const cursor = await afterFirstSync();
+    const graph = replay(without(LAUNCH).slice(0, 2));
+    const { pages, result } = await sync(graph.fetch, { cursor, mode: 'light', excluded: [LAUNCH] });
+
+    expect(pages.flatMap((page) => page.items.map((item) => item.externalId))).not.toContain(LAUNCH);
+    expect(pages.flatMap((page) => page.deleted)).toEqual([]);
+    expect(Object.keys((result.cursor as TeamsCursor).chats)).not.toContain(LAUNCH);
   });
 });
 
@@ -516,9 +543,15 @@ describe('the daily full sync', () => {
       `/chats/${STANDUP}/messages`,
     ]);
     const messages = chatOf(byId(items, PRIYA_CHAT)).messages;
-    expect(messages.find((message) => message.id === String(Date.UTC(2026, 9, 3, 10)))?.text).toBe(
+    const edited = messages.find((message) => message.id === String(Date.UTC(2026, 9, 3, 10)));
+    expect(edited?.text).toBe(
       '@Sam Rivera can you review the rollout plan v2 (https://contoso.test/rollout-v2)?',
     );
+    expect(edited?.editedAt).toBe(Date.UTC(2026, 9, 3, 11, 50));
+    // Reacted to, not edited.
+    expect(
+      messages.find((message) => message.id === String(Date.UTC(2026, 9, 3, 9)))?.editedAt,
+    ).toBeUndefined();
     expect(messages.find((message) => message.id === String(Date.UTC(2026, 9, 3, 9)))?.reactions).toEqual([
       { type: 'heart', by: { userId: 'u-priya', name: '' } },
     ]);

@@ -254,6 +254,23 @@ export const chatDetails = sqliteTable('chat_details', {
   data: text('data', { mode: 'json' }).$type<Omit<ChatDetail, 'kind'>>().notNull(),
 });
 
+// What the User chose for each Teams Chat (#105): muted, or excluded from Commander. Kept by Account
+// and the Chat's Teams id rather than by Item, as an excluded Chat's Item is deleted (and sync then
+// skips the Chat). A setting, not an Item change: not in the activity log.
+export const chatSettings = sqliteTable(
+  'chat_settings',
+  {
+    account: text('account').notNull(),
+    chatId: text('chat_id').notNull(),
+    // The Chat's name when last changed, for Settings → Teams once its Item is gone.
+    name: text('name').notNull(),
+    muted: integer('muted', { mode: 'boolean' }).notNull().default(false),
+    excludedAt: integer('excluded_at'),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.account, t.chatId] })],
+);
+
 // Where each Account's sync stands, so it carries on after a restart: the Source's cursor, when it
 // last synced, any back-off, and the User's cadence. Never a token.
 // One row per Source of each Account: an Account carrying several Sources (a Google Account's Gmail

@@ -24,7 +24,7 @@ const KINDS: Record<string, { tag: string; section: string | null }> = {
   'linear-issue': { tag: 'LIN', section: 'linear' },
   'pull-request': { tag: 'GH', section: 'github' },
   'review-request': { tag: 'GH', section: 'github' },
-  chat: { tag: 'TMS', section: null },
+  chat: { tag: 'TMS', section: 'teams' },
   'channel-post': { tag: 'TMS', section: null },
   todo: { tag: 'TDO', section: 'todos' },
   block: { tag: 'DN', section: 'notes' },
@@ -38,7 +38,7 @@ export function kindTag(kind: string): string {
   return KINDS[kind]?.tag ?? kind.slice(0, 3).toUpperCase();
 }
 
-/** The id of the Section that holds Items of this kind, or null while none does (Teams). */
+/** The id of the Section that holds Items of this kind, or null while none does (Channel posts). */
 export function sectionFor(kind: string): string | null {
   return KINDS[kind]?.section ?? null;
 }

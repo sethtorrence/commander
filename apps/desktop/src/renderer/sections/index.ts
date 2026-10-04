@@ -6,12 +6,12 @@ import { github } from './github';
 import { linear } from './linear';
 import { notes } from './notes';
 import type { SectionDefinition } from './section';
+import { teams } from './teams';
 import { todos } from './todos';
 
 /**
  * The notebook tabs, in order. A Section's place here is its tab number and its number key (1–9).
- * To add a Section (Teams follows in its milestone): make sections/<id>/index.tsx exporting a
- * SectionDefinition, and add it here.
+ * To add a Section: make sections/<id>/index.tsx exporting a SectionDefinition, and add it here.
  */
 export const SECTIONS: readonly SectionDefinition[] = [
   dashboard,
@@ -21,6 +21,7 @@ export const SECTIONS: readonly SectionDefinition[] = [
   email,
   calendar,
   github,
+  teams,
   ares,
 ];
 

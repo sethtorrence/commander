@@ -16,6 +16,7 @@ import {
   blockLinksIn,
   blockTodoQuery,
   type CausedBy,
+  type ChatSettingAction,
   compactForLog,
   type DailyNotePage,
   type DailyNoteProjects,
@@ -79,6 +80,7 @@ import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
+import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
@@ -114,6 +116,7 @@ import { openUpdateStore, type UpdateStore } from './updates';
 export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
+export type { ChatSettingsStore } from './chat-settings';
 export type { DashboardStore, StoredClear } from './dashboard';
 export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
@@ -252,6 +255,9 @@ export type ItemStore = {
   updates: UpdateStore;
   // Settings → GitHub: what each GitHub Account watches (github-watch.ts), in the same database.
   githubWatch: GitHubWatchStore;
+  // Teams Chats the User muted or excluded (chat-settings.ts), in the same database. Excluding one
+  // deletes its Item; the sync engine passes an Account's excluded Chats to its sync, to skip.
+  chatSettings: ChatSettingsStore;
   close(): void;
 };
 
@@ -1533,9 +1539,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return withDetails(rows);
   };
 
+  const chatSettings = chatSettingsIn(db, {
+    now,
+    findChat: (account, chatId) => findBySourceIdentity('teams', account, chatId) ?? null,
+    deleteItem: (itemId, context) => record({ type: 'delete', itemId }, context),
+  });
+
   const removeAccountItems = sqlite.transaction(
-    ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] =>
-      removeItems(liveSourceItems(source, account), actionContext.parse(rawContext)),
+    ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] => {
+      chatSettings.removeAccount(account);
+      return removeItems(liveSourceItems(source, account), actionContext.parse(rawContext));
+    },
   );
 
   const autonomy = openAutonomyStore(db, now);
@@ -1760,6 +1774,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     markdownCopyFolder: markdownCopyFolderIn(db, now),
+    chatSettings: {
+      list: (account) => chatSettings.list(account),
+      change: sqlite.transaction((action: ChatSettingAction, context: ActionContext) =>
+        chatSettings.change(action, context),
+      ),
+      excluded: (account) => chatSettings.excluded(account),
+      removeAccount: (account) => chatSettings.removeAccount(account),
+    },
 
     githubWatch,
 

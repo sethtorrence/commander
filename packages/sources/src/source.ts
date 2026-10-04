@@ -51,6 +51,9 @@ export type SyncRequest = {
   // External ids to read again on every sync whatever changed (the issues behind open Linear Todos,
   // as a reassignment may not show among what changed). Ones the Source no longer has go in `deleted`.
   recheck?: string[];
+  // External ids the User excluded from Commander (Teams Chats): fetch nothing for them, and hand
+  // none of them over. Not deletions: an excluded Chat comes back once the User includes it again.
+  excluded?: string[];
   // Aborted when the sync is no longer wanted (the Account was removed).
   signal: AbortSignal;
 };

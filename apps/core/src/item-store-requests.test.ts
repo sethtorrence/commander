@@ -443,6 +443,39 @@ describe('Rules from the window', () => {
       response: { ok: true, result: [{ blockId, issue: { id: issue?.id, kind: 'linear-issue' } }] },
     });
   });
+  it('mutes, excludes and includes a Teams Chat as the User, and says which Chat changed', () => {
+    const account = 'teams:tenant-1:u-sam';
+    const chatId = '19:launch@thread.v2';
+    const [chat] = store.saveFromSource({
+      source: 'teams',
+      account,
+      items: [{ externalId: chatId, kind: 'chat', title: 'Launch crew' }],
+    }).created;
+    const changed: string[][] = [];
+    const tell = (id: number, request: unknown) =>
+      answerItemStoreRequest(store, { type: 'item-store-request', id, request }, (ids) => changed.push(ids));
+
+    expect(tell(1, { op: 'change-chat-setting', action: { account, chatId, change: 'mute' } })).toMatchObject(
+      {
+        response: { ok: true, result: { setting: { muted: true }, itemId: chat, entry: null } },
+      },
+    );
+    expect(
+      tell(2, { op: 'change-chat-setting', action: { account, chatId, change: 'exclude' } }),
+    ).toMatchObject({
+      response: { ok: true, result: { entry: { action: 'delete', by: { kind: 'user' }, itemId: chat } } },
+    });
+    expect(tell(3, { op: 'chat-settings' })).toMatchObject({
+      response: { ok: true, result: [{ chatId, name: 'Launch crew', muted: true }] },
+    });
+    expect(
+      tell(4, { op: 'change-chat-setting', action: { account, chatId, change: 'shout' } }),
+    ).toMatchObject({
+      response: { ok: false },
+    });
+
+    expect(changed).toEqual([[chat], [chat]]);
+  });
 });
 
 describe('the Dashboard from the window', () => {

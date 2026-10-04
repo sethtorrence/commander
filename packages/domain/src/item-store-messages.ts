@@ -50,6 +50,7 @@ import {
   rulePreviewRequest,
 } from './rules';
 import { type SearchResult, searchQuery, searchResult } from './search';
+import { type ChatSetting, chatSetting, chatSettingAction } from './teams';
 
 // What the window may ask of the Item store. It reaches the store only through these requests,
 // validated in the main process and again in the Core. Actions from the window are always the User's.
@@ -119,9 +120,23 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // from it, and replacing those. Clearing changes no Item, so it is not in the activity log.
   z.object({ op: z.literal('dashboard') }),
   z.object({ op: z.literal('save-dashboard-clears'), clears: dashboardClears }),
+  // Teams: the Chats the User muted or excluded (all Accounts, or one), and muting, excluding or
+  // including one again. Commander settings, not Item changes, except that excluding a Chat deletes
+  // its Item (in the activity log, by the User).
+  z.object({ op: z.literal('chat-settings'), account: z.string().min(1).optional() }),
+  z.object({ op: z.literal('change-chat-setting'), action: chatSettingAction }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
+
+// What a change to a Chat's setting did: the setting as it now stands, the Chat's Item (null when
+// Commander holds none), and the activity entry deleting it, when excluding did.
+export const chatSettingChange = z.object({
+  setting: chatSetting,
+  itemId: z.string().nullable(),
+  entry: activityEntry.nullable(),
+});
+export type ChatSettingChange = z.infer<typeof chatSettingChange>;
 
 export type ItemStoreResults = {
   query: Item[];
@@ -155,6 +170,8 @@ export type ItemStoreResults = {
   'block-issues': BlockIssue[];
   dashboard: DashboardState;
   'save-dashboard-clears': DashboardClears;
+  'chat-settings': ChatSetting[];
+  'change-chat-setting': ChatSettingChange;
 };
 
 export const itemStoreResult = {
@@ -189,6 +206,8 @@ export const itemStoreResult = {
   'block-issues': z.array(blockIssue),
   dashboard: dashboardState,
   'save-dashboard-clears': dashboardClears,
+  'chat-settings': z.array(chatSetting),
+  'change-chat-setting': chatSettingChange,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

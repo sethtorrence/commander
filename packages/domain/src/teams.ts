@@ -29,6 +29,8 @@ export const chatMessage = z.object({
   createdAt: timestamp,
   // When it was last edited, deleted or reacted to.
   modifiedAt: timestamp,
+  // When its text was last edited, if it was (absent in Chats synced before Commander kept it).
+  editedAt: timestamp.optional(),
   deleted: z.boolean(),
   text: z.string(),
   mentions: z.array(chatPerson),
@@ -88,3 +90,32 @@ export function chatFlags(
     lastMessageAt: latest?.createdAt ?? null,
   };
 }
+
+// What the User chose for a Chat in Commander (#105). Commander settings only: nothing changes in
+// Teams. Kept by Account and the Chat's Teams id (the Item's external id), so an excluded Chat, whose
+// Item is deleted, stays excluded, and the sync engine can tell the adapter to skip it.
+//
+// - Muted: the Chat stays and syncs, but drops out of unread ordering and counts, never reaches the
+//   Dashboard, and Ares never summarises it unprompted.
+// - Excluded: its Item is deleted from Commander (a tombstone, so Links show it as gone) and sync
+//   skips it from then on, until the User includes it again.
+export const chatSetting = z.object({
+  account: id,
+  chatId: id,
+  // The Chat's name when last changed, for Settings → Teams once its Item is gone.
+  name: z.string(),
+  muted: z.boolean(),
+  // When it was excluded; null while it isn't.
+  excludedAt: timestamp.nullable(),
+  updatedAt: timestamp,
+});
+export type ChatSetting = z.infer<typeof chatSetting>;
+
+export const chatSettingChanges = ['mute', 'unmute', 'exclude', 'include'] as const;
+export type ChatSettingChangeKind = (typeof chatSettingChanges)[number];
+export const chatSettingAction = z.object({
+  account: id,
+  chatId: id,
+  change: z.enum(chatSettingChanges),
+});
+export type ChatSettingAction = z.infer<typeof chatSettingAction>;
