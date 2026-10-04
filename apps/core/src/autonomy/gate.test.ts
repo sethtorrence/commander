@@ -608,3 +608,84 @@ describe('Ares’s activity', () => {
     expect(() => gate.undo(pending)).toThrow(/can’t be undone/);
   });
 });
+
+describe('proposals that change synced fields (an invitation’s answer, #129)', () => {
+  let invitation: string;
+
+  beforeEach(() => {
+    gate.registerAction({
+      action: 'reply-to-invitations',
+      actionKind: 'act-for-you',
+      name: 'Reply to invitations',
+    });
+    invitation = store.saveFromSource({
+      source: 'google-calendar',
+      account: 'google:alex',
+      items: [
+        {
+          externalId: 'alex@gmail.test/pricing',
+          kind: 'event',
+          title: 'Pricing review',
+          detail: {
+            kind: 'event',
+            calendar: { id: 'alex@gmail.test', name: 'alex@gmail.test', colour: '#9fe1e7' },
+            accountEmail: 'alex@gmail.test',
+            start: { at: Date.UTC(2026, 9, 8, 14), timeZone: 'Europe/London', date: null },
+            end: { at: Date.UTC(2026, 9, 8, 15), timeZone: 'Europe/London', date: null },
+            allDay: false,
+            location: null,
+            description: null,
+            organiser: { email: 'dana@acme.test', name: 'Dana Reyes', self: false },
+            attendees: [],
+            myResponse: 'needs-action',
+            meetingUrl: null,
+            busy: true,
+            private: false,
+            seriesId: null,
+            webUrl: null,
+            createdByCommander: null,
+          },
+        },
+      ],
+    }).created[0] as string;
+  });
+
+  const decline = (overrides: Partial<Proposal> = {}): Proposal => ({
+    actionKind: 'act-for-you',
+    action: 'reply-to-invitations',
+    section: 'calendar',
+    itemId: invitation,
+    itemActions: [{ type: 'edit-fields', itemId: invitation, fields: { response: 'declined' } }],
+    confidence: 0.95,
+    reason: 'You’re already in Board prep with Leo then',
+    causedBy: { itemId: invitation },
+    ...overrides,
+  });
+  const answerOf = (id: string) => {
+    const detail = store.get(id)?.item.detail;
+    return detail?.kind === 'event' ? detail.myResponse : null;
+  };
+
+  it('are only ever suggestions, and accepting one answers as the User and queues it for the Source', () => {
+    const id = suggest(decline());
+    expect(answerOf(invitation)).toBe('needs-action');
+    expect(store.outgoing.list()).toEqual([]);
+
+    gate.accept(id);
+    expect(answerOf(invitation)).toBe('declined');
+    expect(store.activity({ itemId: invitation })[0]).toMatchObject({
+      by: { kind: 'user' },
+      why: 'You’re already in Board prep with Leo then',
+    });
+    expect(store.outgoing.list()).toMatchObject([
+      { itemId: invitation, field: 'response', status: 'pending', madeAt: clock },
+    ]);
+  });
+
+  it('can’t ride in Organise: an answer reaches the Source', () => {
+    gate.setLevel({ scope: 'everywhere', actionKind: 'organise' }, 'auto');
+    const organising = decline({ actionKind: 'organise', action: 'suggest-todos', section: 'notes' });
+    expect(() => gate.propose(organising)).toThrow(/changes an Item at its Source/);
+    expect(answerOf(invitation)).toBe('needs-action');
+  });
+});

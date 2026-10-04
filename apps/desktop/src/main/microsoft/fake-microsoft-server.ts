@@ -14,10 +14,13 @@ import type { AddressInfo } from 'node:net';
 // with nextLinks; for Teams write-back (#106), posting a message as the signed-in user and
 // `markChatReadForUser` / `markChatUnreadForUser`, each user's read time showing in the Chat's
 // viewpoint (a post can be taken and its answer dropped, as when a connection fails at the wrong
-// moment); and for Outlook Calendar, `GET /me/calendars` and each calendar's `calendarView/delta` over
+// moment); for Outlook Calendar, `GET /me/calendars` and each calendar's `calendarView/delta` over
 // a window, paged by `Prefer: odata.maxpagesize`, ending in a delta link that later returns only
 // changes (deleted events as `@removed`), 410 SyncStateNotFound once delta links expire, and
-// throttling. Nothing here talks to the real Microsoft.
+// throttling; and answering invitations (#129): `GET /me/events/{id}` (a series master stands for
+// its instances) and `POST /me/events/{id}/accept`, `/tentativelyAccept` or `/decline`, each recorded
+// with its `sendResponse`, after which the event (or every instance of the series) carries the
+// answer. Nothing here talks to the real Microsoft.
 
 export type FakeMicrosoftUser = { id: string; displayName: string; userPrincipalName: string };
 
@@ -126,6 +129,8 @@ export type FakeMicrosoft = {
   expireDeltaLinks(): void;
   // The Prefer header of every calendar request.
   calendarPrefers: string[];
+  // Every answer to an invitation Commander sent, oldest first.
+  rsvps: { userId: string; eventId: string; action: string; sendResponse: boolean | null }[];
   // How many refreshes Microsoft accepted.
   refreshes: number;
   // The user the next browser sign-in approves.
@@ -315,6 +320,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       deltaGeneration += 1;
     },
     calendarPrefers: [],
+    rsvps: [],
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 
@@ -727,6 +733,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     }
     if (request.method === 'POST') {
       if (url.pathname.startsWith('/v1.0/chats/')) return void chatAction(request, url, response, user);
+      if (url.pathname.startsWith('/v1.0/me/events/'))
+        return void eventResource(user, request, url, response);
       return json(response, 404, { error: { code: 'ResourceNotFound', message: 'Not in the fake.' } });
     }
     if (url.pathname === '/v1.0/me/chats') {
@@ -739,6 +747,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     if (url.pathname.startsWith('/v1.0/chats/')) return chatResource(url, response, user);
     if (url.pathname === '/v1.0/me/calendars') return calendarList(user, url, response);
     if (url.pathname.startsWith('/v1.0/me/calendars/')) return calendarView(user, request, url, response);
+    if (url.pathname.startsWith('/v1.0/me/events/')) return void eventResource(user, request, url, response);
     if (url.pathname === '/v1.0/me') {
       return json(response, 200, {
         '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#users/$entity',
@@ -747,6 +756,69 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       });
     }
     return json(response, 404, { error: { code: 'ResourceNotFound', message: 'Not in the fake.' } });
+  }
+
+  const RSVP_ANSWERS: Record<string, string> = {
+    accept: 'accepted',
+    tentativelyAccept: 'tentativelyAccepted',
+    decline: 'declined',
+  };
+
+  // One event, or a series by its master's id (its instances stand for it), and answering it.
+  async function eventResource(
+    user: FakeMicrosoftUser,
+    request: IncomingMessage,
+    url: URL,
+    response: ServerResponse,
+  ) {
+    const [, id = '', action] = /^\/v1\.0\/me\/events\/([^/]+)(?:\/([^/]+))?$/.exec(url.pathname) ?? [];
+    const eventId = decodeURIComponent(id);
+    const held = (calendarsByUser.get(user.id) ?? []).flatMap((calendar) => [...calendar.events.values()]);
+    const own = held.find((each) => each.event.id === eventId);
+    const instances = held.filter((each) => each.event.seriesMasterId === eventId);
+    const shown =
+      own?.event ?? (instances[0] ? { ...instances[0].event, id: eventId, type: 'seriesMaster' } : null);
+    if (!shown) {
+      return json(response, 404, {
+        error: { code: 'ErrorItemNotFound', message: 'The specified object was not found in the store.' },
+      });
+    }
+    if (request.method === 'GET' && !action) return json(response, 200, shown);
+    const answer = action ? RSVP_ANSWERS[action] : undefined;
+    if (request.method !== 'POST' || !answer) {
+      return json(response, 400, { error: { code: 'BadRequest', message: 'Not in the fake.' } });
+    }
+    const sent = JSON.parse((await body(request)) || '{}') as { sendResponse?: boolean };
+    if (shown.isOrganizer === true) {
+      return json(response, 400, {
+        error: {
+          code: 'ErrorInvalidRequest',
+          message: "Your request can't be completed. You are the organizer.",
+        },
+      });
+    }
+    const time = new Date().toISOString();
+    for (const each of own ? [own] : instances) {
+      const attendees = (each.event.attendees as { emailAddress?: { address?: string } }[] | undefined) ?? [];
+      each.event = {
+        ...each.event,
+        responseStatus: { response: answer, time },
+        lastModifiedDateTime: time,
+        attendees: attendees.map((attendee) =>
+          attendee.emailAddress?.address?.toLowerCase() === user.userPrincipalName.toLowerCase()
+            ? { ...attendee, status: { response: answer, time } }
+            : attendee,
+        ),
+      };
+      each.version = ++version;
+    }
+    fake.rsvps.push({
+      userId: user.id,
+      eventId,
+      action: action ?? '',
+      sendResponse: sent.sendResponse ?? null,
+    });
+    response.writeHead(202).end();
   }
 
   const server = createServer((request, response) => {

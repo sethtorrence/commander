@@ -76,6 +76,10 @@ export const eventDetail = z.object({
   attendees: z.array(eventAttendee),
   // The User's own answer, when they are invited; null for events they aren't an attendee of.
   myResponse: eventResponse.nullable(),
+  // For an instance of a series: the User's answer to the whole series, as far as Commander knows it.
+  // Absent means the same as the instance's own (as calendar sync saves it); set when the User answers
+  // in Commander, so answering one instance and answering the series are separate synced fields (#129).
+  seriesResponse: eventResponse.optional(),
   // The online meeting's join link (Google Meet, Zoom…), when it has one.
   meetingUrl: z.string().nullable(),
   // Busy (opaque) or free (transparent).

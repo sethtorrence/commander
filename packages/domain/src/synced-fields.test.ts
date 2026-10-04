@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { EventDetail } from './calendar';
 import type { LinearIssueDetail } from './linear';
 import {
   isSyncedField,
@@ -206,5 +207,79 @@ describe('a Chat’s synced fields', () => {
 
   it('never changes the Item’s status', () => {
     expect(statusFromDetail(chat, 'open')).toBe('open');
+  });
+});
+
+const invitation: EventDetail = {
+  kind: 'event',
+  calendar: { id: 'alex@gmail.test', name: 'alex@gmail.test', colour: '#9fe1e7' },
+  accountEmail: 'alex@gmail.test',
+  start: { at: Date.UTC(2026, 9, 8, 14), timeZone: 'Europe/London', date: null },
+  end: { at: Date.UTC(2026, 9, 8, 15), timeZone: 'Europe/London', date: null },
+  allDay: false,
+  location: null,
+  description: null,
+  organiser: { email: 'dana@acme.test', name: 'Dana Reyes', self: false },
+  attendees: [
+    {
+      email: 'dana@acme.test',
+      name: 'Dana Reyes',
+      self: false,
+      response: 'accepted',
+      organiser: true,
+      optional: false,
+      resource: false,
+    },
+    {
+      email: 'alex@gmail.test',
+      name: null,
+      self: true,
+      response: 'needs-action',
+      organiser: false,
+      optional: false,
+      resource: false,
+    },
+  ],
+  myResponse: 'needs-action',
+  meetingUrl: null,
+  busy: true,
+  private: false,
+  seriesId: null,
+  webUrl: null,
+  createdByCommander: null,
+};
+
+describe('an invitation’s synced fields', () => {
+  it('has the User’s answer as `response`, and only for an event they are invited to', () => {
+    expect(syncedFieldsOf(invitation)).toEqual({ response: 'needs-action' });
+    // Their own event, or one they aren't a guest of, has nothing to answer.
+    const organiser = { email: 'alex@gmail.test', name: null, self: true };
+    expect(syncedFieldsOf({ ...invitation, organiser })).toBeNull();
+    expect(syncedFieldsOf({ ...invitation, myResponse: null })).toBeNull();
+    expect(isSyncedField('event', 'response')).toBe(true);
+    expect(isSyncedField('event', 'seriesResponse')).toBe(true);
+    expect(isSyncedField('event', 'title')).toBe(false);
+  });
+
+  it('puts the answer in place, with the User’s own line among the guests', () => {
+    const answered = withSyncedFields(invitation, { response: 'declined' });
+    expect(answered.myResponse).toBe('declined');
+    expect(answered.attendees.find((each) => each.self)?.response).toBe('declined');
+    expect(answered.attendees.find((each) => !each.self)?.response).toBe('accepted');
+  });
+
+  it('gives an instance of a series the series’ answer too, which starts as the instance’s', () => {
+    const instance: EventDetail = { ...invitation, seriesId: 'series-1', myResponse: 'accepted' };
+    expect(syncedFieldsOf(instance)).toEqual({ response: 'accepted', seriesResponse: 'accepted' });
+    // Declining one instance leaves the series' answer as it was.
+    const declined = withSyncedFields(instance, { response: 'declined', seriesResponse: 'accepted' });
+    expect(syncedFieldsOf(declined)).toEqual({ response: 'declined', seriesResponse: 'accepted' });
+    // A one-off event has no series to answer.
+    const oneOff = withSyncedFields(invitation, { response: 'accepted', seriesResponse: 'declined' });
+    expect(oneOff.seriesResponse).toBeUndefined();
+  });
+
+  it('never closes or opens the Item', () => {
+    expect(statusFromDetail(withSyncedFields(invitation, { response: 'declined' }), 'open')).toBe('open');
   });
 });

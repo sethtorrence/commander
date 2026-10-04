@@ -17,8 +17,11 @@ import { createFakeGmail, type FakeGmail } from './fake-gmail';
 // `singleEvents=true`), paged by `maxResults`, with `timeMin`/`timeMax` on a full read and a
 // `nextSyncToken` on the last page; a request with a sync token answers what changed since
 // (cancelled events included). Tokens can be expired (410 Gone) and requests rate limited (403
-// rateLimitExceeded). And it serves each user's mailbox through the Gmail API (fake-gmail.ts), at
-// `gmailUrl`, for the tokens it issued. Nothing here talks to the real Google.
+// rateLimitExceeded). Answering invitations (#129): `events.get` for one event, and `events.patch` of
+// the User's own attendee line (`attendeesOmitted`), on an instance or on a whole series (every
+// instance of it follows), each recorded with its `sendUpdates`. And it serves each user's mailbox
+// through the Gmail API (fake-gmail.ts), at `gmailUrl`, for the tokens it issued. Nothing here talks
+// to the real Google.
 
 export type FakeGoogleUser = { sub: string; email: string; name: string };
 
@@ -81,6 +84,16 @@ export type FakeGoogle = {
   expireSyncTokens(): void;
   // The next `count` events requests answer 403 rateLimitExceeded.
   rateLimitCalendar(count: number): void;
+  // Every answer to an invitation Commander sent (events.patch), oldest first.
+  rsvps: {
+    sub: string;
+    calendarId: string;
+    eventId: string;
+    responseStatus: string;
+    sendUpdates: string | null;
+  }[];
+  // The next `count` answers fail with 503 (Google is having trouble).
+  failRsvps(count: number): void;
   close(): Promise<void>;
 };
 
@@ -139,11 +152,12 @@ export async function startFakeGoogle(
   const issued: string[] = [];
   // Calendar API: each user's calendars, and each calendar's events with the change they were last
   // changed in (a counter per server). Sync tokens name the change they were issued at.
-  type StoredEvent = { event: FakeCalendarEvent; changed: number; cancelled: boolean };
+  type StoredEvent = { event: FakeCalendarEvent; changed: number; cancelled: boolean; updatedAt?: number };
   const userCalendars = new Map<string, { calendar: FakeCalendar; events: Map<string, StoredEvent> }[]>();
   let changes = 0;
   let expiredBefore = 0;
   let rateLimited = 0;
+  let rsvpFailures = 0;
   const calendarOf = (sub: string, calendarId: string) => {
     const found = userCalendars.get(sub)?.find((each) => each.calendar.id === calendarId);
     if (!found) throw new Error(`The fake Google has no calendar ${calendarId} for ${sub}`);
@@ -191,13 +205,23 @@ export async function startFakeGoogle(
         sub,
         calendars.map(({ calendar, events }) => ({
           calendar,
-          events: new Map(events.map((event) => [event.id, { event, changed: changes, cancelled: false }])),
+          events: new Map(
+            events.map((event) => [
+              event.id,
+              { event, changed: changes, cancelled: false, updatedAt: Date.now() },
+            ]),
+          ),
         })),
       );
     },
     putEvent: (sub, calendarId, event) => {
       changes += 1;
-      calendarOf(sub, calendarId).events.set(event.id, { event, changed: changes, cancelled: false });
+      calendarOf(sub, calendarId).events.set(event.id, {
+        event,
+        changed: changes,
+        cancelled: false,
+        updatedAt: Date.now(),
+      });
     },
     cancelEvent: (sub, calendarId, eventId) => {
       changes += 1;
@@ -210,6 +234,10 @@ export async function startFakeGoogle(
     },
     rateLimitCalendar: (count) => {
       rateLimited = count;
+    },
+    rsvps: [],
+    failRsvps: (count) => {
+      rsvpFailures = count;
     },
     close: () =>
       new Promise((resolve) => {
@@ -380,6 +408,8 @@ export async function startFakeGoogle(
         ...(next ? { nextPageToken: next } : { nextSyncToken: `fake-list-${changes}` }),
       });
     }
+    const one = /^\/calendars\/([^/]+)\/events\/([^/]+)$/.exec(path);
+    if (one) return void oneEvent(request, url, response, user, calendars, one);
     const match = /^\/calendars\/([^/]+)\/events$/.exec(path);
     const found = match && calendars.find((each) => each.calendar.id === decodeURIComponent(match[1] ?? ''));
     if (!found) return json(response, 404, { error: { code: 404, message: 'Not Found' } });
@@ -431,9 +461,87 @@ export async function startFakeGoogle(
     });
   }
 
+  // As Google shows an event: with when it last changed.
+  const shown = (stored: StoredEvent) => ({
+    kind: 'calendar#event',
+    status: 'confirmed',
+    updated: new Date(stored.updatedAt ?? 0).toISOString(),
+    ...stored.event,
+  });
+
+  // events.get and events.patch (the User's own answer only) on one event, or a whole series.
+  async function oneEvent(
+    request: IncomingMessage,
+    url: URL,
+    response: ServerResponse,
+    user: FakeGoogleUser,
+    calendars: { calendar: FakeCalendar; events: Map<string, StoredEvent> }[],
+    [, calendarPart, eventPart]: RegExpExecArray,
+  ) {
+    const calendarId = decodeURIComponent(calendarPart ?? '');
+    const eventId = decodeURIComponent(eventPart ?? '');
+    const found = calendars.find((each) => each.calendar.id === calendarId);
+    const stored = found?.events.get(eventId);
+    // A series Google holds as its instances here: the first of them stands for it.
+    const instances = found
+      ? [...found.events.values()].filter((each) => each.event.recurringEventId === eventId)
+      : [];
+    const target =
+      stored ?? (instances[0] ? { ...instances[0], event: { ...instances[0].event, id: eventId } } : null);
+    const gone = () =>
+      json(response, 404, { error: { code: 404, message: 'Not Found', errors: [{ reason: 'notFound' }] } });
+    if (!found || !target || target.cancelled) return gone();
+    if (request.method === 'GET') return json(response, 200, shown(target));
+    if (request.method !== 'PATCH')
+      return json(response, 405, { error: { code: 405, message: 'Method not allowed' } });
+    const patch = JSON.parse((await body(request)) || '{}') as {
+      attendeesOmitted?: boolean;
+      attendees?: { email?: string; responseStatus?: string }[];
+    };
+    if (rsvpFailures > 0) {
+      rsvpFailures -= 1;
+      return json(response, 503, { error: { code: 503, message: 'Backend Error' } });
+    }
+    const [mine] = patch.attendees ?? [];
+    if (!patch.attendeesOmitted || patch.attendees?.length !== 1 || !mine?.email || !mine.responseStatus) {
+      return json(response, 400, {
+        error: { code: 400, message: 'Commander may only change its own answer' },
+      });
+    }
+    const answer = (each: StoredEvent) => {
+      const attendees = (each.event.attendees as { email?: string; self?: boolean }[] | undefined) ?? [];
+      const self = attendees.find((attendee) => attendee.self || attendee.email === mine.email);
+      if (!self) return false;
+      changes += 1;
+      each.event = {
+        ...each.event,
+        attendees: attendees.map((attendee) =>
+          attendee === self ? { ...attendee, responseStatus: mine.responseStatus } : attendee,
+        ),
+      };
+      each.changed = changes;
+      each.updatedAt = Date.now();
+      return true;
+    };
+    const answered = stored ? answer(stored) : instances.map(answer).some(Boolean);
+    if (!answered) return json(response, 403, { error: { code: 403, message: 'Not a guest of this event' } });
+    fake.rsvps.push({
+      sub: user.sub,
+      calendarId,
+      eventId,
+      responseStatus: mine.responseStatus,
+      sendUpdates: url.searchParams.get('sendUpdates'),
+    });
+    const now = stored ?? {
+      ...(instances[0] as StoredEvent),
+      event: { ...(instances[0] as StoredEvent).event, id: eventId },
+    };
+    return json(response, 200, shown(now));
+  }
+
   const server = createServer((request, response) => {
     const url = new URL(request.url ?? '/', 'http://localhost');
-    if (request.method === 'GET' && url.pathname.startsWith('/calendar/v3/'))
+    if ((request.method === 'GET' || request.method === 'PATCH') && url.pathname.startsWith('/calendar/v3/'))
       return calendarApi(request, url, response);
     if (request.method === 'GET' && url.pathname === '/o/oauth2/v2/auth') return authorize(url, response);
     if (request.method === 'POST' && url.pathname === '/token') return void tokenEndpoint(request, response);

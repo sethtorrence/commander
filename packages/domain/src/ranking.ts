@@ -1,3 +1,4 @@
+import { awaitingAnswer, invitationReason } from './invitations';
 import type { Item } from './items';
 import type { LinearIssueDetail } from './linear';
 import { isLinearTodo } from './linear-todos';
@@ -284,8 +285,15 @@ function placeChat(chat: Chat, context: RankingContext): Placed | null {
   return { item: chat, band: 'today', reason, at };
 }
 
+// An invitation still waiting for the User's answer (#129), until they answer it.
+function placeInvitation(item: Item, now: number): Placed | null {
+  return awaitingAnswer(item, now)
+    ? { item, band: 'today', reason: invitationReason(item, now), at: item.detail.start.at }
+    : null;
+}
+
 function place(item: Item, context: RankingContext, today: string): Placed | null {
-  if (item.kind === 'event') return placeMeeting(item, context.now);
+  if (item.kind === 'event') return placeMeeting(item, context.now) ?? placeInvitation(item, context.now);
   if (isChat(item)) return placeChat(item, context);
   if (!isIssue(item)) return item.kind === 'todo' ? byDueDate(item, today) : null;
   const me = item.account ? context.users[item.account] : undefined;
@@ -343,7 +351,8 @@ export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<
  * - **Now:** the User's next meeting, from 15 minutes before it starts until it ends (first, as it can't
  *   wait), overdue Todos, and Linear Todos with Urgent priority.
  * - **Waiting on others:** Linear Todos in a review state.
- * - **Today:** Todos due today, and Linear Todos in progress or in their team's current cycle.
+ * - **Today:** Todos due today, Linear Todos in progress or in their team's current cycle, and
+ *   invitations still waiting for the User's answer ("Dana invited you to Pricing review, Thu 15:00").
  * - **FYI:** Linear issues the User created, assigned to someone else, that changed in the last day.
  * - **Today**, too: Chats Ares flagged as waiting on the User (with his reason), Chats with an unread
  *   message mentioning the User, and one-to-one Chats the User hasn't answered (chatAttention), one

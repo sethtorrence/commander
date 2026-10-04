@@ -105,13 +105,16 @@ export function dashboardIn(
       const today = dayKey(clock(), timeZone);
       const from = dayStart(today, timeZone);
       const to = dayStart(addDays(today, 2), timeZone);
-      const [todos, issues, events, chats] = await Promise.all([
+      const [todos, issues, events, chats, invitations] = await Promise.all([
         itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'events', query: { from, to, limit: MOST } }),
         itemStore({ op: 'query', query: { kinds: ['chat'], statuses: ['open'], limit: MOST } }),
+        // Invitations waiting for an answer, whenever they are (#129): the band rules put them in Today.
+        itemStore({ op: 'invitations' }),
       ]);
-      return [...todos, ...issues, ...events, ...chats];
+      const shown = new Set(events.map((event) => event.id));
+      return [...todos, ...issues, ...events, ...chats, ...invitations.filter((item) => !shown.has(item.id))];
     },
 
     chatSettings: () => itemStore({ op: 'chat-settings' }),

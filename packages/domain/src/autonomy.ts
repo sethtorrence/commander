@@ -136,6 +136,14 @@ export type StepTarget = z.infer<typeof stepTarget>;
 export const proposedItemAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('create'), item: newItem }),
   z.object({ type: z.literal('update'), itemId: stepTarget, changes: itemChanges }),
+  // Changes some of a Source Item's synced fields (an invitation's answer), as `edit-fields` does.
+  z.object({
+    type: z.literal('edit-fields'),
+    itemId: stepTarget,
+    fields: z.record(z.string().min(1), z.unknown()).refine((fields) => Object.keys(fields).length > 0, {
+      message: 'Name at least one field to change',
+    }),
+  }),
   z.object({ type: z.literal('delete'), itemId: stepTarget }),
   z.object({ type: z.literal('link'), from: stepTarget, linkType, to: stepTarget }),
   z.object({ type: z.literal('unlink'), from: stepTarget, linkType, to: stepTarget }),

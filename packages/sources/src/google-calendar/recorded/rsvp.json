@@ -1,0 +1,644 @@
+{
+  "accept": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/calendars/alex@gmail.test/events/pr1c1ngrev1ew0ct08"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "pr1c1ngrev1ew0ct08",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=pr1c1ngrev1ew0ct08",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-10-01T09:12:00.000Z",
+          "summary": "Pricing review",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-08T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "pr1c1ngrev1ew0ct08@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "needsAction"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/calendars/alex@gmail.test/events/pr1c1ngrev1ew0ct08?sendUpdates=all",
+        "body": {
+          "attendeesOmitted": true,
+          "attendees": [
+            {
+              "email": "alex@gmail.test",
+              "responseStatus": "accepted"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "pr1c1ngrev1ew0ct08",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=pr1c1ngrev1ew0ct08",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-10-05T08:00:01.000Z",
+          "summary": "Pricing review",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-08T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "pr1c1ngrev1ew0ct08@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default"
+        }
+      }
+    }
+  ],
+  "series": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/calendars/alex@gmail.test/events/w33klyp1ann1ng_20261008T140000Z"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "w33klyp1ann1ng_20261008T140000Z",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=w33klyp1ann1ng_20261008T140000Z",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-09-20T10:00:00.000Z",
+          "summary": "Weekly planning",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-08T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "w33klyp1ann1ng_20261008T140000Z@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "needsAction"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default",
+          "recurringEventId": "w33klyp1ann1ng",
+          "originalStartTime": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/calendars/alex@gmail.test/events/w33klyp1ann1ng"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "w33klyp1ann1ng",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=w33klyp1ann1ng",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-09-20T10:00:00.000Z",
+          "summary": "Weekly planning",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-09-24T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-09-24T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "w33klyp1ann1ng@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "needsAction"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default",
+          "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TH"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/calendars/alex@gmail.test/events/w33klyp1ann1ng?sendUpdates=all",
+        "body": {
+          "attendeesOmitted": true,
+          "attendees": [
+            {
+              "email": "alex@gmail.test",
+              "responseStatus": "declined"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "w33klyp1ann1ng",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=w33klyp1ann1ng",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-10-05T08:00:01.000Z",
+          "summary": "Weekly planning",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-09-24T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-09-24T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "w33klyp1ann1ng@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "declined"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default",
+          "recurrence": ["RRULE:FREQ=WEEKLY;BYDAY=TH"]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/calendars/alex@gmail.test/events/w33klyp1ann1ng_20261008T140000Z"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "w33klyp1ann1ng_20261008T140000Z",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=w33klyp1ann1ng_20261008T140000Z",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-10-05T08:00:01.000Z",
+          "summary": "Weekly planning",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-08T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "w33klyp1ann1ng_20261008T140000Z@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "declined"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default",
+          "recurringEventId": "w33klyp1ann1ng",
+          "originalStartTime": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          }
+        }
+      }
+    }
+  ],
+  "instance": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/calendars/alex@gmail.test/events/w33klyp1ann1ng_20261008T140000Z"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "w33klyp1ann1ng_20261008T140000Z",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=w33klyp1ann1ng_20261008T140000Z",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-09-21T10:00:00.000Z",
+          "summary": "Weekly planning",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-08T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "w33klyp1ann1ng_20261008T140000Z@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default",
+          "recurringEventId": "w33klyp1ann1ng",
+          "originalStartTime": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/calendars/alex@gmail.test/events/w33klyp1ann1ng_20261008T140000Z?sendUpdates=all",
+        "body": {
+          "attendeesOmitted": true,
+          "attendees": [
+            {
+              "email": "alex@gmail.test",
+              "responseStatus": "tentative"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "w33klyp1ann1ng_20261008T140000Z",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=w33klyp1ann1ng_20261008T140000Z",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-10-05T08:00:01.000Z",
+          "summary": "Weekly planning",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-08T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "w33klyp1ann1ng_20261008T140000Z@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "tentative"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default",
+          "recurringEventId": "w33klyp1ann1ng",
+          "originalStartTime": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          }
+        }
+      }
+    }
+  ],
+  "superseded": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/calendars/alex@gmail.test/events/pr1c1ngrev1ew0ct08"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "kind": "calendar#event",
+          "etag": "\"3518420000000000\"",
+          "id": "pr1c1ngrev1ew0ct08",
+          "status": "confirmed",
+          "htmlLink": "https://www.google.com/calendar/event?eid=pr1c1ngrev1ew0ct08",
+          "created": "2026-10-01T09:12:00.000Z",
+          "updated": "2026-10-05T08:30:00.000Z",
+          "summary": "Pricing review",
+          "organizer": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "creator": {
+            "email": "dana@acme.test",
+            "displayName": "Dana Reyes"
+          },
+          "start": {
+            "dateTime": "2026-10-08T15:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "end": {
+            "dateTime": "2026-10-08T16:00:00+01:00",
+            "timeZone": "Europe/London"
+          },
+          "iCalUID": "pr1c1ngrev1ew0ct08@google.com",
+          "sequence": 0,
+          "attendees": [
+            {
+              "email": "dana@acme.test",
+              "displayName": "Dana Reyes",
+              "organizer": true,
+              "responseStatus": "accepted"
+            },
+            {
+              "email": "alex@gmail.test",
+              "self": true,
+              "responseStatus": "declined"
+            },
+            {
+              "email": "leo@acme.test",
+              "displayName": "Leo Park",
+              "responseStatus": "tentative"
+            }
+          ],
+          "reminders": {
+            "useDefault": true
+          },
+          "eventType": "default"
+        }
+      }
+    }
+  ],
+  "gone": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/calendars/alex@gmail.test/events/pr1c1ngrev1ew0ct08"
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "error": {
+            "errors": [
+              {
+                "domain": "global",
+                "reason": "notFound",
+                "message": "Not Found"
+              }
+            ],
+            "code": 404,
+            "message": "Not Found"
+          }
+        }
+      }
+    }
+  ]
+}

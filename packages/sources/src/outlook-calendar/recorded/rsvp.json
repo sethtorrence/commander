@@ -1,0 +1,744 @@
+{
+  "accept": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-pricing="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-pricing=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-10-01T09:12:00.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Pricing review",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "tentative",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-pricing=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "notResponded",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/events/AAMkAGI2-evt-pricing=/accept",
+        "body": {
+          "sendResponse": true
+        }
+      },
+      "response": {
+        "status": 202,
+        "headers": {},
+        "body": null
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-pricing="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-pricing=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-10-05T08:00:01.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Pricing review",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "tentative",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-pricing=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "accepted",
+            "time": "2026-10-05T08:00:01Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    }
+  ],
+  "series": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-weekly-20261008="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-weekly-20261008=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-09-20T10:00:00.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Weekly planning",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": "AAMkAGI2-evt-weekly-master=",
+          "showAs": "tentative",
+          "type": "occurrence",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-weekly-20261008=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "notResponded",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-weekly-master="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-weekly-master=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-09-20T10:00:00.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Weekly planning",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "tentative",
+          "type": "seriesMaster",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-weekly-master=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "notResponded",
+            "time": "0001-01-01T00:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/events/AAMkAGI2-evt-weekly-master=/tentativelyAccept",
+        "body": {
+          "sendResponse": true
+        }
+      },
+      "response": {
+        "status": 202,
+        "headers": {},
+        "body": null
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-weekly-20261008="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-weekly-20261008=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-10-05T08:00:01.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Weekly planning",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": "AAMkAGI2-evt-weekly-master=",
+          "showAs": "tentative",
+          "type": "occurrence",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-weekly-20261008=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "tentativelyAccepted",
+            "time": "2026-10-05T08:00:01Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    }
+  ],
+  "instance": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-weekly-20261008="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-weekly-20261008=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-09-21T10:00:00.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Weekly planning",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": "AAMkAGI2-evt-weekly-master=",
+          "showAs": "tentative",
+          "type": "occurrence",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-weekly-20261008=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "accepted",
+            "time": "2026-09-21T10:00:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/events/AAMkAGI2-evt-weekly-20261008=/decline",
+        "body": {
+          "sendResponse": true
+        }
+      },
+      "response": {
+        "status": 202,
+        "headers": {},
+        "body": null
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-weekly-20261008="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-weekly-20261008=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-10-05T08:00:01.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Weekly planning",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": "AAMkAGI2-evt-weekly-master=",
+          "showAs": "tentative",
+          "type": "occurrence",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-weekly-20261008=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "declined",
+            "time": "2026-10-05T08:00:01Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    }
+  ],
+  "superseded": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-pricing="
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#users('sam%40contoso.test')/events/$entity",
+          "@odata.etag": "W/\"DwAAABYAAACpricing\"",
+          "id": "AAMkAGI2-evt-pricing=",
+          "createdDateTime": "2026-10-01T09:12:00.0000000Z",
+          "lastModifiedDateTime": "2026-10-05T08:30:00.0000000Z",
+          "changeKey": "ck-pricing",
+          "originalStartTimeZone": "GMT Standard Time",
+          "originalEndTimeZone": "GMT Standard Time",
+          "subject": "Pricing review",
+          "bodyPreview": "Pricing for Q4.",
+          "importance": "normal",
+          "sensitivity": "normal",
+          "isAllDay": false,
+          "isCancelled": false,
+          "isOrganizer": false,
+          "responseRequested": true,
+          "seriesMasterId": null,
+          "showAs": "tentative",
+          "type": "singleInstance",
+          "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-pricing=&exvsurl=1&path=/calendar/item",
+          "onlineMeetingUrl": null,
+          "responseStatus": {
+            "response": "declined",
+            "time": "2026-10-05T08:30:00Z"
+          },
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><p>Pricing for Q4.</p></body></html>"
+          },
+          "location": {
+            "displayName": "Room 2"
+          },
+          "attendees": [
+            {
+              "type": "required",
+              "status": {
+                "response": "none",
+                "time": "0001-01-01T00:00:00Z"
+              },
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            {
+              "type": "required",
+              "status": {
+                "response": "accepted",
+                "time": "2026-10-01T09:30:00Z"
+              },
+              "emailAddress": {
+                "name": "Leo Park",
+                "address": "leo@contoso.test"
+              }
+            }
+          ],
+          "organizer": {
+            "emailAddress": {
+              "name": "Dana Reyes",
+              "address": "dana@contoso.test"
+            }
+          },
+          "start": {
+            "dateTime": "2026-10-08T14:00:00.0000000",
+            "timeZone": "UTC"
+          },
+          "end": {
+            "dateTime": "2026-10-08T15:00:00.0000000",
+            "timeZone": "UTC"
+          }
+        }
+      }
+    }
+  ],
+  "gone": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/events/AAMkAGI2-evt-pricing="
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; charset=utf-8"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorItemNotFound",
+            "message": "The specified object was not found in the store."
+          }
+        }
+      }
+    }
+  ]
+}

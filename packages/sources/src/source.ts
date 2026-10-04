@@ -124,7 +124,8 @@ export type WriteRequest = {
   // Who the User is at the Source in the Account (their Teams user id), when known.
   me?: string | null;
   // The Account's Items Commander holds with these external ids, as last saved: for Sources whose
-  // write answers with only part of the Item (a Teams Chat's new message, not its whole history).
+  // write answers with only part of the Item (a Teams Chat's new message, not its whole history, or
+  // a calendar event without the calendar it is on).
   stored?(externalIds: string[]): StoredItem[];
   // A current access token: every write runs as the User.
   accessToken(): Promise<AccessToken>;

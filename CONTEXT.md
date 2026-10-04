@@ -50,6 +50,10 @@ _Avoid_: Import, mirror
 One part of a Source Item that Two-way sync writes back on its own (a Linear issue's state or priority, each of its labels, each comment); changes, undo and conflicts ("the newer change wins") are all judged per synced field.
 _Avoid_: Property, attribute, column
 
+**Invitation**:
+A calendar event someone else organised that the User is a guest of, answered with Accept, Maybe or Decline (a synced field); one still waiting for an answer sits in the Dashboard's Today band.
+_Avoid_: Invite (as a noun), RSVP (as a noun), meeting request
+
 ## Projects
 
 **Project**:

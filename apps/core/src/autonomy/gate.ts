@@ -123,6 +123,10 @@ export function openGate({
     };
     for (const step of parsed.itemActions) {
       if (step.type === 'delete' && action.actionKind !== 'delete') refuse('deletes', 'delete');
+      // Synced fields exist only to write back to a Source.
+      if (step.type === 'edit-fields' && action.actionKind === 'organise') {
+        refuse('changes an Item at its Source', 'tidy-sources');
+      }
       if (step.type !== 'update' || action.actionKind !== 'organise') continue;
       if (typeof step.itemId !== 'string') continue; // an Item this proposal creates is Commander's own
       const fromSource = itemStore.get(step.itemId)?.item.source != null;
@@ -172,6 +176,7 @@ export function openGate({
           break;
         }
         case 'delete':
+        case 'edit-fields':
           entry = itemStore.record({ ...action, itemId: resolve(action.itemId) }, context);
           break;
         default:

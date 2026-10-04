@@ -167,6 +167,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // undos, each kept in the People log. People are not Items: not in the activity log.
   z.object({ op: z.literal('people') }),
   z.object({ op: z.literal('change-people'), action: peopleAction }),
+  // Invitations still to come that wait for the User's answer, earliest first (the Dashboard's Today).
+  z.object({ op: z.literal('invitations') }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -225,6 +227,7 @@ export type ItemStoreResults = {
   'meeting-preps': Item[];
   people: Person[];
   'change-people': PeopleChange;
+  invitations: Item[];
 };
 
 export const itemStoreResult = {
@@ -272,6 +275,7 @@ export const itemStoreResult = {
   'meeting-preps': z.array(item),
   people: z.array(person),
   'change-people': peopleChange,
+  invitations: z.array(item),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =
