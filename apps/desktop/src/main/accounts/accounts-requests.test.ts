@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { fakeSafeStorage } from '../fake-safe-storage';
+import { type FakeGitHub, OCTOCAT, startFakeGitHub } from '../github/fake-github-server';
+import { createGitHubAccounts, type GitHubAccounts } from '../github/github-accounts';
 import { ACME, type FakeLinear, startFakeLinear } from '../linear/fake-linear-server';
 import { createLinearAccounts, type LinearAccounts } from '../linear/linear-accounts';
 import { type FakeMicrosoft, SAM, startFakeMicrosoft } from '../microsoft/fake-microsoft-server';
@@ -88,6 +90,7 @@ describe('Settings → Accounts requests from the window', () => {
           { source: 'linear', oauth: false, apiKey: true },
           { source: 'teams', oauth: true, apiKey: false },
         ],
+        deviceCode: null,
       },
     });
   });
@@ -283,5 +286,123 @@ describe('the Accounts of every Source together', () => {
     await answerAccountsRequest(accounts, { op: 'connect', source: 'teams', method: 'oauth' });
 
     expect(changes).toEqual(['changed']);
+  });
+});
+
+describe('GitHub Accounts from the window', () => {
+  let github: FakeGitHub;
+  let githubAccounts: GitHubAccounts;
+  let withGitHub: Accounts;
+  let ghToken: string;
+  // Holds each device flow poll until released, so the window can be asked mid sign-in.
+  let releasePoll: () => void;
+
+  beforeEach(async () => {
+    github = await startFakeGitHub();
+    ghToken = github.personalToken({ kind: 'oauth' });
+    githubAccounts = createGitHubAccounts({
+      config: {
+        clientId: github.clientId,
+        appSlug: github.appSlug,
+        webUrl: github.webUrl,
+        apiUrl: github.apiUrl,
+      },
+      gh: { installed: true, token: async () => ghToken },
+      sleep: () =>
+        new Promise((resolve) => {
+          releasePoll = resolve;
+        }),
+      secrets,
+      store: createAccountStore(join(dir, 'accounts.json')),
+      openBrowser: async () => {},
+      removeItems: async () => {},
+    });
+    withGitHub = combineAccounts([linearAccounts, githubAccounts]);
+  });
+
+  afterEach(async () => {
+    await github.close();
+  });
+
+  it('lists GitHub with its device sign-in, tokens and gh’s sign-in', async () => {
+    const listed = await answerAccountsRequest(withGitHub, { op: 'list' });
+
+    expect(listed.state.sources).toContainEqual({ source: 'github', oauth: true, apiKey: true, cli: true });
+  });
+
+  it('shows the code to enter while the device sign-in waits, never the device code', async () => {
+    const connecting = answerAccountsRequest(withGitHub, {
+      op: 'connect',
+      source: 'github',
+      method: 'oauth',
+    });
+    await expect.poll(() => withGitHub.deviceCode()).not.toBeNull();
+
+    const waiting = await answerAccountsRequest(withGitHub, { op: 'list' });
+
+    expect(waiting.state.deviceCode).toEqual({
+      source: 'github',
+      userCode: github.userCodes()[0],
+      verificationUri: `${github.webUrl}/login/device`,
+      expiresAt: expect.any(Number),
+    });
+    for (const secret of github.secrets()) expect(JSON.stringify(waiting)).not.toContain(secret);
+    github.enterCode(github.userCodes()[0] ?? '');
+    releasePoll();
+    expect(await connecting).toMatchObject({
+      ok: true,
+      state: { accounts: [{ source: 'github', name: 'octocat' }], deviceCode: null },
+    });
+  });
+
+  it('connects a classic token and gh’s sign-in, never answering with either', async () => {
+    const token = github.personalToken({ kind: 'classic' });
+
+    const pasted = await answerAccountsRequest(withGitHub, {
+      op: 'connect',
+      source: 'github',
+      method: 'api-key',
+      apiKey: token,
+    });
+    const reused = await answerAccountsRequest(withGitHub, {
+      op: 'connect',
+      source: 'github',
+      method: 'cli',
+    });
+
+    expect(pasted).toMatchObject({ ok: true, state: { accounts: [{ signedInWith: 'classic-token' }] } });
+    expect(reused).toMatchObject({ ok: true, state: { accounts: [{ signedInWith: 'gh' }] } });
+    expect(JSON.stringify([pasted, reused])).not.toContain(token);
+    expect(JSON.stringify([pasted, reused])).not.toContain(ghToken);
+  });
+
+  it('checks again where the app is installed', async () => {
+    const connecting = answerAccountsRequest(withGitHub, {
+      op: 'connect',
+      source: 'github',
+      method: 'oauth',
+    });
+    await expect.poll(() => withGitHub.deviceCode()).not.toBeNull();
+    github.enterCode(github.userCodes()[0] ?? '');
+    releasePoll();
+    await connecting;
+    github.install({ login: 'acme-org', type: 'Organization' });
+
+    const response = await answerAccountsRequest(withGitHub, {
+      op: 'refresh-details',
+      accountId: `github:${OCTOCAT.id}`,
+    });
+
+    expect(response).toMatchObject({ ok: true, state: { accounts: [{ installations: ['acme-org'] }] } });
+  });
+
+  it('turns away gh’s sign-in for Linear', async () => {
+    const response = await answerAccountsRequest(withGitHub, {
+      op: 'connect',
+      source: 'linear',
+      method: 'cli',
+    });
+
+    expect(response).toMatchObject({ ok: false, error: 'Commander did not understand that request.' });
   });
 });

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { GITHUB_ENDPOINTS, type GitHubConfig } from './github/github-config';
 import { LINEAR_ENDPOINTS, type LinearConfig } from './linear/linear-config';
 import { MICROSOFT_ENDPOINTS, type MicrosoftConfig } from './microsoft/microsoft-config';
 
@@ -6,9 +7,18 @@ import { MICROSOFT_ENDPOINTS, type MicrosoftConfig } from './microsoft/microsoft
 // their fixed loopback ports. The repo is public, so real values live in the git-ignored
 // config/local.json; config/example.json is committed with none. electron.vite.config.ts reads
 // whichever exists and injects it into the main process at build time. See the README ("Connecting
-// Linear", "Connecting Teams").
+// Linear", "Connecting Teams", "Connecting GitHub").
 
 const port = z.number().int().min(1025).max(65535);
+
+// A GitHub App's slug, as in github.com/apps/<slug>: lowercase letters, digits and dashes.
+const optionalSlug = z
+  .string()
+  .nullable()
+  .transform((slug) => (slug?.trim() ? slug.trim() : null))
+  .refine((slug) => slug === null || /^[a-z0-9][a-z0-9-]*$/.test(slug), {
+    message: 'must be the app’s slug, as in github.com/apps/<slug>',
+  });
 
 // Blank means none.
 const optionalId = z
@@ -28,6 +38,11 @@ const buildConfig = z.object({
   microsoft: z
     .object({ clientId: optionalId, tenantId: optionalId })
     .default({ clientId: null, tenantId: null }),
+  // Commander's GitHub App (public, device flow, no client secret). No client ID: only the token
+  // fallbacks are offered. Optional, so a config/local.json from before GitHub still builds.
+  github: z
+    .object({ clientId: optionalId, appSlug: optionalSlug })
+    .default({ clientId: null, appSlug: null }),
 });
 
 export type BuildConfig = z.infer<typeof buildConfig>;
@@ -86,5 +101,19 @@ export function microsoftConfig(build: BuildConfig, env: NodeJS.ProcessEnv): Mic
       ...build.microsoft,
       ...MICROSOFT_ENDPOINTS,
     }
+  );
+}
+
+// COMMANDER_TEST_GITHUB points the device flow and the API at a fake GitHub (fake-github-server.ts).
+const githubOverride = z.object({
+  clientId: z.string().min(1).nullable(),
+  appSlug: z.string().min(1).nullable(),
+  webUrl: loopbackUrl,
+  apiUrl: loopbackUrl,
+});
+
+export function githubConfig(build: BuildConfig, env: NodeJS.ProcessEnv): GitHubConfig {
+  return (
+    testOverride(env, 'COMMANDER_TEST_GITHUB', githubOverride) ?? { ...build.github, ...GITHUB_ENDPOINTS }
   );
 }

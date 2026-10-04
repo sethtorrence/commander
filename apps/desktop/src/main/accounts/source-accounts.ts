@@ -1,14 +1,19 @@
-import type { AccountSource, AccountSummary as WindowAccountSummary } from '@commander/domain/ipc';
+import type {
+  AccountSource,
+  DeviceCodePrompt,
+  AccountSummary as WindowAccountSummary,
+} from '@commander/domain/ipc';
 import type { TokenSet } from '../oauth/authorization-code';
 import { RefreshError } from '../oauth/authorization-code';
 import { SignInError } from '../oauth/sign-in-error';
 import type { Secrets } from '../secrets';
 import { type AccountRecord, type AccountStore, credentialKey } from './account-store';
 
-// One Source's Accounts: connecting (OAuth in the browser, or a personal API key where the Source
-// has them), reconnecting, removing, and handing the Core a current access token. The same for every
-// Source; what differs (how to sign in, refresh, name an Account and show it) comes from the
-// Source's AccountSourceDefinition (linear/linear-accounts.ts, microsoft/teams-accounts.ts).
+// One Source's Accounts: connecting (OAuth in the browser or with a device code, a personal API key
+// or token where the Source has them, or a command-line tool's sign-in), reconnecting, removing, and
+// handing the Core a current access token. The same for every Source; what differs (how to sign in,
+// refresh, name an Account and show it) comes from the Source's AccountSourceDefinition
+// (linear/linear-accounts.ts, microsoft/teams-accounts.ts, github/github-accounts.ts).
 //
 // Runs in the main process only. Tokens and keys go to the keyring through the secrets module and
 // nowhere else: what leaves this module for the window is an AccountSummary, and errors never carry
@@ -24,8 +29,10 @@ export type AccountSummary = WindowAccountSummary extends infer Summary
 // What the keyring holds for each Account, as JSON under credentialKey(accountId).
 export type StoredCredential = ({ kind: 'oauth' } & TokenSet) | { kind: 'api-key'; apiKey: string };
 
-// A credential to ask the Source who it signs in as.
-export type SourceCredential = { kind: 'oauth'; accessToken: string } | { kind: 'api-key'; apiKey: string };
+// A credential to ask the Source who it signs in as. `fromCli`: a command-line tool's sign-in.
+export type SourceCredential =
+  | { kind: 'oauth'; accessToken: string }
+  | { kind: 'api-key'; apiKey: string; fromCli?: boolean };
 
 // Who a credential signs in as, which names and keys the Account.
 export type AccountIdentity = {
@@ -51,12 +58,20 @@ export type AccountSourceDefinition<S extends TokenSet = TokenSet> = {
       openBrowser: (url: string) => Promise<void>;
       signal: AbortSignal;
       now: () => number;
+      // For a device sign-in (GitHub): shows the User the code to enter at the Source.
+      showCode: (prompt: DeviceCodePrompt) => void;
     }): Promise<S>;
     refresh(refreshToken: string, now: () => number): Promise<TokenSet>;
   } | null;
   notConfigured: string;
   // Whether a personal API key can connect an Account instead.
   apiKeys: boolean;
+  // A command-line tool on this machine whose sign-in can connect an Account (GitHub: gh), when the
+  // Source has one; `available` when it is installed. Its token is stored like an API key.
+  cli?: { available: boolean; token(): Promise<string> };
+  // Asks the Source again for what the Account's details hold that changes (GitHub: where its app is
+  // installed), returning the new details.
+  refreshDetails?(record: AccountRecord, credential: SourceCredential): Promise<Record<string, string>>;
   // Asks the Source who the credential signs in as. `signIn` is the browser sign-in it came from,
   // when it did. Rejects with a SignInError.
   identify(credential: SourceCredential, signIn?: S): Promise<AccountIdentity>;
@@ -88,12 +103,17 @@ export type SourceAccounts = {
   readonly oauthAvailable: boolean;
   // Whether a personal API key can connect an Account.
   readonly apiKeyAvailable: boolean;
+  // Whether a command-line tool's sign-in can connect an Account (it is installed).
+  readonly cliAvailable: boolean;
   // Whether a browser sign-in is waiting for the User.
   readonly signingIn: boolean;
+  // The code a device sign-in waits for the User to enter, while it does.
+  readonly deviceCode: DeviceCodePrompt | null;
   list(): Promise<AccountSummary[]>;
   // `reconnect`: the Account being reconnected; the sign-in must be for the same identity.
   connectWithBrowser(options?: { reconnect?: string }): Promise<AccountSummary>;
   connectWithApiKey(apiKey: string, options?: { reconnect?: string }): Promise<AccountSummary>;
+  connectWithCli(options?: { reconnect?: string }): Promise<AccountSummary>;
   cancelSignIn(): void;
   // Deletes the Account's Items (through `removeItems`), its keyring entry, then the Account.
   remove(accountId: string): Promise<void>;
@@ -102,6 +122,9 @@ export type SourceAccounts = {
   // Finds out who the User is in each Account that doesn't know yet (Accounts connected before
   // Commander kept it). An Account the Source can't be asked about now is left to the next start.
   identifyUsers(): Promise<void>;
+  // Asks the Source again about one Account (rejecting if it can't), or about every connected one
+  // (leaving those it can't ask about now). Only for Sources with details that change.
+  refreshDetails(accountId?: string): Promise<void>;
   // The Source refused the Account's token during a sync (e.g. an API key revoked). An API key
   // Account is marked Reconnect; an OAuth one is refreshed, and marked Reconnect if that fails for good.
   reportRefused(accountId: string): Promise<void>;
@@ -147,6 +170,7 @@ export function createSourceAccounts<S extends TokenSet>(
   // The browser sign-in waiting for the User, if any, and its end (once its listener is closed).
   let signIn: AbortController | null = null;
   let signInEnded: Promise<unknown> = Promise.resolve();
+  let deviceCode: DeviceCodePrompt | null = null;
 
   const needsReconnect = (record: AccountRecord) =>
     new AccessTokenError('needs-reconnect', `${capitalised(definition.describe(record))} needs reconnecting`);
@@ -258,6 +282,19 @@ export function createSourceAccounts<S extends TokenSet>(
     return run;
   }
 
+  const credentialOf = (token: AccessToken): SourceCredential =>
+    token.kind === 'oauth'
+      ? { kind: 'oauth', accessToken: token.token }
+      : { kind: 'api-key', apiKey: token.token };
+
+  async function connectWithToken(raw: string, fromCli: boolean, reconnect: string | undefined) {
+    const apiKey = raw.trim();
+    if (!apiKey) throw new SignInError('invalid-credential', `Paste a ${label} personal API key first.`);
+    requireKeyring();
+    const identity = await definition.identify({ kind: 'api-key', apiKey, ...(fromCli ? { fromCli } : {}) });
+    return connect(identity, { kind: 'api-key', apiKey }, reconnect);
+  }
+
   async function accessToken(id: string): Promise<AccessToken> {
     const record = await store.get(id);
     if (!record || record.source !== source)
@@ -270,9 +307,14 @@ export function createSourceAccounts<S extends TokenSet>(
     source,
     oauthAvailable: oauth !== null,
     apiKeyAvailable: definition.apiKeys,
+    cliAvailable: definition.cli?.available ?? false,
 
     get signingIn() {
       return signIn !== null;
+    },
+
+    get deviceCode() {
+      return deviceCode;
     },
 
     async list() {
@@ -287,15 +329,27 @@ export function createSourceAccounts<S extends TokenSet>(
       await signInEnded;
       const controller = new AbortController();
       signIn = controller;
+      deviceCode = null;
+      const showCode = (prompt: DeviceCodePrompt) => {
+        if (signIn !== controller) return;
+        deviceCode = prompt;
+        changed();
+      };
       try {
-        const signingIn = oauth.signIn({ openBrowser, signal: controller.signal, now });
+        const signingIn = oauth.signIn({ openBrowser, signal: controller.signal, now, showCode });
         signInEnded = signingIn.catch(() => {});
         const signedIn = await signingIn;
         const { accessToken, refreshToken, expiresAt } = signedIn;
         const identity = await definition.identify({ kind: 'oauth', accessToken }, signedIn);
         return await connect(identity, { kind: 'oauth', accessToken, refreshToken, expiresAt }, reconnect);
       } finally {
-        if (signIn === controller) signIn = null;
+        if (signIn === controller) {
+          signIn = null;
+          if (deviceCode) {
+            deviceCode = null;
+            changed();
+          }
+        }
       }
     },
 
@@ -303,11 +357,18 @@ export function createSourceAccounts<S extends TokenSet>(
       if (!definition.apiKeys) {
         throw new SignInError('not-configured', `${label} Accounts can’t be connected with an API key.`);
       }
-      const apiKey = raw.trim();
-      if (!apiKey) throw new SignInError('invalid-credential', `Paste a ${label} personal API key first.`);
+      return connectWithToken(raw, false, reconnect);
+    },
+
+    async connectWithCli({ reconnect } = {}) {
+      if (!definition.cli?.available) {
+        throw new SignInError(
+          'not-configured',
+          `There is no ${label} command-line sign-in on this machine to use.`,
+        );
+      }
       requireKeyring();
-      const identity = await definition.identify({ kind: 'api-key', apiKey });
-      return connect(identity, { kind: 'api-key', apiKey }, reconnect);
+      return connectWithToken(await definition.cli.token(), true, reconnect);
     },
 
     cancelSignIn() {
@@ -333,12 +394,7 @@ export function createSourceAccounts<S extends TokenSet>(
       let found = false;
       for (const record of unknown) {
         try {
-          const token = await accessToken(record.id);
-          const credential: SourceCredential =
-            token.kind === 'oauth'
-              ? { kind: 'oauth', accessToken: token.token }
-              : { kind: 'api-key', apiKey: token.token };
-          const identity = await definition.identify(credential);
+          const identity = await definition.identify(credentialOf(await accessToken(record.id)));
           if (identity.id !== record.id) continue;
           const latest = await store.get(record.id);
           if (!latest) continue;
@@ -346,6 +402,29 @@ export function createSourceAccounts<S extends TokenSet>(
           found = true;
         } catch (error) {
           log(`Couldn't find out who signed in to ${definition.describe(record)} yet: ${String(error)}`);
+        }
+      }
+      if (found) changed();
+    },
+
+    async refreshDetails(id) {
+      const { refreshDetails } = definition;
+      if (!refreshDetails) return;
+      const records = (await store.list()).filter(
+        (record) =>
+          record.source === source && record.status === 'connected' && (id === undefined || record.id === id),
+      );
+      let found = false;
+      for (const record of records) {
+        try {
+          const details = await refreshDetails(record, credentialOf(await accessToken(record.id)));
+          const latest = await store.get(record.id);
+          if (!latest) continue;
+          await store.put({ ...latest, details });
+          found = true;
+        } catch (error) {
+          if (id !== undefined) throw error;
+          log(`Couldn't check ${definition.describe(record)} again yet: ${String(error)}`);
         }
       }
       if (found) changed();

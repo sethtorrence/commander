@@ -45,11 +45,15 @@ cp config/example.json config/local.json   # then fill in the client IDs
   "microsoft": {
     "clientId": "Commander's Entra app: its Application (client) ID",
     "tenantId": "that app's Directory (tenant) ID"
+  },
+  "github": {
+    "clientId": "Commander's GitHub App: its Client ID",
+    "appSlug": "the app's slug, from github.com/apps/<slug>"
   }
 }
 ```
 
-The `microsoft` block is optional: without it (or with `null`s), Teams can't be connected. Restart `pnpm dev` after changing the file.
+The `microsoft` block is optional: without it (or with `null`s), Teams can't be connected. The `github` block is optional too: without a client ID, GitHub connects only with a token or gh's sign-in. Restart `pnpm dev` after changing the file.
 
 ### Accounts
 
@@ -88,6 +92,30 @@ The end-to-end tests never contact Linear: they point sign-in and sync at a fake
 4. Run `pnpm dev`, choose **Connect Teams**, and approve in your browser.
 
 The end-to-end tests never contact Microsoft: they point sign-in and Graph at a fake Microsoft identity platform and Graph on this machine through `COMMANDER_TEST_MICROSOFT`, which only accepts loopback URLs.
+
+### Connecting GitHub
+
+**Settings → Accounts** lists GitHub Accounts by login. Each GitHub user is its own Account, keyed by their GitHub user id, so connecting the same user again updates it. Nothing syncs from GitHub yet.
+
+- **Connect GitHub** signs in to Commander's GitHub App with GitHub's device flow: Commander shows a short code with **Copy code** and **Open GitHub**; type it at github.com/login/device and approve. Commander checks with GitHub at the interval GitHub asks for (slower when GitHub says so) until you approve, decline, or the code runs out after 15 minutes. There is no loopback listener and no client secret. It is offered only when `config/local.json` has `github.clientId`.
+- **Use a token instead** takes a **classic personal access token** with the `repo` and `read:org` scopes ([make one](https://github.com/settings/tokens/new?scopes=repo,read:org&description=Commander)). Commander only reads, though GitHub's `repo` scope also allows writing. Commander checks the token with `GET /user` and says which scopes are missing. Fine-grained tokens are turned away: each reaches only one account's or organisation's repositories, and GitHub doesn't say what one may read.
+- **Use my gh sign-in** (shown when GitHub's `gh` command is installed) runs `gh auth token` once and stores what it prints, like a pasted token. If gh lacks a scope, Commander says to run `gh auth refresh --scopes read:org`.
+- Tokens and gh's token are kept only in the system keyring, through the secrets module; the window never receives one (only the short code to type). Tokens and gh's token are never refreshed: if GitHub refuses one during a sync, the Account shows **Reconnect**, which asks for a token again.
+- The GitHub App's user tokens last 8 hours, and its refresh tokens 6 months. The main process refreshes one within 10 minutes of expiry (with the client ID alone), saving the new refresh token before using the new access token, one refresh at a time. If GitHub refuses a refresh for good, the Account shows **Reconnect**; reconnecting signs in again as the same user.
+- Under each app Account, Settings → Accounts shows where the app is installed ("Installed on sethtorrence, acme-org"), checked at sign-in, at each start and with **Check again**. Commander sees an org's private repositories only once the app is installed there. **Install on another org…** opens the app's install page, where org owners install it and members can request it.
+- **Remove** deletes the Account's keyring entry and its Items.
+
+**Registering Commander's GitHub App (once, by the owner):** on github.com, open your personal Settings → Developer settings → GitHub Apps → **New GitHub App**.
+
+1. **GitHub App name** "Commander" (or a close variant if it's taken); **Homepage URL** this repo. Leave **Callback URL** empty and **Request user authorization (OAuth) during installation** unticked. Leave **Expire user authorization tokens** ticked. Tick **Enable Device Flow**.
+2. **Webhook:** untick **Active**.
+3. **Permissions → Repository permissions**, each **Read-only**: Actions, Checks, Commit statuses, Contents, Issues, Metadata (required) and Pull requests. Leave every **Organization** and **Account** permission at **No access**, so repository admins can install the app without an org owner.
+4. **Where can this GitHub App be installed?** Any account. Create it.
+5. From the app's settings page, copy the **Client ID** (it starts `Iv`) into `config/local.json` under `github.clientId`, and the slug from the app's public link (`https://github.com/apps/<slug>`) into `github.appSlug`. Don't generate a client secret or a private key: Commander needs neither. Keep the client ID out of the repo, issues, PRs and logs.
+6. From the app's public page, **Install** it on your own account and on each org you oversee, choosing all repositories or just the ones you want.
+7. Run `pnpm dev`, choose **Connect GitHub** in Settings → Accounts, and enter the code at github.com/login/device.
+
+The tests never contact GitHub: they point sign-in and the API at a fake GitHub on this machine (device flow, REST and a sliver of GraphQL) through `COMMANDER_TEST_GITHUB`, which only accepts loopback URLs, and put a stand-in `gh` first on the `PATH`.
 
 ### Syncing
 

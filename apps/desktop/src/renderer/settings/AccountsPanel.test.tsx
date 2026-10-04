@@ -3,10 +3,11 @@ import type {
   AccountsRequest,
   AccountsResponse,
   AccountsState,
+  GitHubAccountSummary,
   LinearAccountSummary,
   TeamsAccountSummary,
 } from '@commander/domain/ipc';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccountsPanel } from './AccountsPanel';
 
@@ -41,7 +42,9 @@ const bothConfigured: AccountsState['sources'] = [
 
 let state: AccountsState;
 let requests: AccountsRequest[];
-let answer: (request: AccountsRequest) => AccountsResponse;
+let answer: (request: AccountsRequest) => AccountsResponse | Promise<AccountsResponse>;
+// What the main process pushes when the Accounts change without the window asking.
+let pushState: (state: AccountsState) => void;
 
 beforeEach(() => {
   state = { accounts: [], sources: bothConfigured };
@@ -53,7 +56,10 @@ beforeEach(() => {
         requests.push(request);
         return answer(request);
       },
-      onAccountsChanged: () => () => {},
+      onAccountsChanged: (listener: (state: AccountsState) => void) => {
+        pushState = listener;
+        return () => {};
+      },
     },
   });
 });
@@ -63,7 +69,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const source = (name: 'linear' | 'teams') => within(screen.getByTestId(`source-${name}`));
+const source = (name: 'linear' | 'teams' | 'github') => within(screen.getByTestId(`source-${name}`));
 
 describe('Settings → Accounts', () => {
   it('groups the Accounts by Source, each Source with its own Connect', async () => {
@@ -171,5 +177,225 @@ describe('Settings → Accounts', () => {
     fireEvent.click(alert.getByRole('button', { name: 'Copy link' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(url));
     expect(source('linear').queryByRole('alert')).toBeNull();
+  });
+});
+
+const octocat: GitHubAccountSummary = {
+  id: 'github:583231',
+  source: 'github',
+  name: 'octocat',
+  login: 'octocat',
+  signedInWith: 'github-app',
+  installations: ['octocat', 'acme-org'],
+  installUrl: 'https://github.com/apps/commander/installations/new',
+  method: 'oauth',
+  status: 'connected',
+  user: { id: '583231', name: 'The Octocat' },
+  sync: null,
+};
+
+const withGitHub = (github: Partial<AccountsState['sources'][number]> = {}): AccountsState['sources'] => [
+  ...bothConfigured,
+  { source: 'github', oauth: true, apiKey: true, cli: true, ...github },
+];
+
+describe('Settings → Accounts: GitHub', () => {
+  it('lists GitHub Accounts by login, with where the app is installed and Install on another org…', async () => {
+    state = { accounts: [octocat], sources: withGitHub() };
+
+    render(<AccountsPanel no="02" />);
+
+    await waitFor(() => expect(source('github').getByTestId('account-name').textContent).toBe('octocat'));
+    const github = source('github');
+    expect(github.getByText(/GitHub user · The Octocat · Signed in with the GitHub App/)).toBeTruthy();
+    expect(github.getByTestId('github-installations').textContent).toContain(
+      'Installed on octocat, acme-org',
+    );
+    const install = github.getByRole('link', { name: 'Install on another org…' }) as HTMLAnchorElement;
+    expect(install.href).toBe(octocat.installUrl);
+    expect(install.target).toBe('_blank');
+    fireEvent.click(github.getByRole('button', { name: 'Check again' }));
+    await waitFor(() => expect(requests).toContainEqual({ op: 'refresh-details', accountId: octocat.id }));
+  });
+
+  it('says when the app isn’t installed anywhere yet', async () => {
+    state = { accounts: [{ ...octocat, installations: [] }], sources: withGitHub() };
+
+    render(<AccountsPanel no="02" />);
+
+    await waitFor(() =>
+      expect(source('github').getByTestId('github-installations').textContent).toMatch(
+        /isn’t installed anywhere yet/,
+      ),
+    );
+  });
+
+  it('shows no installations for a token Account', async () => {
+    state = {
+      accounts: [{ ...octocat, method: 'api-key', signedInWith: 'gh', installations: null }],
+      sources: withGitHub(),
+    };
+
+    render(<AccountsPanel no="02" />);
+
+    await waitFor(() => expect(source('github').getByText(/Signed in with gh/)).toBeTruthy());
+    expect(source('github').queryByTestId('github-installations')).toBeNull();
+  });
+
+  it('connects GitHub with a code to enter on GitHub: Copy code, Open GitHub and Cancel', async () => {
+    state = { accounts: [], sources: withGitHub() };
+    let finish: (response: AccountsResponse) => void = () => {};
+    answer = (request) =>
+      request.op === 'connect' ? new Promise((resolve) => (finish = resolve)) : { ok: true, state };
+    const writeText = vi.fn(async () => {});
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<AccountsPanel no="02" />);
+
+    fireEvent.click(await waitFor(() => source('github').getByRole('button', { name: 'Connect GitHub' })));
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'github',
+        method: 'oauth',
+        reconnect: undefined,
+      }),
+    );
+    const prompt = {
+      source: 'github' as const,
+      userCode: 'WDJB-MJHT',
+      verificationUri: 'https://github.com/login/device',
+      expiresAt: Date.now() + 900_000,
+    };
+    act(() => pushState({ ...state, deviceCode: prompt }));
+
+    const dialog = within(await waitFor(() => screen.getByTestId('github-device-code')));
+    expect(dialog.getByTestId('github-user-code').textContent).toBe('WDJB-MJHT');
+    fireEvent.click(dialog.getByRole('button', { name: 'Copy code' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('WDJB-MJHT'));
+    const open = dialog.getByRole('link', { name: 'Open GitHub' }) as HTMLAnchorElement;
+    expect(open.href).toBe(prompt.verificationUri);
+    expect(open.target).toBe('_blank');
+    fireEvent.click(dialog.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(requests).toContainEqual({ op: 'cancel-sign-in' }));
+    act(() => finish({ ok: true, state }));
+    await waitFor(() => expect(screen.queryByTestId('github-device-code')).toBeNull());
+  });
+
+  it('connects with a classic token instead, saying what it needs', async () => {
+    state = { accounts: [], sources: withGitHub() };
+    render(<AccountsPanel no="02" />);
+
+    fireEvent.click(
+      await waitFor(() => source('github').getByRole('button', { name: 'Use a token instead' })),
+    );
+    expect(source('github').getByText(/repo and read:org scopes/)).toBeTruthy();
+    fireEvent.change(source('github').getByLabelText('GitHub classic personal access token'), {
+      target: { value: 'ghp_example' },
+    });
+    fireEvent.click(source('github').getByRole('button', { name: 'Connect with token' }));
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'github',
+        method: 'api-key',
+        apiKey: 'ghp_example',
+        reconnect: undefined,
+      }),
+    );
+  });
+
+  it('clears a connected token from the always-open form of a build without the app', async () => {
+    state = { accounts: [], sources: withGitHub({ oauth: false }) };
+    render(<AccountsPanel no="02" />);
+    const field = (await waitFor(() =>
+      source('github').getByLabelText('GitHub classic personal access token'),
+    )) as HTMLInputElement;
+
+    fireEvent.change(field, { target: { value: 'ghp_example' } });
+    fireEvent.click(source('github').getByRole('button', { name: 'Connect with token' }));
+
+    await waitFor(() =>
+      expect(
+        (source('github').getByLabelText('GitHub classic personal access token') as HTMLInputElement).value,
+      ).toBe(''),
+    );
+  });
+
+  it('reuses gh’s sign-in when gh is installed', async () => {
+    state = { accounts: [], sources: withGitHub() };
+    render(<AccountsPanel no="02" />);
+    fireEvent.click(
+      await waitFor(() => source('github').getByRole('button', { name: 'Use a token instead' })),
+    );
+
+    fireEvent.click(source('github').getByRole('button', { name: 'Use my gh sign-in' }));
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'github',
+        method: 'cli',
+        reconnect: undefined,
+      }),
+    );
+  });
+
+  it('offers only the token fallbacks in a build without the GitHub App, and gh’s only when installed', async () => {
+    state = { accounts: [], sources: withGitHub({ oauth: false, cli: false }) };
+
+    render(<AccountsPanel no="02" />);
+
+    await waitFor(() =>
+      expect(source('github').getByLabelText('GitHub classic personal access token')).toBeTruthy(),
+    );
+    expect(source('github').queryByRole('button', { name: 'Connect GitHub' })).toBeNull();
+    expect(source('github').queryByRole('button', { name: 'Use my gh sign-in' })).toBeNull();
+    expect(source('github').getByText(/See “Connecting GitHub” in the README/)).toBeTruthy();
+  });
+
+  it('reconnects a token Account with a token, and an app Account with a new code', async () => {
+    state = {
+      accounts: [
+        { ...octocat, status: 'needs-reconnect' },
+        {
+          ...octocat,
+          id: 'github:2',
+          name: 'mona',
+          login: 'mona',
+          method: 'api-key',
+          signedInWith: 'classic-token',
+          installations: null,
+          status: 'needs-reconnect',
+        },
+      ],
+      sources: withGitHub(),
+    };
+    render(<AccountsPanel no="02" />);
+    const [app, token] = await waitFor(() => source('github').getAllByTestId('account'));
+
+    fireEvent.click(within(app as HTMLElement).getByRole('button', { name: 'Reconnect' }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'github',
+        method: 'oauth',
+        reconnect: octocat.id,
+      }),
+    );
+    fireEvent.click(within(token as HTMLElement).getByRole('button', { name: 'Reconnect' }));
+    fireEvent.change(source('github').getByLabelText('GitHub classic personal access token'), {
+      target: { value: 'ghp_new' },
+    });
+    fireEvent.click(source('github').getByRole('button', { name: 'Reconnect mona' }));
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        op: 'connect',
+        source: 'github',
+        method: 'api-key',
+        apiKey: 'ghp_new',
+        reconnect: 'github:2',
+      }),
+    );
   });
 });
