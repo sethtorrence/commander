@@ -38,6 +38,8 @@ export interface ProjectsApi {
   change(action: ProjectAction): Promise<ProjectChange>;
   /** Files an Item into a Project by the User, or unfiles it with null. */
   file(itemId: string, projectId: string | null): Promise<ActivityEntry>;
+  /** Answers Ares's filing suggestion: Confirm (its Project), Change (another) or Unfiled (null). */
+  settleFiling(proposalId: number, projectId: string | null): Promise<ActivityEntry | null>;
   /** The current Project filter, the same in every Section. */
   filter: ProjectFilter;
   setFilter(filter: ProjectFilter): void;
@@ -105,6 +107,7 @@ export function ProjectsProvider({
         }
       },
       file: (itemId, projectId) => client.file(itemId, projectId),
+      settleFiling: (proposalId, projectId) => client.settleFiling(proposalId, projectId),
       // Until the Projects load, a remembered Project can't be checked, so it is kept as it is.
       filter: all ? validFilter(chosen, offered) : chosen,
       setFilter,

@@ -29,6 +29,9 @@ export function acceptLabel(line: UpdateViewLine): string | null {
       return 'Accept';
     case 'autonomy-change':
       return 'Yes, just do them';
+    // Opens the Rule editor, filled in (#71).
+    case 'rule-suggestion':
+      return 'Make the Rule…';
     default:
       return null;
   }
@@ -60,7 +63,8 @@ export function openTarget(line: UpdateViewLine, itemId?: string): OpenTarget {
   const about = line.queued?.about;
   if (itemId && line.itemIds.includes(itemId))
     return { kind: 'item', sectionId: sectionOf(line.section), itemId };
-  if (about?.kind === 'cap-warning' || about?.kind === 'autonomy-change') return { kind: 'settings' };
+  if (about?.kind === 'cap-warning' || about?.kind === 'autonomy-change' || about?.kind === 'rule-suggestion')
+    return { kind: 'settings' };
   if (about?.kind === 'reconnect') return { kind: 'settings', part: 'accounts' };
   const first = line.itemIds[0];
   const single = line.itemIds.length === 1 || about?.kind === 'chained';

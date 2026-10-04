@@ -56,14 +56,17 @@ export function IssueBadge({ issue }: { issue: Issue }) {
           aria-label={`Project of ${label}`}
           onClick={(event) => {
             event.stopPropagation();
-            pick({ id: issue.id, title: label, filing: issue.filing }, event.currentTarget);
+            pick(
+              { id: issue.id, title: label, filing: issue.filing, filingSuggestion: issue.filingSuggestion },
+              event.currentTarget,
+            );
           }}
           className="flex cursor-pointer border-0 bg-transparent p-0 hover:outline hover:outline-offset-1 hover:outline-ink focus-visible:outline focus-visible:outline-offset-1 focus-visible:outline-ink"
         >
-          <ItemBadge filing={issue.filing} />
+          <ItemBadge filing={issue.filing} suggestion={issue.filingSuggestion} />
         </button>
       ) : (
-        <ItemBadge filing={issue.filing} />
+        <ItemBadge filing={issue.filing} suggestion={issue.filingSuggestion} />
       )}
     </>
   );

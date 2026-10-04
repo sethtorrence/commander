@@ -2,6 +2,7 @@ import { Button, cn, Kbd } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
+import type { ItemChanges } from '../../item-store/changes';
 import { useCommands } from '../../palette/commands';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
@@ -58,12 +59,21 @@ const and = (names: string[]) =>
  * filters, then the list grouped by workflow state and, once an issue is opened, the detail pane.
  * Opening the Section asks every Linear Account to sync.
  */
-export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accounts: LinearAccountsClient }) {
+export function LinearSheet({
+  issues,
+  accounts,
+  changes,
+}: {
+  issues: LinearIssues;
+  accounts: LinearAccountsClient;
+  /** Word of Items changed elsewhere (Ares filing an issue, say), so the list catches up. */
+  changes?: ItemChanges;
+}) {
   const { filter, include, filingForNew } = useProjectFilter();
   const { projects, openPage } = useProjects();
   const filtered = projects.find((project) => project.id === filter);
   const now = useNow(60_000);
-  const state = useLinear({ issues, accounts, include, now: now.getTime() });
+  const state = useLinear({ issues, accounts, include, now: now.getTime(), changes });
   const { selected, detailOpen, setDetailOpen, groups, accountsById } = state;
   const badges = useBadgePicker(state.apply, state.undo);
   const openSection = useOpenSection();
@@ -100,6 +110,7 @@ export function LinearSheet({ issues, accounts }: { issues: LinearIssues; accoun
       id: selected.id,
       title: `${selected.detail.identifier} ${selected.title}`,
       filing: selected.filing,
+      filingSuggestion: selected.filingSuggestion,
     });
 
   const openLink = ({ other }: IssueLink) => {

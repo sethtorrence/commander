@@ -1,6 +1,7 @@
 import { SettingsGroup } from '../../settings/parts';
 import { EmptySheet, type SectionDefinition, SectionSheet, useSection } from '../section';
 import { ActivityPage } from './ActivityPage';
+import { FilingRecord } from './FilingRecord';
 
 // Reloads Ares's activity whenever the Core says he did or suggested something.
 const onAresActivity = (listener: () => void) =>
@@ -22,7 +23,8 @@ function AresSection() {
       }
     >
       <ActivityPage client={window.commander.autonomy} shown={active} onAresActivity={onAresActivity} />
-      <SettingsGroup no="A2" title="Conversations">
+      <FilingRecord client={window.commander.autonomy} shown={active} onAresActivity={onAresActivity} />
+      <SettingsGroup no="A3" title="Conversations">
         <EmptySheet>No Conversations yet.</EmptySheet>
       </SettingsGroup>
     </SectionSheet>

@@ -23,6 +23,7 @@ import { ManageProject } from './ManageProject';
 import { ProjectNotes } from './ProjectNotes';
 import { filingBreakdown, projectPartNumber, sectionCounts } from './project-page';
 import { SideCard } from './SideCard';
+import { SuggestedHere, suggestedFor } from './SuggestedHere';
 
 /** The shortcut scope of the Project page: its keys work only while it is shown. */
 export const PROJECT_PAGE_SCOPE = 'project-page';
@@ -74,6 +75,9 @@ export function ProjectPage({
     [day, projectById],
   );
 
+  // Changes made elsewhere (Ares filing, or suggesting this Project) show here too.
+  useEffect(() => changes?.(() => refresh()), [changes, refresh]);
+
   // Back in view: read everything again, for changes made in the Sections meanwhile.
   const wasActive = useRef(active);
   useEffect(() => {
@@ -118,6 +122,7 @@ export function ProjectPage({
 
   const counts = sectionCounts(items.own);
   const openTodos = open;
+  const suggested = suggestedFor(project.id, items.everyOpen);
   const sections: [string, string, string, number][] = [
     ['todos', 'Todos', 'open', counts.todos],
     ['notes', 'Notes', 'blocks', counts.notes],
@@ -219,8 +224,13 @@ export function ProjectPage({
                 onTick={tick}
               />
             </TodoGroup>
+            {suggested.length > 0 && (
+              <TodoGroup no="G2" title="Ares suggests" count={suggested.length}>
+                <SuggestedHere project={project} items={suggested} />
+              </TodoGroup>
+            )}
             {mentions.length > 0 && (
-              <TodoGroup no="G2" title="Mentioned in" count={mentions.length}>
+              <TodoGroup no={suggested.length > 0 ? 'G3' : 'G2'} title="Mentioned in" count={mentions.length}>
                 <MentionRows
                   className="pr-5 pl-13"
                   mentions={mentions}

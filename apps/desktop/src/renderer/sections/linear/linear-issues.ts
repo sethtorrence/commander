@@ -15,7 +15,7 @@ import {
 } from '@commander/domain';
 import type { AccountSummary, AccountsState, LinearAccountSummary } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
-import { describeFiling } from '../../projects/projects';
+import { describeFiling, describeFilingAnswer } from '../../projects/projects';
 import { clockTime } from '../../settings/account-sync';
 import { SOURCE_NAMES, type TodoLink } from '../todos/todos';
 
@@ -286,6 +286,9 @@ export function describeIssueEntry(
     return `Added from ${SOURCE_NAMES[entry.by.source]}`;
   // A steering warning says it in its own words (#69).
   if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
+  // The User's answer to Ares's filing (#71).
+  if (entry.action === 'correction' || entry.action === 'confirmation')
+    return describeFilingAnswer(entry, projects);
   // A change in Linear that won over the User's says so: "Changed in Linear by Priya Patel at 14:02".
   if (entry.by.kind === 'source' && entry.why) return entry.why;
   if (entry.action !== 'undo') return `${whatItDid(entry, projects)[0]} ${who}`;

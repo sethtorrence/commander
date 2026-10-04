@@ -118,8 +118,12 @@ export const item = z.object({
   // Present when the Item (or, for a Todo, the Item behind it) holds instructions aimed at Ares: the
   // warning mark, shown wherever the Item is (injectionWarningText). Absent otherwise.
   injectionWarning: z.object({ at: timestamp }).optional(),
+  // Present while Ares has suggested a Project for the Item (or, for a Todo, the Item behind it) and
+  // is waiting for the User: the dashed Badge, with Confirm and Change (#71). Absent otherwise.
+  filingSuggestion: z.object({ proposalId: z.number().int().positive(), projectId: id }).optional(),
 });
 export type Item = z.infer<typeof item>;
+export type FilingSuggestion = NonNullable<Item['filingSuggestion']>;
 
 // The part of an Item that changes, and that the activity log records before and after each change.
 export const itemState = item.pick({
@@ -285,6 +289,9 @@ export type ItemChange = z.infer<typeof itemChange>;
 
 // `injection-warning`: Ares found instructions aimed at him in an outside Item and ignored them
 // (recorded by Ares, never undone; the Update counts them).
+// `correction` and `confirmation`: the User answered Ares's filing (#71), changing it or keeping it;
+// before is his suggestion and after the User's choice, both as `{ filing }`. Never undone: they are
+// what he learns from.
 export const activityAction = z.enum([
   'create',
   'update',
@@ -294,6 +301,8 @@ export const activityAction = z.enum([
   'unlink',
   'undo',
   'injection-warning',
+  'correction',
+  'confirmation',
 ]);
 export type ActivityAction = z.infer<typeof activityAction>;
 

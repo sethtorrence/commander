@@ -86,6 +86,7 @@ import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRo
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
+import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
 import { linearSendIn } from './linear-send';
@@ -123,6 +124,7 @@ export type { NewProposal } from './autonomy';
 export type { CalendarStore, ListedCalendar } from './calendars';
 export type { ChatSettingsStore } from './chat-settings';
 export type { DashboardStore, StoredClear } from './dashboard';
+export type { FilingFeedbackStore } from './filing-feedback';
 export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
@@ -279,6 +281,12 @@ export type ItemStore = {
   // Teams Chats the User muted or excluded (chat-settings.ts), in the same database. Excluding one
   // deletes its Item; the sync engine passes an Account's excluded Chats to its sync, to skip.
   chatSettings: ChatSettingsStore;
+  // Ares's filing (filing-feedback.ts): his record, and the User's corrections and confirmations,
+  // which the Item store records whenever the User files an Item he filed or suggested a Project for.
+  filing: FilingFeedbackStore & {
+    // The User turned down his suggestion for an Item without filing it (Unfiled): a correction.
+    decline(itemId: string, suggestedProjectId: string, context: ActionContext): ActivityEntry;
+  };
   close(): void;
 };
 
@@ -390,6 +398,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     (message) => new ItemStoreError('invalid', message),
     (projectId) => projects.checkFiling({ projectId, filedBy: 'rule' }),
   );
+  // Ares's filing suggestions on Items, and the User's answers to his filing.
+  const filing = filingFeedbackIn(db, (entry, at) => log({ ...entry, why: null }, at));
   const attachments = attachmentFolder({
     dir: options.attachmentsDir ?? join(dirname(options.path), 'attachments'),
     now,
@@ -572,10 +582,22 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         return behind ? [row.id, behind] : [row.id];
       }),
     );
+    // Ares's filing suggestion waiting: the Item's own, or (for a Todo) the Item's behind it.
+    const suggested = filing.suggestions(
+      rows.flatMap((row) => {
+        const behind = backedBy(row.id);
+        return behind ? [row.id, behind] : [row.id];
+      }),
+    );
     return rows.map((row) => {
       const item = toItem(row, details.get(row.id) ?? null);
       const at = marked.get(row.id) ?? marked.get(backedBy(row.id) ?? '');
-      return at === undefined ? item : { ...item, injectionWarning: { at } };
+      const suggestion = suggested.get(row.id) ?? suggested.get(backedBy(row.id) ?? '');
+      return {
+        ...item,
+        ...(at !== undefined && { injectionWarning: { at } }),
+        ...(suggestion && { filingSuggestion: suggestion }),
+      };
     });
   }
 
@@ -952,6 +974,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const settled = blockFiling.settled(item.id, item.kind, { ...before, ...changes });
     const after = writeState(item, settled, at);
     const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
+    filing.answer(item, before, after, logged, at);
     blockFiling.afterUpdate({ ...item, ...after }, before, logged, at);
     afterWrite(item.id, after, entry, at, before);
     afterChange(item, before, after, logged);
@@ -1067,6 +1090,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (!target) throw new ItemStoreError('not-found', `No activity entry ${entryId}`);
     if (target.action === 'injection-warning') {
       throw new ItemStoreError('invalid', 'An injection warning records what Ares found; it can’t be undone');
+    }
+    if (target.action === 'correction' || target.action === 'confirmation') {
+      throw new ItemStoreError(
+        'invalid',
+        'Your answer to Ares’s filing is what he learns from; it can’t be undone',
+      );
     }
     if (target.summary?.length) {
       throw new ItemStoreError('invalid', 'A change the Source made to this Item can’t be undone');
@@ -1613,6 +1642,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         withDetails(db.select().from(schema.items).where(eq(schema.items.id, id)).all())[0] ?? null,
     }),
     updates: openUpdateStore(db),
+    filing: {
+      ...filing.store,
+      decline: sqlite.transaction((itemId: string, suggestedProjectId: string, rawContext: ActionContext) => {
+        requireItem(itemId);
+        return filing.decline(itemId, suggestedProjectId, actionContext.parse(rawContext).by, now());
+      }),
+    },
     injectionWarnings: {
       flag: sqlite.transaction((itemId: string) => warnings.flag(itemId)),
       since: (after) => warnings.since(after),

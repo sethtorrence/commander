@@ -387,15 +387,18 @@ function RowBadge({ row, title }: { row: FeedRow; title: string }) {
           aria-label={`Project of ${title}`}
           onClick={(event) => {
             event.stopPropagation();
-            pick({ id: item.id, title, filing: item.filing }, event.currentTarget);
+            pick(
+              { id: item.id, title, filing: item.filing, filingSuggestion: item.filingSuggestion },
+              event.currentTarget,
+            );
           }}
           className="flex cursor-pointer border-0 bg-transparent p-0 hover:outline hover:outline-offset-1 hover:outline-ink focus-visible:outline focus-visible:outline-offset-1 focus-visible:outline-ink"
         >
-          <ItemBadge filing={item.filing} />
+          <ItemBadge filing={item.filing} suggestion={item.filingSuggestion} />
         </button>
       ) : (
         <span data-item-id={item.id} className="flex">
-          <ItemBadge filing={item.filing} />
+          <ItemBadge filing={item.filing} suggestion={item.filingSuggestion} />
         </span>
       )}
     </>
@@ -468,7 +471,7 @@ function ActionBar({
         Clear hides it here. It stays in its Section.
       </span>
       <span className="mt-2.5 flex basis-full items-center gap-2 font-mono text-label leading-none font-medium uppercase tracking-label text-muted [&_kbd]:h-4 [&_kbd]:min-w-4 [&_kbd]:text-label">
-        <ItemBadge filing={row.item.filing} size="sm" />
+        <ItemBadge filing={row.item.filing} suggestion={row.item.filingSuggestion} size="sm" />
         <b className="font-semibold text-ink">{project ? project.name : 'Unfiled'}</b>
         {row.item.filing && <> · {HOW[row.item.filing.filedBy]}</>}
         {!row.suggestion && (

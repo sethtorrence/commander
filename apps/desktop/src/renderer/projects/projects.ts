@@ -24,9 +24,20 @@ export interface ProjectsClient {
   change(action: ProjectAction): Promise<ProjectChange>;
   /** Files an Item into a Project by the User, or unfiles it with null. */
   file(itemId: string, projectId: string | null): Promise<ActivityEntry>;
+  /**
+   * Answers Ares's filing suggestion (the dashed Badge, #71): its own Project confirms it, another
+   * changes it, null turns it down. Resolves with the filing's activity entry (for Undo), if one.
+   */
+  settleFiling(proposalId: number, projectId: string | null): Promise<ActivityEntry | null>;
 }
 
-export function projectsIn(itemStore: ItemStoreClient): ProjectsClient {
+/** The window's autonomy channel, where Ares's suggestions are answered. */
+type AutonomyBridge = Window['commander']['autonomy'];
+
+export function projectsIn(
+  itemStore: ItemStoreClient,
+  autonomy: () => AutonomyBridge = () => window.commander.autonomy,
+): ProjectsClient {
   const change = (action: ProjectAction) => itemStore({ op: 'change-project', action });
   return {
     list() {
@@ -51,6 +62,13 @@ export function projectsIn(itemStore: ItemStoreClient): ProjectsClient {
         },
       });
     },
+
+    async settleFiling(proposalId, projectId) {
+      const { proposal, entryId } = await autonomy()({ op: 'settle-filing', proposalId, projectId });
+      if (entryId === null) return null;
+      const entries = await itemStore({ op: 'activity', query: { itemId: proposal.itemId, limit: 50 } });
+      return entries.find((entry) => entry.id === entryId) ?? null;
+    },
   };
 }
 
@@ -63,4 +81,20 @@ export function describeFiling(
   const { projectId } = change.after;
   const project = projects.find((p) => p.id === projectId);
   return project ? `Filed under ${project.code}` : 'Filed under a Project';
+}
+
+/**
+ * The User's answer to Ares's filing, for an Item's history (#71): "Confirmed Ares’s filing under TL",
+ * "Corrected Ares: TL → TX", "Corrected Ares: not TL".
+ */
+export function describeFilingAnswer(entry: ActivityEntry, projects: readonly Project[]): string {
+  const change = entry.changes.find((each) => each.field === 'filing');
+  const code = (filing: unknown) => {
+    const projectId = (filing as { projectId?: string } | null)?.projectId;
+    return projects.find((p) => p.id === projectId)?.code ?? (projectId ? 'a Project' : null);
+  };
+  const suggested = code(change?.before) ?? 'a Project';
+  if (entry.action === 'confirmation') return `Confirmed Ares’s filing under ${suggested}`;
+  const chosen = code(change?.after);
+  return chosen ? `Corrected Ares: ${suggested} → ${chosen}` : `Corrected Ares: not ${suggested}`;
 }

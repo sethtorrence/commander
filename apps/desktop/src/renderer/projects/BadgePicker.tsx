@@ -1,5 +1,5 @@
 import type { ActivityEntry, FiledBy, Item, Project } from '@commander/domain';
-import { Badge, cn, Kbd, toast, usePortalContainer } from '@commander/ui';
+import { Badge, Button, cn, Kbd, toast, usePortalContainer } from '@commander/ui';
 import {
   createContext,
   type ReactNode,
@@ -14,8 +14,14 @@ import {
 import { createPortal } from 'react-dom';
 import { useProjects } from './context';
 
-/** What the picker files: an Item, by its id, title and current filing. */
-export type PickerTarget = Pick<Item, 'id' | 'title' | 'filing'>;
+/**
+ * What the picker files: an Item, by its id, title and current filing, with Ares's filing suggestion
+ * when one is waiting (the dashed Badge: the picker opens with Confirm at the top).
+ */
+export type PickerTarget = Pick<Item, 'id' | 'title' | 'filing'> & Pick<Partial<Item>, 'filingSuggestion'>;
+
+// Ares's suggestion on a target, while it is Unfiled (once filed, the User or a Rule has answered).
+const suggestionOf = (target: PickerTarget) => (target.filing ? undefined : target.filingSuggestion);
 
 const HOW: Record<FiledBy, string> = {
   user: 'Filed by you',
@@ -77,6 +83,18 @@ export function BadgePicker({
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null);
   const choices = useMemo(() => matchChoices(projects, query, clearLabel), [projects, query, clearLabel]);
   const current = target.filing?.projectId ?? null;
+  // Ares's suggestion: shown at the top with Confirm, and highlighted in the list until the User types.
+  const suggestion = suggestionOf(target);
+  const suggested = suggestion ? projects.find((project) => project.id === suggestion.projectId) : undefined;
+  useEffect(() => {
+    if (!suggested || query) return;
+    setActive(
+      Math.max(
+        0,
+        choices.findIndex((choice) => choice.project?.id === suggested.id),
+      ),
+    );
+  }, [suggested, query, choices]);
   const highlighted = Math.min(active, Math.max(0, choices.length - 1));
 
   // Beside the anchor, kept on screen: below it, or above when there is no room below.
@@ -122,6 +140,20 @@ export function BadgePicker({
         <span>Project</span>
         <span className="min-w-0 truncate font-medium opacity-70">{target.title}</span>
       </div>
+      {suggested && (
+        <div
+          data-testid="badge-picker-suggestion"
+          className="flex h-[38px] items-center gap-2 border-b border-line bg-raise px-2.5"
+        >
+          <Badge kind="suggested" code={suggested.code} accent={suggested.accent} project={suggested.name} />
+          <span className="min-w-0 flex-1 truncate text-note text-text">
+            Ares suggests <b className="font-semibold text-ink">{suggested.name}</b>
+          </span>
+          <Button size="sm" variant="signal" onClick={() => onPick(suggested.id)}>
+            Confirm
+          </Button>
+        </div>
+      )}
       <input
         // biome-ignore lint/a11y/noAutofocus: the picker opens to be typed into
         autoFocus
@@ -199,7 +231,9 @@ export function BadgePicker({
         )}
       </div>
       <div className="px-2.5 pt-[9px] pb-2.5 font-mono text-label leading-[1.55] font-medium uppercase tracking-tag text-muted">
-        <b className="font-semibold text-ink">{target.filing ? HOW[target.filing.filedBy] : 'Unfiled'}</b>
+        <b className="font-semibold text-ink">
+          {target.filing ? HOW[target.filing.filedBy] : suggested ? 'Suggested by Ares' : 'Unfiled'}
+        </b>
         {' · '}
         <Kbd className="h-4 min-w-4 text-tiny">↵</Kbd> files ·{' '}
         <Kbd className="h-4 min-w-4 text-tiny">Esc</Kbd> closes
@@ -213,24 +247,49 @@ export function BadgePicker({
  * The Badge picker as a Section uses it: `open(item)` shows the picker beside the Item's Badge (the
  * element marked `data-item-id` holding a Badge), and choosing files the Item by the User. The change
  * goes through `apply`, so the Section reloads and can undo it; `undo` backs the toast's Undo.
+ *
+ * On an Item wearing Ares's dashed Badge, choosing answers his suggestion: its own Project confirms
+ * it, another changes it, Unfiled turns it down (#71). `open.confirm(item)` confirms it directly (a
+ * detail pane's Confirm).
  */
 export function useBadgePicker(
   apply: (change: () => Promise<ActivityEntry>) => Promise<ActivityEntry | null>,
   undo: (entryId: number) => void,
-): { open(item: PickerTarget, anchor?: HTMLElement | null): void; picker: ReactNode } {
-  const { file, projectOf } = useProjects();
+): { open: OpenPicker; picker: ReactNode } {
+  const { file, settleFiling, projectOf } = useProjects();
   const [target, setTarget] = useState<{ item: PickerTarget; anchor: HTMLElement | null } | null>(null);
 
-  const open = useCallback((item: PickerTarget, anchor?: HTMLElement | null) => {
-    const badge = document.querySelector<HTMLElement>(
-      `[data-item-id="${CSS.escape(item.id)}"] [data-slot="badge"]`,
-    );
-    setTarget({ item, anchor: anchor ?? badge });
-  }, []);
   const close = useCallback(() => setTarget(null), []);
+
+  // Answers Ares's suggestion on the Item with the User's choice.
+  const answer = async (item: PickerTarget, projectId: string | null) => {
+    const suggestion = suggestionOf(item);
+    if (!suggestion) return;
+    if (!projectId) {
+      try {
+        await settleFiling(suggestion.proposalId, null);
+        toast(`Left Unfiled: ${item.title}. Ares won’t suggest it again`);
+      } catch (error) {
+        toast(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
+    const entry = await apply(async () => {
+      const filed = await settleFiling(suggestion.proposalId, projectId);
+      if (!filed) throw new Error('It wasn’t filed');
+      return filed;
+    });
+    const project = projectOf({ projectId, filedBy: 'user' });
+    if (!entry || !project) return;
+    const how = projectId === suggestion.projectId ? 'Confirmed' : 'Filed';
+    toast(`${how} under ${project.code}: ${item.title}`, {
+      action: { label: 'Undo', onClick: () => undo(entry.id) },
+    });
+  };
 
   const pick = async (item: PickerTarget, projectId: string | null) => {
     setTarget(null);
+    if (suggestionOf(item)) return answer(item, projectId);
     if ((item.filing?.projectId ?? null) === projectId && item.filing?.filedBy === 'user') return;
     if (!item.filing && !projectId) return;
     const entry = await apply(() => file(item.id, projectId));
@@ -240,6 +299,24 @@ export function useBadgePicker(
       action: { label: 'Undo', onClick: () => undo(entry.id) },
     });
   };
+
+  // The latest `answer` (it reads the Projects as they are now), for the stable `open.confirm`.
+  const answering = useRef(answer);
+  answering.current = answer;
+  const open = useMemo<OpenPicker>(() => {
+    const show = (item: PickerTarget, anchor?: HTMLElement | null) => {
+      const badge = document.querySelector<HTMLElement>(
+        `[data-item-id="${CSS.escape(item.id)}"] [data-slot="badge"]`,
+      );
+      setTarget({ item, anchor: anchor ?? badge });
+    };
+    return Object.assign(show, {
+      confirm: (item: PickerTarget) => {
+        const suggestion = suggestionOf(item);
+        if (suggestion) void answering.current(item, suggestion.projectId);
+      },
+    });
+  }, []);
 
   const picker = target && (
     <BadgePicker
@@ -252,7 +329,10 @@ export function useBadgePicker(
   return { open, picker };
 }
 
-type OpenPicker = (item: PickerTarget, anchor?: HTMLElement | null) => void;
+/** Opens the Badge picker on an Item; `confirm` confirms Ares's suggestion on it, if one is waiting. */
+export type OpenPicker = ((item: PickerTarget, anchor?: HTMLElement | null) => void) & {
+  confirm?: (item: PickerTarget) => void;
+};
 
 const PickBadgeContext = createContext<OpenPicker | null>(null);
 

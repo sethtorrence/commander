@@ -190,6 +190,8 @@ export type ProposalRecord = z.infer<typeof proposalRecord>;
 
 export const proposalQuery = z.object({
   itemId: id.optional(),
+  // Only one registered action's proposals.
+  action: z.string().min(1).optional(),
   actionKinds: z.array(actionKind).optional(),
   section: autonomySection.optional(),
   statuses: z.array(proposalStatus).optional(),

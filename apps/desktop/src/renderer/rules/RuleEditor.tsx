@@ -44,8 +44,18 @@ const labelClass =
 const OPERATOR_NAMES = { is: 'is', 'is-not': 'is not', contains: 'contains' } as const;
 const JOIN_NAMES = { and: 'all of', or: 'any of' } as const;
 
-/** The editor's state for a Rule being made (rule null) or edited. */
-export type Editing = { rule: Rule | null; projectId?: string };
+/**
+ * The editor's state for a Rule being made (rule null) or edited. A new one may start from a draft
+ * (a Rule Ares suggested) and have a place to go when it overlaps no other Rule (`position`: 0 is the
+ * top); `onSaved` hears when it was saved.
+ */
+export type Editing = {
+  rule: Rule | null;
+  projectId?: string;
+  draft?: RuleDraft;
+  position?: number;
+  onSaved?: () => void;
+};
 
 /**
  * The Rule editor, in a dialog: which Project the Rule files into, and its conditions (AND or OR, with
@@ -107,9 +117,9 @@ function EditorBody({
   const everyProject = useMemo(() => [...projects, ...archived], [projects, archived]);
   const { rule } = editing;
   const [projectId, setProjectId] = useState(
-    rule?.target.projectId ?? editing.projectId ?? projects[0]?.id ?? '',
+    rule?.target.projectId ?? editing.draft?.target.projectId ?? editing.projectId ?? projects[0]?.id ?? '',
   );
-  const [when, setWhen] = useState<WhenDraft>(() => whenDraftOf(rule?.when));
+  const [when, setWhen] = useState<WhenDraft>(() => whenDraftOf(rule?.when ?? editing.draft?.when));
   const [items, setItems] = useState<Item[]>([]);
   const [preview, setPreview] = useState<RulePreview | null>(null);
   const [placing, setPlacing] = useState<Placement[] | null>(null);
@@ -173,11 +183,14 @@ function EditorBody({
     if (!latest) return;
     setPreview(latest);
     if (latest.overlaps.length) {
-      setPlacing(placements(rules, latest.overlaps, everyProject, rule?.id));
-      setPosition(null);
+      const offered = placements(rules, latest.overlaps, everyProject, rule?.id);
+      setPlacing(offered);
+      setPosition(
+        offered.some((each) => each.position === editing.position) ? (editing.position ?? null) : null,
+      );
       return;
     }
-    await save(undefined);
+    await save(editing.position);
   };
 
   const target = everyProject.find((p) => p.id === projectId);

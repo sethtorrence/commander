@@ -9,6 +9,7 @@ export * from './block-projects';
 export * from './calendar';
 export * from './core-messages';
 export * from './daily-template';
+export * from './filing';
 export * from './github-watch';
 export * from './github-watch-messages';
 export * from './injection-warnings';

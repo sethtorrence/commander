@@ -382,6 +382,24 @@ describe('Rules from the window', () => {
       response: { ok: true, result: [{ action: 'undo', by: { kind: 'user' } }] },
     });
     expect(store.query({ kinds: ['linear-issue'] })[0]?.filing).toBeNull();
+
+    // Re-filing (and undoing it) says which Items it changed, so open views catch up.
+    const changed: string[][] = [];
+    const again = answerItemStoreRequest(
+      store,
+      { type: 'item-store-request', id: 7, request: { op: 'refile', itemIds: [item?.id] } },
+      (ids) => changed.push(ids),
+    );
+    answerItemStoreRequest(
+      store,
+      {
+        type: 'item-store-request',
+        id: 8,
+        request: { op: 'undo-refile', entryIds: [resultOf<{ id: number }[]>(again)[0]?.id] },
+      },
+      (ids) => changed.push(ids),
+    );
+    expect(changed).toEqual([[item?.id], [item?.id]]);
   });
 
   it('sends a Block to Linear as the User, says what changed, starts the dialog, and finds the Block’s issues', () => {

@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@commander/ui';
 import { useState } from 'react';
+import { useProjectsIfAny } from '../../projects/context';
 import { SettingsGroup } from '../../settings/parts';
 import {
   type AresActivityFilters,
@@ -137,6 +138,11 @@ function Filter({
 }
 
 function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<typeof useAresActivity> }) {
+  const projects = useProjectsIfAny();
+  const projectName = (projectId: string) => {
+    const project = projects?.projectById(projectId);
+    return project && `${project.code} · ${project.name}`;
+  };
   const pending = row.status === 'pending';
   const where = row.section ? AUTONOMY_SECTION_NAMES[row.section] : 'Everywhere';
   // Act for you and Delete are accepted one at a time, with everything they'll do in view.
@@ -179,7 +185,7 @@ function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<type
         )}
       </div>
       <div className="min-w-0">
-        {describeItemActions(row.itemActions).map((line) => (
+        {describeItemActions(row.itemActions, projectName).map((line) => (
           <p key={line} className="m-0 text-row leading-6 font-semibold text-ink">
             <AresText inline text={line} sources={sources} />
           </p>

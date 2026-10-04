@@ -43,8 +43,15 @@ export interface RuleFlow {
   rules: Rule[];
   loaded: boolean;
   reload: () => Promise<void>;
-  /** Opens the editor on a Rule, or on a new one (filing into `projectId` to start with). */
-  edit: (rule: Rule | null, projectId?: string) => void;
+  /**
+   * Opens the editor on a Rule, or on a new one (filing into `projectId` to start with, or from a
+   * draft with a place to go: a Rule Ares suggested).
+   */
+  edit: (
+    rule: Rule | null,
+    projectId?: string,
+    start?: Pick<Editing, 'draft' | 'position' | 'onSaved'>,
+  ) => void;
   /** Moves a Rule to a place in the list, then offers to re-file what that moves. */
   move: (rule: Rule, position: number) => Promise<void>;
   /** Deletes a Rule, leaving its Items where they are; the toast's Undo brings it back. */
@@ -98,6 +105,7 @@ export function useRuleFlow(client: RulesClient, onChanged?: () => void): RuleFl
       : { type: 'create', rule, position };
     const done = await apply(action);
     if (typeof done === 'string') return done;
+    editing?.onSaved?.();
     setEditing(null);
     if (!done.refile.length) toast(editing?.rule ? 'Rule saved' : 'Rule created');
     return null;
@@ -153,7 +161,7 @@ export function useRuleFlow(client: RulesClient, onChanged?: () => void): RuleFl
     rules: rules ?? [],
     loaded: rules !== null,
     reload,
-    edit: (rule, projectId) => setEditing({ rule, projectId }),
+    edit: (rule, projectId, start) => setEditing({ rule, projectId, ...start }),
     move,
     remove,
     ui: (

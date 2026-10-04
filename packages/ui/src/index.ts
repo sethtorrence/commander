@@ -53,6 +53,7 @@ export {
   SheetStripStatus,
 } from './components/sheet';
 export { SignalColourPicker } from './components/signal-colour-picker';
+export { SuggestedFiling, type SuggestedFilingProps } from './components/suggested-filing';
 export { Switch } from './components/switch';
 export { ThemeToggle } from './components/theme-toggle';
 export { Toaster, ToastView, toast } from './components/toast';

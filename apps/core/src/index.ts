@@ -88,10 +88,12 @@ sync.engine.onSynced(({ itemIds }) => {
 const testHooks = process.argv.includes('--test-hooks');
 const gate = openGate({
   itemStore,
-  onChange: (itemIds) => {
+  onChange: (itemIds, suggestionsOn) => {
     port.postMessage({ type: 'ares-activity', at: Date.now() } satisfies CoreMessage);
-    // What Ares added (or the User accepted, or undid) shows in every open Section.
-    if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
+    // What Ares added (or the User accepted, or undid) shows in every open Section, and so does a
+    // suggestion shown or gone (the dashed Badge).
+    const seen = [...new Set([...itemIds, ...suggestionsOn])];
+    if (seen.length) port.postMessage({ type: 'items-changed', itemIds: seen } satisfies CoreMessage);
     // And in the Markdown copy: an Ares Todo puts a checkbox on its Block there too.
     markdownCopy.itemsChanged(itemIds);
     // A suggested (or added) Todo is ranked on the Dashboard.
@@ -152,7 +154,7 @@ port.on('message', ({ data }) => {
       // The window's changes are the User's: typing in a Daily Note, say.
       agent.userChanged(itemIds);
     }) ??
-    answerAutonomyRequest(gate, data, { testHooks, jobs: agent.runner });
+    answerAutonomyRequest(gate, data, { testHooks, jobs: agent.runner, filing: agent.filing });
   if (reply) port.postMessage(reply);
   // A calendar switched on is synced at once (one switched off is hidden by the change itself).
   const request = (data as { request?: { op?: string; account?: string; on?: boolean } }).request;
