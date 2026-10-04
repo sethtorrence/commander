@@ -57,7 +57,7 @@ A body of work the User is pursuing (e.g. Longtail, Titanlink, Tactics); every i
 _Avoid_: Workspace, venture, tag, area; and never plain "project" for a Linear or GitHub project, say "Linear project" or "GitHub project"
 
 **Badge**:
-A Project's short code on its accent colour (e.g. `LT`), marking which Project an item belongs to.
+A Project's short code on its accent colour (e.g. `LT`), marking which Project an item belongs to; a dashed one is Ares's Suggestion of a Project, waiting for the User to Confirm or Change it.
 _Avoid_: Tag, label, icon, chip
 
 **Rule**:

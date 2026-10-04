@@ -19,6 +19,7 @@ import {
   useState,
 } from 'react';
 import { useCommands } from '../palette/commands';
+import { type RuleSuggestion, SuggestedRule } from './SuggestedRule';
 import { UpdatePanel } from './UpdatePanel';
 import { type OpenTarget, openTarget, type UpdatesClient } from './updates';
 
@@ -73,6 +74,8 @@ export function UpdatesProvider({
     presence: null,
   });
   const [panel, setPanel] = useState<PanelState>({ mode: 'closed' });
+  // A Rule Ares suggested, accepted: its editor is open (SuggestedRule).
+  const [ruleSuggestion, setRuleSuggestion] = useState<RuleSuggestion | null>(null);
   // The last answer wins: asking again while one is on its way drops the older one.
   const asked = useRef(0);
 
@@ -130,6 +133,14 @@ export function UpdatesProvider({
   const act = useCallback(
     async (line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice) => {
       if (!client || panel.mode !== 'update' || !panel.view) return;
+      // Accepting a Rule suggestion opens the Rule editor, filled in; the line is done once it is saved.
+      const about = line.queued?.about;
+      if (action === 'accept' && about?.kind === 'rule-suggestion') {
+        asked.current++;
+        setPanel({ mode: 'closed' });
+        setRuleSuggestion({ about, queuedId: line.queuedId, at: Date.now() });
+        return;
+      }
       try {
         await client({ op: 'act', queuedId: line.queuedId, action, ...(snooze && { snooze }) });
       } catch (error) {
@@ -177,6 +188,12 @@ export function UpdatesProvider({
         onShowHistory={showHistory}
         onReopen={reopen}
       />
+      {ruleSuggestion && (
+        <SuggestedRule
+          suggestion={ruleSuggestion}
+          onSaved={(queuedId) => void client?.({ op: 'act', queuedId, action: 'done' }).catch(report)}
+        />
+      )}
     </UpdatesContext.Provider>
   );
 }

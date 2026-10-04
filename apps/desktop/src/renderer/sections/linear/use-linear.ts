@@ -2,6 +2,7 @@ import type { ActivityEntry, Item, LinearCatalog, OutgoingChange } from '@comman
 import type { AccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ItemChanges } from '../../item-store/changes';
 import { type IssueSync, issueSync } from './editing';
 import {
   type AccountsById,
@@ -113,12 +114,15 @@ export function useLinear({
   include,
   now,
   storage = window.localStorage,
+  changes,
 }: {
   issues: LinearIssues;
   accounts: LinearAccountsClient;
   include: (item: Pick<Item, 'filing'>) => boolean;
   now: number;
   storage?: Storage;
+  /** Word of Items changed elsewhere: an issue among them is read again (Ares filed it, say). */
+  changes?: ItemChanges;
 }): LinearState {
   const [items, setItems] = useState<Item[] | null>(null);
   const [outgoing, setOutgoing] = useState<OutgoingChange[]>([]);
@@ -140,6 +144,14 @@ export function useLinear({
   const lastIndex = useRef(0);
 
   const reload = useCallback(() => setVersion((v) => v + 1), []);
+
+  // Issues changed elsewhere (Ares filed one, or left his dashed Badge on it) are read again.
+  const known = useRef(new Set<string>());
+  known.current = new Set((items ?? []).map((item) => item.id));
+  useEffect(
+    () => changes?.((itemIds) => itemIds.some((id) => known.current.has(id)) && reload()),
+    [changes, reload],
+  );
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload
   useEffect(() => {

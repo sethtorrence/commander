@@ -27,6 +27,7 @@ const projectsClient: ProjectsClient = {
   create: vi.fn(),
   change: vi.fn(),
   file: vi.fn(async () => ({}) as ActivityEntry),
+  settleFiling: vi.fn(async () => null),
 };
 
 let backing: ReturnType<typeof openTestItemStore>;

@@ -13,6 +13,8 @@
 //
 // - Linear (linear.ts): issues taken off the User's list, stuck issues that changed, and Accounts
 //   needing reconnecting.
+// - Rule suggestions (rule-suggestions.ts): "Always file Linear team OPS under TX?", once the User's
+//   answers to Ares's filing point one Source field value at one Project often enough.
 //
 // Later producers (meeting prep, the GitHub summary, missed send-later) call the queue's `enqueue`
 // themselves, as the "Spot stuck Linear issues" job does.
@@ -30,6 +32,7 @@ import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import { createLinearWatch, type WatchedAccount } from './linear';
 import type { UpdateQueue } from './queue';
+import { createRuleSuggestions } from './rule-suggestions';
 
 // How many accepted suggestions in a row make Ares ask to just do them.
 export const STREAK = 20;
@@ -242,6 +245,9 @@ export function createProducers({
     }
   }
 
+  // "Always file Linear team OPS under TX?" (rule-suggestions.ts).
+  const ruleSuggestions = createRuleSuggestions({ itemStore, queue });
+
   return {
     sweep() {
       suggestions();
@@ -250,6 +256,7 @@ export function createProducers({
       capWarning();
       autonomyChanges();
       linear.sweep();
+      ruleSuggestions.sweep();
     },
   };
 }

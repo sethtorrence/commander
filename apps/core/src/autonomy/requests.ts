@@ -4,6 +4,7 @@
 // tests' (registering actions and proposing as Ares's jobs would). Validated again here.
 import { AUTONOMY_MESSAGES, autonomyRequest, autonomyTestRequest } from '@commander/domain';
 import { z } from 'zod';
+import type { Filing } from '../agent/filing';
 import type { JobRunner } from '../agent/runner';
 import type { Gate } from './gate';
 
@@ -30,7 +31,7 @@ function attempt(run: () => unknown): Response {
 // What the window may ask of Ares's jobs (the job runner, ../agent).
 export type JobsForWindow = Pick<JobRunner, 'jobs' | 'setEnabled' | 'run' | 'status'>;
 
-function answerWindow(gate: Gate, raw: unknown, jobs?: JobsForWindow): Response {
+function answerWindow(gate: Gate, raw: unknown, jobs?: JobsForWindow, filing?: Filing): Response {
   const parsed = autonomyRequest.safeParse(raw);
   if (!parsed.success) return { ok: false, error: `Malformed autonomy request: ${parsed.error.message}` };
   const request = parsed.data;
@@ -38,6 +39,10 @@ function answerWindow(gate: Gate, raw: unknown, jobs?: JobsForWindow): Response 
     const runner = () => {
       if (!jobs) throw new Error('Ares’s jobs aren’t running');
       return jobs;
+    };
+    const filed = () => {
+      if (!filing) throw new Error('Ares’s filing isn’t running');
+      return filing;
     };
     switch (request.op) {
       case 'jobs':
@@ -61,6 +66,10 @@ function answerWindow(gate: Gate, raw: unknown, jobs?: JobsForWindow): Response 
         return gate.acceptAll(request.proposalIds);
       case 'undo':
         return gate.undo(request.proposalId);
+      case 'settle-filing':
+        return filed().settle(request.proposalId, request.projectId);
+      case 'filing-record':
+        return filed().record();
     }
   });
 }
@@ -80,14 +89,14 @@ function answerTests(gate: Gate, raw: unknown): Response {
 export function answerAutonomyRequest(
   gate: Gate,
   message: unknown,
-  { testHooks, jobs }: { testHooks: boolean; jobs?: JobsForWindow },
+  { testHooks, jobs, filing }: { testHooks: boolean; jobs?: JobsForWindow; filing?: Filing },
 ): AutonomyReply | null {
   const parsed = envelope.safeParse(message);
   if (!parsed.success) return null;
   const { request } = message as { request?: unknown };
   const { id, type } = parsed.data;
   if (type === AUTONOMY_MESSAGES.window.request) {
-    return { type: AUTONOMY_MESSAGES.window.reply, id, response: answerWindow(gate, request, jobs) };
+    return { type: AUTONOMY_MESSAGES.window.reply, id, response: answerWindow(gate, request, jobs, filing) };
   }
   const response: Response = testHooks
     ? answerTests(gate, request)

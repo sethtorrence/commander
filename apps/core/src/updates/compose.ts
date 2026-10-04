@@ -11,7 +11,7 @@
 // outside Items it names. The model only ever chooses words: what each line is about, and what
 // accepting or dismissing it does, stays with the queue. What it wrote is shown with AresText.
 import type { Item, QueuedLine } from '@commander/domain';
-import { UPDATE_GROUP_NAMES } from '@commander/domain';
+import { ruleSuggestionText, UPDATE_GROUP_NAMES } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
 import { type BuiltPrompt, buildPrompt, type PromptData, PromptRefused } from '../agent/prompt';
@@ -115,6 +115,8 @@ export function templateText(
       return about.name
         ? `${about.sourceName} (${about.name}) needs you to sign in again; syncing is paused.`
         : `Your ${about.sourceName} Account needs you to sign in again; syncing is paused.`;
+    case 'rule-suggestion':
+      return ruleSuggestionText(about);
   }
 }
 

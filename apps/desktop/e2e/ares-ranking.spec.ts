@@ -242,7 +242,11 @@ test('sync, Ares’s bands and reasons, Add a suggested Todo, clear a row; at Of
     /ENG-4Audit log export.*Priya picked it up this morning/,
   ]);
   // Each Item in its own data block; one Quick call at low thinking per run.
-  const call = server.requests.at(-1)?.body as { reasoning_effort: string; messages: { content: string }[] };
+  // (File into Projects calls the model after a sync too: the last ranking call is the one to read.)
+  const call = server.requests
+    .map((request) => request.body as { reasoning_effort: string; messages: { content: string }[] })
+    .filter((body) => body.messages[0]?.content.includes("rank the User's Dashboard"))
+    .at(-1) as { reasoning_effort: string; messages: { content: string }[] };
   expect(call.reasoning_effort).toBe('low');
   expect(call.messages.at(-1)?.content).toMatch(/label="I\d+ · Linear issue ENG-1" source="outside">/);
 

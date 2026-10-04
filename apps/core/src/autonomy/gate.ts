@@ -69,13 +69,14 @@ const user: ActionContext['by'] = { kind: 'user' };
 const ONE_AT_A_TIME = new Set(['act-for-you', 'delete']);
 
 // `onChange` hears of every change to Ares's activity, with the Items it changed (none for a
-// suggestion kept or dismissed), so open views can catch up.
+// suggestion kept or dismissed) and the Items whose waiting suggestions changed (a dashed Badge
+// shows or goes), so open views can catch up.
 export function openGate({
   itemStore,
   onChange,
 }: {
   itemStore: ItemStore;
-  onChange?: (itemIds: string[]) => void;
+  onChange?: (itemIds: string[], suggestionsOn: string[]) => void;
 }): Gate {
   const registered = new Map<string, RegisteredAction>();
 
@@ -130,7 +131,19 @@ export function openGate({
     }
   }
 
+  // Filing precedence (#62, #71): the User's filing, then a Rule's, then Ares's (or inheritance). The
+  // update steps that would file an existing Item the User or a Rule filed: Ares never re-files those.
+  function overridesFiling(steps: ProposalRecord['itemActions']): boolean {
+    return steps.some((step) => {
+      if (step.type !== 'update' || typeof step.itemId !== 'string' || step.changes.filing === undefined)
+        return false;
+      const filedBy = itemStore.get(step.itemId)?.item.filing?.filedBy;
+      return filedBy === 'user' || filedBy === 'rule';
+    });
+  }
+
   // Carries out a proposal's Item actions, in order, as one change. Returns the entries recorded.
+  // Accepted by the User, a filing Ares suggested is the User's own: filed by hand from then on.
   function carryOut(record: ProposalRecord, by: ActionContext['by']): number[] {
     const context: ActionContext = { by, why: record.reason, causedBy: record.causedBy ?? undefined };
     const createdIds: string[] = [];
@@ -149,9 +162,15 @@ export function openGate({
         case 'create':
           entry = itemStore.record(action, context);
           break;
-        case 'update':
-          entry = itemStore.record({ ...action, itemId: resolve(action.itemId) }, context);
+        case 'update': {
+          const { filing } = action.changes;
+          const changes =
+            by.kind === 'user' && filing?.filedBy === 'ares'
+              ? { ...action.changes, filing: { ...filing, filedBy: 'user' as const } }
+              : action.changes;
+          entry = itemStore.record({ ...action, changes, itemId: resolve(action.itemId) }, context);
           break;
+        }
         case 'delete':
           entry = itemStore.record({ ...action, itemId: resolve(action.itemId) }, context);
           break;
@@ -178,6 +197,10 @@ export function openGate({
 
   function acceptOne(proposalId: number): ProposalRecord {
     const record = requirePending(proposalId);
+    // Filed by the User or a Rule since Ares suggested it: his suggestion no longer stands.
+    if (overridesFiling(record.itemActions)) {
+      return itemStore.autonomy.settleProposal(record.id, { status: 'dismissed', entryIds: [] });
+    }
     return itemStore.autonomy.settleProposal(record.id, {
       status: 'accepted',
       entryIds: carryOut(record, user),
@@ -227,8 +250,8 @@ export function openGate({
     return [...ids];
   }
 
-  function changed<T>(result: T, entryIds: readonly number[] = []): T {
-    onChange?.(itemsOf(entryIds));
+  function changed<T>(result: T, entryIds: readonly number[] = [], suggestionsOn: string[] = []): T {
+    onChange?.(itemsOf(entryIds), suggestionsOn);
     return result;
   }
 
@@ -304,6 +327,9 @@ export function openGate({
       }
       checkSteps(parsed);
       checkStepsFitKind(parsed, action);
+      if (overridesFiling(parsed.itemActions)) {
+        throw new GateError('invalid', 'Ares never re-files an Item you or a Rule filed');
+      }
       if (!itemStore.get(parsed.itemId)) throw new GateError('not-found', `No Item ${parsed.itemId}`);
       if (followsAChain(parsed.causedBy?.entryId) || reachesBeyondOutsideCause(parsed)) parsed.chained = true;
 
@@ -322,17 +348,21 @@ export function openGate({
         const entryIds = carryOut(saved, ares);
         return { decision, done: itemStore.autonomy.settleProposal(saved.id, { status: 'done', entryIds }) };
       });
-      return changed(outcome, outcome.decision === 'auto' ? outcome.done.entryIds : []);
+      return changed(outcome, outcome.decision === 'auto' ? outcome.done.entryIds : [], [parsed.itemId]);
     },
 
     accept(proposalId) {
       const accepted = itemStore.transaction(() => acceptOne(proposalId));
-      return changed(accepted, accepted.entryIds);
+      return changed(accepted, accepted.entryIds, [accepted.itemId]);
     },
 
     dismiss(proposalId) {
       const record = requirePending(proposalId);
-      return changed(itemStore.autonomy.settleProposal(record.id, { status: 'dismissed', entryIds: [] }));
+      return changed(
+        itemStore.autonomy.settleProposal(record.id, { status: 'dismissed', entryIds: [] }),
+        [],
+        [record.itemId],
+      );
     },
 
     acceptAll(proposalIds) {
@@ -348,6 +378,7 @@ export function openGate({
       return changed(
         accepted,
         accepted.flatMap((record) => record.entryIds),
+        accepted.map((record) => record.itemId),
       );
     },
 

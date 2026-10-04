@@ -107,6 +107,21 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     sourceName: z.string().min(1),
     name: z.string().nullable(),
   }),
+  // "Always file Linear team OPS under TX?" (#71): the User's corrections and confirmations point one
+  // Source field value at one Project often enough. Accepting opens the Rule, filled in, to go at the
+  // top of the list; dismissing it stops it coming back.
+  z.object({
+    kind: z.literal('rule-suggestion'),
+    // The Rule field (`linear.team`), the value's id and how it reads ("OPS").
+    field: z.string().min(1),
+    value: z.string().min(1),
+    label: z.string().min(1),
+    projectId: itemId,
+    // The Project's code when it was suggested, for the plain sentence.
+    code: z.string().min(1),
+    // How many Items the User filed that way.
+    count: z.number().int().positive(),
+  }),
 ]);
 export type QueuedAbout = z.infer<typeof queuedAbout>;
 export type QueuedKind = QueuedAbout['kind'];

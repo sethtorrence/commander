@@ -3,7 +3,7 @@ import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useRef } from 'react';
 import { shortDate } from '../../frame/calendar';
 import { ItemWarning } from '../../links/ItemWarning';
-import { ItemBadge } from '../../projects/badges';
+import { ItemProject } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { Eyebrow, PaneEmpty, PanePart } from '../todos/detail/parts';
 import { TodoLinks } from '../todos/detail/TodoLinks';
@@ -248,9 +248,8 @@ export function IssueDetail({
   onClose: () => void;
   onOpenLink: (link: IssueLink) => void;
 }) {
-  const { projects, archived, projectOf } = useProjects();
+  const { projects, archived } = useProjects();
   const detail = issue?.detail;
-  const project = issue ? projectOf(issue.filing) : undefined;
   const pane = useRef<HTMLElement>(null);
   const backToPane = () => pane.current?.focus();
   return (
@@ -313,10 +312,7 @@ export function IssueDetail({
                 );
               })}
               <Fact field="project" label="Project">
-                <span className="flex items-center justify-end gap-[9px]">
-                  <ItemBadge filing={issue.filing} />
-                  {project ? project.name : 'Unfiled'}
-                </span>
+                <ItemProject item={{ ...issue, title: `${detail.identifier} ${issue.title}` }} />
               </Fact>
             </dl>
             {editing && <SyncLine editing={editing} />}

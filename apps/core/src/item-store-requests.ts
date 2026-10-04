@@ -137,7 +137,15 @@ const isChatSettingChange = (result: unknown): result is ChatSettingChange =>
   typeof result === 'object' && result !== null && 'setting' in result && 'itemId' in result;
 
 // The requests that change Items, after which `onChanged` hears which.
-const CHANGES = new Set(['record', 'record-all', 'send-to-linear', 'change-chat-setting']);
+// Re-filing by Rules changes Items too: views catch up, and Ares's overruled suggestions go.
+const CHANGES = new Set([
+  'record',
+  'record-all',
+  'send-to-linear',
+  'change-chat-setting',
+  'refile',
+  'undo-refile',
+]);
 
 /**
  * Returns the reply to send back, or null when the message is not an Item store request. After a

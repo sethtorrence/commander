@@ -15,6 +15,7 @@ import {
   type RegisteredAction,
   registeredAction,
 } from './autonomy';
+import { type FilingRecord, filingRecord } from './filing';
 
 // What the window may ask of the gate: read and change the Autonomy settings, and see, accept,
 // dismiss and undo what Ares did or suggested. Validated in the main process and again in the Core.
@@ -34,6 +35,10 @@ export const autonomyRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('jobs') }),
   z.object({ op: z.literal('set-job-enabled'), job: z.string().min(1), enabled: z.boolean() }),
   z.object({ op: z.literal('run-job'), job: z.string().min(1) }),
+  // Ares's filing (#71): the User's answer on a dashed Badge (its Project to Confirm, another to
+  // Change, null for Unfiled), and his filing record for the activity page.
+  z.object({ op: z.literal('settle-filing'), proposalId, projectId: z.string().min(1).nullable() }),
+  z.object({ op: z.literal('filing-record') }),
 ]);
 export type AutonomyRequest = z.input<typeof autonomyRequest>;
 export type AutonomyOp = AutonomyRequest['op'];
@@ -53,6 +58,8 @@ export type AutonomyResults = {
   jobs: AgentJobsState;
   'set-job-enabled': AgentJobsState;
   'run-job': AgentJobsState;
+  'settle-filing': { proposal: ProposalRecord; entryId: number | null };
+  'filing-record': FilingRecord;
 };
 
 export const autonomyResult = {
@@ -66,6 +73,8 @@ export const autonomyResult = {
   jobs: agentJobsState,
   'set-job-enabled': agentJobsState,
   'run-job': agentJobsState,
+  'settle-filing': z.object({ proposal: proposalRecord, entryId: z.number().int().positive().nullable() }),
+  'filing-record': filingRecord,
 } satisfies Record<AutonomyOp, z.ZodType>;
 
 // For end-to-end tests only: the main process accepts these from the test harness, never from the

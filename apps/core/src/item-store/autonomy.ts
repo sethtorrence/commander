@@ -106,6 +106,7 @@ export function openAutonomyStore(
         .where(
           and(
             query.itemId ? eq(proposals.itemId, query.itemId) : undefined,
+            query.action ? eq(proposals.action, query.action) : undefined,
             query.actionKinds ? inArray(proposals.actionKind, query.actionKinds) : undefined,
             query.section ? eq(proposals.section, query.section) : undefined,
             query.statuses ? inArray(proposals.status, query.statuses) : undefined,

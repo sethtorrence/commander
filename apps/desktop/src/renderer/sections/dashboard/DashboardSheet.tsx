@@ -104,7 +104,12 @@ export function DashboardSheet() {
           toast('Add it first: a suggestion takes the Project of its Block');
           return;
         }
-        badges.open({ id: selected.item.id, title: titleOf(selected), filing: selected.item.filing });
+        badges.open({
+          id: selected.item.id,
+          title: titleOf(selected),
+          filing: selected.item.filing,
+          filingSuggestion: selected.item.filingSuggestion,
+        });
       },
     },
     { keys: 'Ctrl+z', label: 'Undo', run: () => void dashboard.undo() },

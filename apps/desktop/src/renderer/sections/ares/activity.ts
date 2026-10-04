@@ -27,8 +27,14 @@ export function bulkAcceptable(kind: ActionKind): boolean {
 
 const KIND_NAMES: Partial<Record<ItemKind, string>> = { todo: 'Todo', block: 'Block', event: 'event' };
 
-/** What a proposal does (or would do), one plain line per change, so it can be judged before accepting. */
-export function describeItemActions(actions: ProposedItemAction[]): string[] {
+/**
+ * What a proposal does (or would do), one plain line per change, so it can be judged before
+ * accepting. `projectName` names a Project by its id ("TL · Titanlink"), where the Projects are known.
+ */
+export function describeItemActions(
+  actions: ProposedItemAction[],
+  projectName: (projectId: string) => string | undefined = () => undefined,
+): string[] {
   const lines = actions.flatMap((action): string[] => {
     switch (action.type) {
       case 'create':
@@ -40,7 +46,11 @@ export function describeItemActions(actions: ProposedItemAction[]): string[] {
         return [
           ...(status ? [`Mark it ${status}`] : []),
           ...(title !== undefined ? [`Rename it “${title}”`] : []),
-          ...(filing ? [`File it under ${filing.projectId}`] : filing === null ? ['Unfile it'] : []),
+          ...(filing
+            ? [`File it under ${projectName(filing.projectId) ?? filing.projectId}`]
+            : filing === null
+              ? ['Unfile it']
+              : []),
           ...(people ? [`Set the people to ${people.join(', ') || 'nobody'}`] : []),
         ];
       }

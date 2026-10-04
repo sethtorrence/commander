@@ -123,6 +123,7 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
     /Suggest Todos/,
     /Rank the Dashboard/,
     /Spot stuck Linear issues/,
+    /File into Projects/,
   ]);
   await expect(grid.getByTestId('registered-action').nth(1)).toContainText('Ask works as Auto here');
   await expect(grid.getByTestId('registered-action').nth(2)).toContainText('Ask works as Auto here');

@@ -40,10 +40,13 @@ export function Badge({ code, accent, project, kind, size, className, style, ...
   const colour = accent && accentColour(accent);
   // A custom accent brings its own Badge text (near-black or white); palette ones use --on-accent.
   const text = accent && !unfiled && kind !== 'suggested' ? accentTextColour(accent) : undefined;
-  const label = unfiled ? 'Unfiled' : (project ?? code);
+  const suggested = !unfiled && kind === 'suggested';
+  const name = project ?? code;
+  const label = unfiled ? 'Unfiled' : suggested ? `Ares suggests ${name}` : name;
   return (
     <span
       data-slot="badge"
+      data-suggested={suggested || undefined}
       role="img"
       aria-label={label}
       title={label}

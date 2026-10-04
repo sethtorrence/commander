@@ -30,6 +30,7 @@ function fakeClient(projects: Project[]): ProjectsClient {
     create: vi.fn(),
     change: vi.fn(),
     file: vi.fn(async () => ({}) as ActivityEntry),
+    settleFiling: vi.fn(async () => null),
   };
 }
 
@@ -121,6 +122,50 @@ describe('the Badge picker', () => {
       'textContent',
       '—UnfiledCurrent4',
     );
+  });
+});
+
+describe('the Badge picker on Ares’s dashed Badge', () => {
+  function renderPicker() {
+    const onPick = vi.fn();
+    render(
+      <Providers>
+        <BadgePicker
+          target={{
+            id: 't1',
+            title: 'OPS-7 Pager rota',
+            filing: null,
+            filingSuggestion: { proposalId: 4, projectId: 'p-tl' },
+          }}
+          anchor={null}
+          onPick={onPick}
+          onClose={vi.fn()}
+        />
+      </Providers>,
+    );
+    return { onPick, input: screen.getByRole('combobox', { name: /code or name/ }) };
+  }
+
+  it('opens with Ares’s suggestion and Confirm on top', async () => {
+    const { onPick } = renderPicker();
+    const suggestion = await screen.findByTestId('badge-picker-suggestion');
+    expect(suggestion.textContent).toContain('Ares suggests Titanlink');
+    expect(within(suggestion).getByRole('img', { name: 'Ares suggests Titanlink' })).toBeTruthy();
+    fireEvent.click(within(suggestion).getByRole('button', { name: 'Confirm' }));
+    expect(onPick).toHaveBeenCalledWith('p-tl');
+    expect(screen.getByTestId('badge-picker').textContent).toContain('Suggested by Ares');
+  });
+
+  it('confirms with Enter, or changes to what is typed', async () => {
+    const { onPick, input } = renderPicker();
+    await screen.findByTestId('badge-picker-suggestion');
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Titanlink/ }).getAttribute('aria-selected')).toBe('true'),
+    );
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.change(input, { target: { value: 'tx' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onPick.mock.calls).toEqual([['p-tl'], ['p-tx']]);
   });
 });
 

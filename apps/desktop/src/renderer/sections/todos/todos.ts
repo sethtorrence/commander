@@ -13,7 +13,7 @@ import type {
   Source,
 } from '@commander/domain';
 import type { ItemStoreClient } from '../../item-store/client';
-import { describeFiling } from '../../projects/projects';
+import { describeFiling, describeFilingAnswer } from '../../projects/projects';
 
 /*
   The Todos Section's view of the Item store: everything it reads or changes goes through here, so
@@ -309,6 +309,9 @@ export function describeEntry(
   const who = byWhom(entry.by);
   // A steering warning says it in its own words (#69).
   if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
+  // The User's answer to Ares's filing (#71).
+  if (entry.action === 'correction' || entry.action === 'confirmation')
+    return describeFilingAnswer(entry, projects);
   if (entry.action !== 'undo') return `${whatItDid(entry, projects)[0]} ${who}`;
   const undone = history.find((other) => other.id === entry.undoes);
   if (!undone) return `Undone ${who}`;

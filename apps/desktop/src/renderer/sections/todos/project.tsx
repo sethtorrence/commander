@@ -1,7 +1,6 @@
 import type { Item } from '@commander/domain';
 import { usePickBadge } from '../../projects/BadgePicker';
-import { ItemBadge, useAccentBar } from '../../projects/badges';
-import { useProjects } from '../../projects/context';
+import { ItemBadge, ItemProject, useAccentBar } from '../../projects/badges';
 
 /*
   Where a Todo's Project shows: the Badge slot on its row and the Project line in the detail pane.
@@ -37,22 +36,19 @@ export function TodoBadge({ todo }: { todo: Item }) {
           }}
           className="flex cursor-pointer border-0 bg-transparent p-0 hover:outline hover:outline-offset-1 hover:outline-ink focus-visible:outline focus-visible:outline-offset-1 focus-visible:outline-ink"
         >
-          <ItemBadge filing={todo.filing} />
+          <ItemBadge filing={todo.filing} suggestion={todo.filingSuggestion} />
         </button>
       ) : (
-        <ItemBadge filing={todo.filing} />
+        <ItemBadge filing={todo.filing} suggestion={todo.filingSuggestion} />
       )}
     </>
   );
 }
 
-/** The Todo's Project, for the detail pane's Project line: its Badge and name, or Unfiled. */
+/**
+ * The Todo's Project, for the detail pane's Project line: its Badge and name, or Unfiled; or Ares's
+ * dashed Badge with Confirm and Change, for a Todo whose issue he suggested a Project for.
+ */
 export function TodoProject({ todo }: { todo: Item }) {
-  const project = useProjects().projectOf(todo.filing);
-  return (
-    <span className="flex items-center justify-end gap-[9px]">
-      <ItemBadge filing={todo.filing} />
-      {project ? project.name : 'Unfiled'}
-    </span>
-  );
+  return <ItemProject item={todo} />;
 }

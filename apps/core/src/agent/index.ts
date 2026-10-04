@@ -9,6 +9,8 @@ import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import type { SyncedEvent } from '../sync';
+import { fileIntoProjectsJob } from './file-into-projects';
+import { createFiling, type Filing } from './filing';
 import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
 import { spotStuckLinearJob } from './spot-stuck-linear';
@@ -38,6 +40,8 @@ export type AgentOptions = {
 
 export type Agent = {
   runner: JobRunner;
+  // The User's side of Ares's filing: answering the dashed Badge, and his filing record.
+  filing: Filing;
   // The User changed these Items (through the window).
   userChanged(itemIds: string[]): void;
   synced(event: SyncedEvent): void;
@@ -63,6 +67,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       suggestTodosJob(itemStore, { now }),
       rankDashboardJob(itemStore, { now }),
       spotStuckLinearJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}), me: options.me }),
+      fileIntoProjectsJob(itemStore),
     ],
     client: options.client,
     gate: options.gate,
@@ -82,6 +87,16 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     },
   });
 
+  const filing = createFiling({ itemStore, gate: options.gate });
+  // Ares's filing suggestions the User or a Rule has since overruled: they no longer stand.
+  const dismissStale = () => {
+    try {
+      filing.dismissStale();
+    } catch (error) {
+      options.log?.(`Couldn’t settle Ares’s overruled filing suggestions: ${error}`);
+    }
+  };
+
   let lastChange = now();
   let caughtUp = false;
   const idle = () => runner.trigger({ kind: 'idle' });
@@ -100,10 +115,12 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
 
   return {
     runner,
+    filing,
 
     userChanged(itemIds) {
       lastChange = now();
       caughtUp = false;
+      dismissStale();
       const blocks = itemIds.filter((id) => itemStore.get(id)?.item.kind === 'block');
       if (blocks.length) runner.trigger({ kind: 'typing', itemIds: blocks });
       const ranked = itemIds.filter((id) => RANKED_KINDS.has(itemStore.get(id)?.item.kind ?? ''));
@@ -114,8 +131,11 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       runner.trigger({ kind: 'todos-changed', itemIds: [] });
     },
 
-    synced({ source, account }) {
+    synced({ source, account, itemIds }) {
+      dismissStale();
       runner.trigger({ kind: 'source-sync', source, account });
+      // What a sync brought (new and changed Items) is for Ares to file.
+      if (itemIds.length) runner.trigger({ kind: 'items-arrived', itemIds });
     },
 
     idle,
