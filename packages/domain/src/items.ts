@@ -265,6 +265,8 @@ export type ItemQuery = z.input<typeof itemQuery>;
 
 export const activityQuery = z.object({
   itemId: id.optional(),
+  // Only entries made after this one.
+  after: z.number().int().nonnegative().optional(),
   limit: z.number().int().positive().max(1000).optional(),
 });
 export type ActivityQuery = z.input<typeof activityQuery>;
@@ -316,3 +318,16 @@ export type BlockTodoQuery = z.input<typeof blockTodoQuery>;
 // A Todo made from a Block, with that Block and its Daily Note's day.
 export const blockTodo = z.object({ todo: item, block: item, day: z.iso.date() });
 export type BlockTodo = z.infer<typeof blockTodo>;
+
+// The Project filter in Notes: each Daily Note with something written, with the Projects its written
+// Blocks are filed under (own or inherited) and whether any of them is Unfiled. Newest first.
+export const dailyNoteProjects = z.object({
+  day: z.iso.date(),
+  projectIds: z.array(id),
+  unfiled: z.boolean(),
+});
+export type DailyNoteProjects = z.infer<typeof dailyNoteProjects>;
+
+// A Block filed under a Project, with its Daily Note's day (a Project page's Notes list).
+export const projectBlock = z.object({ block: item, day: z.iso.date() });
+export type ProjectBlock = z.infer<typeof projectBlock>;

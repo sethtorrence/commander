@@ -26,19 +26,21 @@ type FilterBarProps = ComponentProps<typeof ProjectFilterBar>;
 /**
  * The Project filter bar for a Section, under its sheet header: the app-wide filter, with the
  * Section's own counts, and each Project's page a click away. `items` are the Items the counts are
- * over (a Section's open Todos, say).
+ * over (a Section's open Todos, say), unless the Section counts for itself (`counts`: Notes counts
+ * Daily Notes).
  */
 export function SectionProjectFilter({
-  items,
+  items = [],
+  counts: own,
   ...props
-}: { items: readonly Pick<Item, 'filing'>[] } & Omit<
-  FilterBarProps,
-  'projects' | 'everything' | 'unfiled' | 'selected' | 'onSelect'
-> &
+}: {
+  items?: readonly Pick<Item, 'filing'>[];
+  counts?: ReturnType<typeof countByFilter>;
+} & Omit<FilterBarProps, 'projects' | 'everything' | 'unfiled' | 'selected' | 'onSelect'> &
   Partial<Pick<FilterBarProps, 'selected' | 'onSelect'>>) {
   const { projects, filter, setFilter, openPage } = useProjects();
   const armed = usePendingKeys() === 'p';
-  const counts = countByFilter(items);
+  const counts = own ?? countByFilter(items);
   return (
     <ProjectFilterBar
       projects={projects.map((project) => ({ ...project, count: counts.project(project.id) }))}

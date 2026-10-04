@@ -5,6 +5,7 @@ import { Toaster } from '@commander/ui';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { onReveal } from '../../frame/reveal';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { ShortcutProvider, ShortcutScope, useActiveScopes } from '../../shortcuts/react';
@@ -286,5 +287,60 @@ describe('the Project page', () => {
     expect((within(editor).getByRole('combobox', { name: 'Files into' }) as HTMLSelectElement).value).toBe(
       lt.id,
     );
+  });
+
+  it('lists the Project’s Blocks by day, each one jumping to its Block in Notes', async () => {
+    const user = { by: { kind: 'user' as const } };
+    const block = (day: string, text: string, fields: { parentId?: string; projectId?: string } = {}) => {
+      const note = store.ensureDailyNote(day, user).id;
+      return store.record(
+        {
+          type: 'create',
+          item: {
+            kind: 'block',
+            title: text,
+            filing: fields.projectId ? { projectId: fields.projectId, filedBy: 'user' } : null,
+            detail: {
+              kind: 'block',
+              dailyNoteId: note,
+              parentId: fields.parentId ?? null,
+              position: 'a0',
+              text,
+              folded: false,
+            },
+          },
+        },
+        user,
+      ).itemId;
+    };
+    const planning = block('2026-10-03', 'Planning #LT', { projectId: lt.id });
+    const standup = block('2026-10-03', 'Standup notes', { parentId: planning });
+    block('2026-10-02', 'Earlier #LT', { projectId: lt.id });
+    block('2026-10-02', 'Tactics only #TX', { projectId: tx.id });
+    const revealed: string[] = [];
+    const stop = onReveal('notes', (id) => revealed.push(id));
+    const { onOpenSection } = await renderLoadedPage();
+
+    const notes = await screen.findByRole('region', { name: 'Notes filed here' });
+    await waitFor(() => expect(within(notes).getAllByRole('button')).toHaveLength(3));
+    expect(
+      within(notes)
+        .getAllByRole('button')
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringContaining('Planning #LT'),
+      expect.stringContaining('Standup notes'),
+      expect.stringContaining('Earlier #LT'),
+    ]);
+    expect(
+      within(notes)
+        .getAllByRole('heading', { level: 3 })
+        .map((day) => day.textContent),
+    ).toEqual(['Sat 3 Oct', 'Fri 2 Oct']);
+
+    fireEvent.click(within(notes).getByRole('button', { name: /Standup notes/ }));
+    expect(revealed).toEqual([standup]);
+    expect(onOpenSection).toHaveBeenCalledWith('notes');
+    stop();
   });
 });

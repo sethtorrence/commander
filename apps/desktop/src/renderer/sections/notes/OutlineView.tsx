@@ -1,4 +1,4 @@
-import { imageAttachmentOf } from '@commander/domain';
+import { type Filing, imageAttachmentOf, isOwnFiling, type Project } from '@commander/domain';
 import { cn } from '@commander/ui';
 import {
   type ClipboardEvent,
@@ -13,6 +13,7 @@ import {
   useRef,
 } from 'react';
 import { BlockImage } from './BlockImage';
+import { BlockMargin } from './BlockMargin';
 import { TodoCheck, TodoTag } from './BlockTodo';
 import {
   formatShortcut,
@@ -28,6 +29,8 @@ import { caretX, onFirstLine, onLastLine, placeCaret, placeCaretAtX, selectionIn
 import { headingLevel, toggleMark } from './markdown';
 import type { Notebook } from './notebook';
 import { type Block, blockNumbers, type Caret, descendantCount, type Outline, treeOf } from './outline';
+import { useTagPicker } from './TagPicker';
+import { clearTags, highlightTags } from './tag-highlights';
 
 /*
   One Daily Note's outline: each Block a row with its number, bullet and its own editable text (a
@@ -40,6 +43,25 @@ export interface OutlineControls {
   notebook: Notebook;
   /** Puts the caret at a Block once it is on screen. */
   focus(caret: Caret | null): void;
+  /** Block Projects, where Blocks have them (the Notes Section, not the daily template). */
+  projects?: OutlineProjects;
+}
+
+/** Block Projects in the outline (#51): the `#` picker, the inline Badges and the margin's picker. */
+export interface OutlineProjects {
+  /** The active Projects, for the `#` picker and the `#LT` drawn as Badges. */
+  list: readonly Project[];
+  /** Opens the Badge picker for a Block beside its margin Badge; `filing` is what it shows now. */
+  pick(day: string, block: Block, filing: Filing, anchor: HTMLElement): void;
+}
+
+/** What each Block of a Daily Note shows of its Project, and what the Project filter leaves out. */
+export interface ProjectView {
+  /** The Project each Block shows: its own, or its parent's (block-projects.ts). */
+  filings: ReadonlyMap<string, Filing>;
+  /** Blocks the filter hides, and those it shows dimmed as context. */
+  hidden: ReadonlySet<string>;
+  dimmed: ReadonlySet<string>;
 }
 
 export const OutlineContext = createContext<OutlineControls | null>(null);
@@ -147,6 +169,11 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
   const { notebook, focus } = controls;
   const ref = useRef<HTMLDivElement>(null);
   useNativeInputGuard(ref, controls);
+  // `#` and letters offer the Projects; choosing one completes the code, as typing it would.
+  const tags = useTagPicker(controls.projects?.list, (text, offset) => {
+    notebook.type(day, block.id, text, offset);
+    focus({ id: block.id, offset });
+  });
 
   // The text is the browser's while typing (rendered again from it as it changes, markdown.ts); it is
   // set from the outline only when they differ (after an undo, a join or a split).
@@ -154,6 +181,19 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
     const element = ref.current;
     if (element && element.textContent !== block.text) renderBlockText(element, block.text);
   }, [block.text]);
+  // `#LT` in the text is drawn as LT's Badge, again whenever the text changes.
+  const projects = controls.projects?.list;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the text is read from the element, which follows `block.text`
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element && projects) highlightTags(element, projects);
+  }, [block.text, projects]);
+  useEffect(() => {
+    const element = ref.current;
+    return () => {
+      if (element) clearTags(element);
+    };
+  }, []);
 
   // A formatting shortcut or a pasted link: shown at once, and saved like typing.
   const apply = (element: HTMLElement, edit: { text: string; start: number; end: number }) => {
@@ -167,6 +207,7 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.nativeEvent.isComposing) return;
+    if (tags.onKeyDown(event)) return;
     const element = event.currentTarget;
     const mod = event.ctrlKey || event.metaKey;
     const { id } = block;
@@ -234,7 +275,7 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
     }
   };
 
-  return (
+  const editor = (
     // biome-ignore lint/a11y/useSemanticElements: a Block's text is a contenteditable, not an input
     <div
       ref={ref}
@@ -254,6 +295,7 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
         if (!(event.nativeEvent as InputEvent).isComposing) renderBlockText(element, text);
         // `[] ` typed at the start makes the Block a Todo: the mark goes, and the caret stays put.
         focus(notebook.type(day, block.id, text, selectionIn(element)[0]));
+        tags.onInput(element);
       }}
       onCompositionEnd={(event) =>
         renderBlockText(event.currentTarget, event.currentTarget.textContent ?? '')
@@ -277,8 +319,17 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
         const href = linkClicked(event);
         if (href) openBlockLink(href);
       }}
-      onBlur={() => void notebook.flush()}
+      onBlur={() => {
+        tags.close();
+        void notebook.flush();
+      }}
     />
+  );
+  return (
+    <>
+      {editor}
+      {tags.popup}
+    </>
   );
 });
 
@@ -289,11 +340,15 @@ interface BlockViewProps {
   tree: Map<string | null, Block[]>;
   numbers: Map<string, string>;
   outline: Outline;
+  projectView?: ProjectView;
 }
 
-function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps) {
-  const { notebook, focus } = useControls();
-  const children = tree.get(block.id) ?? [];
+function BlockView({ day, block, depth, tree, numbers, outline, projectView }: BlockViewProps) {
+  const { notebook, focus, projects } = useControls();
+  // Under the Project filter, Blocks outside it (and not above one in it) aren't shown.
+  const children = (tree.get(block.id) ?? []).filter((child) => !projectView?.hidden.has(child.id));
+  const filing = projectView?.filings.get(block.id) ?? null;
+  const ownProject = !!projectView && isOwnFiling(filing);
   const hasKids = children.length > 0;
   const folded = hasKids && block.folded;
   const wasFolded = useRef(folded);
@@ -316,15 +371,24 @@ function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps
         folded && 'folded',
         block.todo && 'todo',
         block.todo?.done && 'done',
+        projectView?.dimmed.has(block.id) && 'dim',
       )}
       data-block={block.id}
       data-heading={headingLevel(block.text) || undefined}
       data-image={image ? '' : undefined}
     >
-      <div className="n-row" style={{ '--d': depth } as CSSProperties}>
+      <div className={cn('n-row', ownProject && 'has-badge')} style={{ '--d': depth } as CSSProperties}>
         <span className="n-bn" aria-hidden="true">
           {numbers.get(block.id)}
         </span>
+        {projects && projectView && (
+          <BlockMargin
+            filing={filing}
+            own={ownProject}
+            label={block.text}
+            onPick={(anchor) => projects.pick(day, block, filing, anchor)}
+          />
+        )}
         {block.todo && <TodoCheck notebook={notebook} day={day} block={block} />}
         <button
           type="button"
@@ -364,6 +428,7 @@ function BlockView({ day, block, depth, tree, numbers, outline }: BlockViewProps
               tree={tree}
               numbers={numbers}
               outline={outline}
+              projectView={projectView}
             />
           ))}
         </div>
@@ -450,17 +515,20 @@ export function OutlineView({
   day,
   outline,
   placeholder,
+  projectView,
 }: {
   day: string;
   outline: Outline;
   placeholder: string;
+  /** Each Block's Project and the Project filter, where Blocks have Projects. */
+  projectView?: ProjectView;
 }) {
   const tree = useMemo(() => treeOf(outline), [outline]);
   const numbers = useMemo(() => blockNumbers(outline), [outline]);
-  const top = tree.get(null) ?? [];
+  const top = (tree.get(null) ?? []).filter((block) => !projectView?.hidden.has(block.id));
   return (
     <div className="n-outline">
-      {top.length === 0 ? (
+      {!tree.get(null)?.length ? (
         <FirstBlock day={day} placeholder={placeholder} />
       ) : (
         top.map((block) => (
@@ -472,6 +540,7 @@ export function OutlineView({
             tree={tree}
             numbers={numbers}
             outline={outline}
+            projectView={projectView}
           />
         ))
       )}

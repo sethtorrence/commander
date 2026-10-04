@@ -184,6 +184,49 @@ describe('answering Item store requests from the window', () => {
     expect(changed).toEqual([[todo], [other, todo]]);
   });
 
+  it('counts the Items a change re-filed along with it among those it changed', () => {
+    const note = store.ensureDailyNote('2026-10-03', { by: { kind: 'user' } });
+    const project = store.changeProject({
+      type: 'create',
+      project: { name: 'Longtail', code: 'LT', accent: 'blue' },
+    }).project;
+    const parent = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e06';
+    const child = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e07';
+    const detail = (id: string, parentId: string | null) => ({
+      id,
+      kind: 'block',
+      title: '',
+      detail: { kind: 'block', dailyNoteId: note.id, parentId, position: 'a0', text: '', folded: false },
+    });
+    ask(1, {
+      op: 'record-all',
+      actions: [
+        { type: 'create', item: detail(parent, null) },
+        { type: 'create', item: detail(child, parent) },
+      ],
+    });
+    const changed: string[][] = [];
+
+    answerItemStoreRequest(
+      store,
+      {
+        type: 'item-store-request',
+        id: 2,
+        request: {
+          op: 'record',
+          action: {
+            type: 'update',
+            itemId: parent,
+            changes: { filing: { projectId: project?.id, filedBy: 'user' } },
+          },
+        },
+      },
+      (ids) => changed.push(ids),
+    );
+
+    expect(changed).toEqual([[parent, child]]);
+  });
+
   it('finds the Todos made from Blocks', () => {
     const note = store.ensureDailyNote('2026-10-03', { by: { kind: 'user' } });
     const blockId = '0b7c2a8e-4f7d-4c11-9a52-0d6b6f0a1e04';

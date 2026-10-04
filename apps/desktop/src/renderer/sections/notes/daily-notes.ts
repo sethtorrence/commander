@@ -1,5 +1,6 @@
-import type { DailyNotePage, DailyNoteQuery, Item, ItemAction } from '@commander/domain';
+import type { DailyNotePage, DailyNoteProjects, DailyNoteQuery, Item, ItemAction } from '@commander/domain';
 import type { ItemStoreClient } from '../../item-store/client';
+import { ownFiling } from './block-projects';
 import { sameSavedBlock, todoActionsFor } from './block-todos';
 import type { Block, BlockChange, Outline } from './outline';
 
@@ -25,6 +26,11 @@ export interface DailyNotes {
    * Block whose saved part didn't change (only its Todo was ticked) isn't recorded itself.
    */
   save(dailyNoteId: string, changes: BlockChange[], why: string, before?: Outline): Promise<number[]>;
+  /**
+   * Each Daily Note with written Blocks: the Projects they are in, and whether any is Unfiled (for
+   * the Project filter's counts). Absent where Blocks have no Projects (the daily template).
+   */
+  projects?(): Promise<DailyNoteProjects[]>;
   /** The day (YYYY-MM-DD) of the Daily Note a Block is in, or null if there is no such Block. */
   dayOfBlock(blockId: string): Promise<string | null>;
   /** False where Blocks can't become Todos (the daily template); they can otherwise. */
@@ -41,16 +47,21 @@ export interface DailyNotes {
 export function blockOf(item: Item): Block | null {
   if (item.detail?.kind !== 'block') return null;
   const { parentId, position, text, folded } = item.detail;
-  return { id: item.id, parentId, position, text, folded };
+  return { id: item.id, parentId, position, text, folded, filing: item.filing };
 }
 
-function actionFor(dailyNoteId: string, change: BlockChange): ItemAction {
+// A Block change as an Item action. Its own Project goes with it when it has changed since `was` (the
+// Block as saved before); an inherited one is the Item store's to work out.
+function actionFor(dailyNoteId: string, change: BlockChange, was?: Block): ItemAction {
   if (change.type === 'delete') return { type: 'delete', itemId: change.id };
   const { id, parentId, position, text, folded } = change.block;
   const detail = { kind: 'block' as const, dailyNoteId, parentId, position, text, folded };
-  return change.type === 'create'
-    ? { type: 'create', item: { id, kind: 'block', title: text, detail } }
-    : { type: 'update', itemId: id, changes: { detail } };
+  const filing = ownFiling(change.block);
+  const refiled = JSON.stringify(filing) !== JSON.stringify(was ? ownFiling(was) : null);
+  if (change.type === 'create') {
+    return { type: 'create', item: { id, kind: 'block', title: text, detail, ...(filing && { filing }) } };
+  }
+  return { type: 'update', itemId: id, changes: { detail, ...(refiled && { filing }) } };
 }
 
 export function dailyNotesIn(itemStore: ItemStoreClient): DailyNotes {
@@ -88,11 +99,23 @@ export function dailyNotesIn(itemStore: ItemStoreClient): DailyNotes {
         return !!was && change.type === 'update' && sameSavedBlock(was, change.block);
       };
       const actions = [
-        ...changes.filter((change) => !onlyTodo(change)).map((change) => actionFor(dailyNoteId, change)),
+        ...changes
+          .filter((change) => !onlyTodo(change))
+          .map((change) =>
+            actionFor(
+              dailyNoteId,
+              change,
+              change.type === 'delete' ? undefined : before?.get(change.block.id),
+            ),
+          ),
         ...(before ? todoActionsFor(before, changes) : []),
       ];
       if (!actions.length) return [];
       return (await itemStore({ op: 'record-all', actions, why })).map((entry) => entry.id);
+    },
+
+    projects() {
+      return itemStore({ op: 'daily-note-projects' });
     },
 
     async dayOfBlock(blockId) {

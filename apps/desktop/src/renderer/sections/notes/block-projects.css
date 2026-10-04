@@ -1,0 +1,124 @@
+/*
+  Block Projects in the Daily Note (#51): the Badge in the numbered margin, the accent bar on the
+  margin rule (faint where inherited), Blocks dimmed as context under the Project filter, the filter
+  bar over the stream, and a day collapsed to one line. After the prototypes' .pb, the 2px accent
+  bar beside a row's number, .pflt and .dnb .bk.dim (prototype/dashboard-section-layout, feed.html).
+*/
+@layer components {
+  /* The accent bar, on the sheet's margin rule (36px in from the sheet's edge). */
+  .n-pbar {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(-5px - var(--d, 0) * 24px);
+    width: 2px;
+    pointer-events: none;
+  }
+  .n-pbar.inherited {
+    opacity: 0.35;
+  }
+
+  /* The margin Badge sits where the Block's number is. */
+  .n-mb {
+    position: absolute;
+    top: 0;
+    left: calc(-34px - var(--d, 0) * 24px);
+    width: 24px;
+    height: 30px;
+    display: grid;
+    place-items: center end;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+  }
+  .n-mb [data-slot="badge"] {
+    cursor: pointer;
+  }
+  .n-mb:hover [data-slot="badge"],
+  .n-mb:focus-visible [data-slot="badge"] {
+    outline: 1px solid var(--ink);
+    outline-offset: 1px;
+  }
+  .n-row.has-badge > .n-bn {
+    visibility: hidden;
+  }
+  /* Untagged: the number shows, and pointing at it shows the Badge to click. */
+  .n-mb.ghost {
+    opacity: 0;
+  }
+  .n-mb.ghost:hover,
+  .n-mb.ghost:focus-visible {
+    opacity: 0.7;
+  }
+  .n-row:has(> .n-mb.ghost:hover) > .n-bn {
+    visibility: hidden;
+  }
+
+  /* Under the Project filter: the Blocks above those in it, as context. */
+  .n-blk.dim > .n-row {
+    opacity: 0.3;
+  }
+  .n-blk.dim > .n-row:focus-within {
+    opacity: 1;
+  }
+
+  /* The Project filter bar, over the sheets and kept in view. */
+  .n-filter {
+    position: sticky;
+    top: var(--body);
+    z-index: 6;
+    margin-bottom: 18px;
+  }
+  .n-pflt {
+    grid-column: 2 / 6;
+    border: 1px solid var(--line);
+  }
+
+  /* A day with nothing under the filter: one line (after the stream's end row). */
+  .n-day.n-collapsed + .n-day,
+  .n-day + .n-day.n-collapsed {
+    margin-top: 10px;
+  }
+  .n-col-row {
+    grid-column: 2 / 6;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 40px;
+    padding: 0 20px;
+    border: 1px dashed var(--line);
+    background: var(--sheet);
+    background-image: repeating-linear-gradient(-45deg, var(--hatch) 0 1px, transparent 1px 7px);
+    font: inherit;
+    font-size: 13.5px;
+    color: var(--muted);
+    text-align: left;
+    cursor: pointer;
+  }
+  .n-col-row:hover {
+    border-color: var(--ink);
+    color: var(--text);
+  }
+  .n-col-row b {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .n-col-row .m {
+    font: 600 9.5px / 1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .n-col-row .m:last-child {
+    margin-left: auto;
+  }
+
+  @media (max-width: 1440px) {
+    .n-pflt,
+    .n-col-row {
+      grid-column: 2 / 7;
+    }
+  }
+}
