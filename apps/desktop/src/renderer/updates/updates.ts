@@ -37,7 +37,8 @@ export function acceptLabel(line: UpdateViewLine): string | null {
 export type OpenTarget =
   | { kind: 'item'; sectionId: string; itemId: string }
   | { kind: 'section'; sectionId: string }
-  | { kind: 'settings' };
+  // `part`: where in Settings (Accounts, for an Account to reconnect).
+  | { kind: 'settings'; part?: 'accounts' };
 
 // Sections with a tab of their own; Teams follows in its milestone.
 const OPENABLE: readonly UpdateSection[] = [
@@ -51,15 +52,38 @@ const OPENABLE: readonly UpdateSection[] = [
 ];
 const sectionOf = (section: UpdateSection) => (OPENABLE.includes(section) ? section : 'ares');
 
-/** Where Open takes the User: the one Item a line is about, else where its Items are. */
-export function openTarget(line: UpdateViewLine): OpenTarget {
+/**
+ * Where Open takes the User: the one Item a line is about, else where its Items are. `itemId`: one
+ * of the line's Items in particular (an issue of a merged Linear line).
+ */
+export function openTarget(line: UpdateViewLine, itemId?: string): OpenTarget {
   const about = line.queued?.about;
+  if (itemId && line.itemIds.includes(itemId))
+    return { kind: 'item', sectionId: sectionOf(line.section), itemId };
   if (about?.kind === 'cap-warning' || about?.kind === 'autonomy-change') return { kind: 'settings' };
+  if (about?.kind === 'reconnect') return { kind: 'settings', part: 'accounts' };
   const first = line.itemIds[0];
   const single = line.itemIds.length === 1 || about?.kind === 'chained';
   if (first && single) return { kind: 'item', sectionId: sectionOf(line.section), itemId: first };
   if (about?.kind === 'suggestions') return { kind: 'section', sectionId: 'ares' };
   return { kind: 'section', sectionId: sectionOf(line.section) };
+}
+
+/**
+ * The Linear issues a merged line is about, each with what Ares said of it (why it left the User's
+ * list, or why it looks stuck), to open one by one. Empty for a line about one issue (Open opens it)
+ * and once the line has been acted on.
+ */
+export function lineIssues(line: UpdateViewLine): { itemId: string; identifier: string; text: string }[] {
+  if (!isQueued(line)) return [];
+  const about = line.queued?.about;
+  const issues =
+    about?.kind === 'linear-left'
+      ? about.issues.map(({ itemId, identifier, why }) => ({ itemId, identifier, text: why }))
+      : about?.kind === 'linear-stuck'
+        ? about.issues.map(({ itemId, identifier, reason }) => ({ itemId, identifier, text: reason }))
+        : [];
+  return issues.length > 1 ? issues : [];
 }
 
 /** "and 23 smaller things", with how many in each Section. */

@@ -36,8 +36,11 @@ export const UPDATE_SECTION_NAMES: Record<UpdateSection, string> = {
   ares: 'Ares',
 };
 
-// What a queued line is about, by what queued it. Later producers (Linear reassignments, meeting
-// prep, the GitHub summary, missed send-later) add their own kind here.
+// A Linear issue a queued line is about, by its Item and its identifier (ENG-418).
+const linearIssueOnLine = z.object({ itemId, identifier: z.string().min(1) });
+
+// What a queued line is about, by what queued it. Later producers (meeting prep, the GitHub summary,
+// missed send-later) add their own kind here.
 export const queuedAbout = z.discriminatedUnion('kind', [
   // Ask suggestions of one action Ares wasn't sure about, merged into one line.
   z.object({
@@ -77,6 +80,32 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     accepted: z.number().int().positive(),
     // The newest suggestion the streak counted, so the next streak starts after it.
     lastProposalId: id,
+  }),
+  // Linear issues taken off the User's list by a sync (reassigned, unassigned, cancelled, moved out
+  // of the Todo states, deleted), whose Linear Todos went: their activity entries, merged into one
+  // line ("3 of your Linear issues were reassigned"). `why` is the entry's ("ENG-418 was reassigned
+  // to Priya Patel").
+  z.object({
+    kind: z.literal('linear-left'),
+    entryIds: z.array(id).min(1),
+    issues: z
+      .array(linearIssueOnLine.extend({ todoId: itemId, why: z.string().min(1), reassigned: z.boolean() }))
+      .min(1),
+  }),
+  // The User's Linear issues Ares judged stuck, merged by team, each with his one-sentence reason and
+  // when it last changed: it leaves the line once the issue changes.
+  z.object({
+    kind: z.literal('linear-stuck'),
+    team: z.object({ id: z.string().min(1), key: z.string(), name: z.string() }),
+    issues: z.array(linearIssueOnLine.extend({ reason: z.string().min(1), changedAt: timestamp })).min(1),
+  }),
+  // An Account whose sign-in needs reconnecting: its syncing is paused until the User signs in again.
+  z.object({
+    kind: z.literal('reconnect'),
+    account: z.string().min(1),
+    // The Source as the User knows it ("Linear"), and the Account's name ("Acme"), when known.
+    sourceName: z.string().min(1),
+    name: z.string().nullable(),
   }),
 ]);
 export type QueuedAbout = z.infer<typeof queuedAbout>;

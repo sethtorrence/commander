@@ -52,8 +52,15 @@ const models = setUpModels(itemStore, {
   accessTokens,
   secrets,
 });
-// Source sync: every Account on its cadence, writing through the Item store.
-const sync = setUpSync(itemStore, { send: (message) => port.postMessage(message), accessTokens });
+// Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
+let updates: Updates | undefined;
+// Source sync: every Account on its cadence, writing through the Item store. An Account needing
+// reconnecting (or reconnected) is Ares's to mention in the next Update.
+const sync = setUpSync(itemStore, {
+  send: (message) => port.postMessage(message),
+  accessTokens,
+  onAccountsChanged: () => updates?.sweep(),
+});
 // Settings → GitHub: what each GitHub Account can reach and watches, kept through the Item store.
 const githubWatch = setUpGitHubWatch(itemStore, {
   send: (message) => port.postMessage(message),
@@ -79,8 +86,6 @@ sync.engine.onSynced(({ itemIds }) => {
 // The gate every Ares action goes through. Test hooks (proposing from end-to-end tests) are on only
 // when the main process asks for them.
 const testHooks = process.argv.includes('--test-hooks');
-// Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
-let updates: Updates | undefined;
 const gate = openGate({
   itemStore,
   onChange: (itemIds) => {
@@ -107,6 +112,9 @@ const agent = setUpAgent(itemStore, {
   secrets,
   // A steering warning mark shows at once in open views.
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
+  // Stuck Linear issues go in Ares's queue, for the next Update.
+  enqueue: (input) => updates?.queue.enqueue(input),
+  me: (account) => sync.me(account),
 });
 sync.engine.onSynced((event) => agent.synced(event));
 
@@ -118,12 +126,13 @@ updates = setUpUpdates({
   gate,
   client: models.client,
   secrets,
+  accounts: () => sync.accounts(),
   send: (message) => port.postMessage(message),
   onState: (state) => port.postMessage({ type: 'ares-updates', ...state } satisfies CoreMessage),
   onIdle: () => agent.idle(),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
-// Injection warnings arrive with a sync.
+// Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
 sync.engine.onSynced(() => updates?.sweep());
 
 port.on('message', ({ data }) => {

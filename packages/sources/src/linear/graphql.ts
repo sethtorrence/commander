@@ -7,6 +7,8 @@ const PAGE_INFO = 'pageInfo { hasNextPage endCursor }';
 
 // Comments that come with each issue; an issue with more gets the rest from ISSUE_COMMENTS.
 export const COMMENTS_PER_ISSUE = 20;
+// Relations pointing at each issue (those blocking it among them), for spotting stuck issues.
+const RELATIONS_PER_ISSUE = 10;
 
 const ISSUE = `
   id identifier title url description priority estimate dueDate
@@ -18,6 +20,7 @@ const ISSUE = `
   labels { nodes { id name color } }
   cycle { id number name startsAt endsAt }
   project { id name }
+  inverseRelations(first: ${RELATIONS_PER_ISSUE}) { nodes { type issue { id identifier title state { type } } } }
   comments(first: ${COMMENTS_PER_ISSUE}) { nodes { ${COMMENT} } ${PAGE_INFO} }
 `;
 

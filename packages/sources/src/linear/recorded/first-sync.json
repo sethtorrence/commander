@@ -74,6 +74,37 @@
                   "endsAt": "2026-10-12T00:00:00.000Z"
                 },
                 "project": { "id": "project-login", "name": "Login revamp" },
+                "inverseRelations": {
+                  "nodes": [
+                    {
+                      "type": "blocks",
+                      "issue": {
+                        "id": "issue-377",
+                        "identifier": "ENG-377",
+                        "title": "Move backups to the new bucket",
+                        "state": { "type": "completed" }
+                      }
+                    },
+                    {
+                      "type": "related",
+                      "issue": {
+                        "id": "issue-390",
+                        "identifier": "ENG-390",
+                        "title": "SSO settings page",
+                        "state": { "type": "started" }
+                      }
+                    },
+                    {
+                      "type": "blocks",
+                      "issue": {
+                        "id": "issue-412",
+                        "identifier": "OPS-412",
+                        "title": "Renew the IdP certificate",
+                        "state": { "type": "started" }
+                      }
+                    }
+                  ]
+                },
                 "comments": {
                   "nodes": [
                     {

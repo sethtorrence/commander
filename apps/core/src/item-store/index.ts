@@ -225,6 +225,9 @@ export type ItemStore = {
   // The external ids of an Account's live Items behind open Todos (the issues of open Linear Todos):
   // each sync re-reads them, as what a Source reports changed can miss them (a reassignment).
   recheckIds(account: { source: Source; account: string }): string[];
+  // Where a sync took Linear Todos off the User's list (their issues reassigned, cancelled…): the
+  // Todos' delete entries after an activity entry (all, from null), oldest first, at most 1000.
+  linearTodosLeft(after: number | null): ActivityEntry[];
   // The Account's live Items with these external ids, as last saved: for adapters that fetch only
   // part of an Item when it changes (a Chat's new messages).
   fromSource(account: { source: Source; account: string }, externalIds: string[]): Item[];
@@ -1674,6 +1677,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     dailyNoteProjects,
     projectBlocks,
     recheckIds: (account) => linearTodos.recheckIds(account),
+    linearTodosLeft: (after) => linearTodos.leftSince(after),
 
     fromSource({ source, account }, externalIds) {
       const { items } = schema;

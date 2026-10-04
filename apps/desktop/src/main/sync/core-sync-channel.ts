@@ -37,6 +37,8 @@ export function createCoreSyncChannel({
     setAccounts(
       accounts: {
         id: string;
+        // What the User sees ("Acme"), for Ares's Reconnect line.
+        name?: string;
         source: AccountSource;
         status: 'connected' | 'needs-reconnect';
         // Who the User is in the Account (their Linear user), for "assigned to me"; null until known.
@@ -47,14 +49,21 @@ export function createCoreSyncChannel({
     ) {
       send({
         type: 'sync-accounts',
-        accounts: accounts.flatMap(({ id, source, status, user, sources }): CoreSyncAccounts['accounts'] => {
-          const account = { id, needsReconnect: status === 'needs-reconnect', me: user?.id ?? null };
-          const [only, ...others] = SOURCES_OF_ACCOUNT[source];
-          if (!sources && only && others.length === 0) return [{ ...account, source: only }];
-          // Only the Sources switched on sync; with none on, the Account doesn't.
-          const on: Source[] = (sources ?? []).filter((each) => each.enabled).map((each) => each.source);
-          return on.length > 0 ? [{ ...account, sources: on }] : [];
-        }),
+        accounts: accounts.flatMap(
+          ({ id, name, source, status, user, sources }): CoreSyncAccounts['accounts'] => {
+            const account = {
+              id,
+              needsReconnect: status === 'needs-reconnect',
+              me: user?.id ?? null,
+              ...(name ? { name } : {}),
+            };
+            const [only, ...others] = SOURCES_OF_ACCOUNT[source];
+            if (!sources && only && others.length === 0) return [{ ...account, source: only }];
+            // Only the Sources switched on sync; with none on, the Account doesn't.
+            const on: Source[] = (sources ?? []).filter((each) => each.enabled).map((each) => each.source);
+            return on.length > 0 ? [{ ...account, sources: on }] : [];
+          },
+        ),
         endpoints,
       });
     },

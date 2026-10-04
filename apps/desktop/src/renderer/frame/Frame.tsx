@@ -167,10 +167,19 @@ export function Frame() {
     if (returnTo === SETTINGS) openSettings();
     else openSection(returnTo);
   }, [returnTo, openSettings, openSection]);
-  // Open on a line of an Update: its Item where it lives, its Section, or Settings.
+  // Open on a line of an Update: its Item where it lives, its Section, or Settings (at Accounts, for
+  // an Account to reconnect).
   const openUpdateLine = useCallback(
     (target: OpenTarget) => {
-      if (target.kind === 'settings') return openSettings();
+      if (target.kind === 'settings') {
+        openSettings();
+        if (target.part === 'accounts') {
+          requestAnimationFrame(() =>
+            document.querySelector('[data-testid="accounts-panel"]')?.scrollIntoView({ block: 'start' }),
+          );
+        }
+        return;
+      }
       openSection(target.sectionId);
       if (target.kind === 'item') requestReveal(target.sectionId, target.itemId);
     },

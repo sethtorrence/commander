@@ -18,7 +18,7 @@ import {
 } from '@commander/ui';
 import { useRef, useState } from 'react';
 import type { PanelState } from './context';
-import { acceptLabel, foldedSummary, lineStatus } from './updates';
+import { acceptLabel, foldedSummary, lineIssues, lineStatus } from './updates';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const when = new Intl.DateTimeFormat(undefined, {
@@ -34,7 +34,8 @@ export interface UpdatePanelProps {
   state: PanelState;
   onClose(): void;
   onAct(line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice): void;
-  onOpen(line: UpdateViewLine): void;
+  /** Open on a line, or on one of its Items (`itemId`: an issue of a merged Linear line). */
+  onOpen(line: UpdateViewLine, itemId?: string): void;
   onShowHistory(): void;
   onReopen(id: number): void;
 }
@@ -170,6 +171,7 @@ function Line({
   const [snoozing, setSnoozing] = useState(false);
   const status = lineStatus(line, Date.now());
   const accept = acceptLabel(line);
+  const issues = lineIssues(line);
   const waiting = line.queued?.status === 'queued';
   return (
     <li
@@ -198,6 +200,26 @@ function Line({
           </span>
         ) : null}
       </div>
+      {issues.length > 0 && (
+        <ul aria-label="Its Linear issues" className="col-span-2 m-0 list-none p-0">
+          {issues.map((issue) => (
+            <li
+              key={issue.itemId}
+              className="flex items-baseline gap-2 py-0.5 text-note leading-5 text-muted"
+            >
+              <button
+                type="button"
+                aria-label={`Open ${issue.identifier}`}
+                onClick={() => onOpen(line, issue.itemId)}
+                className="cursor-pointer border-0 bg-transparent p-0 font-mono text-label font-semibold tracking-label text-ink underline-offset-2 hover:underline"
+              >
+                {issue.identifier}
+              </button>
+              <AresText inline text={issue.text} sources={line.sources} />
+            </li>
+          ))}
+        </ul>
+      )}
       {waiting && (
         <div className="col-span-2 flex flex-wrap items-center gap-2">
           {accept && (

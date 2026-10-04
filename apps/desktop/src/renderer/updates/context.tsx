@@ -141,9 +141,9 @@ export function UpdatesProvider({
   );
 
   const open = useCallback(
-    (line: UpdateViewLine) => {
+    (line: UpdateViewLine, itemId?: string) => {
       close();
-      onOpen(openTarget(line));
+      onOpen(openTarget(line, itemId));
     },
     [close, onOpen],
   );

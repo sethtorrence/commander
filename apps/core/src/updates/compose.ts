@@ -42,6 +42,14 @@ const REPLY = OUTPUT.extend({
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const money = (usd: number) => `$${usd.toFixed(2)}`;
+// One sentence as said: on one line, ending with a full stop (or its own mark).
+const sentence = (text: string) => {
+  const one = text.replace(/\s+/g, ' ').trim();
+  return /[.!?…]$/.test(one) ? one : `${one}.`;
+};
+// A stuck issue's reason, naming the issue: Ares's sentence usually does already.
+const stuckReason = ({ identifier, reason }: { identifier: string; reason: string }) =>
+  sentence(reason.includes(identifier) ? reason : `${identifier}: ${reason}`);
 
 /**
  * A queued line in plain words: Ares's template sentence. `quote` puts the Items' titles in; the
@@ -85,6 +93,28 @@ export function templateText(
     }
     case 'autonomy-change':
       return `You’ve accepted my last ${about.accepted} ${about.name} suggestions without changing any. Want me to just do them?`;
+    // Linear's words (an assignee's name, a team's, Ares's reason from an issue) only when quoting.
+    case 'linear-left': {
+      const [only, ...others] = about.issues;
+      if (only && !others.length)
+        return quote ? sentence(only.why) : 'One of your Linear issues left your list.';
+      const count = about.issues.length;
+      return about.issues.every((issue) => issue.reassigned)
+        ? `${count} of your Linear issues were reassigned.`
+        : `${count} of your Linear issues left your list.`;
+    }
+    case 'linear-stuck': {
+      const [only, ...others] = about.issues;
+      if (only && !others.length) return quote ? stuckReason(only) : 'One of your Linear issues looks stuck.';
+      const count = about.issues.length;
+      return quote && about.team.name.trim()
+        ? `${count} of your ${about.team.name.replace(/\s+/g, ' ').trim()} issues look stuck.`
+        : `${count} of your Linear issues look stuck.`;
+    }
+    case 'reconnect':
+      return about.name
+        ? `${about.sourceName} (${about.name}) needs you to sign in again; syncing is paused.`
+        : `Your ${about.sourceName} Account needs you to sign in again; syncing is paused.`;
   }
 }
 

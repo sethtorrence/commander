@@ -68,6 +68,11 @@ export const linearIssueDetail = z.object({
   description: z.string().nullable(),
   // Oldest first.
   comments: z.array(linearComment),
+  // The issues blocking this one ("blocked by" relations), with each one's state type as of this
+  // issue's last sync. Missing on issues saved before Commander asked Linear for it.
+  blockedBy: z
+    .array(z.object({ id, identifier: z.string(), title: z.string(), stateType: z.string() }))
+    .optional(),
   createdAt: timestamp,
   updatedAt: timestamp,
   startedAt: timestamp.nullable(),
