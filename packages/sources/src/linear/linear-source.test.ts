@@ -128,8 +128,25 @@ describe('the first sync', () => {
         startedAt: Date.UTC(2026, 8, 30, 8),
         completedAt: null,
         canceledAt: null,
+        // Only the issues blocking it, each with its state type then.
+        blockedBy: [
+          {
+            id: 'issue-377',
+            identifier: 'ENG-377',
+            title: 'Move backups to the new bucket',
+            stateType: 'completed',
+          },
+          {
+            id: 'issue-412',
+            identifier: 'OPS-412',
+            title: 'Renew the IdP certificate',
+            stateType: 'started',
+          },
+        ],
       },
     });
+    // No blockers, no list.
+    expect(byId(items, 'issue-401')?.detail).not.toHaveProperty('blockedBy');
     expect(byId(items, 'issue-377')?.detail).toMatchObject({
       state: { type: 'canceled' },
       canceledAt: Date.UTC(2026, 8, 20, 11),

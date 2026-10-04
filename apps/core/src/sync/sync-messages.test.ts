@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import type { CoreAccountRefused, CoreSyncStatus } from '@commander/domain';
 import { SignInRefused, type SourceAdapter } from '@commander/sources';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AccessTokenUnavailable } from '../access-tokens';
 import { type ItemStore, openItemStore } from '../item-store';
 import { setUpSync } from '.';
 
@@ -20,6 +21,8 @@ let store: ItemStore;
 let sent: (CoreSyncStatus | CoreAccountRefused)[];
 let endpointsSeen: string[];
 let refuse: boolean;
+let tokenGone: boolean;
+let accountsHeard: number;
 let sync: ReturnType<typeof setUpSync>;
 
 function adapterFor(apiUrl: () => string): SourceAdapter {
@@ -29,6 +32,7 @@ function adapterFor(apiUrl: () => string): SourceAdapter {
     async sync(request) {
       endpointsSeen.push(apiUrl());
       if (refuse) throw new SignInRefused('Linear refused this Account’s sign-in.');
+      if (tokenGone) await request.accessToken();
       request.save({
         items: [{ externalId: 'issue-1', kind: 'linear-issue', title: 'Fix it' }],
         deleted: [],
@@ -52,9 +56,20 @@ beforeEach(() => {
   sent = [];
   endpointsSeen = [];
   refuse = false;
+  tokenGone = false;
+  accountsHeard = 0;
   sync = setUpSync(store, {
     send: (message) => sent.push(message),
-    accessTokens: { request: async () => ({ token: 'secret', kind: 'api-key' }) },
+    accessTokens: {
+      request: async () => {
+        if (tokenGone)
+          throw new AccessTokenUnavailable('needs-reconnect', 'This Account needs reconnecting.');
+        return { token: 'secret', kind: 'api-key' };
+      },
+    },
+    onAccountsChanged: () => {
+      accountsHeard += 1;
+    },
     linearSource: ({ apiUrl }) => adapterFor(apiUrl),
     teamsSource: ({ graphUrl }) => ({
       source: 'teams',
@@ -168,6 +183,38 @@ describe('sync messages', () => {
 
     expect(store.syncState.get(ACME, 'linear')).toBeNull();
     expect(lastStatus()).toBeUndefined();
+  });
+
+  it('knows every Account listed: its Sources, its name, who the User is there, and whether it needs reconnecting', async () => {
+    sync.handle({
+      type: 'sync-accounts',
+      accounts: [
+        { id: ACME, source: 'linear', needsReconnect: false, me: 'user-sam', name: 'Acme' },
+        { id: 'google:1045', sources: ['gmail'], needsReconnect: true, me: '1045' },
+      ],
+      endpoints,
+    });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sync.accounts()).toEqual([
+      { account: ACME, sources: ['linear'], name: 'Acme', needsReconnect: false },
+      { account: 'google:1045', sources: ['gmail'], name: null, needsReconnect: true },
+    ]);
+    expect(sync.me(ACME)).toBe('user-sam');
+    expect(sync.me('linear:org-other')).toBeNull();
+    expect(accountsHeard).toBeGreaterThan(0);
+  });
+
+  it('an Account whose sign-in a sync found gone needs reconnecting, before the main process says so', async () => {
+    sync.handle(accounts());
+    await vi.advanceTimersByTimeAsync(1);
+    const heard = accountsHeard;
+    tokenGone = true;
+    sync.handle({ type: 'sync-command', command: { op: 'refresh', account: ACME } });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sync.accounts()).toEqual([
+      { account: ACME, sources: ['linear'], name: null, needsReconnect: true },
+    ]);
+    expect(accountsHeard).toBeGreaterThan(heard);
   });
 
   it('leaves other messages alone and drops malformed sync messages', () => {

@@ -2,6 +2,8 @@
 // `issue.comments` queries to drive Linear sync end to end, answering in Linear's shapes with
 // cursor pagination and an X-Complexity header. Only the filters Commander sends are understood.
 //
+// Each issue answers with the issues blocking it (`inverseRelations`), for spotting stuck issues.
+//
 // Two-way sync too: the issue with its history, `issueUpdate` (ids checked against the team's
 // catalog, labels as deltas), `commentCreate` with the caller's id (a second post with the same id
 // is refused, as Linear refuses a duplicate id), `commentDelete`, and what the pickers offer. Every
@@ -44,6 +46,8 @@ export type FakeIssue = {
   cycle: { id: string; number: number; name: string | null; startsAt: string; endsAt: string } | null;
   project: { id: string; name: string } | null;
   comments: FakeComment[];
+  // The ids of the issues blocking this one (answered as its `inverseRelations` of type blocks).
+  blockedBy: string[];
 };
 
 // What a test says about an issue; the rest is filled in.
@@ -289,9 +293,23 @@ export function createFakeIssues(now: () => number = Date.now) {
     throw new Error(`The fake Linear has no issue ${id}`);
   }
 
-  // The GraphQL shape of an issue, with its first comments.
-  const node = (issue: FakeIssue, commentsFirst = 20) => ({
+  // The GraphQL shape of an issue, with its first comments and the issues blocking it.
+  const node = ({ blockedBy, ...issue }: FakeIssue, commentsFirst = 20) => ({
     ...issue,
+    inverseRelations: {
+      nodes: blockedBy.map((id) => {
+        const blocker = find(id);
+        return {
+          type: 'blocks',
+          issue: {
+            id: blocker.id,
+            identifier: blocker.identifier,
+            title: blocker.title,
+            state: { type: blocker.state.type },
+          },
+        };
+      }),
+    },
     comments: page(issue.comments, commentsFirst, null),
   });
 
@@ -320,6 +338,7 @@ export function createFakeIssues(now: () => number = Date.now) {
       cycle: null,
       project: null,
       comments: [],
+      blockedBy: [],
       ...input,
     };
     byWorkspace.set(workspaceId, [...(byWorkspace.get(workspaceId) ?? []), issue]);

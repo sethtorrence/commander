@@ -52,6 +52,24 @@ export const issue = z.object({
     })
     .nullish(),
   project: z.object({ id: z.string(), name: z.string() }).nullish(),
+  // Relations other issues have to this one: `blocks` means that issue blocks this one.
+  inverseRelations: z
+    .object({
+      nodes: z.array(
+        z.object({
+          type: z.string(),
+          issue: z
+            .object({
+              id: z.string(),
+              identifier: z.string(),
+              title: z.string(),
+              state: z.object({ type: z.string() }),
+            })
+            .nullish(),
+        }),
+      ),
+    })
+    .nullish(),
   comments,
 });
 export type Issue = z.infer<typeof issue>;
@@ -121,6 +139,13 @@ export function toItem(from: Issue, everyComment: z.infer<typeof comment>[]): So
     completedAt: optionalTime(from.completedAt),
     canceledAt: optionalTime(from.canceledAt),
   };
+  const blockedBy = (from.inverseRelations?.nodes ?? []).flatMap(({ type, issue }) =>
+    type === 'blocks' && issue
+      ? [{ id: issue.id, identifier: issue.identifier, title: issue.title, stateType: issue.state.type }]
+      : [],
+  );
+  // Kept only when there are any, so issues without blockers stay as they were saved before.
+  if (blockedBy.length) detail.blockedBy = blockedBy;
   const done = from.state.type === 'completed' || from.state.type === 'canceled';
   return {
     externalId: from.id,

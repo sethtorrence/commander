@@ -297,6 +297,44 @@ describe('the Update panel', () => {
     expect(opened).toEqual([{ kind: 'item', sectionId: 'notes', itemId: 'block-1' }]);
   });
 
+  it('a merged Linear line lists its issues, each opening its own', async () => {
+    const issue = (n: number) => ({
+      itemId: `issue-${n}`,
+      identifier: `ENG-${n}`,
+      todoId: `todo-${n}`,
+      why: `ENG-${n} was reassigned to Priya Patel`,
+      reassigned: true,
+    });
+    answer = (request) =>
+      request.op === 'run-skill'
+        ? update([
+            line(
+              1,
+              '2 of your Linear issues were reassigned.',
+              {
+                group: 'fyi',
+                about: { kind: 'linear-left', entryIds: [1, 2], issues: [issue(1), issue(2)] },
+                itemIds: ['issue-1', 'issue-2'],
+                section: 'linear',
+              },
+              { sources: ['Fix the export', 'Rotate the keys'] },
+            ),
+          ])
+        : null;
+    renderUpdates();
+    fireEvent.keyDown(document.body, { key: 'u' });
+    const fyi = await screen.findByRole('region', { name: 'For your information' });
+    const issues = within(fyi).getByRole('list', { name: 'Its Linear issues' });
+    expect(
+      within(issues)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    ).toEqual(['ENG-1ENG-1 was reassigned to Priya Patel', 'ENG-2ENG-2 was reassigned to Priya Patel']);
+    fireEvent.click(within(issues).getByRole('button', { name: 'Open ENG-2' }));
+    await waitFor(() => expect(panel()).toBeNull());
+    expect(opened).toEqual([{ kind: 'item', sectionId: 'linear', itemId: 'issue-2' }]);
+  });
+
   it('after time away, leads with the most important and folds the rest by Section', async () => {
     const lines = [
       ...[1, 2, 3, 4, 5].map((id) => line(id, `Lead ${id}.`)),

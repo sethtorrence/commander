@@ -22,10 +22,10 @@ import {
   type Source,
   sentWhy,
 } from '@commander/domain';
-import { and, asc, desc, eq, isNull, notExists } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, isNull, notExists } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { alias } from 'drizzle-orm/sqlite-core';
-import { stateOf } from './rows';
+import { stateOf, toEntry } from './rows';
 import * as schema from './schema';
 
 type Issue = Item & { detail: LinearIssueDetail };
@@ -258,6 +258,33 @@ export function linearTodosIn(deps: LinearTodosDeps) {
         why: `${ticking ? 'Ticked' : 'Unticked'} its Todo`,
         causedBy: { itemId: todo.id, entryId: entry.id },
       });
+    },
+
+    /**
+     * The entries where a Linear Todo went because a sync found its issue off the User's list
+     * (reassigned, unassigned, cancelled, moved out of the Todo states, deleted in Linear), after an
+     * activity entry (all of them, from null), oldest first, at most 1000: what Ares tells the User.
+     * Not the User's own changes, nor Ares's.
+     */
+    leftSince(after: number | null): ActivityEntry[] {
+      const { activity, todoDetails } = schema;
+      return db
+        .select({ entry: activity })
+        .from(activity)
+        .innerJoin(todoDetails, eq(todoDetails.itemId, activity.itemId))
+        .where(
+          and(
+            eq(activity.action, 'delete'),
+            eq(activity.actor, 'source'),
+            isNull(activity.otherItemId),
+            eq(todoDetails.backedBy, activity.causedByItemId),
+            after === null ? undefined : gt(activity.id, after),
+          ),
+        )
+        .orderBy(asc(activity.id))
+        .limit(1000)
+        .all()
+        .map((row) => toEntry(row.entry));
     },
 
     /** The live Linear issue behind a Todo, if it is a Linear Todo still backed by one. */

@@ -17,6 +17,7 @@ export * from './item-store-messages';
 export * from './items';
 export * from './linear';
 export * from './linear-send';
+export * from './linear-stuck';
 export * from './linear-todos';
 export * from './links';
 export * from './logged-fields';

@@ -11,8 +11,11 @@
 //   changing any (none dismissed or undone), "Want me to just do them?". Only if the action's next
 //   level is within its hard limit; the next offer for that action counts only suggestions after it.
 //
-// Later producers (Linear reassignments, meeting prep, the GitHub summary, missed send-later) call
-// the queue's `enqueue` themselves.
+// - Linear (linear.ts): issues taken off the User's list, stuck issues that changed, and Accounts
+//   needing reconnecting.
+//
+// Later producers (meeting prep, the GitHub summary, missed send-later) call the queue's `enqueue`
+// themselves, as the "Spot stuck Linear issues" job does.
 import {
   type ActivityEntry,
   autonomyLevels,
@@ -25,6 +28,7 @@ import {
 } from '@commander/domain';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
+import { createLinearWatch, type WatchedAccount } from './linear';
 import type { UpdateQueue } from './queue';
 
 // How many accepted suggestions in a row make Ares ask to just do them.
@@ -66,13 +70,17 @@ export function createProducers({
   gate,
   queue,
   now,
+  accounts,
 }: {
   itemStore: ItemStore;
   gate: Pick<Gate, 'actions' | 'settings'>;
   queue: UpdateQueue;
   now: () => number;
+  // Every Account, for Reconnect.
+  accounts?: () => readonly WatchedAccount[];
 }) {
   const store = itemStore.updates;
+  const linear = createLinearWatch({ itemStore, queue, now, accounts });
   const nameOf = (action: string) => gate.actions().find((each) => each.action === action)?.name ?? action;
   const sectionOfItem = (itemId: string | undefined): UpdateSection => {
     const kind = itemId ? itemStore.get(itemId)?.item.kind : undefined;
@@ -241,6 +249,7 @@ export function createProducers({
       injectionWarnings();
       capWarning();
       autonomyChanges();
+      linear.sweep();
     },
   };
 }

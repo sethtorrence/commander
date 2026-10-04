@@ -3,7 +3,7 @@
 // change to Todos or Linear issues a Todos-changed one), when Ares did or suggested something, and
 // when a Source has synced; it works out for itself when the machine has been idle long enough for
 // catch-up work. The main process's idle and lock reports (Updates, #70) call `idle()` too.
-import type { CoreMessage } from '@commander/domain';
+import type { CoreMessage, Enqueue } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
@@ -11,6 +11,7 @@ import type { KnownSecrets } from '../safety/known-secrets';
 import type { SyncedEvent } from '../sync';
 import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
+import { spotStuckLinearJob } from './spot-stuck-linear';
 import { suggestTodosJob } from './suggest-todos';
 
 export type { JobRunner } from './runner';
@@ -28,6 +29,10 @@ export type AgentOptions = {
   secrets?: KnownSecrets;
   // Items the Agent changed outside the gate (a steering warning mark), so open views catch up.
   onItemsChanged?: (itemIds: string[]) => void;
+  // Ares's queue for the Update: where the stuck Linear issues he spots go.
+  enqueue?: (input: Enqueue) => unknown;
+  // Who the User is in a Linear Account (their Linear user id), from Source sync, when known.
+  me?: (account: string) => string | null;
   log?: (message: string) => void;
 };
 
@@ -54,7 +59,11 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   const idleAfterMs = options.idleAfterMs ?? IDLE_AFTER_MS;
   let wasRanking = false;
   const runner = createJobRunner({
-    jobs: [suggestTodosJob(itemStore, { now }), rankDashboardJob(itemStore, { now })],
+    jobs: [
+      suggestTodosJob(itemStore, { now }),
+      rankDashboardJob(itemStore, { now }),
+      spotStuckLinearJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}), me: options.me }),
+    ],
     client: options.client,
     gate: options.gate,
     store: itemStore.agent,

@@ -27,12 +27,18 @@ export type UpdateQueue = {
   act(id: number, action: 'done' | 'dismiss' | 'snooze', snooze?: SnoozeChoice): QueuedLine;
   // What the line is about was settled elsewhere: it leaves the queue.
   resolve(id: number): QueuedLine;
-  // Changes what a queued line is about (fewer suggestions still waiting, say).
+  // What the line is about stopped mattering (a stuck issue changed): it leaves the queue for good.
+  expire(id: number): QueuedLine;
+  // Changes what a queued line is about (fewer suggestions still waiting, say): a changed line.
   revise(id: number, changes: Pick<QueuedLine, 'about' | 'itemIds'>): QueuedLine;
   line(id: number): QueuedLine | null;
 };
 
 const union = <T>(a: readonly T[], b: readonly T[]) => [...new Set([...a, ...b])];
+// Both lists of issues, one entry per Item: the newer word on one already there replaces it.
+const byItem = <T extends { itemId: string }>(was: readonly T[], next: readonly T[]) => [
+  ...new Map([...was, ...next].map((issue) => [issue.itemId, issue])).values(),
+];
 
 // What a merged line is about: the suggestions and warnings of both, or the newer word otherwise.
 function merged(was: QueuedAbout, next: QueuedAbout): QueuedAbout {
@@ -41,6 +47,16 @@ function merged(was: QueuedAbout, next: QueuedAbout): QueuedAbout {
   }
   if (was.kind === 'injection-warnings' && next.kind === 'injection-warnings') {
     return { ...next, entryIds: union(was.entryIds, next.entryIds).sort((a, b) => a - b) };
+  }
+  if (was.kind === 'linear-left' && next.kind === 'linear-left') {
+    return {
+      ...next,
+      entryIds: union(was.entryIds, next.entryIds).sort((a, b) => a - b),
+      issues: byItem(was.issues, next.issues),
+    };
+  }
+  if (was.kind === 'linear-stuck' && next.kind === 'linear-stuck') {
+    return { ...next, issues: byItem(was.issues, next.issues) };
   }
   return next;
 }
@@ -136,9 +152,14 @@ export function createUpdateQueue({
       return changed(store.saveLine(id, { status: 'resolved', settledAt: now() }));
     },
 
+    expire(id) {
+      queued(id);
+      return changed(store.saveLine(id, { status: 'expired', settledAt: now() }));
+    },
+
     revise(id, changes) {
       queued(id);
-      return changed(store.saveLine(id, changes));
+      return changed(store.saveLine(id, { ...changes, updatedAt: now() }));
     },
 
     line: (id) => store.line(id),

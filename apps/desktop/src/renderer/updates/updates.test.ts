@@ -1,6 +1,6 @@
 import type { QueuedLine, UpdateViewLine } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
-import { acceptLabel, foldedSummary, lineStatus, openTarget } from './updates';
+import { acceptLabel, foldedSummary, lineIssues, lineStatus, openTarget } from './updates';
 
 const queued = (overrides: Partial<QueuedLine> = {}): QueuedLine => ({
   id: 1,
@@ -154,5 +154,75 @@ describe('where a line stands', () => {
     expect(lineStatus(line({ snoozedUntil: new Date(2026, 9, 4, 9, 0).getTime() }), at)).toBe(
       'Snoozed till tomorrow 09:00',
     );
+  });
+});
+
+describe('Ares watching Linear', () => {
+  const left = (n: number) => ({
+    itemId: `issue-${n}`,
+    identifier: `ENG-${n}`,
+    todoId: `todo-${n}`,
+    why: `ENG-${n} was reassigned to Priya Patel`,
+    reassigned: true,
+  });
+
+  it('a line about one issue opens it in Linear; one about several lists each, each opening its issue', () => {
+    const one = line({
+      group: 'fyi',
+      about: { kind: 'linear-left', entryIds: [3], issues: [left(1)] },
+      itemIds: ['issue-1'],
+      section: 'linear',
+    });
+    expect(openTarget(one)).toEqual({ kind: 'item', sectionId: 'linear', itemId: 'issue-1' });
+    expect(lineIssues(one)).toEqual([]);
+
+    const several = line({
+      group: 'fyi',
+      about: { kind: 'linear-left', entryIds: [3, 4], issues: [left(1), left(2)] },
+      itemIds: ['issue-1', 'issue-2'],
+      section: 'linear',
+    });
+    expect(openTarget(several)).toEqual({ kind: 'section', sectionId: 'linear' });
+    expect(lineIssues(several)).toEqual([
+      { itemId: 'issue-1', identifier: 'ENG-1', text: 'ENG-1 was reassigned to Priya Patel' },
+      { itemId: 'issue-2', identifier: 'ENG-2', text: 'ENG-2 was reassigned to Priya Patel' },
+    ]);
+    expect(openTarget(several, 'issue-2')).toEqual({ kind: 'item', sectionId: 'linear', itemId: 'issue-2' });
+
+    const stuck = line({
+      group: 'fyi',
+      about: {
+        kind: 'linear-stuck',
+        team: { id: 'team-eng', key: 'ENG', name: 'Engineering' },
+        issues: [
+          {
+            itemId: 'issue-4',
+            identifier: 'ENG-4',
+            reason: 'ENG-4 has sat in review for 4 days',
+            changedAt: 1,
+          },
+          { itemId: 'issue-5', identifier: 'ENG-5', reason: 'ENG-5 is overdue', changedAt: 1 },
+        ],
+      },
+      itemIds: ['issue-4', 'issue-5'],
+      section: 'linear',
+    });
+    expect(lineIssues(stuck).map((issue) => issue.text)).toEqual([
+      'ENG-4 has sat in review for 4 days',
+      'ENG-5 is overdue',
+    ]);
+    // Acted on, nothing to open from it.
+    expect(lineIssues(line({ ...stuck.queued, status: 'expired' } as QueuedLine))).toEqual([]);
+  });
+
+  it('Reconnect opens Settings at Accounts, with nothing to accept', () => {
+    const reconnect = line({
+      group: 'now',
+      about: { kind: 'reconnect', account: 'linear:org-acme', sourceName: 'Linear', name: 'Acme' },
+      itemIds: [],
+      section: 'linear',
+    });
+    expect(openTarget(reconnect)).toEqual({ kind: 'settings', part: 'accounts' });
+    expect(acceptLabel(reconnect)).toBeNull();
   });
 });

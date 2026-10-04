@@ -3,7 +3,8 @@
 //
 // - Producers (producers.ts) look for what's new whenever the gate does something, after a sync and
 //   every minute: suggestions Ares wasn't sure about, chained suggestions, injection warnings, the
-//   80% cost-cap warning and "want me to just do these?" Autonomy changes.
+//   80% cost-cap warning, "want me to just do these?" Autonomy changes, and from Linear (linear.ts)
+//   issues taken off the User's list, stuck issues that changed, and Accounts needing reconnecting.
 // - Presence (presence.ts) follows what the main process reports of powerMonitor: it drives only
 //   "You're here / away" and having the Update ready on return (put together in the background
 //   when the User comes back), and tells the Agent the machine is idle for its catch-up work.
@@ -41,10 +42,12 @@ import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { compose, templateText } from './compose';
+import type { WatchedAccount } from './linear';
 import { AWAY_AFTER_MS, createPresence, type PresenceModel } from './presence';
 import { createProducers } from './producers';
 import { createUpdateQueue, type UpdateQueue } from './queue';
 
+export type { WatchedAccount } from './linear';
 export type { UpdateQueue } from './queue';
 
 // After more than 8 hours away, the five most important things lead and the rest fold.
@@ -57,6 +60,8 @@ export type UpdatesOptions = {
   client: ModelClient;
   secrets?: KnownSecrets;
   now?: () => number;
+  // Every Account and whether it needs reconnecting (from Source sync), for Reconnect lines.
+  accounts?: () => readonly WatchedAccount[];
   // The quiet count or the User's presence changed.
   onState?: (state: UpdatesState) => void;
   // The User stopped being active: the Agent's catch-up work can run.
@@ -111,7 +116,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
   }
 
   const queue = createUpdateQueue({ store, now, onChange: () => reportState() });
-  const producers = createProducers({ itemStore, gate, queue, now });
+  const producers = createProducers({ itemStore, gate, queue, now, accounts: options.accounts });
   const presence = createPresence({
     store,
     now,

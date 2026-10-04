@@ -1,13 +1,18 @@
 // Source sync in the Core: the sync engine with every Source adapter, driven by the main process's
 // messages (the Accounts, Settings → Accounts commands, the machine asleep or offline) and reporting
 // each Account's sync status and refused sign-ins back. Adapters borrow access tokens per request;
-// nothing here keeps or logs them.
+// nothing here keeps or logs them. It also knows every Account the main process listed (its name,
+// who the User is there, and whether it needs reconnecting, as the main process or a sync found),
+// for Ares.
 import {
+  type AccountSyncStatus,
   type CoreAccountRefused,
+  type CoreSyncAccounts,
   type CoreSyncStatus,
   coreSyncAccounts,
   coreSyncCommand,
   coreSystemState,
+  type Source,
 } from '@commander/domain';
 import {
   createGoogleCalendarSource,
@@ -25,6 +30,14 @@ import { createSyncEngine, type SyncEngine } from './engine';
 
 export type { SyncEngine, SyncedEvent } from './engine';
 
+// An Account as Ares sees it: its Sources, its name and whether it needs reconnecting.
+export type KnownAccount = {
+  account: string;
+  sources: readonly Source[];
+  name: string | null;
+  needsReconnect: boolean;
+};
+
 export type SyncOptions = {
   send: (message: CoreSyncStatus | CoreAccountRefused) => void;
   accessTokens: Pick<AccessTokens, 'request'>;
@@ -36,6 +49,8 @@ export type SyncOptions = {
   googleCalendarSource?: (options: GoogleCalendarSourceOptions) => SourceAdapter;
   random?: () => number;
   log?: (message: string) => void;
+  // The Accounts changed, or whether one needs reconnecting did.
+  onAccountsChanged?: () => void;
 };
 
 const isSyncMessage = z.object({ type: z.enum(['sync-accounts', 'sync-command', 'system-state']) });
@@ -50,6 +65,7 @@ export function setUpSync(
     googleCalendarSource = createGoogleCalendarSource,
     random,
     log = (message) => console.warn(message),
+    onAccountsChanged,
   }: SyncOptions,
 ) {
   // Where Linear lives, from the main process (a fake on this machine in the end-to-end tests).
@@ -82,7 +98,31 @@ export function setUpSync(
     random,
     log,
   });
-  engine.onStatus((accounts) => send({ type: 'sync-status', accounts }));
+  // The Accounts as the main process last listed them.
+  let listed: CoreSyncAccounts['accounts'] = [];
+  function accounts(statuses = engine.statuses()): KnownAccount[] {
+    const gone = new Set(
+      statuses.filter((status) => status.activity === 'needs-reconnect').map((status) => status.account),
+    );
+    return listed.map((account) => ({
+      account: account.id,
+      sources: 'sources' in account ? account.sources : [account.source],
+      name: account.name ?? null,
+      needsReconnect: account.needsReconnect || gone.has(account.id),
+    }));
+  }
+  let lastAccounts = '';
+  function accountsMayHaveChanged(statuses?: AccountSyncStatus[]) {
+    const key = JSON.stringify(accounts(statuses));
+    if (key === lastAccounts) return;
+    lastAccounts = key;
+    onAccountsChanged?.();
+  }
+
+  engine.onStatus((statuses) => {
+    send({ type: 'sync-status', accounts: statuses });
+    accountsMayHaveChanged(statuses);
+  });
 
   return {
     engine,
@@ -102,7 +142,9 @@ export function setUpSync(
           linearApiUrl = parsed.data.endpoints.linear;
           if (parsed.data.endpoints.graph) graphUrl = parsed.data.endpoints.graph;
           if (parsed.data.endpoints.googleCalendar) googleCalendarUrl = parsed.data.endpoints.googleCalendar;
+          listed = parsed.data.accounts;
           engine.setAccounts(parsed.data.accounts);
+          accountsMayHaveChanged();
           return true;
         }
         case 'sync-command': {
@@ -122,6 +164,13 @@ export function setUpSync(
           return true;
         }
       }
+    },
+
+    accounts: () => accounts(),
+
+    // Who the User is in the Account (their Linear user id), when known.
+    me(account: string): string | null {
+      return listed.find((each) => each.id === account)?.me ?? null;
     },
 
     // The Account is being removed: stop its syncing before its Items go, so none come back.

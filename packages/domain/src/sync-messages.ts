@@ -70,7 +70,13 @@ void _statusMatches;
 // Main process → Core: the Accounts to sync, sent at start-up and whenever they change.
 // Most Accounts carry one Source (`source`); an Account carrying several that share its sign-in (a
 // Google Account's Gmail and Google Calendar) lists those switched on (`sources`), each synced on its own.
-const syncAccountBase = { id: accountId, needsReconnect: z.boolean(), me: accountId.nullable().optional() };
+// `name`: what the User sees ("Acme"), for Ares's Reconnect line.
+const syncAccountBase = {
+  id: accountId,
+  needsReconnect: z.boolean(),
+  me: accountId.nullable().optional(),
+  name: z.string().optional(),
+};
 export const coreSyncAccounts = z.object({
   type: z.literal('sync-accounts'),
   // `me`: who the User is in the Account (their Linear user id), for Linear Todos; null until known.
