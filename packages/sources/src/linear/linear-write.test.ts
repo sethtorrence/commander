@@ -292,7 +292,9 @@ describe('what the pickers offer', () => {
       mode: 'full',
       accessToken: async () => apiKey,
       save: () => {},
-      saveCatalog: (catalog) => catalogs.push(catalog),
+      saveCatalog: (catalog) => {
+        if (catalog.kind === 'linear') catalogs.push(catalog);
+      },
       signal: new AbortController().signal,
     });
     return { fake, catalogs, result };

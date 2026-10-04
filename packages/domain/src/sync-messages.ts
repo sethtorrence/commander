@@ -57,6 +57,16 @@ export const accountSyncStatus = z.object({
   // Sources with a light sync only (Teams): whether it also checks whenever another Source syncs. Their
   // `nextSyncAt` is then the next full sync, and `lastSyncedAt` the last sync of either kind.
   alsoAfterOtherSources: z.boolean().optional(),
+  // Sources with hourly limits only (GitHub): what the Account's syncs used in the last hour (REST
+  // requests charged, and GraphQL points), against GitHub's limits, which the User's other tools share.
+  hourUse: z
+    .object({
+      requests: z.number().int().nonnegative(),
+      complexity: z.number().int().nonnegative(),
+      requestLimit: z.number().int().positive(),
+      complexityLimit: z.number().int().positive(),
+    })
+    .optional(),
 });
 // The zod-free AccountSyncStatus type in ipc.ts (for the preload and window) must match the schema.
 type _StatusMatches = [AccountSyncStatus] extends [z.infer<typeof accountSyncStatus>]
@@ -88,10 +98,12 @@ export const coreSyncAccounts = z.object({
   ),
   // Where to reach each Source (the end-to-end tests point Linear and Graph at fakes on this machine).
   // `graph`: Microsoft Graph's base, for Teams. `googleCalendar`: the Google Calendar API's base.
+  // `github`: GitHub's REST API base.
   endpoints: z.object({
     linear: z.string().url(),
     graph: z.string().url().optional(),
     googleCalendar: z.string().url().optional(),
+    github: z.string().url().optional(),
   }),
 });
 export type CoreSyncAccounts = z.infer<typeof coreSyncAccounts>;

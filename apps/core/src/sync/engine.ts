@@ -40,6 +40,7 @@ import {
   type SyncCost,
   type SyncMode,
   type SyncResult,
+  type SyncWatch,
   WriteRejected,
 } from '@commander/sources';
 import { type AccessToken, AccessTokenUnavailable } from '../access-tokens';
@@ -59,6 +60,7 @@ export const MAX_WRITE_ATTEMPTS = 5;
 // together cause one), and never within 5 minutes of the Account's last sync.
 export const CHECK_DELAY_MS = 5_000;
 export const CHECK_INTERVAL_MS = 5 * 60_000;
+const HOUR_MS = 60 * 60_000;
 
 const SOURCE_NAMES: Record<Source, string> = {
   gmail: 'Gmail',
@@ -102,6 +104,8 @@ export type SyncEngineOptions = {
   accessTokens: { request(account: string): Promise<AccessToken> };
   // The Source refused an Account's sign-in: the main process checks it and may mark it Reconnect.
   onSignInRefused?: (account: string) => void;
+  // What a GitHub Account watches (Settings → GitHub), read before each of its syncs.
+  watchOf?: (account: string, source: Source) => Promise<SyncWatch | null> | SyncWatch | null;
   now?: () => number;
   random?: () => number;
   log?: (message: string) => void;
@@ -183,6 +187,7 @@ export function createSyncEngine({
   adapters,
   accessTokens,
   onSignInRefused = () => {},
+  watchOf,
   now = Date.now,
   random = Math.random,
   log = (message) => console.warn(message),
@@ -243,7 +248,14 @@ export function createSyncEngine({
       problem: state.problem,
       outgoing: store.outgoing.counts(entry.account.id),
       ...(hasLightSync(lane) ? { alsoAfterOtherSources: checksAlongside(lane, state) } : {}),
+      ...(lane.adapter.hourlyLimits ? { hourUse: hourUse(entry, lane, lane.adapter.hourlyLimits) } : {}),
     };
+  }
+
+  // What the Account's syncs of a Source with hourly limits cost in the last hour, against them.
+  function hourUse(entry: Entry, lane: Lane, limits: { requests: number; complexity: number }) {
+    const used = store.syncState.usageSince(entry.account.id, lane.source, now() - HOUR_MS);
+    return { ...used, requestLimit: limits.requests, complexityLimit: limits.complexity };
   }
 
   function statuses() {
@@ -374,6 +386,8 @@ export function createSyncEngine({
     let mode: SyncMode = 'full';
     try {
       let cursor = startCursor;
+      const watch = watchOf ? await watchOf(account, source) : undefined;
+      if (signal.aborted || !isCurrent(entry, lane)) return;
       for (;;) {
         // Light only for Sources that have one, with a cursor to check from, off their cadence.
         mode = hasLightSync(lane) && cursor !== null && trigger !== 'scheduled' ? 'light' : 'full';
@@ -394,6 +408,8 @@ export function createSyncEngine({
             accessToken: () => accessTokens.request(account),
             recheck,
             excluded: store.chatSettings.excluded(account),
+            ...(watch !== undefined ? { watch } : {}),
+            catalog: store.syncState.sourceCatalog(account),
             saveCatalog(catalog) {
               if (!signal.aborted) store.syncState.saveCatalog(account, source, catalog, now());
             },

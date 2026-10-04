@@ -1,4 +1,11 @@
-import type { ItemDetail, ItemStatus, LinearCatalog, Source, SourceItem } from '@commander/domain';
+import type {
+  SourceCatalog as DomainSourceCatalog,
+  GitHubWatch,
+  ItemDetail,
+  ItemStatus,
+  Source,
+  SourceItem,
+} from '@commander/domain';
 
 // The one Source interface every Source adapter implements (Linear now; GitHub, Calendar, Email
 // and Teams later). An adapter only translates: it reads the Source and hands over Items, and
@@ -46,8 +53,15 @@ export type SyncRequest = {
   // Hands a page to the engine, which saves it through the Item store at once. Saving the same
   // Items twice is harmless, so a sync that fails half-way can simply run again.
   save(page: SyncPage): void;
-  // Hands over what the Source offers the detail pane's pickers, kept per Account (Two-way sync).
+  // Hands over what the Source keeps beside its Items, per Account: the detail pane's pickers (Linear,
+  // Two-way sync) or repo health (GitHub).
   saveCatalog?(catalog: SourceCatalog): void;
+  // The catalog the Account's last sync handed over, for Sources that update it bit by bit (GitHub's
+  // repo health, for the repos pushed to since).
+  catalog?: SourceCatalog | null;
+  // GitHub: what the Account watches (Settings → GitHub), with the logins GitHub last listed as orgs
+  // the Account reaches. null: nothing chosen yet, so nothing is watched.
+  watch?: SyncWatch | null;
   // External ids to read again on every sync whatever changed (the issues behind open Linear Todos,
   // as a reassignment may not show among what changed). Ones the Source no longer has go in `deleted`.
   recheck?: string[];
@@ -58,11 +72,16 @@ export type SyncRequest = {
   signal: AbortSignal;
 };
 
-// What a Source offers for its synced fields' pickers (Linear: each team's states, members, labels,
-// cycles and Linear projects).
-export type SourceCatalog = LinearCatalog;
+// What a Source keeps beside its Items (Linear: each team's states, members, labels, cycles and Linear
+// projects, for its synced fields' pickers; GitHub: each watched repo's health).
+export type SourceCatalog = DomainSourceCatalog;
 
-// What a Source reports a sync cost it, for comparing with its limits.
+// A GitHub Account's watch list as a sync reads it: the selection, and which owners are orgs.
+export type SyncWatch = { selection: GitHubWatch; orgs: readonly string[] };
+
+// What a Source reports a sync cost it, for comparing with its limits. Linear: every request, and the
+// complexity it reported. GitHub: the REST requests counted against its hourly limit (a 304 is free),
+// and the GraphQL points it charged.
 export type SyncCost = { requests: number; complexity: number | null };
 
 // A finished sync: the cursor the next sync starts from, and what it cost.
@@ -98,6 +117,9 @@ export type WriteResult = {
 export type SourceAdapter = {
   source: Source;
   cadence: Cadence;
+  // Sources with hourly limits (GitHub: 5,000 REST requests and 5,000 GraphQL points, shared with the
+  // User's other tools): Settings → Accounts shows the last hour's use against them.
+  hourlyLimits?: { requests: number; complexity: number };
   // Fetches what changed since `cursor` and hands it over page by page. Rejects with RateLimited,
   // SignInRefused, CursorExpired, or any other error (treated as passing, and retried with back-off).
   sync(request: SyncRequest): Promise<SyncResult>;

@@ -164,6 +164,47 @@ describe('as the User types', () => {
     });
   });
 
+  it('groups pull requests and GitHub issues under GitHub, tagged repo#number', () => {
+    const repo = { nodeId: 'R_api', owner: 'acme', name: 'api' };
+    const pull = item('pr-12', 'pull-request', 'Retry webhooks with back-off', {
+      source: 'github',
+      detail: {
+        kind: 'pull-request',
+        repo,
+        number: 12,
+        url: 'https://github.com/acme/api/pull/12',
+        nodeId: 'PR_12',
+        author: 'priya',
+        state: 'open',
+        draft: false,
+        baseBranch: 'main',
+        headBranch: 'retry',
+        labels: [],
+        assignees: [],
+        requestedReviewers: [],
+        reviews: [],
+        reviewDecision: null,
+        checks: null,
+        closingIssues: [],
+        additions: 1,
+        deletions: 1,
+        changedFiles: 1,
+        body: '',
+        createdAt: 0,
+        updatedAt: 0,
+        mergedAt: null,
+        closedAt: null,
+      },
+    });
+    const groups = paletteGroups(context('api#12', { hits: [hit(pull, null, true)], projects: [] }));
+
+    expect(groups.find((group) => group.title === 'GitHub')?.rows[0]).toMatchObject({
+      label: 'Retry webhooks with back-off',
+      tag: 'api#12',
+      hint: 'GitHub',
+    });
+  });
+
   it('lists the Projects the Core matched', () => {
     expect(shape('long', { hits: [], projects: [project] })[0]).toEqual(['Projects', ['Longtail']]);
   });

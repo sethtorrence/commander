@@ -55,19 +55,21 @@ const models = setUpModels(itemStore, {
 });
 // Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
 let updates: Updates | undefined;
-// Source sync: every Account on its cadence, writing through the Item store. An Account needing
-// reconnecting (or reconnected) is Ares's to mention in the next Update.
-const sync = setUpSync(itemStore, {
-  send: (message) => port.postMessage(message),
-  accessTokens,
-  onAccountsChanged: () => updates?.sweep(),
-});
 // Settings → GitHub: what each GitHub Account can reach and watches, kept through the Item store.
 const githubWatch = setUpGitHubWatch(itemStore, {
   send: (message) => port.postMessage(message),
   accessTokens,
   // The end-to-end tests may save GitHub Items as sync will.
   testHooks: process.argv.includes('--test-hooks'),
+});
+// Source sync: every Account on its cadence, writing through the Item store. GitHub sync reads what
+// each Account watches. An Account needing reconnecting (or reconnected) is Ares's to mention in the
+// next Update.
+const sync = setUpSync(itemStore, {
+  send: (message) => port.postMessage(message),
+  accessTokens,
+  githubWatch: (account, apiUrl) => githubWatch.forSync(account, apiUrl),
+  onAccountsChanged: () => updates?.sweep(),
 });
 // The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Notes.
 const markdownCopy = setUpMarkdownCopy({

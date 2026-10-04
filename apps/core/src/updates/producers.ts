@@ -43,6 +43,8 @@ const SECTION_OF_KIND: Partial<Record<ItemKind, UpdateSection>> = {
   event: 'calendar',
   'pull-request': 'github',
   'review-request': 'github',
+  'github-issue': 'github',
+  'github-release': 'github',
   chat: 'teams',
   'channel-post': 'teams',
   todo: 'todos',

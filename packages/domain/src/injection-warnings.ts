@@ -9,6 +9,8 @@ const NOUNS: Partial<Record<ItemKind, string>> = {
   'linear-issue': 'issue',
   'pull-request': 'pull request',
   'review-request': 'review request',
+  'github-issue': 'issue',
+  'github-release': 'release',
   chat: 'chat',
   'channel-post': 'post',
   // A Todo shows the mark of the Item behind it: a Linear issue, today.

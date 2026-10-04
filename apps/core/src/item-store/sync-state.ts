@@ -5,11 +5,13 @@ import {
   type LinearCatalog,
   linearCatalog,
   type Source,
+  type SourceCatalog,
   type SyncOutcomeKind,
   type SyncProblem,
   type SyncTrigger,
+  sourceCatalog,
 } from '@commander/domain';
-import { and, count, desc, eq, isNull, lt } from 'drizzle-orm';
+import { and, count, desc, eq, gte, isNull, lt, sum } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
 
@@ -58,9 +60,13 @@ export type SyncStateStore = {
   runs(account: string, limit?: number): SyncRun[];
   // How many of the Account's Items Commander holds, tombstones aside.
   countItems(source: Source, account: string): number;
-  // What the Account's Source offers the detail pane's pickers, as its last sync fetched it.
+  // What the Account's Source (Linear) offers the detail pane's pickers, as its last sync fetched it.
   catalog(account: string): LinearCatalog | null;
-  saveCatalog(account: string, source: Source, catalog: LinearCatalog, at: number): void;
+  // What the Account's Source keeps beside its Items, whichever Source it is (GitHub: repo health).
+  sourceCatalog(account: string): SourceCatalog | null;
+  saveCatalog(account: string, source: Source, catalog: SourceCatalog, at: number): void;
+  // What the Account's syncs of a Source cost since then: requests, and the Source's own measure.
+  usageSince(account: string, source: Source, since: number): { requests: number; complexity: number };
 };
 
 // Runs kept per Account: about two days at the default cadence.
@@ -144,8 +150,25 @@ export function openSyncStateStore(db: BetterSQLite3Database<typeof schema>): Sy
       return parsed.success ? parsed.data : null;
     },
 
+    sourceCatalog(account) {
+      const row = db.select().from(sourceCatalogs).where(eq(sourceCatalogs.account, account)).get();
+      const parsed = sourceCatalog.safeParse(row?.catalog);
+      return parsed.success ? parsed.data : null;
+    },
+
+    usageSince(account, source, since) {
+      const row = db
+        .select({ requests: sum(syncRuns.requests), complexity: sum(syncRuns.complexity) })
+        .from(syncRuns)
+        .where(
+          and(eq(syncRuns.account, account), eq(syncRuns.source, source), gte(syncRuns.startedAt, since)),
+        )
+        .get();
+      return { requests: Number(row?.requests ?? 0), complexity: Number(row?.complexity ?? 0) };
+    },
+
     saveCatalog(account, source, catalog, at) {
-      const values = { source, catalog: linearCatalog.parse(catalog), fetchedAt: at };
+      const values = { source, catalog: sourceCatalog.parse(catalog), fetchedAt: at };
       db.insert(sourceCatalogs)
         .values({ account, ...values })
         .onConflictDoUpdate({ target: sourceCatalogs.account, set: values })

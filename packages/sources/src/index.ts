@@ -1,5 +1,11 @@
 export { type GitHubApiOptions, readGitHubAccess, readGitHubOrg, readWorkedRepos } from './github/access';
 export {
+  createGitHubSource,
+  GITHUB_CADENCE,
+  GITHUB_HOURLY_LIMITS,
+  type GitHubSourceOptions,
+} from './github/github-source';
+export {
   type CalendarChoices,
   createGoogleCalendarSource,
   GOOGLE_CALENDAR_CADENCE,
