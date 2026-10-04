@@ -16,6 +16,12 @@ import { revealWhenPainted } from './reveal';
 import { setUpSecretStorage } from './secret-storage';
 import type { Secrets } from './secrets';
 import { windowWebPreferences } from './window-config';
+import {
+  frameBehaviour,
+  hyprlandCompositor,
+  installWindowControls,
+  windowFrameOptions,
+} from './window-frame';
 
 for (const [name, value] of launchSwitches(process.platform)) app.commandLine.appendSwitch(name, value);
 // Pasted images reach the window through attachment://, which must be declared before the app is ready.
@@ -24,9 +30,20 @@ const primary = claimSingleInstance();
 
 let window: BrowserWindow | null = null;
 
+const hyprland = !!process.env.HYPRLAND_INSTANCE_SIGNATURE;
+
+// Guessed from the launch switches and the session; readDisplayServer asks Hyprland when it can.
+const inferredDisplayServer = () =>
+  inferDisplayServer({
+    platform: process.platform,
+    ozonePlatform: app.commandLine.getSwitchValue('ozone-platform'),
+    ozoneHint: app.commandLine.getSwitchValue('ozone-platform-hint'),
+    waylandDisplay: process.env.WAYLAND_DISPLAY,
+  });
+
 async function readDisplayServer(): Promise<Pick<Diagnostics, 'displayServer' | 'displaySource'>> {
   // The window may not be mapped yet when the renderer first asks, so give Hyprland a moment.
-  for (let attempt = 0; process.env.HYPRLAND_INSTANCE_SIGNATURE && attempt < 10; attempt++) {
+  for (let attempt = 0; hyprland && attempt < 10; attempt++) {
     try {
       const { stdout } = await promisify(execFile)('hyprctl', ['clients', '-j']);
       const server = displayServerFromHyprland(stdout, process.pid);
@@ -36,13 +53,7 @@ async function readDisplayServer(): Promise<Pick<Diagnostics, 'displayServer' | 
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
-  const displayServer = inferDisplayServer({
-    platform: process.platform,
-    ozonePlatform: app.commandLine.getSwitchValue('ozone-platform'),
-    ozoneHint: app.commandLine.getSwitchValue('ozone-platform-hint'),
-    waylandDisplay: process.env.WAYLAND_DISPLAY,
-  });
-  return { displayServer, displaySource: 'inferred' };
+  return { displayServer: inferredDisplayServer(), displaySource: 'inferred' };
 }
 
 async function diagnostics(): Promise<Diagnostics> {
@@ -97,6 +108,8 @@ app.whenReady().then(() => {
     width: 1280,
     height: 800,
     title: 'Commander',
+    // No Electron or system frame: the header is the title bar and holds the window controls.
+    ...windowFrameOptions(process.platform),
     // Hidden until the first frame is painted in the User's theme (see reveal.ts); this colour
     // only shows while resizing.
     backgroundColor: '#141516',
@@ -104,6 +117,16 @@ app.whenReady().then(() => {
     webPreferences: windowWebPreferences(join(__dirname, '../preload/index.cjs')),
   });
   const created = window;
+  installWindowControls({
+    window: created,
+    ipc: ipcMain,
+    behaviour: frameBehaviour({
+      platform: process.platform,
+      displayServer: inferredDisplayServer(),
+      hyprland,
+    }),
+    compositor: hyprlandCompositor(process.pid),
+  });
   // Links in the window open in the system browser (read at call time, so the end-to-end tests can
   // stand in for it).
   keepLinksInBrowser(created.webContents, (url) => void shell.openExternal(url));

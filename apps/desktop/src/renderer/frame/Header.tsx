@@ -2,6 +2,7 @@ import { cn, Kbd, Led } from '@commander/ui';
 import type { Ref } from 'react';
 import { clockTime, dayOfYear, isoWeek, shortDate } from './calendar';
 import { useNow } from './use-now';
+import { useWindowFrame, WindowControls } from './WindowControls';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -88,11 +89,15 @@ export interface HeaderProps {
   slotRef?: Ref<HTMLDivElement>;
 }
 
-/** The Industrial header (.hdr): identity and clock, the date, the band meter, and Ares. */
+/**
+ * The Industrial header (.hdr): identity and clock, the date, the band meter, and Ares. It is also
+ * the window's title bar: drag it to move the window, and its right edge holds the window controls.
+ */
 export function Header({ eyebrow, title, bands = {}, onBand, ares, slotRef }: HeaderProps) {
   const now = useNow(1000);
+  const frame = useWindowFrame();
   return (
-    <header className="f-hdr">
+    <header className="f-hdr" data-window-controls={frame?.controls}>
       <div className="f-corner" aria-hidden="true" />
       <div className="f-id">
         <span className="f-mark" title="Commander">
@@ -139,6 +144,7 @@ export function Header({ eyebrow, title, bands = {}, onBand, ares, slotRef }: He
       </nav>
       <div className="f-slot" ref={slotRef} />
       <AresStatus {...ares} />
+      <WindowControls frame={frame} onControl={(control) => void window.commander.windowControl(control)} />
     </header>
   );
 }
