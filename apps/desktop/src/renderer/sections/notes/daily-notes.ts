@@ -97,6 +97,7 @@ export function dailyNotesIn(itemStore: ItemStoreClient): DailyNotes {
 
     async dayOfBlock(blockId) {
       const block = await itemStore({ op: 'get', itemId: blockId });
+      if (block?.item.detail?.kind === 'daily-note') return block.item.detail.day;
       if (block?.item.detail?.kind !== 'block') return null;
       const note = await itemStore({ op: 'get', itemId: block.item.detail.dailyNoteId });
       return note?.item.detail?.kind === 'daily-note' ? note.item.detail.day : null;

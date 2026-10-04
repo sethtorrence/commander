@@ -2,6 +2,7 @@ import { cn, toast } from '@commander/ui';
 import { useEffect, useRef } from 'react';
 import { requestReveal, useReveal } from '../../frame/reveal';
 import type { ItemChanges } from '../../item-store/changes';
+import { useCommands } from '../../palette/commands';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
@@ -75,6 +76,17 @@ export function TodosSheet({ todos, changes }: { todos: Todos; changes?: ItemCha
     state.select(todoId);
     setDetailOpen(true);
   };
+
+  // From the palette: start a new Todo (a Todo it found opens through useReveal above).
+  useCommands([
+    {
+      label: 'New Todo',
+      run: () => {
+        openSection('todos');
+        requestAnimationFrame(() => input.current?.focus());
+      },
+    },
+  ]);
 
   useShortcuts([
     { keys: 'j', label: 'Next Todo', run: () => state.moveSelection(1) },

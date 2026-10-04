@@ -1,5 +1,6 @@
 import { DrawingGrid, RulerX, RulerY } from '@commander/ui';
 import { type ComponentProps, useCallback, useMemo, useRef, useState } from 'react';
+import { PaletteHost } from '../palette/PaletteHost';
 import { ProjectsProvider, useProjects } from '../projects/context';
 import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
 import { ProjectPageTab } from '../projects/page/ProjectPageTab';
@@ -51,7 +52,8 @@ function FrameHeader({ page, ...props }: ComponentProps<typeof Header> & { page:
 /**
  * The app frame: the Industrial header, the rulers and exposed grid, the numbered notebook tabs,
  * and the open Section's sheet. Sections stay mounted while another is open, so they keep their
- * state. The frame's own keys: 1–9 open Sections, `,` Settings, `?` the cheat sheet. It also holds
+ * state. The frame's own keys: 1–9 open Sections; `,` Settings, `?` the cheat sheet, `Ctrl+K` and `/`
+ * the palette come with it (palette/PaletteHost.tsx). It also holds
  * the Projects and the one Project filter every Section shares (projects/context.tsx).
  */
 export function Frame() {
@@ -118,14 +120,6 @@ export function Frame() {
       group: 'Sections',
       run: () => openSection(section.id),
     })),
-    {
-      keys: '?',
-      label: 'Keyboard shortcuts',
-      group: 'General',
-      inDialogs: true,
-      run: () => setCheatSheet((shown) => !shown),
-    },
-    { keys: ',', label: 'Settings', group: 'General', run: openSettings },
     {
       keys: 'Escape',
       label: 'Leave the field',
@@ -204,6 +198,12 @@ export function Frame() {
         </section>
       </main>
       <CheatSheet open={cheatSheet} onOpenChange={setCheatSheet} />
+      <PaletteHost
+        current={open}
+        onOpenSection={openSection}
+        onOpenSettings={openSettings}
+        onToggleShortcuts={() => setCheatSheet((shown) => !shown)}
+      />
     </ProjectsProvider>
   );
 }
