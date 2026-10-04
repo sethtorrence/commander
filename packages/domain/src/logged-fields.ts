@@ -11,8 +11,10 @@ import type { ItemDetail, ItemKind } from './items';
 // left out of both states: undo restores a Chat's synced fields one by one, never its messages.
 //
 // Each field listed is an array of entries with an `id` (and a `createdAt`, for the newest). Other
-// Sources with large detail (long Linear descriptions or comment threads, email bodies) can list
-// theirs here once nothing they show from the log needs the full value.
+// Sources with large detail (long Linear descriptions or comment threads) can list theirs here once
+// nothing they show from the log needs the full value. Email bodies need no entry: they are never in
+// an email's detail, but kept beside its Item (email.ts, `emailBody`), so the log never sees them;
+// an email's detail (headers, snippet, labels) is small and logged whole.
 const SUMMARISED: Partial<Record<ItemKind, readonly string[]>> = {
   chat: ['messages'],
 };

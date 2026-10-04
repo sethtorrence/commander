@@ -1,0 +1,635 @@
+[
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/labels"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "labels": [
+          {
+            "id": "CHAT",
+            "name": "CHAT",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "SENT",
+            "name": "SENT",
+            "type": "system"
+          },
+          {
+            "id": "INBOX",
+            "name": "INBOX",
+            "type": "system"
+          },
+          {
+            "id": "IMPORTANT",
+            "name": "IMPORTANT",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "TRASH",
+            "name": "TRASH",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "DRAFT",
+            "name": "DRAFT",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "SPAM",
+            "name": "SPAM",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "CATEGORY_UPDATES",
+            "name": "CATEGORY_UPDATES",
+            "type": "system"
+          },
+          {
+            "id": "CATEGORY_PERSONAL",
+            "name": "CATEGORY_PERSONAL",
+            "type": "system"
+          },
+          {
+            "id": "STARRED",
+            "name": "STARRED",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "UNREAD",
+            "name": "UNREAD",
+            "type": "system"
+          },
+          {
+            "id": "Label_7",
+            "name": "Receipts",
+            "messageListVisibility": "show",
+            "labelListVisibility": "labelShow",
+            "type": "user"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/profile"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "emailAddress": "alex@gmail.test",
+        "messagesTotal": 18234,
+        "threadsTotal": 9120,
+        "historyId": "5000"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a4c3d4e5f6a704",
+            "threadId": "19a1f0c2d3e4f501"
+          },
+          {
+            "id": "19a3b2c3d4e5f603",
+            "threadId": "19a3b2c3d4e5f603"
+          },
+          {
+            "id": "19a5d4e5f6a7b8d1",
+            "threadId": "19a5d4e5f6a7b8d1"
+          }
+        ],
+        "nextPageToken": "06513918443255419581",
+        "resultSizeEstimate": 3
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&q=after:1788436800&pageToken=06513918443255419581"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a2a1b2c3d4e502",
+            "threadId": "19a1f0c2d3e4f501"
+          },
+          {
+            "id": "19a1f0c2d3e4f501",
+            "threadId": "19a1f0c2d3e4f501"
+          }
+        ],
+        "resultSizeEstimate": 2
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a4c3d4e5f6a704?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a4c3d4e5f6a704",
+        "threadId": "19a1f0c2d3e4f501",
+        "labelIds": ["UNREAD", "IMPORTANT", "CATEGORY_PERSONAL", "INBOX"],
+        "snippet": "Great, 19–21 Nov it is. I&#39;ll book the venue today.",
+        "sizeEstimate": 2167,
+        "historyId": "4990",
+        "internalDate": "1790956800000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/alternative",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@gmail.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 02 Oct 2026 16:00:00 +0000"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<CAJx=offsite-3@mail.northwind.test>"
+            },
+            {
+              "name": "In-Reply-To",
+              "value": "<CAKa=reply-2@mail.gmail.test>"
+            },
+            {
+              "name": "References",
+              "value": "<CAJx=offsite-1@mail.northwind.test> <CAKa=reply-2@mail.gmail.test>"
+            },
+            {
+              "name": "Subject",
+              "value": "Re: Q4 offsite dates"
+            },
+            {
+              "name": "From",
+              "value": "Dana Whitfield <dana@northwind.test>"
+            },
+            {
+              "name": "To",
+              "value": "Alex Kim <alex@gmail.test>"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/alternative; boundary=\"000000000000a1b2c3\""
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "partId": "0",
+              "mimeType": "text/plain",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 62,
+                "data": "R3JlYXQsIDE54oCTMjEgTm92IGl0IGlzLiBJJ2xsIGJvb2sgdGhlIHZlbnVlIHRvZGF5Lg0KDQpEYW5hDQo"
+              }
+            },
+            {
+              "partId": "1",
+              "mimeType": "text/html",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 109,
+                "data": "PGRpdiBkaXI9Imx0ciI-R3JlYXQsIDE54oCTMjEgTm92IGl0IGlzLiBJJiMzOTtsbCBib29rIHRoZSB2ZW51ZSB0b2RheS48ZGl2Pjxicj48L2Rpdj48ZGl2PkRhbmE8L2Rpdj48L2Rpdj4NCg"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a3b2c3d4e5f603?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a3b2c3d4e5f603",
+        "threadId": "19a3b2c3d4e5f603",
+        "labelIds": ["CATEGORY_UPDATES", "Label_7"],
+        "snippet": "Your order is on its way. Track your parcel.",
+        "sizeEstimate": 2381,
+        "historyId": "4990",
+        "internalDate": "1790865000000",
+        "payload": {
+          "partId": "",
+          "mimeType": "text/html",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@gmail.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Thu, 01 Oct 2026 14:30:00 +0000"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<0100019a.order-48213@email.shop.test>"
+            },
+            {
+              "name": "Subject",
+              "value": "Your order #48213 has shipped"
+            },
+            {
+              "name": "From",
+              "value": "Shop <orders@shop.test>"
+            },
+            {
+              "name": "To",
+              "value": "alex@gmail.test"
+            },
+            {
+              "name": "List-Unsubscribe",
+              "value": "<https://shop.test/unsubscribe/abc>"
+            },
+            {
+              "name": "List-Id",
+              "value": "Shop orders <orders.shop.test>"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/html; charset=\"UTF-8\""
+            },
+            {
+              "name": "Content-Transfer-Encoding",
+              "value": "base64"
+            }
+          ],
+          "body": {
+            "size": 381,
+            "data": "PCFET0NUWVBFIGh0bWw-PGh0bWw-PGhlYWQ-PG1ldGEgY2hhcnNldD0idXRmLTgiPjxzdHlsZT4uYnRue2JhY2tncm91bmQ6IzAwMH08L3N0eWxlPjwvaGVhZD48Ym9keT48dGFibGUgcm9sZT0icHJlc2VudGF0aW9uIj48dHI-PHRkPjxoMT5Zb3VyIG9yZGVyIGlzIG9uIGl0cyB3YXk8L2gxPjxwPk9yZGVyICM0ODIxMyBzaGlwcGVkIHRvZGF5LjwvcD48cD48YSBocmVmPSJodHRwczovL3Nob3AudGVzdC90cmFjay80ODIxMyIgY2xhc3M9ImJ0biI-VHJhY2sgeW91ciBwYXJjZWw8L2E-PC9wPjxpbWcgc3JjPSJodHRwczovL3Nob3AudGVzdC9vLzQ4MjEzLmdpZiIgd2lkdGg9IjEiIGhlaWdodD0iMSIgYWx0PSIiPjwvdGQ-PC90cj48L3RhYmxlPjwvYm9keT48L2h0bWw-"
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a5d4e5f6a7b8d1?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a5d4e5f6a7b8d1",
+        "threadId": "19a5d4e5f6a7b8d1",
+        "labelIds": ["DRAFT"],
+        "snippet": "Half-written",
+        "sizeEstimate": 2014,
+        "historyId": "4990",
+        "internalDate": "1790964000000",
+        "payload": {
+          "partId": "",
+          "mimeType": "text/plain",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@gmail.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Fri, 02 Oct 2026 18:00:00 +0000"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<CAKa=draft@mail.gmail.test>"
+            },
+            {
+              "name": "Subject",
+              "value": "Notes for Lee"
+            },
+            {
+              "name": "From",
+              "value": "Alex Kim <alex@gmail.test>"
+            },
+            {
+              "name": "To",
+              "value": "lee@northwind.test"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/plain; charset=\"UTF-8\""
+            }
+          ],
+          "body": {
+            "size": 14,
+            "data": "SGFsZi13cml0dGVuDQo"
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a2a1b2c3d4e502?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a2a1b2c3d4e502",
+        "threadId": "19a1f0c2d3e4f501",
+        "labelIds": ["SENT"],
+        "snippet": "19–21 Nov works best for me. On Mon, 28 Sept 2026 at 10:14, Dana Whitfield &lt;dana@northwind.test&gt; wrote:",
+        "sizeEstimate": 2377,
+        "historyId": "4990",
+        "internalDate": "1790668920000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/alternative",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@gmail.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Tue, 29 Sep 2026 08:02:00 +0000"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<CAKa=reply-2@mail.gmail.test>"
+            },
+            {
+              "name": "In-Reply-To",
+              "value": "<CAJx=offsite-1@mail.northwind.test>"
+            },
+            {
+              "name": "References",
+              "value": "<CAJx=offsite-1@mail.northwind.test>"
+            },
+            {
+              "name": "Subject",
+              "value": "Re: Q4 offsite dates"
+            },
+            {
+              "name": "From",
+              "value": "Alex Kim <alex@gmail.test>"
+            },
+            {
+              "name": "To",
+              "value": "Dana Whitfield <dana@northwind.test>"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/alternative; boundary=\"000000000000a1b2c3\""
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "partId": "0",
+              "mimeType": "text/plain",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 139,
+                "data": "MTnigJMyMSBOb3Ygd29ya3MgYmVzdCBmb3IgbWUuDQoNCk9uIE1vbiwgMjggU2VwdCAyMDI2IGF0IDEwOjE0LCBEYW5hIFdoaXRmaWVsZCA8ZGFuYUBub3J0aHdpbmQudGVzdD4gd3JvdGU6DQo-IFdoaWNoIGRhdGVzIHdvcmsgZm9yIHlvdT8NCg"
+              }
+            },
+            {
+              "partId": "1",
+              "mimeType": "text/html",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 242,
+                "data": "PGRpdiBkaXI9Imx0ciI-MTnigJMyMSBOb3Ygd29ya3MgYmVzdCBmb3IgbWUuPC9kaXY-PGJyPjxkaXYgY2xhc3M9ImdtYWlsX3F1b3RlIj5PbiBNb24sIDI4IFNlcHQgMjAyNiBhdCAxMDoxNCwgRGFuYSBXaGl0ZmllbGQgJmx0O2RhbmFAbm9ydGh3aW5kLnRlc3QmZ3Q7IHdyb3RlOjxicj48YmxvY2txdW90ZSBjbGFzcz0iZ21haWxfcXVvdGUiPldoaWNoIGRhdGVzIHdvcmsgZm9yIHlvdT88L2Jsb2NrcXVvdGU-PC9kaXY-DQo"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a1f0c2d3e4f501?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a1f0c2d3e4f501",
+        "threadId": "19a1f0c2d3e4f501",
+        "labelIds": ["IMPORTANT", "CATEGORY_PERSONAL", "INBOX"],
+        "snippet": "Hi Alex, which dates work for you for the Q4 offsite? We&#39;re choosing between 12–14 Nov and 19–21 Nov.",
+        "sizeEstimate": 2297,
+        "historyId": "4990",
+        "internalDate": "1790586840000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/alternative",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@gmail.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Mon, 28 Sep 2026 09:14:00 +0000"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<CAJx=offsite-1@mail.northwind.test>"
+            },
+            {
+              "name": "Subject",
+              "value": "Q4 offsite dates"
+            },
+            {
+              "name": "From",
+              "value": "Dana Whitfield <dana@northwind.test>"
+            },
+            {
+              "name": "To",
+              "value": "Alex Kim <alex@gmail.test>"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/alternative; boundary=\"000000000000a1b2c3\""
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "partId": "0",
+              "mimeType": "text/plain",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 118,
+                "data": "SGkgQWxleCwNCg0KV2hpY2ggZGF0ZXMgd29yayBmb3IgeW91IGZvciB0aGUgUTQgb2Zmc2l0ZT8gV2UncmUgY2hvb3NpbmcgYmV0d2VlbiAxMuKAkzE0IE5vdiBhbmQgMTnigJMyMSBOb3YuDQoNCkRhbmENCg"
+              }
+            },
+            {
+              "partId": "1",
+              "mimeType": "text/html",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 187,
+                "data": "PGRpdiBkaXI9Imx0ciI-SGkgQWxleCw8ZGl2Pjxicj48L2Rpdj48ZGl2PldoaWNoIGRhdGVzIHdvcmsgZm9yIHlvdSBmb3IgdGhlIFE0IG9mZnNpdGU_IFdlJiMzOTtyZSBjaG9vc2luZyBiZXR3ZWVuIDEy4oCTMTQgTm92IGFuZCAxOeKAkzIxIE5vdi48L2Rpdj48ZGl2Pjxicj48L2Rpdj48ZGl2PkRhbmE8L2Rpdj48L2Rpdj4NCg"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/history?startHistoryId=5000&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "historyId": "5000"
+      }
+    }
+  }
+]

@@ -57,6 +57,7 @@ export const accountsRequest = z.union([
     source,
     enabled: z.boolean(),
   }),
+  // `source`: just that Source of the Account (opening Email syncs only Gmail); otherwise all.
   z.object({ op: z.literal('sync-now'), accountId: z.string().min(1), source: source.optional() }),
   z.object({
     op: z.literal('set-sync-cadence'),

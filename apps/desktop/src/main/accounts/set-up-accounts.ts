@@ -108,7 +108,7 @@ export function setUpAccounts({
 
   // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
   // reports a sign-in a Source refused, which may mean the Account needs reconnecting. Sources the
-  // Core can't sync yet (Gmail, Outlook and Outlook Calendar, for now) are passed on and left alone
+  // Core can't sync yet (Outlook and Outlook Calendar, for now) are passed on and left alone
   // there.
   const sync = createCoreSyncChannel({
     send: sendToCore,
@@ -117,10 +117,20 @@ export function setUpAccounts({
       graph: microsoftSettings.graphUrl,
       googleCalendar: googleSettings.calendarUrl,
       github: githubSettings.apiUrl,
+      gmail: googleSettings.gmailUrl,
     },
     onRefused: (account) => void accounts.reportRefused(account),
   });
-  const syncAccounts = async () => sync.setAccounts(await accounts.list());
+  // Each Account with when it was connected (Gmail downloads the 30 days before).
+  const syncAccounts = async () => {
+    const connected = new Map((await shared.store.list()).map((record) => [record.id, record.connectedAt]));
+    sync.setAccounts(
+      (await accounts.list()).map((account) => ({
+        ...account,
+        connectedAt: connected.get(account.id) ?? null,
+      })),
+    );
+  };
   void syncAccounts();
   // Accounts connected before Commander kept who signed in find out now.
   void accounts.identifyUsers();

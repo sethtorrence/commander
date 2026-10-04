@@ -10,6 +10,13 @@ import {
 } from './calendar';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import {
+  type EmailThread,
+  type EmailThreadList,
+  emailThread,
+  emailThreadList,
+  emailThreadQuery,
+} from './email-threads';
+import {
   type ActivityEntry,
   activityEntry,
   activityQuery,
@@ -146,6 +153,10 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // Settings → Calendar: the opt-in heads-up 2 minutes before each meeting (off by default).
   z.object({ op: z.literal('calendar-settings') }),
   z.object({ op: z.literal('save-calendar-settings'), settings: calendarSettings }),
+  // The Email Section (email-threads.ts): the inbox as threads, and one thread's messages with their
+  // plain-text bodies.
+  z.object({ op: z.literal('email-threads'), query: emailThreadQuery.default({}) }),
+  z.object({ op: z.literal('email-thread'), account: z.string().min(1), threadKey: z.string().min(1) }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -198,6 +209,8 @@ export type ItemStoreResults = {
   'set-calendar-enabled': CalendarSummary[];
   'calendar-settings': CalendarSettings;
   'save-calendar-settings': CalendarSettings;
+  'email-threads': EmailThreadList;
+  'email-thread': EmailThread | null;
 };
 
 export const itemStoreResult = {
@@ -239,6 +252,8 @@ export const itemStoreResult = {
   'set-calendar-enabled': z.array(calendarSummary),
   'calendar-settings': calendarSettings,
   'save-calendar-settings': calendarSettings,
+  'email-threads': emailThreadList,
+  'email-thread': emailThread.nullable(),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

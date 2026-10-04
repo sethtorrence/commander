@@ -444,6 +444,7 @@ describe('Settings → Accounts requests for a Google Account', () => {
           tokenUrl: google.tokenUrl,
           userinfoUrl: google.userinfoUrl,
           calendarUrl: google.calendarUrl,
+          gmailUrl: google.gmailUrl,
         },
         secrets,
         store: createAccountStore(join(dir, 'accounts.json')),

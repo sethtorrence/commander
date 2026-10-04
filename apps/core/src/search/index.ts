@@ -35,13 +35,36 @@ export type SearchSources = {
   load: (itemIds: string[]) => Item[];
   // The Projects offered for filing (not archived), in their order.
   projects: () => Project[];
+  // An email's body text, kept beside its Item (null when none is kept).
+  bodyText?: (itemId: string) => string | null;
 };
+
+const sentAtOf = (item: Item) => (item.detail?.kind === 'email' ? item.detail.sentAt : null);
+
+/**
+ * Emails newest first: each email hit keeps a place an email had in the ranked list, but they are
+ * dealt into those places by date (the palette groups results by kind, so its Email group reads
+ * newest first, as mail search does). Other hits stay where they are.
+ */
+function emailsNewestFirst(hits: SearchHit[]): SearchHit[] {
+  const emails = hits.filter((hit) => sentAtOf(hit.item) !== null && !hit.exact);
+  const byDate = [...emails].sort((a, b) => (sentAtOf(b.item) ?? 0) - (sentAtOf(a.item) ?? 0));
+  let next = 0;
+  return hits.map((hit) => (sentAtOf(hit.item) !== null && !hit.exact ? (byDate[next++] as SearchHit) : hit));
+}
 
 const DEFAULT_LIMIT = 50;
 const WORD = /[\p{L}\p{N}]+/gu;
 
 export function openSearch(sqlite: Database.Database, sources: SearchSources): SearchIndex {
-  const words = openWordIndex(sqlite, sources.allItems);
+  // An email is indexed with its body text, which the Item doesn't carry.
+  const withBody = (item: SearchableItem): SearchableItem =>
+    item.kind === 'email' && item.bodyText === undefined
+      ? { ...item, bodyText: sources.bodyText?.(item.id) ?? null }
+      : item;
+  const words = openWordIndex(sqlite, function* () {
+    for (const page of sources.allItems()) yield page.map(withBody);
+  });
   const retrievers: Retriever[] = [words];
 
   // The calendar day each Block or Daily Note belongs to, for opening it in Notes.
@@ -79,7 +102,7 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
   }
 
   return {
-    put: (item) => words.put(item),
+    put: (item) => words.put(withBody(item)),
 
     query(input) {
       const { limit = DEFAULT_LIMIT, ...query } = searchQuery.parse(input);
@@ -103,7 +126,7 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
         query.accounts !== undefined ||
         query.from !== undefined ||
         query.to !== undefined;
-      return { hits, projects: narrowed ? [] : matchingProjects(query.text) };
+      return { hits: emailsNewestFirst(hits), projects: narrowed ? [] : matchingProjects(query.text) };
     },
   };
 }

@@ -183,6 +183,13 @@
       "when": 1791103074040,
       "tag": "0025_teams_replies",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1791104644549,
+      "tag": "0026_email_sync",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,415 @@
+{
+  "incremental": [
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/history?startHistoryId=5000&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "history": [
+            {
+              "id": "5001",
+              "messages": [
+                {
+                  "id": "19a6e5f6a7b8c905",
+                  "threadId": "19a6e5f6a7b8c905",
+                  "labelIds": ["UNREAD", "CATEGORY_PERSONAL", "INBOX"]
+                }
+              ],
+              "messagesAdded": [
+                {
+                  "message": {
+                    "id": "19a6e5f6a7b8c905",
+                    "threadId": "19a6e5f6a7b8c905",
+                    "labelIds": ["UNREAD", "CATEGORY_PERSONAL", "INBOX"]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "5002",
+              "messages": [
+                {
+                  "id": "19a4c3d4e5f6a704",
+                  "threadId": "19a1f0c2d3e4f501",
+                  "labelIds": ["IMPORTANT", "CATEGORY_PERSONAL", "INBOX"]
+                }
+              ],
+              "labelsRemoved": [
+                {
+                  "message": {
+                    "id": "19a4c3d4e5f6a704",
+                    "threadId": "19a1f0c2d3e4f501",
+                    "labelIds": ["IMPORTANT", "CATEGORY_PERSONAL", "INBOX"]
+                  },
+                  "labelIds": ["UNREAD"]
+                }
+              ]
+            },
+            {
+              "id": "5003",
+              "messages": [
+                {
+                  "id": "19a1f0c2d3e4f501",
+                  "threadId": "19a1f0c2d3e4f501",
+                  "labelIds": ["IMPORTANT", "CATEGORY_PERSONAL", "INBOX", "STARRED"]
+                }
+              ],
+              "labelsAdded": [
+                {
+                  "message": {
+                    "id": "19a1f0c2d3e4f501",
+                    "threadId": "19a1f0c2d3e4f501",
+                    "labelIds": ["IMPORTANT", "CATEGORY_PERSONAL", "INBOX", "STARRED"]
+                  },
+                  "labelIds": ["STARRED"]
+                }
+              ]
+            },
+            {
+              "id": "5004",
+              "messages": [
+                {
+                  "id": "19a1f0c2d3e4f501",
+                  "threadId": "19a1f0c2d3e4f501",
+                  "labelIds": ["IMPORTANT", "CATEGORY_PERSONAL", "STARRED"]
+                }
+              ],
+              "labelsRemoved": [
+                {
+                  "message": {
+                    "id": "19a1f0c2d3e4f501",
+                    "threadId": "19a1f0c2d3e4f501",
+                    "labelIds": ["IMPORTANT", "CATEGORY_PERSONAL", "STARRED"]
+                  },
+                  "labelIds": ["INBOX"]
+                }
+              ]
+            },
+            {
+              "id": "5005",
+              "messages": [
+                {
+                  "id": "19a3b2c3d4e5f603",
+                  "threadId": "19a3b2c3d4e5f603"
+                }
+              ],
+              "messagesDeleted": [
+                {
+                  "message": {
+                    "id": "19a3b2c3d4e5f603",
+                    "threadId": "19a3b2c3d4e5f603"
+                  }
+                }
+              ]
+            }
+          ],
+          "nextPageToken": "15022417355271389302",
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/history?startHistoryId=5000&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved&pageToken=15022417355271389302"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "history": [
+            {
+              "id": "5006",
+              "messages": [
+                {
+                  "id": "19a2a1b2c3d4e502",
+                  "threadId": "19a1f0c2d3e4f501",
+                  "labelIds": ["SENT", "TRASH"]
+                }
+              ],
+              "labelsAdded": [
+                {
+                  "message": {
+                    "id": "19a2a1b2c3d4e502",
+                    "threadId": "19a1f0c2d3e4f501",
+                    "labelIds": ["SENT", "TRASH"]
+                  },
+                  "labelIds": ["TRASH"]
+                }
+              ]
+            },
+            {
+              "id": "5007",
+              "messages": [
+                {
+                  "id": "19a7f6a7b8c9d0d2",
+                  "threadId": "19a7f6a7b8c9d0d2",
+                  "labelIds": ["DRAFT"]
+                }
+              ],
+              "messagesAdded": [
+                {
+                  "message": {
+                    "id": "19a7f6a7b8c9d0d2",
+                    "threadId": "19a7f6a7b8c9d0d2",
+                    "labelIds": ["DRAFT"]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "5008",
+              "messages": [
+                {
+                  "id": "19a7f6a7b8c9d0e6",
+                  "threadId": "19a7f6a7b8c9d0e6",
+                  "labelIds": ["INBOX", "UNREAD"]
+                }
+              ],
+              "messagesAdded": [
+                {
+                  "message": {
+                    "id": "19a7f6a7b8c9d0e6",
+                    "threadId": "19a7f6a7b8c9d0e6",
+                    "labelIds": ["INBOX", "UNREAD"]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "5009",
+              "messages": [
+                {
+                  "id": "19a7f6a7b8c9d0e6",
+                  "threadId": "19a7f6a7b8c9d0e6"
+                }
+              ],
+              "messagesDeleted": [
+                {
+                  "message": {
+                    "id": "19a7f6a7b8c9d0e6",
+                    "threadId": "19a7f6a7b8c9d0e6"
+                  }
+                }
+              ]
+            }
+          ],
+          "historyId": "5009"
+        }
+      }
+    },
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/labels"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "labels": [
+            {
+              "id": "CHAT",
+              "name": "CHAT",
+              "messageListVisibility": "hide",
+              "labelListVisibility": "labelHide",
+              "type": "system"
+            },
+            {
+              "id": "SENT",
+              "name": "SENT",
+              "type": "system"
+            },
+            {
+              "id": "INBOX",
+              "name": "INBOX",
+              "type": "system"
+            },
+            {
+              "id": "IMPORTANT",
+              "name": "IMPORTANT",
+              "messageListVisibility": "hide",
+              "labelListVisibility": "labelHide",
+              "type": "system"
+            },
+            {
+              "id": "TRASH",
+              "name": "TRASH",
+              "messageListVisibility": "hide",
+              "labelListVisibility": "labelHide",
+              "type": "system"
+            },
+            {
+              "id": "DRAFT",
+              "name": "DRAFT",
+              "messageListVisibility": "hide",
+              "labelListVisibility": "labelHide",
+              "type": "system"
+            },
+            {
+              "id": "SPAM",
+              "name": "SPAM",
+              "messageListVisibility": "hide",
+              "labelListVisibility": "labelHide",
+              "type": "system"
+            },
+            {
+              "id": "CATEGORY_UPDATES",
+              "name": "CATEGORY_UPDATES",
+              "type": "system"
+            },
+            {
+              "id": "CATEGORY_PERSONAL",
+              "name": "CATEGORY_PERSONAL",
+              "type": "system"
+            },
+            {
+              "id": "STARRED",
+              "name": "STARRED",
+              "messageListVisibility": "hide",
+              "labelListVisibility": "labelHide",
+              "type": "system"
+            },
+            {
+              "id": "UNREAD",
+              "name": "UNREAD",
+              "type": "system"
+            },
+            {
+              "id": "Label_7",
+              "name": "Receipts",
+              "messageListVisibility": "show",
+              "labelListVisibility": "labelShow",
+              "type": "user"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/messages/19a6e5f6a7b8c905?format=full"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "19a6e5f6a7b8c905",
+          "threadId": "19a6e5f6a7b8c905",
+          "labelIds": ["UNREAD", "CATEGORY_PERSONAL", "INBOX"],
+          "snippet": "The staging certificate expires on Friday. Can you renew it?",
+          "sizeEstimate": 2158,
+          "historyId": "4990",
+          "internalDate": "1791026400000",
+          "payload": {
+            "partId": "",
+            "mimeType": "multipart/alternative",
+            "filename": "",
+            "headers": [
+              {
+                "name": "Delivered-To",
+                "value": "alex@gmail.test"
+              },
+              {
+                "name": "MIME-Version",
+                "value": "1.0"
+              },
+              {
+                "name": "Date",
+                "value": "Sat, 03 Oct 2026 11:20:00 +0000"
+              },
+              {
+                "name": "Message-ID",
+                "value": "<CAPr=cert-1@mail.contoso.test>"
+              },
+              {
+                "name": "Subject",
+                "value": "Staging certificate"
+              },
+              {
+                "name": "From",
+                "value": "Priya Patel <priya@contoso.test>"
+              },
+              {
+                "name": "To",
+                "value": "Alex Kim <alex@gmail.test>"
+              },
+              {
+                "name": "Content-Type",
+                "value": "multipart/alternative; boundary=\"000000000000a1b2c3\""
+              }
+            ],
+            "body": {
+              "size": 0
+            },
+            "parts": [
+              {
+                "partId": "0",
+                "mimeType": "text/plain",
+                "filename": "",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/plain; charset=\"UTF-8\""
+                  },
+                  {
+                    "name": "Content-Transfer-Encoding",
+                    "value": "quoted-printable"
+                  }
+                ],
+                "body": {
+                  "size": 71,
+                  "data": "VGhlIHN0YWdpbmcgY2VydGlmaWNhdGUgZXhwaXJlcyBvbiBGcmlkYXkuIENhbiB5b3UgcmVuZXcgaXQ_DQoNClByaXlhDQo"
+                }
+              },
+              {
+                "partId": "1",
+                "mimeType": "text/html",
+                "filename": "",
+                "headers": [
+                  {
+                    "name": "Content-Type",
+                    "value": "text/html; charset=\"UTF-8\""
+                  },
+                  {
+                    "name": "Content-Transfer-Encoding",
+                    "value": "quoted-printable"
+                  }
+                ],
+                "body": {
+                  "size": 87,
+                  "data": "PGRpdj5UaGUgc3RhZ2luZyBjZXJ0aWZpY2F0ZSBleHBpcmVzIG9uIEZyaWRheS4gQ2FuIHlvdSByZW5ldyBpdD88L2Rpdj48ZGl2PlByaXlhPC9kaXY-"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "quiet": [
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/history?startHistoryId=5009&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "historyId": "5009"
+        }
+      }
+    }
+  ]
+}

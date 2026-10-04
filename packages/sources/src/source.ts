@@ -35,6 +35,9 @@ export type StoredItem = {
   detail: ItemDetail | null;
 };
 
+// How far a long sync has got: Items done of about how many.
+export type SyncProgress = { done: number; total: number };
+
 // One page of a sync: Items new or changed at the Source, and the external ids it deleted.
 export type SyncPage = { items: SourceItem[]; deleted: string[] };
 
@@ -45,9 +48,20 @@ export type SyncRequest = {
   mode: SyncMode;
   // Who the User is at the Source in the Account (their Teams user id), when known.
   me?: string | null;
+  // When the User connected the Account (Gmail downloads the 30 days before it), when known.
+  connectedAt?: number | null;
   // The Account's Items Commander holds with these external ids (tombstones aside), as last saved:
   // for Sources that fetch only part of an Item when it changes (a Chat's new messages).
   stored?(externalIds: string[]): StoredItem[];
+  // The external ids of every live Item Commander holds from this Account and Source: for a re-sync
+  // to tell what the Source no longer has (Gmail, after its history expired).
+  heldIds?(): string[];
+  // Saves where a long sync has got to (Gmail's first download), so that if it stops (a restart, a
+  // rate limit) the next sync is handed this as its cursor and carries on from there.
+  checkpoint?(cursor: unknown): void;
+  // How far a long sync has got, for the User ("Downloading 30 days: 1,240 of ~3,000"); null once
+  // there is nothing to report.
+  progress?(progress: SyncProgress | null): void;
   // A current access token. Ask for it per request rather than holding on to it.
   accessToken(): Promise<AccessToken>;
   // Hands a page to the engine, which saves it through the Item store at once. Saving the same

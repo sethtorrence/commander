@@ -17,11 +17,13 @@ import {
 import {
   type CalendarChoices,
   createGitHubSource,
+  createGmailSource,
   createGoogleCalendarSource,
   createLinearSource,
   createOutlookCalendarSource,
   createTeamsSource,
   type GitHubSourceOptions,
+  type GmailSourceOptions,
   type GoogleCalendarSourceOptions,
   type LinearSourceOptions,
   type OutlookCalendarSourceOptions,
@@ -60,6 +62,8 @@ export type SyncOptions = {
   // What a GitHub Account watches, for its syncs (Settings → GitHub works out the first selection
   // when there is none yet, asking GitHub at `apiUrl`).
   githubWatch?: (account: string, apiUrl: string) => Promise<SyncWatch | null>;
+  // For tests: stands in for the Gmail adapter.
+  gmailSource?: (options: GmailSourceOptions) => SourceAdapter;
   random?: () => number;
   log?: (message: string) => void;
   // The Accounts changed, or whether one needs reconnecting did.
@@ -97,6 +101,7 @@ export function setUpSync(
     outlookCalendarSource = createOutlookCalendarSource,
     githubSource = createGitHubSource,
     githubWatch,
+    gmailSource = createGmailSource,
     random,
     log = (message) => console.warn(message),
     onAccountsChanged,
@@ -107,6 +112,7 @@ export function setUpSync(
   let graphUrl = 'https://graph.microsoft.com/v1.0';
   let googleCalendarUrl = 'https://www.googleapis.com/calendar/v3';
   let githubApiUrl = 'https://api.github.com';
+  let gmailUrl = 'https://gmail.googleapis.com';
   const engine: SyncEngine = createSyncEngine({
     store,
     adapters: [
@@ -122,6 +128,7 @@ export function setUpSync(
         calendars: calendarChoicesIn(store, 'outlook-calendar'),
       }),
       githubSource({ apiUrl: () => githubApiUrl }),
+      gmailSource({ gmailUrl: () => gmailUrl }),
     ],
     accessTokens,
     watchOf: (account, source) =>
@@ -175,6 +182,7 @@ export function setUpSync(
           if (parsed.data.endpoints.graph) graphUrl = parsed.data.endpoints.graph;
           if (parsed.data.endpoints.googleCalendar) googleCalendarUrl = parsed.data.endpoints.googleCalendar;
           if (parsed.data.endpoints.github) githubApiUrl = parsed.data.endpoints.github;
+          if (parsed.data.endpoints.gmail) gmailUrl = parsed.data.endpoints.gmail;
           listed = parsed.data.accounts;
           engine.setAccounts(parsed.data.accounts);
           accountsMayHaveChanged();

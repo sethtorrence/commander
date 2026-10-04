@@ -112,6 +112,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
             { by: { kind: 'user' } },
           ),
         };
+      case 'email-threads':
+        return { ok: true, result: store.emailThreads(request.query) };
+      case 'email-thread':
+        return { ok: true, result: store.emailThread(request.account, request.threadKey) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

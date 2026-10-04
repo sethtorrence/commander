@@ -172,6 +172,8 @@ export type AccountSyncStatus = {
   alsoAfterOtherSources?: boolean;
   // Sources with hourly limits only (GitHub): the last hour's use, against the limits.
   hourUse?: { requests: number; complexity: number; requestLimit: number; complexityLimit: number };
+  // How far a long sync has got (Gmail's 30-day download), while it runs; null otherwise.
+  progress?: { done: number; total: number } | null;
 };
 export type AccountsState = {
   accounts: AccountSummary[];

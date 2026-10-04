@@ -12,6 +12,8 @@ export type GoogleConfig = {
   userinfoUrl: string;
   // The Google Calendar API's base, for Google Calendar sync (in the Core).
   calendarUrl: string;
+  // The Gmail API's base, for Gmail sync.
+  gmailUrl: string;
 };
 
 export const GOOGLE_ENDPOINTS = {
@@ -19,4 +21,5 @@ export const GOOGLE_ENDPOINTS = {
   tokenUrl: 'https://oauth2.googleapis.com/token',
   userinfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
   calendarUrl: 'https://www.googleapis.com/calendar/v3',
+  gmailUrl: 'https://gmail.googleapis.com',
 } as const;

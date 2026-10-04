@@ -28,8 +28,9 @@ export type InjectionWarningStore = {
 type Warning = { itemId: string; why: string; causedBy: CausedBy | null; after: unknown };
 
 export type InjectionWarnings = InjectionWarningStore & {
-  // Checks an Item just saved from its Source. `causedBy` is the save's activity entry.
-  check(item: Item, at: number, causedBy: number | null): void;
+  // Checks an Item just saved from its Source. `causedBy` is the save's activity entry; `extra`, text
+  // it holds outside its detail (an email's body).
+  check(item: Item, at: number, causedBy: number | null, extra?: string): void;
   // When each of these Items was marked.
   marked(itemIds: readonly string[]): Map<string, number>;
 };
@@ -80,8 +81,8 @@ export function injectionWarningsIn(
   }
 
   return {
-    check(item, at, causedBy) {
-      const words = wordsOf(item);
+    check(item, at, causedBy, extra) {
+      const words = extra ? `${wordsOf(item)}\n${extra}` : wordsOf(item);
       const found = findSteering(words);
       const row = rowOf(item.id);
       if (!found.length) {

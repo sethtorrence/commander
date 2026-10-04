@@ -246,6 +246,7 @@ describe('the Google sign-in settings', () => {
       tokenUrl: 'https://oauth2.googleapis.com/token',
       userinfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo',
       calendarUrl: 'https://www.googleapis.com/calendar/v3',
+      gmailUrl: 'https://gmail.googleapis.com',
     });
   });
 
@@ -257,13 +258,18 @@ describe('the Google sign-in settings', () => {
       tokenUrl: 'http://127.0.0.1:50000/token',
       userinfoUrl: 'http://127.0.0.1:50000/v1/userinfo',
     };
-    // The Calendar API is the fake's own unless the test names another fake.
+    // The Calendar API and Gmail are the fake's own unless the test names other fakes.
     expect(googleConfig(example(), { COMMANDER_TEST_GOOGLE: JSON.stringify(fake) })).toEqual({
       ...fake,
       calendarUrl: 'http://127.0.0.1:50000/calendar/v3',
+      gmailUrl: 'http://127.0.0.1:50000',
     });
-    const calendar = { ...fake, calendarUrl: 'http://127.0.0.1:50001/calendar/v3' };
-    expect(googleConfig(example(), { COMMANDER_TEST_GOOGLE: JSON.stringify(calendar) })).toEqual(calendar);
+    const named = {
+      ...fake,
+      calendarUrl: 'http://127.0.0.1:50001/calendar/v3',
+      gmailUrl: 'http://127.0.0.1:50001',
+    };
+    expect(googleConfig(example(), { COMMANDER_TEST_GOOGLE: JSON.stringify(named) })).toEqual(named);
     expect(() =>
       googleConfig(example(), {
         COMMANDER_TEST_GOOGLE: JSON.stringify({
@@ -275,6 +281,10 @@ describe('the Google sign-in settings', () => {
 
     const elsewhere = { ...fake, tokenUrl: 'https://oauth2.googleapis.com/token' };
     expect(() => googleConfig(example(), { COMMANDER_TEST_GOOGLE: JSON.stringify(elsewhere) })).toThrow(
+      /loopback/,
+    );
+    const realGmail = { ...fake, gmailUrl: 'https://gmail.googleapis.com' };
+    expect(() => googleConfig(example(), { COMMANDER_TEST_GOOGLE: JSON.stringify(realGmail) })).toThrow(
       /loopback/,
     );
   });

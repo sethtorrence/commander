@@ -34,6 +34,18 @@ describe('describing an Account’s sync', () => {
     );
   });
 
+  it('says how far a first email download has got', () => {
+    const gmail: AccountSyncStatus = {
+      ...idle,
+      source: 'gmail',
+      activity: 'syncing',
+      lastSyncedAt: null,
+      progress: { done: 1240, total: 3000 },
+    };
+
+    expect(describeSync(gmail, now).next).toBe('Downloading 30 days: 1,240 of ~3,000');
+  });
+
   it('says so before the first sync, and while syncing', () => {
     expect(
       describeSync({ ...idle, activity: 'syncing', lastSyncedAt: null, itemCount: 0 }, now),
