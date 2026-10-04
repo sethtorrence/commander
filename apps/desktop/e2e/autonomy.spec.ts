@@ -2,6 +2,7 @@ import type { AutonomyTestRequest, Proposal } from '@commander/domain';
 import { type ElectronApplication, expect, type Page, test } from '@playwright/test';
 import { openSettings } from './frame';
 import { launchCommander } from './launch-commander';
+import { pickOption } from './pick-option';
 
 // Ares's jobs arrive later, so these tests stand in for them: with COMMANDER_TEST_HOOKS=1 the main
 // process exposes a hook (never reachable from the window) that registers actions and hands
@@ -85,9 +86,7 @@ const todoTitles = (page: Page) =>
   );
 
 async function choose(window: Page, cell: string, level: string) {
-  await window.getByRole('combobox', { name: cell, exact: true }).click();
-  await window.getByRole('option', { name: level, exact: true }).click();
-  await expect(window.getByRole('combobox', { name: cell, exact: true })).toHaveText(level);
+  await pickOption(window.getByRole('combobox', { name: cell, exact: true }), level);
 }
 
 test('the Autonomy grid greys out levels above the hard limits, lists registered actions and keeps its choices', async () => {

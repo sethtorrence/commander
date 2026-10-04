@@ -4,6 +4,7 @@ import { type ElectronApplication, expect, type Locator, type Page, test } from 
 import { ACME, type FakeLinear, startFakeLinear, viewerOf } from '../src/main/linear/fake-linear-server';
 import { openSettings, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
+import { pickOption } from './pick-option';
 
 // The Linear Section end to end. Issues come from a fake Linear on this machine (never the real
 // one) through Linear sync, which saves them with saveFromSource: switching views, filtering,
@@ -124,15 +125,9 @@ async function connect(window: Page) {
 
 const rows = (section: Locator) => section.getByTestId('linear-issue');
 
-// Picks a choice from one of the Linear filters. Pop-ups close when the window loses focus, which
-// another window on the desktop can take mid-test, so the pick is tried again until it holds.
+// Picks a choice from one of the Linear filters (retried: pop-ups close when focus is lost).
 async function choose(section: Locator, filter: string, option: RegExp, shows: RegExp) {
-  const combobox = section.getByRole('combobox', { name: filter });
-  await expect(async () => {
-    if ((await combobox.getAttribute('aria-expanded')) !== 'true') await combobox.click();
-    await section.page().getByRole('option', { name: option }).click({ timeout: 2000 });
-    await expect(combobox).toHaveText(shows, { timeout: 1000 });
-  }).toPass({ timeout: 15_000 });
+  await pickOption(section.getByRole('combobox', { name: filter }), option, shows);
 }
 
 test('switch views, filter, open an issue and file it into a Project', async () => {

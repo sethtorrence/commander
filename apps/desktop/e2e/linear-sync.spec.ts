@@ -6,6 +6,7 @@ import { expect, type Locator, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear } from '../src/main/linear/fake-linear-server';
 import { openSettings } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
+import { pickOption } from './pick-option';
 
 // Linear sync end to end, against a fake Linear on this machine (never the real one): issues arrive
 // as Items, Settings → Accounts shows the sync, Sync now picks up changes, the cadence setting
@@ -138,9 +139,7 @@ test('the sync cadence can be set to 30 or 60 minutes, and stays set after a res
   await connectWithKey(panel);
   await expect(panel.getByTestId('account-synced')).toHaveText(/2 issues/);
 
-  await panel.getByRole('combobox', { name: 'How often to sync Acme' }).click();
-  await window.getByRole('option', { name: 'Every 30 min' }).click();
-  await expect(panel.getByRole('combobox', { name: 'How often to sync Acme' })).toHaveText('Every 30 min');
+  await pickOption(panel.getByRole('combobox', { name: 'How often to sync Acme' }), 'Every 30 min');
   await first.app.close();
 
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
