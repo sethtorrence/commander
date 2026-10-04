@@ -731,5 +731,7 @@ export const meetingChips = sqliteTable(
 export const calendarSettings = sqliteTable('calendar_settings', {
   id: integer('id').primaryKey(),
   headsUp: integer('heads_up', { mode: 'boolean' }).notNull(),
+  // The second time zone shown in the Calendar Section (#127), as an IANA name; null: none.
+  secondTimeZone: text('second_time_zone'),
   updatedAt: integer('updated_at').notNull(),
 });

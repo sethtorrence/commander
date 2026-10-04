@@ -2,9 +2,10 @@ import { cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
-import { ItemBadge, useAccentBar } from '../../projects/badges';
+import { ItemBadge, useAccentBar, waitingSuggestion } from '../../projects/badges';
 import { Tag } from '../linear/IssueRow';
-import type { AgendaEntry } from './agenda';
+import type { AgendaEntry, CalendarEvent } from './agenda';
+import { ClashMark } from './marks';
 
 /** The calendar's colour, as a small square (the colour its Source gives it). */
 export function CalendarSwatch({ colour, className }: { colour: string; className?: string }) {
@@ -38,28 +39,37 @@ function EventBadge({ entry }: { entry: AgendaEntry }) {
           aria-label={`Project of ${event.title}`}
           onClick={(click) => {
             click.stopPropagation();
-            pick({ id: event.id, title: event.title, filing: event.filing }, click.currentTarget);
+            pick(
+              {
+                id: event.id,
+                title: event.title,
+                filing: event.filing,
+                filingSuggestion: event.filingSuggestion,
+              },
+              click.currentTarget,
+            );
           }}
           className="flex cursor-pointer border-0 bg-transparent p-0 hover:outline hover:outline-offset-1 hover:outline-ink focus-visible:outline focus-visible:outline-offset-1 focus-visible:outline-ink"
         >
-          <ItemBadge filing={event.filing} />
+          <ItemBadge filing={event.filing} suggestion={waitingSuggestion(event)} />
         </button>
       ) : (
-        <ItemBadge filing={event.filing} />
+        <ItemBadge filing={event.filing} suggestion={waitingSuggestion(event)} />
       )}
     </>
   );
 }
 
 /**
- * One event on one day of the Agenda: its time, calendar colour, Badge and title, then its Account
- * (when more than one is connected) and where it is.
+ * One event on one day of the Agenda: its time, calendar colour, Badge and title, then its clash mark,
+ * its Account (when more than one is connected) and where it is.
  */
 export function EventRow({
   entry,
   selected,
   account,
   compact = false,
+  clashes = [],
   onOpen,
 }: {
   entry: AgendaEntry;
@@ -67,6 +77,8 @@ export function EventRow({
   /** The Account's address, when more than one is connected. */
   account: string | null;
   compact?: boolean;
+  /** The events of other Accounts it clashes with. */
+  clashes?: readonly CalendarEvent[];
   onOpen: () => void;
 }) {
   const row = useRef<HTMLLIElement>(null);
@@ -111,6 +123,7 @@ export function EventRow({
         {event.title}
       </span>
       <span className="mt-[5px] ml-3 flex flex-none items-center gap-1.5">
+        <ClashMark clashes={clashes} />
         <ItemWarning item={event} />
         {!compact && event.detail.location && (
           <Tag title={event.detail.location}>{event.detail.location}</Tag>

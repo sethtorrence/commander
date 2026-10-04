@@ -1,0 +1,1 @@
+ALTER TABLE `calendar_settings` ADD `second_time_zone` text;

@@ -2,7 +2,7 @@ import type { ActivityEntry, EventPerson } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
-import { ItemBadge } from '../../projects/badges';
+import { ItemProject } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { describeIssueEntry } from '../linear/linear-issues';
 import { Markdown } from '../linear/Markdown';
@@ -12,6 +12,8 @@ import { whenShort } from '../todos/when';
 import { type CalendarEvent, RESPONSE_NAMES, whenText } from './agenda';
 import type { EventLink } from './calendar-events';
 import { CalendarSwatch } from './EventRow';
+import { clashText } from './marks';
+import { eventZoneNote, hereAndThere } from './zones';
 
 /*
   The detail pane beside the Agenda, after the Linear Section's: actions along the top (Edit in
@@ -55,6 +57,8 @@ export function EventDetail({
   event,
   editUrl,
   timeZone,
+  secondTimeZone = null,
+  clashes = [],
   links,
   history,
   onEdit,
@@ -66,6 +70,10 @@ export function EventDetail({
   /** Where Edit opens the event (Google Calendar or Outlook on the web, as its Account); null without a link. */
   editUrl: string | null;
   timeZone: string;
+  /** Settings → Calendar's second time zone, shown beside the time. */
+  secondTimeZone?: string | null;
+  /** The events of other Accounts it clashes with. */
+  clashes?: readonly CalendarEvent[];
   links: EventLink[];
   history: ActivityEntry[];
   /** Edit was pressed (the Section refreshes the Account when the window comes back). */
@@ -74,10 +82,16 @@ export function EventDetail({
   onClose: () => void;
   onOpenLink: (link: EventLink) => void;
 }) {
-  const { projects, archived, projectOf } = useProjects();
+  const { projects, archived } = useProjects();
   const pane = useRef<HTMLElement>(null);
   const detail = event?.detail;
-  const project = event ? projectOf(event.filing) : undefined;
+  const zoneNote =
+    detail && !detail.allDay
+      ? eventZoneNote(
+          { start: detail.start.at, end: detail.end.at, timeZone: detail.start.timeZone },
+          timeZone,
+        )
+      : null;
   const people = detail?.attendees.filter((attendee) => !attendee.resource) ?? [];
   const rooms = detail?.attendees.filter((attendee) => attendee.resource) ?? [];
   return (
@@ -136,7 +150,39 @@ export function EventDetail({
             >
               {whenText(event, timeZone)}
             </p>
+            {secondTimeZone && !detail.allDay && (
+              <p
+                className="m-0 mt-1 font-mono text-label-lg leading-[1.4] text-muted"
+                data-testid="event-zones"
+              >
+                {hereAndThere(detail.start.at, timeZone, secondTimeZone)}
+              </p>
+            )}
+            {zoneNote && (
+              <p
+                className="m-0 mt-1 font-mono text-label-lg leading-[1.4] text-muted"
+                data-testid="event-zone-note"
+              >
+                {zoneNote}
+              </p>
+            )}
             <ItemWarning item={event} variant="pane" className="mt-3" />
+            {clashes.map((other) => (
+              <p
+                key={other.id}
+                role="note"
+                data-testid="event-clash"
+                className="m-0 mt-3 flex items-baseline gap-2 border border-signal bg-signal-soft px-2.5 py-1.5 text-note leading-[1.35] text-text"
+              >
+                <span
+                  aria-hidden="true"
+                  className="bg-signal px-1 font-mono text-[9px] font-bold uppercase text-on-signal"
+                >
+                  Clash
+                </span>
+                <span>{clashText(other)}</span>
+              </p>
+            ))}
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact field="calendar" label="Calendar">
                 {detail.calendar.name}
@@ -180,10 +226,7 @@ export function EventDetail({
                 </Fact>
               )}
               <Fact field="project" label="Project">
-                <span className="flex items-center justify-end gap-[9px]">
-                  <ItemBadge filing={event.filing} />
-                  {project ? project.name : 'Unfiled'}
-                </span>
+                <ItemProject item={event} />
               </Fact>
             </dl>
 

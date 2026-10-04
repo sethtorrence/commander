@@ -1,4 +1,4 @@
-import type { ActivityEntry, CalendarSummary, Item } from '@commander/domain';
+import { type ActivityEntry, type CalendarSummary, findClashes, type Item } from '@commander/domain';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -10,6 +10,8 @@ import {
   dayKey,
   dayStart,
   daysOf,
+  entryFor,
+  inDayOrder,
   stillToCome,
 } from './agenda';
 import {
@@ -19,13 +21,17 @@ import {
   calendarSyncOf,
   type EventLink,
 } from './calendar-events';
+import { inAllDayStrip } from './time-grid';
+import { type CalendarView, outsideSyncedWindow, stepAnchor, viewDays, viewOf } from './views';
 
 /*
-  The Calendar Section's state: the calendar Accounts and their calendars, the events in the days
-  shown, which calendars this view hides, the selection and the detail pane, and filing with undo.
+  The Calendar Section's state: the calendar Accounts and their calendars, the view (Day, Week, Month
+  or Agenda) and the day it is on, the events in the days shown and their clashes, which calendars
+  this view hides, the selection and the detail pane, and filing with undo.
 */
 
 export const HIDDEN_STORAGE_KEY = 'commander.calendar.hidden';
+export const VIEW_STORAGE_KEY = 'commander.calendar.view';
 // Days the Agenda shows at first, and how many more each "Show more days" adds.
 export const AGENDA_DAYS = 30;
 const MOST_DAYS = 365;
@@ -37,6 +43,37 @@ export const keyOfEvent = (event: CalendarEvent) => calendarKey(event.account, e
 const entryKey = (entry: AgendaEntry) => `${entry.day}/${entry.event.id}`;
 const daysBetween = (from: string, to: string) =>
   Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
+
+function loadView(storage: Storage): CalendarView {
+  try {
+    return viewOf(storage.getItem(VIEW_STORAGE_KEY));
+  } catch {
+    return 'agenda';
+  }
+}
+
+/**
+ * Each day's entries, in the order the selection moves through them (j and k): day by day, in Agenda
+ * order. In Day and Week, an event in the all-day strip counts once, on its first day shown.
+ */
+function entriesOf(
+  events: readonly CalendarEvent[],
+  days: readonly string[],
+  timeZone: string,
+  once: boolean,
+) {
+  const wanted = new Set(days);
+  const byDay = new Map<string, AgendaEntry[]>();
+  for (const event of events) {
+    let placed = false;
+    for (const day of daysOf(event, timeZone)) {
+      if (!wanted.has(day) || (placed && once && inAllDayStrip(event))) continue;
+      placed = true;
+      byDay.set(day, [...(byDay.get(day) ?? []), entryFor(event, day, timeZone)]);
+    }
+  }
+  return days.flatMap((day) => (byDay.get(day) ?? []).sort(inDayOrder));
+}
 
 function loadHidden(storage: Storage): Set<string> {
   try {
@@ -78,6 +115,9 @@ export function useCalendar({
   const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
   const [items, setItems] = useState<CalendarEvent[] | null>(null);
   const [days, setDays] = useState(AGENDA_DAYS);
+  const [view, setViewState] = useState<CalendarView>(() => loadView(storage));
+  // The day the view is on (the Agenda's first day); null: today.
+  const [anchorDay, setAnchorDay] = useState<string | null>(null);
   const [hidden, setHidden] = useState<Set<string>>(() => loadHidden(storage));
   // An entry (`<day>/<id>`), or `event:<id>` for an event opened from elsewhere (its first entry).
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -91,8 +131,12 @@ export function useCalendar({
   const reload = useCallback(() => setVersion((v) => v + 1), []);
 
   const today = dayKey(now, timeZone);
-  const from = dayStart(today, timeZone);
-  const to = dayStart(addDays(today, days), timeZone);
+  const anchor = anchorDay ?? today;
+  const shownDays = useMemo(() => viewDays(view, anchor, days), [view, anchor, days]);
+  const first = shownDays[0] ?? anchor;
+  const last = shownDays.at(-1) ?? anchor;
+  const from = dayStart(first, timeZone);
+  const to = dayStart(addDays(last, 1), timeZone);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload
   useEffect(() => {
@@ -157,17 +201,24 @@ export function useCalendar({
   const shownEvents = useMemo(() => all.filter((event) => !hidden.has(keyOfEvent(event))), [all, hidden]);
   const filtered = useMemo(() => shownEvents.filter(include), [shownEvents, include]);
   const agenda: AgendaDay[] = useMemo(
-    () => agendaDays(filtered, { today, days, timeZone }),
-    [filtered, today, days, timeZone],
+    () => (view === 'agenda' ? agendaDays(filtered, { today, days, timeZone, from: anchor }) : []),
+    [view, filtered, today, days, timeZone, anchor],
   );
-  const entries = useMemo(() => agenda.flatMap((day) => day.entries), [agenda]);
+  const entries = useMemo(
+    () =>
+      view === 'agenda'
+        ? agenda.flatMap((day) => day.entries)
+        : entriesOf(filtered, shownDays, timeZone, view !== 'month'),
+    [view, agenda, filtered, shownDays, timeZone],
+  );
   // The Project filter counts the events in the days shown, whatever it is set to.
   const forProjectFilter = useMemo(() => {
-    const inDays = new Set(
-      agendaDays(shownEvents, { today, days, timeZone }).flatMap((day) => day.entries.map((e) => e.event.id)),
-    );
-    return shownEvents.filter((event) => inDays.has(event.id));
-  }, [shownEvents, today, days, timeZone]);
+    const inDays = new Set(shownDays);
+    return shownEvents.filter((event) => daysOf(event, timeZone).some((day) => inDays.has(day)));
+  }, [shownEvents, shownDays, timeZone]);
+  // Clashes between Accounts, among every event read (a calendar hidden here still keeps the User busy).
+  const clashes = useMemo(() => findClashes(all), [all]);
+  const outside = useMemo(() => outsideSyncedWindow(shownDays, today), [shownDays, today]);
   const toCome = useMemo(() => stillToCome(shownEvents, now, timeZone), [shownEvents, now, timeZone]);
 
   const askedFor = selectedKey?.startsWith('event:') ? selectedKey.slice('event:'.length) : null;
@@ -234,6 +285,31 @@ export function useCalendar({
     [storage],
   );
 
+  const setView = useCallback(
+    (next: CalendarView) => {
+      setViewState(next);
+      try {
+        storage.setItem(VIEW_STORAGE_KEY, next);
+      } catch {
+        // Storage unavailable: the choice still applies for this session.
+      }
+    },
+    [storage],
+  );
+  const goToday = useCallback(() => setAnchorDay(null), []);
+  const step = useCallback(
+    (by: 1 | -1) => setAnchorDay((current) => stepAnchor(view, current ?? today, by, AGENDA_DAYS)),
+    [view, today],
+  );
+  /** Shows a day in the Day view (a Month cell's "+3 more"). */
+  const showDay = useCallback(
+    (day: string) => {
+      setView('day');
+      setAnchorDay(day);
+    },
+    [setView],
+  );
+
   // From the palette: show an event, wherever it is (its calendar shown, its day loaded, if it is
   // still to come within the year).
   const reveal = useCallback(
@@ -243,15 +319,23 @@ export function useCalendar({
         if (hidden.has(keyOfEvent(event))) {
           setCalendarShown({ account: event.account ?? '', id: event.detail.calendar.id }, true);
         }
-        const first = daysOf(event, timeZone).find((day) => day >= today);
-        if (first) setDays((now) => Math.min(MOST_DAYS, Math.max(now, daysBetween(today, first) + 1)));
+        const own = daysOf(event, timeZone);
+        if (view === 'agenda') {
+          setAnchorDay(null);
+          const upcoming = own.find((day) => day >= today);
+          if (upcoming) {
+            setDays((now) => Math.min(MOST_DAYS, Math.max(now, daysBetween(today, upcoming) + 1)));
+          }
+        } else if (own[0]) {
+          setAnchorDay(own[0]);
+        }
         setRevealed(event);
       }
       setSelectedKey(`event:${itemId}`);
       setDetailOpen(true);
       reload();
     },
-    [all, client, hidden, reload, setCalendarShown, timeZone, today],
+    [all, client, hidden, reload, setCalendarShown, timeZone, today, view],
   );
 
   const apply = useCallback(
@@ -293,6 +377,17 @@ export function useCalendar({
     calendars: listed,
     hidden,
     setCalendarShown,
+    view,
+    setView,
+    anchor,
+    today,
+    shownDays,
+    goToday,
+    step,
+    showDay,
+    filtered,
+    clashes,
+    outside,
     agenda,
     entries,
     forProjectFilter,

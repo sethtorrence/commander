@@ -1,6 +1,9 @@
 // @vitest-environment jsdom
+
+import { createFiling } from '@commander/core/src/agent/filing';
+import { openGate } from '@commander/core/src/autonomy/gate';
 import type { ItemStore } from '@commander/core/src/item-store';
-import type { EventDetail, Project, SourceItem } from '@commander/domain';
+import { type EventDetail, FILE_INTO_PROJECTS, type Project, type SourceItem } from '@commander/domain';
 import type { AccountSyncStatus, GoogleAccountSummary, OutlookAccountSummary } from '@commander/domain/ipc';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -8,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
-import { ShortcutProvider, ShortcutScope, useActiveScopes } from '../../shortcuts/react';
+import { ShortcutProvider, ShortcutScope, useActiveScopes, useShortcutList } from '../../shortcuts/react';
 import { FrameControlsProvider, SectionProvider } from '../section';
 import { calendar as definition } from '.';
 import { CalendarSheet } from './CalendarSheet';
@@ -18,6 +21,7 @@ import {
   type CalendarEvents,
   calendarEventsIn,
 } from './calendar-events';
+import { type CalendarSettingsClient, calendarSettingsIn } from './calendar-settings';
 
 // The Calendar Section against a real Item store on a temporary database, with events saved the way
 // Google Calendar sync saves them (saveFromSource), a stand-in for the Google Accounts, a fixed clock
@@ -33,6 +37,9 @@ const at = (iso: string) => Date.parse(iso);
 
 let store: ItemStore;
 let events: CalendarEvents;
+let settings: CalendarSettingsClient;
+let itemStoreClient: ReturnType<typeof openTestItemStore>['client'];
+let listedShortcuts: string[] = [];
 let projects: ProjectsClient;
 let close: () => void;
 let opened: string[];
@@ -135,6 +142,8 @@ beforeEach(() => {
   const opened_ = openTestItemStore(() => NOW);
   ({ store, close } = opened_);
   events = calendarEventsIn(opened_.client);
+  settings = calendarSettingsIn(opened_.client);
+  itemStoreClient = opened_.client;
   projects = projectsIn(opened_.client);
   accounts = fakeAccounts([alex()]);
   opened = [];
@@ -208,8 +217,10 @@ afterEach(() => {
 
 function Active({ children }: { children: ReactNode }) {
   useActiveScopes(['calendar']);
+  listedShortcuts = useShortcutList().map((shortcut) => shortcut.label);
   return children;
 }
+const registryLabels = () => listedShortcuts;
 
 const place = { definition, number: 6, total: 8, active: true };
 
@@ -225,6 +236,7 @@ function renderSheet() {
                   events={events}
                   accounts={accounts.client}
                   timeZone={LONDON}
+                  settings={settings}
                   open={(url) => opened.push(url)}
                 />
               </Active>
@@ -451,5 +463,310 @@ describe('the Calendar sheet', () => {
         'Google Calendar couldn’t answer just now (HTTP 503).',
       ),
     );
+  });
+});
+
+const blocks = () =>
+  screen.queryAllByTestId('calendar-block').map((block) => block.getAttribute('aria-label'));
+const bars = () => screen.queryAllByTestId('calendar-allday').map((bar) => bar.getAttribute('aria-label'));
+const columnHeads = () =>
+  Array.from(screen.getByTestId('time-grid').querySelectorAll('[data-testid="grid-day"]'), (head) =>
+    head.textContent?.trim(),
+  );
+const rangeTitle = () => screen.getByTestId('calendar-range').textContent;
+
+describe('the Day, Week and Month views', () => {
+  it('switches to Week with w: a time grid of the week, all-day events above, and the choice remembered', async () => {
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(5));
+    press('w');
+    await waitFor(() => expect(screen.getByTestId('time-grid')).toBeTruthy());
+    expect(columnHeads()).toEqual(['Mon 5', 'Tue 6', 'Wed 7', 'Thu 8', 'Fri 9', 'Sat 10', 'Sun 11']);
+    await waitFor(() =>
+      expect(blocks()).toEqual([
+        '09:00–09:15 TL standup',
+        '12:30–13:30 Lunch with Priya',
+        '14:00–15:00 Design review',
+        '10:00–11:00 Planning',
+      ]),
+    );
+    expect(bars()).toEqual(['All day Local-first conference']);
+    expect(screen.queryByTestId('agenda')).toBeNull();
+    expect(rangeTitle()).toBe('5 – 11 October 2026');
+    expect(screen.getByRole('radio', { name: /Week/ }).getAttribute('aria-checked')).toBe('true');
+    // The "now" line on today's column only.
+    expect(screen.getAllByTestId('now-line')).toHaveLength(1);
+    expect(screen.getByTestId('now-line').closest('[data-day]')?.getAttribute('data-day')).toBe('2026-10-05');
+
+    cleanup();
+    renderSheet();
+    await waitFor(() => expect(blocks()).toHaveLength(4));
+  });
+
+  it('moves between views, ranges and today with d, w, m, l, [, ] and t', async () => {
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(5));
+    press('d');
+    await waitFor(() => expect(rangeTitle()).toBe('Monday 5 October 2026'));
+    await waitFor(() => expect(blocks()).toHaveLength(3));
+    press(']');
+    press(']');
+    await waitFor(() => expect(rangeTitle()).toBe('Wednesday 7 October 2026'));
+    await waitFor(() => expect(blocks()).toEqual(['10:00–11:00 Planning']));
+    expect(bars()).toEqual(['All day Local-first conference']);
+    press('m');
+    await waitFor(() => expect(rangeTitle()).toBe('October 2026'));
+    press(']');
+    await waitFor(() => expect(rangeTitle()).toBe('November 2026'));
+    press('t');
+    await waitFor(() => expect(rangeTitle()).toBe('October 2026'));
+    press('w');
+    press('[');
+    await waitFor(() => expect(rangeTitle()).toBe('28 September – 4 October 2026'));
+    press('l');
+    await waitFor(() => expect(screen.getByTestId('agenda')).toBeTruthy());
+    press('t');
+    await waitFor(() => expect(days()[0]?.[0]).toBe('Today · Monday 5 October'));
+  });
+
+  it('lists every view’s keys in the cheat sheet', async () => {
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(5));
+    for (const label of ['Day view', 'Week view', 'Month view', 'Agenda', 'Today', 'Back', 'Forward']) {
+      expect(registryLabels()).toContain(label);
+    }
+  });
+
+  it('shows up to three events a day in Month, then “+N more”, which opens the day', async () => {
+    store.saveFromSource({
+      source: 'google-calendar',
+      account: ALEX,
+      items: [event('late', 'Late call', '2026-10-05T18:00:00Z', '2026-10-05T19:00:00Z')],
+    });
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(6));
+    press('m');
+    const monday = await waitFor(() => {
+      const found = screen.getByTestId('month-grid').querySelector('[data-day="2026-10-05"]');
+      if (!found) throw new Error('no Monday');
+      return found as HTMLElement;
+    });
+    expect(
+      within(monday)
+        .getAllByTestId('month-event')
+        .map((each) => each.getAttribute('aria-label')),
+    ).toEqual(['09:00 TL standup', '12:30 Lunch with Priya', '14:00 Design review']);
+    fireEvent.click(within(monday).getByRole('button', { name: '+1 more' }));
+    await waitFor(() => expect(rangeTitle()).toBe('Monday 5 October 2026'));
+    expect(blocks()).toContain('19:00–20:00 Late call');
+  });
+
+  it('opens an event from the grid with a click, or with j and Enter, and files it with b', async () => {
+    const tl = store.changeProject({
+      type: 'create',
+      project: { name: 'Titanlink', code: 'TL', accent: 'blue' },
+    }).project as Project;
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(5));
+    press('w');
+    await waitFor(() => expect(blocks()).toHaveLength(4));
+    fireEvent.click(screen.getByRole('listitem', { name: '14:00–15:00 Design review' }));
+    await waitFor(() =>
+      expect(within(detail() as HTMLElement).getByRole('heading', { name: 'Design review' })).toBeTruthy(),
+    );
+    // j moves on in time order: the next is Wednesday's all-day conference, then Planning.
+    press('j');
+    press('j');
+    await waitFor(() =>
+      expect(within(detail() as HTMLElement).getByRole('heading', { name: 'Planning' })).toBeTruthy(),
+    );
+    press('b');
+    fireEvent.click(await waitFor(() => screen.getByRole('option', { name: /Titanlink/ })));
+    const planning = screen.getByRole('listitem', { name: '10:00–11:00 Planning' });
+    await waitFor(() =>
+      expect(store.get(planning.getAttribute('data-item-id') ?? '')?.item.filing).toEqual({
+        projectId: tl.id,
+        filedBy: 'user',
+      }),
+    );
+    // The Project filter narrows the grid, with this week's counts.
+    const filterButton = screen.getByRole('button', { name: /Titanlink/ });
+    expect(filterButton.textContent).toContain('1');
+    fireEvent.click(filterButton);
+    await waitFor(() => expect(blocks()).toEqual(['10:00–11:00 Planning']));
+    expect(bars()).toEqual([]);
+    // Undo puts it back.
+    press('z', { ctrlKey: true });
+    await waitFor(() =>
+      expect(store.get(planning.getAttribute('data-item-id') ?? '')?.item.filing).toBeNull(),
+    );
+  });
+
+  it('says when the days shown reach past what calendar sync keeps, pointing to the provider', async () => {
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(5));
+    press('m');
+    expect(screen.queryByTestId('calendar-outside')).toBeNull();
+    press('[');
+    press('[');
+    const line = await waitFor(() => screen.getByTestId('calendar-outside'));
+    expect(line.textContent).toBe('Older events aren’t kept in Commander. They live in Google Calendar ↗.');
+    fireEvent.click(within(line).getByRole('link', { name: /Google Calendar/ }));
+    expect(opened).toEqual(['https://calendar.google.com/calendar/r']);
+  });
+});
+
+const SAM = 'outlook:fake-tenant-0001:6f1c2a40-0000-4000-8000-00000000a001';
+const UPN = 'sam@contoso.test';
+
+// Sam's Outlook Account beside Alex's Google one, with a busy board prep over Monday's design review.
+function withSam(extra: Partial<EventDetail> = {}) {
+  const outlookSync = syncStatus({ account: SAM, source: 'outlook-calendar' });
+  const sam: OutlookAccountSummary = {
+    id: SAM,
+    source: 'outlook',
+    name: `Outlook · ${UPN}`,
+    userPrincipalName: UPN,
+    method: 'oauth',
+    status: 'connected',
+    user: { id: '6f1c2a40-0000-4000-8000-00000000a001', name: 'Sam Rivera' },
+    sync: null,
+    sources: [
+      { source: 'outlook', granted: true, enabled: false },
+      { source: 'outlook-calendar', granted: true, enabled: true, sync: outlookSync },
+    ],
+    personal: false,
+  };
+  accounts = fakeAccounts([alex(), sam]);
+  store.calendars.listed(SAM, 'outlook-calendar', [
+    { id: 'AAMk-default=', name: 'Calendar', colour: '#0078d4', primary: true, accessRole: 'owner' },
+  ]);
+  const board = event('board', 'Board prep', '2026-10-05T13:30:00Z', '2026-10-05T14:30:00Z', {
+    calendar: { id: 'AAMk-default=', name: 'Calendar', colour: '#0078d4' },
+    accountEmail: UPN,
+    start: { at: at('2026-10-05T13:30:00Z'), timeZone: 'America/New_York', date: null },
+    end: { at: at('2026-10-05T14:30:00Z'), timeZone: 'America/New_York', date: null },
+    ...extra,
+  });
+  store.saveFromSource({
+    source: 'outlook-calendar',
+    account: SAM,
+    items: [{ ...board, externalId: 'AAMk-board=' }],
+  });
+}
+
+describe('clashes between Accounts', () => {
+  it('marks both events in every view and says what clashes in the detail pane', async () => {
+    withSam();
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(6));
+    const marked = (testId: string) =>
+      screen
+        .getAllByTestId(testId)
+        .filter((each) => within(each).queryByTestId('clash-mark'))
+        .map((each) => each.getAttribute('aria-label'));
+    expect(marked('calendar-event')).toEqual(['14:00–15:00 Design review', '14:30–15:30 Board prep']);
+
+    press('w');
+    await waitFor(() =>
+      expect(marked('calendar-block')).toEqual(['14:00–15:00 Design review', '14:30–15:30 Board prep']),
+    );
+    press('m');
+    // Monday holds four events: Board prep is the one behind "+1 more".
+    await waitFor(() => expect(marked('month-event')).toEqual(['14:00 Design review']));
+    fireEvent.click(screen.getByRole('button', { name: '+1 more' }));
+    await waitFor(() => expect(marked('calendar-block')).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole('listitem', { name: '14:30–15:30 Board prep' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('event-clash').textContent).toBe(
+        'ClashClashes with Design review in your alex@gmail.test calendar',
+      ),
+    );
+    // Board prep was set in New York time.
+    expect(screen.getByTestId('event-zone-note').textContent).toBe('Set in New York time: 09:30–10:30 there');
+  });
+
+  it('never marks a declined or free event', async () => {
+    withSam({ myResponse: 'declined' });
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(6));
+    expect(screen.queryAllByTestId('clash-mark')).toHaveLength(0);
+  });
+});
+
+describe('the second time zone', () => {
+  it('adds a column of the second zone’s hours in Day and Week, and its time in the detail pane', async () => {
+    await settings.saveSecondTimeZone('America/New_York');
+    renderSheet();
+    await waitFor(() => expect(screen.getAllByTestId('calendar-event')).toHaveLength(5));
+    press('w');
+    await waitFor(() => expect(screen.getByTestId('second-zone-head').textContent).toBe('New York'));
+    const hours = screen.getAllByTestId('second-zone-hour').map((each) => each.textContent);
+    // From 01:00 London: 20:00 the evening before in New York; 15:00 London is 10:00 there.
+    expect(hours[0]).toBe('20:00');
+    expect(hours[14]).toBe('10:00');
+    press('d');
+    await waitFor(() => expect(screen.getByTestId('second-zone-head')).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('listitem', { name: '14:00–15:00 Design review' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('event-zones').textContent).toBe('14:00 here · 09:00 New York'),
+    );
+
+    // Cleared in Settings, it goes at once.
+    await act(() => settings.saveSecondTimeZone(null));
+    await waitFor(() => expect(screen.queryByTestId('second-zone-head')).toBeNull());
+    expect(screen.queryByTestId('event-zones')).toBeNull();
+  });
+});
+
+describe('Ares’s filing of events', () => {
+  it('shows his dashed Badge on an event he wasn’t sure about in every view, and Confirm files it', async () => {
+    const tl = store.changeProject({
+      type: 'create',
+      project: { name: 'Titanlink', code: 'TL', accent: 'blue' },
+    }).project as Project;
+    const gate = openGate({ itemStore: store });
+    gate.registerAction({ action: FILE_INTO_PROJECTS, actionKind: 'organise', name: 'File into Projects' });
+    const filing = createFiling({ itemStore: store, gate });
+    const review = store.query({ kinds: ['event'] }).find((item) => item.title === 'Design review');
+    gate.propose({
+      action: FILE_INTO_PROJECTS,
+      actionKind: 'organise',
+      section: 'calendar',
+      itemId: review?.id as string,
+      itemActions: [
+        {
+          type: 'update',
+          itemId: review?.id as string,
+          changes: { filing: { projectId: tl.id, filedBy: 'ares' } },
+        },
+      ],
+      confidence: 0.5,
+      reason: 'Dana runs Titanlink design',
+    });
+    // The window's autonomy channel, answered by the Core's filing over the same gate.
+    const autonomy = async (request: { op: string; proposalId: number; projectId: string | null }) => {
+      if (request.op !== 'settle-filing') throw new Error(`Not here: ${request.op}`);
+      return filing.settle(request.proposalId, request.projectId);
+    };
+    projects = projectsIn(itemStoreClient, () => autonomy as never);
+    renderSheet();
+    const dashed = () =>
+      document.querySelectorAll(`[data-item-id="${review?.id}"] [data-suggested="true"]`).length;
+    await waitFor(() => expect(dashed()).toBe(1));
+    press('w');
+    await waitFor(() => expect(dashed()).toBe(1));
+    press('m');
+    await waitFor(() => expect(dashed()).toBe(1));
+
+    fireEvent.click(screen.getByRole('listitem', { name: '14:00 Design review' }));
+    const suggestion = await waitFor(() => screen.getByTestId('suggested-filing'));
+    fireEvent.click(within(suggestion).getByRole('button', { name: 'Confirm Titanlink' }));
+    await waitFor(() =>
+      expect(store.get(review?.id as string)?.item.filing).toEqual({ projectId: tl.id, filedBy: 'user' }),
+    );
+    await waitFor(() => expect(dashed()).toBe(0));
   });
 });

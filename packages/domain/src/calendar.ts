@@ -125,9 +125,29 @@ export type EventQuery = z.input<typeof eventQuery>;
 // ---------------------------------------------------------------------------------------------
 // Settings → Calendar
 
+// Whether a name is a time zone this machine knows (an IANA name, like America/New_York).
+const knownTimeZone = (name: string) => {
+  try {
+    new Intl.DateTimeFormat('en-GB', { timeZone: name });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 // `headsUp`: a system notification 2 minutes before each meeting (#128). The one interruption
 // Commander makes (decision #23), so it is off until the User turns it on.
-export const calendarSettings = z.object({ headsUp: z.boolean() });
+// `secondTimeZone` (#127): a second zone shown beside the Day and Week grids and in the event detail;
+// null clears it, and leaving it out keeps the one saved.
+export const calendarSettings = z.object({
+  headsUp: z.boolean(),
+  secondTimeZone: z
+    .string()
+    .min(1)
+    .max(64)
+    .refine(knownTimeZone, 'That isn’t a time zone this machine knows')
+    .nullish(),
+});
 export type CalendarSettings = z.infer<typeof calendarSettings>;
 export const defaultCalendarSettings: CalendarSettings = { headsUp: false };
 

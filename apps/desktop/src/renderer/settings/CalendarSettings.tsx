@@ -1,7 +1,9 @@
 import type { CalendarSettings as Settings } from '@commander/domain';
 import { Switch, toast } from '@commander/ui';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ItemStoreClient } from '../item-store/client';
+import { calendarSettingsIn } from '../sections/calendar/calendar-settings';
+import { SecondTimeZoneSetting } from '../sections/calendar/SecondTimeZoneSetting';
 import { SettingRow, SettingsGroup } from './parts';
 
 /**
@@ -17,13 +19,13 @@ export function CalendarSettings({
   itemStore?: ItemStoreClient;
 }) {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const calendar = useMemo(() => calendarSettingsIn(itemStore), [itemStore]);
   useEffect(() => {
     itemStore({ op: 'calendar-settings' }).then(setSettings, () => {});
   }, [itemStore]);
   const change = (headsUp: boolean) =>
-    itemStore({ op: 'save-calendar-settings', settings: { ...settings, headsUp } }).then(
-      setSettings,
-      (error) => toast(error instanceof Error ? error.message : String(error)),
+    itemStore({ op: 'save-calendar-settings', settings: { headsUp } }).then(setSettings, (error) =>
+      toast(error instanceof Error ? error.message : String(error)),
     );
   const on = settings?.headsUp ?? false;
   return (
@@ -43,6 +45,7 @@ export function CalendarSettings({
           <span aria-hidden="true">{on ? 'On' : 'Off'}</span>
         </div>
       </SettingRow>
+      <SecondTimeZoneSetting settings={calendar} />
     </SettingsGroup>
   );
 }

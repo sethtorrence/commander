@@ -18,18 +18,23 @@ export const RULE_SUGGESTION_AT = 5;
 // The Source fields a Rule suggestion can be about: groupings an Item belongs to, most specific
 // first. When two point at the same Items, the more specific one is offered. For Chats, the people
 // in them (#108): a Chat is one Item, so "this Chat" never counts five, and a whole Teams Account is
-// rarely one Project.
+// rarely one Project. For events, their calendar (#127), read from Google's and Outlook's alike.
 export const RULE_SUGGESTION_FIELDS = [
   'linear.team',
   'linear.project',
   'linear.label',
   'linear.workspace',
   'teams.person',
+  'google-calendar.calendar',
 ];
 
+// Whether a Rule suggestion is about calendar events (its field is a calendar Source's).
+export const isCalendarSuggestionField = (field: string) =>
+  field.startsWith('google-calendar.') || field.startsWith('outlook-calendar.');
+
 /** The Section a Rule suggestion about this field belongs to, for the Update. */
-export const ruleSuggestionSection = (field: string): 'linear' | 'teams' =>
-  field.startsWith('teams.') ? 'teams' : 'linear';
+export const ruleSuggestionSection = (field: string): 'linear' | 'teams' | 'calendar' =>
+  field.startsWith('teams.') ? 'teams' : isCalendarSuggestionField(field) ? 'calendar' : 'linear';
 
 // One of the User's answers to Ares's filing: the Item, his suggestion, and the User's choice (null:
 // Unfiled).
@@ -81,6 +86,9 @@ export function ruleSuggestionDraft(
 /** The question in the Update: "Always file Linear team OPS under TX?". */
 export function ruleSuggestionQuestion(about: Pick<RuleSuggestion, 'field' | 'label' | 'code'>): string {
   if (about.field === 'teams.person') return `Always file Chats with ${about.label} under ${about.code}?`;
+  if (isCalendarSuggestionField(about.field)) {
+    return `Always file events in ${RULE_FIELDS.get(about.field)?.name ?? 'calendar'} ${about.label} under ${about.code}?`;
+  }
   const name = RULE_FIELDS.get(about.field)?.name ?? about.field;
   const source = about.field.split('.')[0] === 'linear' && !name.startsWith('Linear') ? 'Linear ' : '';
   return `Always file ${source}${name} ${about.label} under ${about.code}?`;
@@ -93,6 +101,7 @@ const COUNTED: Record<string, (label: string) => string> = {
   'linear.label': (label) => `labelled ${label}`,
   'linear.workspace': (label) => `from workspace ${label}`,
   'teams.person': (label) => `with ${label}`,
+  'google-calendar.calendar': (label) => `in calendar ${label}`,
 };
 
 /** The Update's plain sentence: "You filed 5 Linear issues from team OPS under TX. Always file …?" */
@@ -104,6 +113,8 @@ export function ruleSuggestionText(
     ? 'Linear issues'
     : about.field.startsWith('teams.')
       ? 'Chats'
-      : 'items';
+      : isCalendarSuggestionField(about.field)
+        ? 'events'
+        : 'items';
   return `You filed ${about.count} ${items} ${counted} under ${about.code}. ${ruleSuggestionQuestion(about)}`;
 }
