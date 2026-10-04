@@ -50,6 +50,9 @@ export const accountSyncStatus = z.object({
   // How many of the Account's Items Commander holds (tombstones aside).
   itemCount: z.number().int().nonnegative(),
   problem: syncProblem.nullable(),
+  // Two-way sync: the Account's changes made in Commander still on their way to the Source, and those
+  // that couldn't sync.
+  outgoing: z.object({ pending: z.number().int().nonnegative(), failed: z.number().int().nonnegative() }),
 });
 // The zod-free AccountSyncStatus type in ipc.ts (for the preload and window) must match the schema.
 type _StatusMatches = [AccountSyncStatus] extends [z.infer<typeof accountSyncStatus>]

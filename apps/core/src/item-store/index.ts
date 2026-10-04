@@ -48,6 +48,7 @@ import {
   type Source,
   type SourceBatch,
   sourceBatch,
+  statusFromDetail,
 } from '@commander/domain';
 import Database from 'better-sqlite3';
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
@@ -60,6 +61,7 @@ import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type ModelStore, openModelStore } from './models';
+import { type OutgoingStore, openOutgoingQueue } from './outgoing';
 import { projectsIn } from './projects';
 import {
   actorColumns,
@@ -79,9 +81,11 @@ import { type ListChange, rulesIn } from './rules';
 import * as schema from './schema';
 import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
+import { editedState, queueChanges, undoneDetail, withQueuedOnTop } from './synced-changes';
 
 export type { Search } from '../search';
 export type { NewProposal } from './autonomy';
+export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
 
@@ -161,6 +165,9 @@ export type ItemStore = {
   models: ModelStore;
   // Where each Account's sync stands, and its recent sync runs, in the same database.
   syncState: SyncStateStore;
+  // Two-way sync's outgoing queue: changes made in Commander to Source Items' synced fields, queued
+  // by record (in the change's own transaction) and sent by the sync engine.
+  outgoing: OutgoingStore;
   // The Autonomy settings and the gate's proposals, in the same database.
   autonomy: AutonomyStore;
   // Global search over the live Items, kept current by every write here.
@@ -232,6 +239,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const db = drizzle(sqlite, { schema });
   migrate(db, { migrationsFolder: options.migrationsFolder });
   const template = dailyTemplateIn(db, now);
+  const outgoing = openOutgoingQueue(db);
   // Project changes come only from the User (the window); a merge's Item moves are recorded as theirs.
   const byUser: Actor = { kind: 'user' };
   const projects = projectsIn(
@@ -586,7 +594,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         projects.checkFiling(action.changes.filing);
         const before = stateOf(item);
         const after = writeState(item, { ...before, ...action.changes }, at);
-        return log({ ...entry, action: 'update', itemId: item.id, before, after }, at);
+        return logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
+      }
+      case 'edit-fields': {
+        const item = requireItem(action.itemId);
+        const edited = editedState(item, action.fields, (message) => new ItemStoreError('invalid', message));
+        const after = writeState(item, edited, at);
+        return logAndQueue(
+          item,
+          { ...entry, action: 'update', itemId: item.id, before: stateOf(item), after },
+          at,
+        );
       }
       case 'delete': {
         const item = requireItem(action.itemId);
@@ -660,9 +678,20 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       restored = { ...current };
       for (const change of changesBetween(before, after))
         Object.assign(restored, { [change.field]: change.before });
+      // A Source Item's synced fields go back one by one, so nothing changed since is lost.
+      const detail = undoneDetail(current.detail, before.detail, after.detail);
+      if (detail) restored = { ...restored, detail, status: statusFromDetail(detail, restored.status) };
     }
     writeState(item, restored, at);
-    return log({ ...undoEntry, before: current, after: restored }, at);
+    return logAndQueue(item, { ...undoEntry, before: current, after: restored }, at);
+  }
+
+  // Logs a change, and queues what it changed in a Source Item's synced fields for the Source (Two-way
+  // sync), in the same transaction.
+  function logAndQueue(item: Item, entry: NewEntry, at: number): ActivityEntry {
+    const logged = log(entry, at);
+    queueChanges(outgoing, item, entry.before as ItemState, entry.after as ItemState, logged);
+    return logged;
   }
 
   const recordAll = sqlite.transaction((actions: ItemAction[], context: ActionContext): ActivityEntry[] =>
@@ -846,16 +875,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           ...before,
           title: incoming.title,
           people: incoming.people,
-          status: incoming.status,
-          detail: incoming.detail,
           deletedAt: null,
+          // Changes made in Commander still on their way to the Source stay on top.
+          ...withQueuedOnTop(outgoing, existing.id, { status: incoming.status, detail: incoming.detail }),
         };
         if (isDeepStrictEqual(before, after)) {
           result.unchanged.push(existing.id);
           continue;
         }
         writeState(existing, after, at);
-        log({ by, action: 'update', itemId: existing.id, before, after }, at);
+        log({ by, why: batch.why, action: 'update', itemId: existing.id, before, after }, at);
         applyRules(existing.id, at);
         result.updated.push(existing.id);
         continue;
@@ -875,7 +904,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         externalId: incoming.externalId,
       };
       const { id, state: stored } = insertItem(identity, state, at);
-      log({ by, action: 'create', itemId: id, before: null, after: stored }, at);
+      log({ by, why: batch.why, action: 'create', itemId: id, before: null, after: stored }, at);
       applyRules(id, at);
       result.created.push(id);
     }
@@ -915,6 +944,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   return {
     models: openModelStore(db, now),
     syncState: openSyncStateStore(db),
+    outgoing,
     autonomy: openAutonomyStore(db, now),
     search: { query: (query) => search.query(query) },
 

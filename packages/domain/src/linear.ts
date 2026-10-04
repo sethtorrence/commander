@@ -75,3 +75,33 @@ export const linearIssueDetail = z.object({
   canceledAt: timestamp.nullable(),
 });
 export type LinearIssueDetail = z.infer<typeof linearIssueDetail>;
+
+// What the detail pane's pickers offer, per team: its workflow states, members, labels (the team's
+// own and the workspace's), current and upcoming cycles, and Linear projects. Fetched by Linear sync
+// with each sync and kept per Account.
+export const linearCatalogTeam = z.object({
+  id,
+  key: z.string(),
+  name: z.string(),
+  // In the team's own order.
+  states: z.array(z.object({ id, name: z.string(), type: z.string(), color: z.string() })),
+  members: z.array(linearUser),
+  labels: z.array(z.object({ id, name: z.string(), color: z.string() })),
+  cycles: z.array(
+    z.object({
+      id,
+      number: z.number().int(),
+      name: z.string().nullable(),
+      startsAt: timestamp,
+      endsAt: timestamp,
+    }),
+  ),
+  linearProjects: z.array(z.object({ id, name: z.string() })),
+});
+export type LinearCatalogTeam = z.infer<typeof linearCatalogTeam>;
+
+export const linearCatalog = z.object({
+  kind: z.literal('linear'),
+  teams: z.array(linearCatalogTeam),
+});
+export type LinearCatalog = z.infer<typeof linearCatalog>;

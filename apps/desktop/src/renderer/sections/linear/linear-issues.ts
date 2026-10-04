@@ -1,4 +1,16 @@
-import type { ActivityEntry, Actor, Item, ItemChange, Project } from '@commander/domain';
+import {
+  type ActivityEntry,
+  type Actor,
+  COMMENT_FIELD,
+  type Item,
+  type ItemChange,
+  LABEL_FIELD,
+  type LinearCatalog,
+  type LinearComment,
+  type OutgoingChange,
+  type Project,
+  syncedFieldsOf,
+} from '@commander/domain';
 import type { AccountSummary, AccountsState } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import { describeFiling } from '../../projects/projects';
@@ -7,10 +19,13 @@ import { SOURCE_NAMES, type TodoLink } from '../todos/todos';
 
 /*
   The Linear Section's view of the app: everything it reads from the Item store or asks of the
-  Linear Accounts goes through here, so components never build requests themselves. Read-only
-  for now; filing goes through Projects (projects/), which records it as the User's.
+  Linear Accounts goes through here, so components never build requests themselves. Filing goes
+  through Projects (projects/), which records it as the User's.
 
-  Two-way sync (#60) adds the writes here: changing an issue's fields and commenting.
+  Two-way sync: changing an issue's synced fields and commenting are Item store edits (recorded as
+  the User's, undoable); the Core queues each for Linear and sends it in the background. The
+  Section reads back what is still on its way (or couldn't sync), retries, and reads what each
+  Account's Linear offers the pickers.
 */
 
 /** One of an issue's Links: from it to another Item, or a backlink from another Item to it. */
@@ -25,6 +40,19 @@ export interface LinearIssues {
   history(itemId: string): Promise<ActivityEntry[]>;
   /** Reverses what an activity entry changed (filing an issue, say). */
   undo(entryId: number): Promise<ActivityEntry>;
+  /**
+   * Changes some of an issue's synced fields (`state`, `priority`, `label:<id>`…), leaving the rest
+   * as they are now. Shows at once; Linear gets it in the background.
+   */
+  edit(itemId: string, fields: Record<string, unknown>): Promise<ActivityEntry>;
+  /** Posts a comment, under an id made here so a retried post is never posted twice. */
+  comment(itemId: string, body: string, author: LinearComment['author']): Promise<ActivityEntry>;
+  /** The changes made here still on their way to Linear, or that couldn't sync. */
+  outgoing(): Promise<OutgoingChange[]>;
+  /** Sends an issue's changes that couldn't sync again. */
+  retry(itemId: string): Promise<void>;
+  /** What an Account's Linear offers the pickers, as its last sync fetched it (null before then). */
+  catalog(accountId: string): Promise<LinearCatalog | null>;
 }
 
 // The Item store answers at most 1000 Items a query.
@@ -55,6 +83,33 @@ export function linearIssuesIn(itemStore: ItemStoreClient): LinearIssues {
 
     undo(entryId) {
       return itemStore({ op: 'record', action: { type: 'undo', entryId } });
+    },
+
+    edit(itemId, fields) {
+      return itemStore({ op: 'record', action: { type: 'edit-fields', itemId, fields } });
+    },
+
+    comment(itemId, body, author) {
+      const id = crypto.randomUUID();
+      const at = Date.now();
+      const comment: LinearComment = { id, author, body, createdAt: at, updatedAt: at };
+      return itemStore({
+        op: 'record',
+        action: { type: 'edit-fields', itemId, fields: { [`${COMMENT_FIELD}${id}`]: comment } },
+      });
+    },
+
+    async outgoing() {
+      const changes = await itemStore({ op: 'outgoing', query: {} });
+      return changes.filter((change) => change.source === 'linear');
+    },
+
+    async retry(itemId) {
+      await itemStore({ op: 'retry-outgoing', itemId });
+    },
+
+    catalog(accountId) {
+      return itemStore({ op: 'source-catalog', account: accountId });
     },
   };
 }
@@ -119,6 +174,56 @@ function whatItDid(entry: ActivityEntry, projects: readonly Project[]): [string,
   }
 }
 
+// Whether two values read from the Item store are the same (key order aside).
+function sameValue(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  return [...keys].every((key) =>
+    sameValue((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+  );
+}
+
+// How the activity log names an issue's synced fields.
+const FIELD_NAMES: Record<string, string> = {
+  state: 'State',
+  assignee: 'Assignee',
+  priority: 'Priority',
+  dueDate: 'Due date',
+  estimate: 'Estimate',
+  cycle: 'Cycle',
+  linearProject: 'Linear project',
+};
+
+/** The synced fields a change to an issue's detail touched, by name: "Priority", "Labels", "Comment". */
+export function changedFieldNames(changes: readonly ItemChange[]): string[] {
+  const detail = changes.find((change) => change.field === 'detail');
+  if (detail?.field !== 'detail') return [];
+  const before = syncedFieldsOf(detail.before) ?? {};
+  const after = syncedFieldsOf(detail.after) ?? {};
+  const names = new Set<string>();
+  for (const field of new Set([...Object.keys(before), ...Object.keys(after)])) {
+    if (sameValue(before[field] ?? null, after[field] ?? null)) continue;
+    if (field.startsWith(LABEL_FIELD)) names.add('Labels');
+    else if (field.startsWith(COMMENT_FIELD)) names.add(after[field] ? 'Comment' : 'Comment deleted');
+    else names.add(FIELD_NAMES[field] ?? field);
+  }
+  return [...names];
+}
+
+// Whether a change touched nothing but the issue's updated time.
+function onlyBookkeeping(changes: readonly ItemChange[]): boolean {
+  const [only, ...rest] = changes;
+  if (!only || rest.length || only.field !== 'detail' || !only.before || !only.after) return false;
+  return sameValue({ ...only.before, updatedAt: 0 }, { ...only.after, updatedAt: 0 });
+}
+
+const andList = (names: string[]) =>
+  names.length <= 1
+    ? (names[0] ?? '')
+    : `${names.slice(0, -1).join(', ')} and ${names.at(-1)?.toLowerCase()}`;
+
 function whatChanged(changes: ItemChange[], projects: readonly Project[]): [string, string] {
   const filing = changes.length === 1 && changes[0]?.field === 'filing' ? changes[0] : null;
   if (filing) return [describeFiling(filing, projects), 'Filing'];
@@ -126,6 +231,15 @@ function whatChanged(changes: ItemChange[], projects: readonly Project[]): [stri
   if (status?.after === 'done') return ['Closed', 'Close'];
   if (status?.before === 'done') return ['Reopened', 'Reopen'];
   if (changes.length === 1 && changes[0]?.field === 'title') return ['Renamed', 'Rename'];
+  const fields = changedFieldNames(changes);
+  if (fields.length === 1 && fields[0] === 'Comment') return ['Commented', 'Comment'];
+  if (fields.length === 1 && fields[0] === 'Comment deleted') return ['Comment deleted', 'Comment deletion'];
+  if (fields.length) {
+    const named = andList(fields.map((name) => name.replace(' deleted', '')));
+    return [`${named} changed`, `${named} change`];
+  }
+  // Only Linear's own bookkeeping moved (its updated time, after a change sent from here, say).
+  if (onlyBookkeeping(changes)) return ['Updated', 'Update'];
   return ['Changed', 'Change'];
 }
 
@@ -142,6 +256,8 @@ export function describeIssueEntry(
   const who = entry.by.kind === 'rule' && entry.why ? `by ${entry.why}` : byWhom(entry.by);
   if (entry.action === 'create' && entry.by.kind === 'source')
     return `Added from ${SOURCE_NAMES[entry.by.source]}`;
+  // A change in Linear that won over the User's says so: "Changed in Linear by Priya Patel at 14:02".
+  if (entry.by.kind === 'source' && entry.why) return entry.why;
   if (entry.action !== 'undo') return `${whatItDid(entry, projects)[0]} ${who}`;
   const undone = history.find((other) => other.id === entry.undoes);
   if (!undone) return `Undone ${who}`;

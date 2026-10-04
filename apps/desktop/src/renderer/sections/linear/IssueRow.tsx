@@ -70,7 +70,8 @@ export function IssueBadge({ issue }: { issue: Issue }) {
 
 /**
  * An issue's row: number, state mark, Badge, identifier and title, then its state, priority and
- * assignee, and its workspace when more than one is connected.
+ * assignee, and its workspace when more than one is connected. A change made here that couldn't
+ * reach Linear says so.
  */
 export function IssueRow({
   issue,
@@ -79,6 +80,7 @@ export function IssueRow({
   mine,
   workspace,
   compact = false,
+  unsynced = false,
   onOpen,
 }: {
   issue: Issue;
@@ -90,6 +92,8 @@ export function IssueRow({
   workspace: string | null;
   /** Beside the detail pane: the state and workspace tags make way for the title. */
   compact?: boolean;
+  /** One of its changes made here couldn't sync to Linear. */
+  unsynced?: boolean;
   /** Selects the row and opens it in the detail pane. */
   onOpen: () => void;
 }) {
@@ -141,6 +145,14 @@ export function IssueRow({
         {issue.title}
       </span>
       <span className="mt-[5px] ml-3 flex flex-none items-center gap-1.5">
+        {unsynced && (
+          <Tag
+            className="border-ink font-semibold text-ink"
+            title="A change made here couldn’t sync to Linear"
+          >
+            Couldn’t sync
+          </Tag>
+        )}
         {!compact && <Tag>{detail.state.name}</Tag>}
         <span className="grid h-5 w-5 place-items-center" title={PRIORITY_NAMES[detail.priority]}>
           <PriorityIcon priority={detail.priority} />

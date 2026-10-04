@@ -1,7 +1,14 @@
 // The sync side of the Item store: where each Account's sync stands (cursor, last sync, back-off,
 // cadence) and a short history of sync runs with what each cost the Source. It shares the Item
 // store's database, so the Item store stays its only writer. Tokens never come here.
-import type { Source, SyncOutcomeKind, SyncProblem, SyncTrigger } from '@commander/domain';
+import {
+  type LinearCatalog,
+  linearCatalog,
+  type Source,
+  type SyncOutcomeKind,
+  type SyncProblem,
+  type SyncTrigger,
+} from '@commander/domain';
 import { and, count, desc, eq, isNull, lt } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
@@ -46,13 +53,16 @@ export type SyncStateStore = {
   runs(account: string, limit?: number): SyncRun[];
   // How many of the Account's Items Commander holds, tombstones aside.
   countItems(source: Source, account: string): number;
+  // What the Account's Source offers the detail pane's pickers, as its last sync fetched it.
+  catalog(account: string): LinearCatalog | null;
+  saveCatalog(account: string, source: Source, catalog: LinearCatalog, at: number): void;
 };
 
 // Runs kept per Account: about two days at the default cadence.
 const RUNS_KEPT = 200;
 
 export function openSyncStateStore(db: BetterSQLite3Database<typeof schema>): SyncStateStore {
-  const { syncState, syncRuns, items } = schema;
+  const { syncState, syncRuns, items, sourceCatalogs } = schema;
   return {
     get(account) {
       const row = db.select().from(syncState).where(eq(syncState.account, account)).get();
@@ -70,6 +80,7 @@ export function openSyncStateStore(db: BetterSQLite3Database<typeof schema>): Sy
     remove(account) {
       db.delete(syncState).where(eq(syncState.account, account)).run();
       db.delete(syncRuns).where(eq(syncRuns.account, account)).run();
+      db.delete(sourceCatalogs).where(eq(sourceCatalogs.account, account)).run();
     },
 
     recordRun(run) {
@@ -106,6 +117,21 @@ export function openSyncStateStore(db: BetterSQLite3Database<typeof schema>): Sy
         .where(and(eq(items.source, source), eq(items.account, account), isNull(items.deletedAt)))
         .get();
       return row?.n ?? 0;
+    },
+
+    catalog(account) {
+      const row = db.select().from(sourceCatalogs).where(eq(sourceCatalogs.account, account)).get();
+      // A catalog saved by an older Commander that no longer fits is as good as none.
+      const parsed = linearCatalog.safeParse(row?.catalog);
+      return parsed.success ? parsed.data : null;
+    },
+
+    saveCatalog(account, source, catalog, at) {
+      const values = { source, catalog: linearCatalog.parse(catalog), fetchedAt: at };
+      db.insert(sourceCatalogs)
+        .values({ account, ...values })
+        .onConflictDoUpdate({ target: sourceCatalogs.account, set: values })
+        .run();
     },
   };
 }

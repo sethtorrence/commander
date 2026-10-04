@@ -366,6 +366,7 @@ describe('what a sync saves', () => {
       nextSyncAt: T0 + 15 * MIN,
       itemCount: 2,
       problem: null,
+      outgoing: { pending: 0, failed: 0 },
     });
   });
 

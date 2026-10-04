@@ -20,10 +20,14 @@ declare const __COMMANDER_BUILD_CONFIG__: unknown;
 export function setUpAccounts({
   secrets,
   sendToCore,
+  testHooks = false,
 }: {
   secrets: Secrets;
   sendToCore: (message: CoreAccessTokenReply | CoreRemoveAccountItems | CoreSyncMessage) => void;
-}): { fromCore: (raw: unknown) => boolean } {
+  // End-to-end tests (COMMANDER_TEST_HOOKS=1) may take the machine offline: COMMANDER_TEST_OFFLINE=1
+  // starts Commander offline, and the returned setOnline switches it (checked every half second).
+  testHooks?: boolean;
+}): { fromCore: (raw: unknown) => boolean; setOnline: (online: boolean) => void } {
   const config = linearConfig(parseBuildConfig(__COMMANDER_BUILD_CONFIG__), process.env);
   const core = createCoreAccountChannel({
     send: sendToCore,
@@ -50,10 +54,12 @@ export function setUpAccounts({
   // Accounts connected before Commander kept who signed in find out now.
   void linear.identifyUsers();
   // Syncing pauses while the machine is asleep or offline.
+  let testOffline = testHooks && process.env.COMMANDER_TEST_OFFLINE === '1';
   watchSystemState({
     powerMonitor,
-    isOnline: () => net.isOnline(),
+    isOnline: () => !testOffline && net.isOnline(),
     onChange: (state) => sync.systemState(state),
+    pollMs: testHooks ? 500 : undefined,
   });
 
   ipcMain.handle(ipc.accounts, (_event, request: unknown) => answerAccountsRequest(linear, request, sync));
@@ -68,5 +74,10 @@ export function setUpAccounts({
   });
   sync.onChange(() => void broadcast());
 
-  return { fromCore: (raw) => core.handle(raw) || sync.handle(raw) };
+  return {
+    fromCore: (raw) => core.handle(raw) || sync.handle(raw),
+    setOnline: (online) => {
+      if (testHooks) testOffline = !online;
+    },
+  };
 }

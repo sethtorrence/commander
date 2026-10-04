@@ -134,6 +134,9 @@ export const sourceBatch = z.object({
   account: id,
   items: z.array(sourceItem).default([]),
   deleted: z.array(id).default([]),
+  // Why the Source's changes are being saved, when there is more to say than a sync (a change made in
+  // the Source that won over the User's: "Changed in Linear by Priya Patel at 14:02").
+  why: z.string().optional(),
 });
 export type SourceBatch = z.input<typeof sourceBatch>;
 
@@ -194,6 +197,16 @@ const linkEnds = { from: id, linkType, to: id };
 export const itemAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('create'), item: newItem }),
   z.object({ type: z.literal('update'), itemId: id, changes: itemChanges }),
+  // Changes some of a Source Item's synced fields (see synced-fields.ts: `priority`, `label:<id>`,
+  // `comment:<id>`…), leaving the rest as they are now. Recorded as an update; Two-way sync then
+  // writes it back to the Source.
+  z.object({
+    type: z.literal('edit-fields'),
+    itemId: id,
+    fields: z.record(z.string().min(1), z.unknown()).refine((fields) => Object.keys(fields).length > 0, {
+      message: 'Name at least one field to change',
+    }),
+  }),
   z.object({ type: z.literal('delete'), itemId: id }),
   z.object({ type: z.literal('link'), ...linkEnds }),
   z.object({ type: z.literal('unlink'), ...linkEnds }),

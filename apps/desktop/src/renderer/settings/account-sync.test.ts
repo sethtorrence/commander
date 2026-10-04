@@ -16,6 +16,7 @@ const idle: AccountSyncStatus = {
   nextSyncAt: at(14, 17),
   itemCount: 312,
   problem: null,
+  outgoing: { pending: 0, failed: 0 },
 };
 
 describe('describing an Account’s sync', () => {

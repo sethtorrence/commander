@@ -18,6 +18,8 @@ import {
   itemQuery,
   itemView,
 } from './items';
+import { type LinearCatalog, linearCatalog } from './linear';
+import { type OutgoingChange, outgoingChange, outgoingQuery } from './outgoing';
 import {
   type Project,
   type ProjectChange,
@@ -79,6 +81,13 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('undo-refile'), entryIds: z.array(z.number().int().positive()).min(1).max(1000) }),
   // Global search (the Ctrl+K palette): local, ranked, never waiting on a model.
   z.object({ op: z.literal('search'), query: searchQuery }),
+  // Two-way sync: changes waiting to reach their Source (or that couldn't sync), and Retry for an
+  // Item's changes that couldn't sync.
+  z.object({ op: z.literal('outgoing'), query: outgoingQuery.default({}) }),
+  z.object({ op: z.literal('retry-outgoing'), itemId: z.string().min(1) }),
+  // What an Account's Source offers the detail pane's pickers (Linear: each team's states, members,
+  // labels, cycles and Linear projects), as its last sync fetched it; null before the first.
+  z.object({ op: z.literal('source-catalog'), account: z.string().min(1) }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -104,6 +113,9 @@ export type ItemStoreResults = {
   refile: ActivityEntry[];
   'undo-refile': ActivityEntry[];
   search: SearchResult;
+  outgoing: OutgoingChange[];
+  'retry-outgoing': OutgoingChange[];
+  'source-catalog': LinearCatalog | null;
 };
 
 export const itemStoreResult = {
@@ -127,6 +139,9 @@ export const itemStoreResult = {
   refile: z.array(activityEntry),
   'undo-refile': z.array(activityEntry),
   search: searchResult,
+  outgoing: z.array(outgoingChange),
+  'retry-outgoing': z.array(outgoingChange),
+  'source-catalog': linearCatalog.nullable(),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

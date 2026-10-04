@@ -1,0 +1,1042 @@
+{
+  "commentId": "0b6f2d0e-6c55-4a8e-9d43-0f4d1b8e2a11",
+  "issueForWrite": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "issue": {
+          "id": "issue-418",
+          "identifier": "ENG-418",
+          "title": "Fix the login loop",
+          "url": "https://linear.app/acme/issue/ENG-418/fix-the-login-loop",
+          "description": "The login page **loops** after SSO.",
+          "priority": 3,
+          "estimate": 3,
+          "dueDate": "2026-10-09",
+          "createdAt": "2026-09-29T10:00:00.000Z",
+          "updatedAt": "2026-10-03T11:00:00.000Z",
+          "startedAt": "2026-09-30T08:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": null,
+          "archivedAt": null,
+          "trashed": null,
+          "team": {
+            "id": "team-eng",
+            "key": "ENG",
+            "name": "Engineering"
+          },
+          "state": {
+            "id": "state-progress",
+            "name": "In Progress",
+            "type": "started",
+            "color": "#f2c94c"
+          },
+          "assignee": {
+            "id": "user-priya",
+            "name": "Priya Patel",
+            "displayName": "priya",
+            "email": "priya@acme.test"
+          },
+          "creator": {
+            "id": "user-sam",
+            "name": "Sam Rivera",
+            "displayName": "sam",
+            "email": "sam@acme.test"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "label-bug",
+                "name": "Bug",
+                "color": "#eb5757"
+              }
+            ]
+          },
+          "cycle": {
+            "id": "cycle-12",
+            "number": 12,
+            "name": null,
+            "startsAt": "2026-09-28T00:00:00.000Z",
+            "endsAt": "2026-10-12T00:00:00.000Z"
+          },
+          "project": {
+            "id": "project-login",
+            "name": "Login revamp"
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-1",
+                "body": "Reproduced on staging.",
+                "createdAt": "2026-09-30T09:00:00.000Z",
+                "updatedAt": "2026-09-30T09:00:00.000Z",
+                "user": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "comment-1"
+            }
+          },
+          "history": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-03T11:00:00.000Z",
+                "actor": {
+                  "id": "user-priya",
+                  "name": "Priya Patel"
+                },
+                "fromStateId": null,
+                "toStateId": null,
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": null,
+                "toPriority": null,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": ["label-bug"],
+                "removedLabelIds": []
+              },
+              {
+                "createdAt": "2026-10-03T10:30:00.000Z",
+                "actor": {
+                  "id": "user-priya",
+                  "name": "Priya Patel"
+                },
+                "fromStateId": null,
+                "toStateId": null,
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": 2,
+                "toPriority": 3,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": null,
+                "removedLabelIds": null
+              },
+              {
+                "createdAt": "2026-09-30T08:00:00.000Z",
+                "actor": {
+                  "id": "user-sam",
+                  "name": "Sam Rivera"
+                },
+                "fromStateId": "state-todo",
+                "toStateId": "state-progress",
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": null,
+                "toPriority": null,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": null,
+                "removedLabelIds": null
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "h3"
+            }
+          }
+        }
+      }
+    }
+  },
+  "issueForWriteWithMyComment": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "issue": {
+          "id": "issue-418",
+          "identifier": "ENG-418",
+          "title": "Fix the login loop",
+          "url": "https://linear.app/acme/issue/ENG-418/fix-the-login-loop",
+          "description": "The login page **loops** after SSO.",
+          "priority": 3,
+          "estimate": 3,
+          "dueDate": "2026-10-09",
+          "createdAt": "2026-09-29T10:00:00.000Z",
+          "updatedAt": "2026-10-03T11:00:00.000Z",
+          "startedAt": "2026-09-30T08:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": null,
+          "archivedAt": null,
+          "trashed": null,
+          "team": {
+            "id": "team-eng",
+            "key": "ENG",
+            "name": "Engineering"
+          },
+          "state": {
+            "id": "state-progress",
+            "name": "In Progress",
+            "type": "started",
+            "color": "#f2c94c"
+          },
+          "assignee": {
+            "id": "user-priya",
+            "name": "Priya Patel",
+            "displayName": "priya",
+            "email": "priya@acme.test"
+          },
+          "creator": {
+            "id": "user-sam",
+            "name": "Sam Rivera",
+            "displayName": "sam",
+            "email": "sam@acme.test"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "label-bug",
+                "name": "Bug",
+                "color": "#eb5757"
+              }
+            ]
+          },
+          "cycle": {
+            "id": "cycle-12",
+            "number": 12,
+            "name": null,
+            "startsAt": "2026-09-28T00:00:00.000Z",
+            "endsAt": "2026-10-12T00:00:00.000Z"
+          },
+          "project": {
+            "id": "project-login",
+            "name": "Login revamp"
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-1",
+                "body": "Reproduced on staging.",
+                "createdAt": "2026-09-30T09:00:00.000Z",
+                "updatedAt": "2026-09-30T09:00:00.000Z",
+                "user": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                }
+              },
+              {
+                "id": "0b6f2d0e-6c55-4a8e-9d43-0f4d1b8e2a11",
+                "body": "On it, fixing the redirect.",
+                "createdAt": "2026-10-03T12:01:00.000Z",
+                "updatedAt": "2026-10-03T12:01:00.000Z",
+                "user": {
+                  "id": "user-sam",
+                  "name": "Sam Rivera",
+                  "displayName": "sam",
+                  "email": "sam@acme.test"
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "0b6f2d0e-6c55-4a8e-9d43-0f4d1b8e2a11"
+            }
+          },
+          "history": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-03T11:00:00.000Z",
+                "actor": {
+                  "id": "user-priya",
+                  "name": "Priya Patel"
+                },
+                "fromStateId": null,
+                "toStateId": null,
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": null,
+                "toPriority": null,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": ["label-bug"],
+                "removedLabelIds": []
+              },
+              {
+                "createdAt": "2026-10-03T10:30:00.000Z",
+                "actor": {
+                  "id": "user-priya",
+                  "name": "Priya Patel"
+                },
+                "fromStateId": null,
+                "toStateId": null,
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": 2,
+                "toPriority": 3,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": null,
+                "removedLabelIds": null
+              },
+              {
+                "createdAt": "2026-09-30T08:00:00.000Z",
+                "actor": {
+                  "id": "user-sam",
+                  "name": "Sam Rivera"
+                },
+                "fromStateId": "state-todo",
+                "toStateId": "state-progress",
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": null,
+                "toPriority": null,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": null,
+                "removedLabelIds": null
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "h3"
+            }
+          }
+        }
+      }
+    }
+  },
+  "issueForWriteHistoryPaged": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "issue": {
+          "id": "issue-418",
+          "identifier": "ENG-418",
+          "title": "Fix the login loop",
+          "url": "https://linear.app/acme/issue/ENG-418/fix-the-login-loop",
+          "description": "The login page **loops** after SSO.",
+          "priority": 3,
+          "estimate": 3,
+          "dueDate": "2026-10-09",
+          "createdAt": "2026-09-29T10:00:00.000Z",
+          "updatedAt": "2026-10-03T11:00:00.000Z",
+          "startedAt": "2026-09-30T08:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": null,
+          "archivedAt": null,
+          "trashed": null,
+          "team": {
+            "id": "team-eng",
+            "key": "ENG",
+            "name": "Engineering"
+          },
+          "state": {
+            "id": "state-progress",
+            "name": "In Progress",
+            "type": "started",
+            "color": "#f2c94c"
+          },
+          "assignee": {
+            "id": "user-priya",
+            "name": "Priya Patel",
+            "displayName": "priya",
+            "email": "priya@acme.test"
+          },
+          "creator": {
+            "id": "user-sam",
+            "name": "Sam Rivera",
+            "displayName": "sam",
+            "email": "sam@acme.test"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "label-bug",
+                "name": "Bug",
+                "color": "#eb5757"
+              }
+            ]
+          },
+          "cycle": {
+            "id": "cycle-12",
+            "number": 12,
+            "name": null,
+            "startsAt": "2026-09-28T00:00:00.000Z",
+            "endsAt": "2026-10-12T00:00:00.000Z"
+          },
+          "project": {
+            "id": "project-login",
+            "name": "Login revamp"
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-1",
+                "body": "Reproduced on staging.",
+                "createdAt": "2026-09-30T09:00:00.000Z",
+                "updatedAt": "2026-09-30T09:00:00.000Z",
+                "user": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "comment-1"
+            }
+          },
+          "history": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-03T11:00:00.000Z",
+                "actor": {
+                  "id": "user-priya",
+                  "name": "Priya Patel"
+                },
+                "fromStateId": null,
+                "toStateId": null,
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": null,
+                "toPriority": null,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": ["label-bug"],
+                "removedLabelIds": []
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": true,
+              "endCursor": "h1"
+            }
+          }
+        }
+      }
+    }
+  },
+  "issueHistorySecondPage": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "issue": {
+          "history": {
+            "nodes": [
+              {
+                "createdAt": "2026-10-03T10:30:00.000Z",
+                "actor": {
+                  "id": "user-priya",
+                  "name": "Priya Patel"
+                },
+                "fromStateId": null,
+                "toStateId": null,
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": 2,
+                "toPriority": 3,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": null,
+                "removedLabelIds": null
+              },
+              {
+                "createdAt": "2026-09-30T08:00:00.000Z",
+                "actor": {
+                  "id": "user-sam",
+                  "name": "Sam Rivera"
+                },
+                "fromStateId": "state-todo",
+                "toStateId": "state-progress",
+                "fromAssigneeId": null,
+                "toAssigneeId": null,
+                "fromPriority": null,
+                "toPriority": null,
+                "fromDueDate": null,
+                "toDueDate": null,
+                "fromEstimate": null,
+                "toEstimate": null,
+                "fromCycleId": null,
+                "toCycleId": null,
+                "fromProjectId": null,
+                "toProjectId": null,
+                "addedLabelIds": null,
+                "removedLabelIds": null
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "h3"
+            }
+          }
+        }
+      }
+    }
+  },
+  "issueUpdated": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "issueUpdate": {
+          "success": true,
+          "issue": {
+            "id": "issue-418",
+            "identifier": "ENG-418",
+            "title": "Fix the login loop",
+            "url": "https://linear.app/acme/issue/ENG-418/fix-the-login-loop",
+            "description": "The login page **loops** after SSO.",
+            "priority": 1,
+            "estimate": 5,
+            "dueDate": "2026-10-09",
+            "createdAt": "2026-09-29T10:00:00.000Z",
+            "updatedAt": "2026-10-03T12:00:05.000Z",
+            "startedAt": "2026-09-30T08:00:00.000Z",
+            "completedAt": null,
+            "canceledAt": null,
+            "archivedAt": null,
+            "trashed": null,
+            "team": {
+              "id": "team-eng",
+              "key": "ENG",
+              "name": "Engineering"
+            },
+            "state": {
+              "id": "state-progress",
+              "name": "In Progress",
+              "type": "started",
+              "color": "#f2c94c"
+            },
+            "assignee": {
+              "id": "user-priya",
+              "name": "Priya Patel",
+              "displayName": "priya",
+              "email": "priya@acme.test"
+            },
+            "creator": {
+              "id": "user-sam",
+              "name": "Sam Rivera",
+              "displayName": "sam",
+              "email": "sam@acme.test"
+            },
+            "labels": {
+              "nodes": [
+                {
+                  "id": "label-customer",
+                  "name": "Customer",
+                  "color": "#5e6ad2"
+                }
+              ]
+            },
+            "cycle": {
+              "id": "cycle-12",
+              "number": 12,
+              "name": null,
+              "startsAt": "2026-09-28T00:00:00.000Z",
+              "endsAt": "2026-10-12T00:00:00.000Z"
+            },
+            "project": {
+              "id": "project-login",
+              "name": "Login revamp"
+            },
+            "comments": {
+              "nodes": [
+                {
+                  "id": "comment-1",
+                  "body": "Reproduced on staging.",
+                  "createdAt": "2026-09-30T09:00:00.000Z",
+                  "updatedAt": "2026-09-30T09:00:00.000Z",
+                  "user": {
+                    "id": "user-priya",
+                    "name": "Priya Patel",
+                    "displayName": "priya",
+                    "email": "priya@acme.test"
+                  }
+                }
+              ],
+              "pageInfo": {
+                "hasNextPage": false,
+                "endCursor": "comment-1"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "commentCreated": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "commentCreate": {
+          "success": true
+        }
+      }
+    }
+  },
+  "commentDeleted": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "commentDelete": {
+          "success": true
+        }
+      }
+    }
+  },
+  "issueWithMyComment": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "issue": {
+          "id": "issue-418",
+          "identifier": "ENG-418",
+          "title": "Fix the login loop",
+          "url": "https://linear.app/acme/issue/ENG-418/fix-the-login-loop",
+          "description": "The login page **loops** after SSO.",
+          "priority": 3,
+          "estimate": 3,
+          "dueDate": "2026-10-09",
+          "createdAt": "2026-09-29T10:00:00.000Z",
+          "updatedAt": "2026-10-03T11:00:00.000Z",
+          "startedAt": "2026-09-30T08:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": null,
+          "archivedAt": null,
+          "trashed": null,
+          "team": {
+            "id": "team-eng",
+            "key": "ENG",
+            "name": "Engineering"
+          },
+          "state": {
+            "id": "state-progress",
+            "name": "In Progress",
+            "type": "started",
+            "color": "#f2c94c"
+          },
+          "assignee": {
+            "id": "user-priya",
+            "name": "Priya Patel",
+            "displayName": "priya",
+            "email": "priya@acme.test"
+          },
+          "creator": {
+            "id": "user-sam",
+            "name": "Sam Rivera",
+            "displayName": "sam",
+            "email": "sam@acme.test"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "label-bug",
+                "name": "Bug",
+                "color": "#eb5757"
+              }
+            ]
+          },
+          "cycle": {
+            "id": "cycle-12",
+            "number": 12,
+            "name": null,
+            "startsAt": "2026-09-28T00:00:00.000Z",
+            "endsAt": "2026-10-12T00:00:00.000Z"
+          },
+          "project": {
+            "id": "project-login",
+            "name": "Login revamp"
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-1",
+                "body": "Reproduced on staging.",
+                "createdAt": "2026-09-30T09:00:00.000Z",
+                "updatedAt": "2026-09-30T09:00:00.000Z",
+                "user": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                }
+              },
+              {
+                "id": "0b6f2d0e-6c55-4a8e-9d43-0f4d1b8e2a11",
+                "body": "On it, fixing the redirect.",
+                "createdAt": "2026-10-03T12:01:00.000Z",
+                "updatedAt": "2026-10-03T12:01:00.000Z",
+                "user": {
+                  "id": "user-sam",
+                  "name": "Sam Rivera",
+                  "displayName": "sam",
+                  "email": "sam@acme.test"
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "comment-1"
+            }
+          }
+        }
+      }
+    }
+  },
+  "issueAfterTakeBack": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "118",
+      "x-ratelimit-requests-remaining": "4990",
+      "x-ratelimit-complexity-remaining": "1998000"
+    },
+    "body": {
+      "data": {
+        "issue": {
+          "id": "issue-418",
+          "identifier": "ENG-418",
+          "title": "Fix the login loop",
+          "url": "https://linear.app/acme/issue/ENG-418/fix-the-login-loop",
+          "description": "The login page **loops** after SSO.",
+          "priority": 3,
+          "estimate": 3,
+          "dueDate": "2026-10-09",
+          "createdAt": "2026-09-29T10:00:00.000Z",
+          "updatedAt": "2026-10-03T11:00:00.000Z",
+          "startedAt": "2026-09-30T08:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": null,
+          "archivedAt": null,
+          "trashed": null,
+          "team": {
+            "id": "team-eng",
+            "key": "ENG",
+            "name": "Engineering"
+          },
+          "state": {
+            "id": "state-progress",
+            "name": "In Progress",
+            "type": "started",
+            "color": "#f2c94c"
+          },
+          "assignee": {
+            "id": "user-priya",
+            "name": "Priya Patel",
+            "displayName": "priya",
+            "email": "priya@acme.test"
+          },
+          "creator": {
+            "id": "user-sam",
+            "name": "Sam Rivera",
+            "displayName": "sam",
+            "email": "sam@acme.test"
+          },
+          "labels": {
+            "nodes": [
+              {
+                "id": "label-bug",
+                "name": "Bug",
+                "color": "#eb5757"
+              }
+            ]
+          },
+          "cycle": {
+            "id": "cycle-12",
+            "number": 12,
+            "name": null,
+            "startsAt": "2026-09-28T00:00:00.000Z",
+            "endsAt": "2026-10-12T00:00:00.000Z"
+          },
+          "project": {
+            "id": "project-login",
+            "name": "Login revamp"
+          },
+          "comments": {
+            "nodes": [
+              {
+                "id": "comment-1",
+                "body": "Reproduced on staging.",
+                "createdAt": "2026-09-30T09:00:00.000Z",
+                "updatedAt": "2026-09-30T09:00:00.000Z",
+                "user": {
+                  "id": "user-priya",
+                  "name": "Priya Patel",
+                  "displayName": "priya",
+                  "email": "priya@acme.test"
+                }
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": "comment-1"
+            }
+          }
+        }
+      }
+    }
+  },
+  "issueNotFound": {
+    "status": 200,
+    "headers": {},
+    "body": {
+      "errors": [
+        {
+          "message": "Argument Validation Error",
+          "extensions": {
+            "type": "invalid input",
+            "code": "INVALID_INPUT",
+            "statusCode": 400,
+            "userError": true,
+            "userPresentableMessage": "Could not find referenced Issue."
+          }
+        }
+      ],
+      "data": null
+    }
+  },
+  "stateRefused": {
+    "status": 400,
+    "headers": {},
+    "body": {
+      "errors": [
+        {
+          "message": "Argument Validation Error",
+          "extensions": {
+            "type": "invalid input",
+            "code": "INVALID_INPUT",
+            "statusCode": 400,
+            "userError": true,
+            "userPresentableMessage": "The workflow state does not belong to the issue's team."
+          }
+        }
+      ],
+      "data": null
+    }
+  },
+  "catalog": {
+    "status": 200,
+    "headers": {
+      "x-complexity": "2310"
+    },
+    "body": {
+      "data": {
+        "teams": {
+          "nodes": [
+            {
+              "id": "team-eng",
+              "key": "ENG",
+              "name": "Engineering",
+              "states": {
+                "nodes": [
+                  {
+                    "id": "state-done",
+                    "name": "Done",
+                    "type": "completed",
+                    "color": "#5e6ad2",
+                    "position": 4
+                  },
+                  {
+                    "id": "state-todo",
+                    "name": "Todo",
+                    "type": "unstarted",
+                    "color": "#e2e2e2",
+                    "position": 1
+                  },
+                  {
+                    "id": "state-backlog",
+                    "name": "Backlog",
+                    "type": "backlog",
+                    "color": "#bec2c8",
+                    "position": 0
+                  },
+                  {
+                    "id": "state-progress",
+                    "name": "In Progress",
+                    "type": "started",
+                    "color": "#f2c94c",
+                    "position": 2
+                  },
+                  {
+                    "id": "state-review",
+                    "name": "In Review",
+                    "type": "started",
+                    "color": "#0f783c",
+                    "position": 3
+                  }
+                ]
+              },
+              "members": {
+                "nodes": [
+                  {
+                    "id": "user-sam",
+                    "name": "Sam Rivera",
+                    "displayName": "sam",
+                    "email": "sam@acme.test",
+                    "active": true
+                  },
+                  {
+                    "id": "user-priya",
+                    "name": "Priya Patel",
+                    "displayName": "priya",
+                    "email": "priya@acme.test",
+                    "active": true
+                  },
+                  {
+                    "id": "user-gone",
+                    "name": "Alex Former",
+                    "displayName": "alex",
+                    "email": null,
+                    "active": false
+                  }
+                ]
+              },
+              "cycles": {
+                "nodes": [
+                  {
+                    "id": "cycle-13",
+                    "number": 13,
+                    "name": "Polish",
+                    "startsAt": "2026-10-12T00:00:00.000Z",
+                    "endsAt": "2026-10-26T00:00:00.000Z"
+                  },
+                  {
+                    "id": "cycle-12",
+                    "number": 12,
+                    "name": null,
+                    "startsAt": "2026-09-28T00:00:00.000Z",
+                    "endsAt": "2026-10-12T00:00:00.000Z"
+                  }
+                ]
+              },
+              "projects": {
+                "nodes": [
+                  {
+                    "id": "project-login",
+                    "name": "Login revamp"
+                  },
+                  {
+                    "id": "project-audit",
+                    "name": "Audit trail"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "issueLabels": {
+          "nodes": [
+            {
+              "id": "label-bug",
+              "name": "Bug",
+              "color": "#eb5757",
+              "team": null
+            },
+            {
+              "id": "label-customer",
+              "name": "Customer",
+              "color": "#5e6ad2",
+              "team": {
+                "id": "team-eng"
+              }
+            },
+            {
+              "id": "label-ops",
+              "name": "On call",
+              "color": "#26b5ce",
+              "team": {
+                "id": "team-ops"
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

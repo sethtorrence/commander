@@ -1,7 +1,8 @@
-import type { ActivityEntry, Item } from '@commander/domain';
+import type { ActivityEntry, Item, LinearCatalog, OutgoingChange } from '@commander/domain';
 import type { AccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type IssueSync, issueSync } from './editing';
 import {
   type AccountsById,
   type FilterKey,
@@ -69,6 +70,18 @@ export interface LinearState {
   /** The selected issue's activity log (newest first) and Links. */
   history: ActivityEntry[];
   links: IssueLink[];
+  /** Every issue Commander holds, whatever the view and filters (for the pickers' choices). */
+  allIssues: Issue[];
+  /** What each Account's Linear offers the pickers, by Account; null until its first sync. */
+  catalogs: ReadonlyMap<string, LinearCatalog | null>;
+  /** Where an issue's own changes stand: in Linear, on their way, or couldn't sync. */
+  syncOf(itemId: string): IssueSync;
+  /** Changes some of the selected issue's synced fields; undoable here. */
+  edit(fields: Record<string, unknown>): Promise<void>;
+  /** Posts a comment on the selected issue, as the User; undoable here (which deletes it in Linear). */
+  comment(body: string): Promise<boolean>;
+  /** Sends the selected issue's changes that couldn't sync again. */
+  retry(): Promise<void>;
   /** Makes a change through another module (filing), so it reloads and can be undone here. */
   apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
   /** Undoes one change made here: the given entry, or the latest not yet undone. */
@@ -79,9 +92,15 @@ export interface LinearState {
   refresh(): void;
 }
 
-// What changes when a sync finishes: each Account's last sync.
+// What changes when a sync finishes, or a change made here reaches Linear or fails: each Account's
+// last sync and outgoing changes.
 const syncSignature = (accounts: readonly AccountSummary[]) =>
-  accounts.map((account) => `${account.id}:${account.sync?.lastSyncedAt ?? ''}`).join('|');
+  accounts
+    .map((account) => {
+      const outgoing = account.sync?.outgoing;
+      return `${account.id}:${account.sync?.lastSyncedAt ?? ''}:${outgoing?.pending ?? 0}/${outgoing?.failed ?? 0}`;
+    })
+    .join('|');
 
 /**
  * The Linear Section's state: the issues and Accounts, the view, the filters (with the Project
@@ -102,6 +121,8 @@ export function useLinear({
   storage?: Storage;
 }): LinearState {
   const [items, setItems] = useState<Item[] | null>(null);
+  const [outgoing, setOutgoing] = useState<OutgoingChange[]>([]);
+  const [catalogs, setCatalogs] = useState<ReadonlyMap<string, LinearCatalog | null>>(new Map());
   // null until the Accounts are first read.
   const [knownAccounts, setAccounts] = useState<AccountSummary[] | null>(null);
   const accounts = useMemo(() => knownAccounts ?? [], [knownAccounts]);
@@ -124,10 +145,24 @@ export function useLinear({
   useEffect(() => {
     let current = true;
     issues.list().then((next) => current && setItems(next), report);
+    issues.outgoing().then((next) => current && setOutgoing(next), report);
     return () => {
       current = false;
     };
   }, [issues, version]);
+
+  // What each Account's Linear offers the pickers, read again after each sync.
+  const catalogKey = syncSignature(accounts);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `catalogKey` asks for a reread after a sync
+  useEffect(() => {
+    let current = true;
+    Promise.all(
+      accounts.map(async (account) => [account.id, await issues.catalog(account.id)] as const),
+    ).then((found) => current && setCatalogs(new Map(found)), report);
+    return () => {
+      current = false;
+    };
+  }, [issues, catalogKey]);
 
   // The Accounts, kept current; the issues are read again whenever a sync finishes.
   const synced = useRef<string | null>(null);
@@ -188,13 +223,17 @@ export function useLinear({
     () => groups.flatMap((group) => (group.id === 'closed' && !closedShown ? [] : group.issues)),
     [groups, closedShown],
   );
+  // An issue open in the detail pane stays open when an edit moves it out of the list (closing it
+  // into the collapsed Closed group, say), rather than the pane jumping to another issue.
   const selected =
     shown.find((issue) => issue.id === selectedId) ??
+    (detailOpen ? all.find((issue) => issue.id === selectedId) : undefined) ??
     shown[Math.min(lastIndex.current, shown.length - 1)] ??
     null;
   const selectedItemId = selected?.id ?? null;
   useEffect(() => {
-    if (selected) lastIndex.current = shown.indexOf(selected);
+    const index = selected ? shown.indexOf(selected) : -1;
+    if (index >= 0) lastIndex.current = index;
   }, [selected, shown]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `version` asks for a reload after a change
@@ -289,6 +328,46 @@ export function useLinear({
     [issues, reload],
   );
 
+  const outgoingByItem = useMemo(() => {
+    const byItem = new Map<string, OutgoingChange[]>();
+    for (const change of outgoing) byItem.set(change.itemId, [...(byItem.get(change.itemId) ?? []), change]);
+    return byItem;
+  }, [outgoing]);
+  const syncOf = useCallback(
+    (itemId: string) => issueSync(outgoingByItem.get(itemId) ?? []),
+    [outgoingByItem],
+  );
+
+  const edit = useCallback(
+    async (fields: Record<string, unknown>) => {
+      if (!selectedItemId) return;
+      await apply(() => issues.edit(selectedItemId, fields));
+    },
+    [apply, issues, selectedItemId],
+  );
+
+  // The User's own Linear user in the issue's workspace, as the comment's author until Linear's arrives.
+  const selectedAccount = selected?.account ?? null;
+  const comment = useCallback(
+    async (body: string) => {
+      if (!selectedItemId || !body.trim()) return false;
+      const me = selectedAccount ? accountsById.get(selectedAccount)?.user : null;
+      const author = me ? { id: me.id, name: me.name, displayName: me.name, email: null } : null;
+      return (await apply(() => issues.comment(selectedItemId, body.trim(), author))) !== null;
+    },
+    [apply, issues, selectedItemId, selectedAccount, accountsById],
+  );
+
+  const retry = useCallback(async () => {
+    if (!selectedItemId) return;
+    try {
+      await issues.retry(selectedItemId);
+    } catch (error) {
+      report(error);
+    }
+    reload();
+  }, [issues, selectedItemId, reload]);
+
   const refresh = useCallback(() => setRefreshWanted(true), []);
   useEffect(() => {
     if (!refreshWanted || knownAccounts === null) return;
@@ -323,6 +402,12 @@ export function useLinear({
     setDetailOpen,
     history,
     links,
+    allIssues: all,
+    catalogs,
+    syncOf,
+    edit,
+    comment,
+    retry,
     apply,
     undo,
     reload,

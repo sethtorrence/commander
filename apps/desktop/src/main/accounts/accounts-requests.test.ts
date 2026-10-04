@@ -113,6 +113,7 @@ describe('Settings → Accounts requests from the window', () => {
       nextSyncAt: 2,
       itemCount: 12,
       problem: null,
+      outgoing: { pending: 0, failed: 0 },
     };
     const sync = {
       status: (id: string) => (id === 'linear:org-acme' ? status : null),

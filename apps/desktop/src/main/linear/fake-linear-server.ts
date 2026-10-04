@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { createFakeIssues, type FakeIssues, type FakeUser } from './fake-linear-issues';
+import { createFakeIssues, type FakeIssues, FakeLinearRefusal, type FakeUser } from './fake-linear-issues';
 
 // A stand-in for Linear's OAuth and GraphQL endpoints, for tests only (unit and end-to-end). It
 // behaves like Linear where Commander depends on it: PKCE with no client secret, refresh tokens
@@ -52,6 +52,9 @@ export type FakeLinear = {
   revokeApiKey(key: string): void;
   // Every GraphQL request, by operation name.
   graphqlRequests: { operationName: string; variables: Record<string, unknown> }[];
+  // Two-way sync's writes (issueUpdate, commentCreate, commentDelete) are refused with this message
+  // until switched back with null, as Linear refuses a change it won't take.
+  refuseWrites(message: string | null): void;
   close(): Promise<void>;
 };
 
@@ -94,6 +97,7 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
   const issued: string[] = [];
   let refreshFailing = false;
   let refreshDelay = 0;
+  let writesRefused: string | null = null;
 
   const fake: FakeLinear = {
     url: '',
@@ -130,6 +134,9 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
       apiKeys.delete(key);
     },
     graphqlRequests: [],
+    refuseWrites: (message) => {
+      writesRefused = message;
+    },
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 
@@ -224,7 +231,28 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
         ],
       });
     }
-    const answer = fake.issues.answer(workspace.id, sent.operationName ?? '', sent.variables ?? {});
+    const operationName = sent.operationName ?? '';
+    // Linear's answer to a request it refuses: GraphQL errors, with words for people.
+    const refuse = (message: string) =>
+      json(response, 400, {
+        errors: [
+          {
+            message: 'Argument Validation Error',
+            extensions: { code: 'INVALID_INPUT', userError: true, userPresentableMessage: message },
+          },
+        ],
+        data: null,
+      });
+    if (writesRefused && /^Commander(IssueUpdate|CommentCreate|CommentDelete)$/.test(operationName)) {
+      return refuse(writesRefused);
+    }
+    let answer: unknown;
+    try {
+      answer = fake.issues.answer(workspace.id, operationName, sent.variables ?? {}, viewerOf(workspace));
+    } catch (error) {
+      if (error instanceof FakeLinearRefusal) return refuse(error.message);
+      throw error;
+    }
     if (answer !== null) return json(response, 200, { data: answer }, { 'x-complexity': '42' });
     if (!/viewer\s*{[^{}]*organization\s*{/.test(query))
       return json(response, 400, { errors: [{ message: 'unknown' }] });

@@ -16,6 +16,7 @@ const status: AccountSyncStatus = {
   nextSyncAt: 2,
   itemCount: 3,
   problem: null,
+  outgoing: { pending: 0, failed: 0 },
 };
 
 function channel() {

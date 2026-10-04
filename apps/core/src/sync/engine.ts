@@ -5,6 +5,13 @@
 // while the machine is asleep or offline and catches up once after; backs off exponentially (capped)
 // on failures, always honouring the Source's Retry-After; and skips Accounts that need reconnecting.
 // Where each Account stands is kept in the Item store's database, so it carries on after a restart.
+//
+// Two-way sync's outgoing side runs on the same per-Account queue: changes made in Commander to
+// Source Items are queued by the Item store (with the time they were made) and sent from here, one
+// Item at a time, never alongside that Account's sync. They wait while offline or asleep and for a
+// reconnect; retry with back-off (honouring Retry-After); stop as Couldn't sync after repeated
+// failure or when the Source refuses the change outright; and are followed by a refresh. A change
+// that lost to a newer one at the Source is dropped, with the Source's value saved and a note.
 import type {
   AccountSyncStatus,
   Source,
@@ -19,11 +26,13 @@ import {
   SignInRefused,
   type SourceAdapter,
   SourceUnavailable,
+  type Superseded,
   type SyncCost,
   type SyncResult,
+  WriteRejected,
 } from '@commander/sources';
 import { type AccessToken, AccessTokenUnavailable } from '../access-tokens';
-import type { ItemStore, SyncState } from '../item-store';
+import type { ItemStore, OutgoingRow, SyncState } from '../item-store';
 
 // Back-off after failures: 1, 2, 4… minutes, never more than an hour (a Retry-After can ask for more).
 export const BACKOFF_BASE_MS = 60_000;
@@ -32,6 +41,31 @@ export const BACKOFF_CAP_MS = 60 * 60_000;
 export const SPREAD_MS = 60_000;
 // setTimeout can't wait longer than this; longer waits are re-armed.
 const MAX_TIMER_MS = 2 ** 31 - 1;
+// Outgoing changes retry after 10, 20, 40, 80 seconds; the fifth failure in a row is Couldn't sync.
+export const WRITE_BACKOFF_BASE_MS = 10_000;
+export const MAX_WRITE_ATTEMPTS = 5;
+
+const SOURCE_NAMES: Record<Source, string> = {
+  gmail: 'Gmail',
+  outlook: 'Outlook',
+  'google-calendar': 'Google Calendar',
+  teams: 'Teams',
+  linear: 'Linear',
+  github: 'GitHub',
+};
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+// The note on a change from the Source that won over the User's: "Changed in Linear by Priya Patel
+// at 14:02" (the newest such change, at the machine's local time).
+export function supersededNote(source: Source, superseded: Superseded[]): string | undefined {
+  const [first, ...rest] = superseded;
+  if (!first) return undefined;
+  const newest = rest.reduce((a, b) => (b.at > a.at ? b : a), first);
+  const at = new Date(newest.at);
+  const by = newest.by ? ` by ${newest.by}` : '';
+  return `Changed in ${SOURCE_NAMES[source]}${by} at ${pad(at.getHours())}:${pad(at.getMinutes())}`;
+}
 
 export type SyncAccount = { id: string; source: Source; needsReconnect: boolean };
 export type SystemState = { awake: boolean; online: boolean };
@@ -73,10 +107,32 @@ type Entry = {
   dueAt: number | null;
   running: Promise<void> | null;
   abort: AbortController | null;
+  // The Account's syncs and outgoing writes take turns on this chain, never overlapping.
+  turn: Promise<void>;
+  writing: Promise<void> | null;
+  // More changes arrived while writing: look again once done.
+  writeAgain: boolean;
+  writeTimer: ReturnType<typeof setTimeout> | null;
+  writeAbort: AbortController | null;
+  // No writes before this (a rate limit, or a refused sign-in being checked).
+  writesHeldUntil: number | null;
 };
 
 const backoff = (failures: number) =>
   Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** Math.max(0, failures - 1));
+const writeBackoff = (attempts: number) => WRITE_BACKOFF_BASE_MS * 2 ** Math.max(0, attempts - 1);
+
+// Runs the task once the Account's syncs and writes before it are done.
+function takeTurn<T>(entry: Entry, task: () => Promise<T>): Promise<T> {
+  const result = entry.turn.then(task, task);
+  entry.turn = result.then(
+    () => {},
+    () => {},
+  );
+  return result;
+}
+
+type WriteOutcome = 'written' | 'next' | 'stop';
 
 export function createSyncEngine({
   store,
@@ -133,6 +189,7 @@ export function createSyncEngine({
       nextSyncAt: entry.dueAt,
       itemCount: store.syncState.countItems(entry.account.source, entry.account.id),
       problem: state.problem,
+      outgoing: store.outgoing.counts(entry.account.id),
     };
   }
 
@@ -190,7 +247,7 @@ export function createSyncEngine({
     clearTimer(entry);
     const abort = new AbortController();
     entry.abort = abort;
-    entry.running = execute(entry, state.cursor, trigger, abort.signal)
+    entry.running = takeTurn(entry, () => execute(entry, load(entry).cursor, trigger, abort.signal))
       .catch((error) => log(`Sync engine error for ${entry.account.id}: ${String(error)}`))
       .finally(() => {
         entry.running = null;
@@ -216,6 +273,9 @@ export function createSyncEngine({
             account,
             cursor,
             accessToken: () => accessTokens.request(account),
+            saveCatalog(catalog) {
+              if (!signal.aborted) store.syncState.saveCatalog(account, source, catalog, now());
+            },
             save(page) {
               if (signal.aborted) throw new Error('The sync was stopped');
               const outcome = store.saveFromSource({
@@ -315,9 +375,172 @@ export function createSyncEngine({
 
   function drop(entry: Entry) {
     clearTimer(entry);
+    clearWriteTimer(entry);
     entry.abort?.abort();
+    entry.writeAbort?.abort();
     entries.delete(entry.account.id);
   }
+
+  // ------------------------------------------------------------------------------------------
+  // Outgoing changes (Two-way sync)
+
+  const canWrite = (entry: Entry) =>
+    !!entry.adapter.write && isCurrent(entry) && !entry.account.needsReconnect && !paused();
+
+  function clearWriteTimer(entry: Entry) {
+    if (entry.writeTimer) clearTimeout(entry.writeTimer);
+    entry.writeTimer = null;
+  }
+
+  // Sends the Account's due changes, then refreshes it if any reached the Source.
+  function kickWrites(entry: Entry) {
+    if (entry.writing) {
+      entry.writeAgain = true;
+      return;
+    }
+    if (!canWrite(entry)) return;
+    clearWriteTimer(entry);
+    entry.writing = takeTurn(entry, () => sendDue(entry))
+      .then((wrote) => {
+        if (wrote && isCurrent(entry)) void run(entry, 'refresh');
+      })
+      .catch((error) => log(`Outgoing changes for ${entry.account.id} stopped: ${String(error)}`))
+      .finally(() => {
+        entry.writing = null;
+        if (entry.writeAgain) {
+          entry.writeAgain = false;
+          kickWrites(entry);
+        } else scheduleWrites(entry);
+        emit();
+      });
+  }
+
+  // Arms a timer for the Account's next change waiting on a back-off (or a hold).
+  function scheduleWrites(entry: Entry) {
+    clearWriteTimer(entry);
+    if (!canWrite(entry) || entry.writing) return;
+    const due = store.outgoing.nextDueAt(entry.account.id);
+    if (due === null) return;
+    const at = Math.max(due, entry.writesHeldUntil ?? 0);
+    entry.writeTimer = setTimeout(
+      () => {
+        entry.writeTimer = null;
+        kickWrites(entry);
+      },
+      Math.min(MAX_TIMER_MS, Math.max(0, at - now())),
+    );
+  }
+
+  async function sendDue(entry: Entry): Promise<boolean> {
+    let wrote = false;
+    for (;;) {
+      if (!canWrite(entry)) return wrote;
+      if (entry.writesHeldUntil !== null && entry.writesHeldUntil > now()) return wrote;
+      const [changes] = store.outgoing.due(entry.account.id, now());
+      if (!changes) return wrote;
+      const outcome = await writeItem(entry, changes);
+      if (outcome === 'written') wrote = true;
+      if (outcome === 'stop') return wrote;
+    }
+  }
+
+  // Writes one Item's due changes: settled when they reached the Source (or lost to a newer change
+  // there), else back in the queue or stopped as Couldn't sync.
+  async function writeItem(entry: Entry, changes: OutgoingRow[]): Promise<WriteOutcome> {
+    const { id: account, source } = entry.account;
+    const [first] = changes;
+    if (!first || !entry.adapter.write) return 'stop';
+    const ids = changes.map((change) => change.id);
+    store.outgoing.markSending(ids);
+    emit();
+    const abort = new AbortController();
+    entry.writeAbort = abort;
+    try {
+      const result = await entry.adapter.write({
+        account,
+        externalId: first.externalId,
+        changes: changes.map(({ field, value, synced, madeAt }) => ({ field, value, synced, madeAt })),
+        accessToken: () => accessTokens.request(account),
+        signal: abort.signal,
+      });
+      if (abort.signal.aborted || !isCurrent(entry)) return 'stop';
+      const at = now();
+      store.transaction(() => {
+        store.outgoing.settle(ids);
+        // Edits made to these fields while they were on their way come after this write.
+        store.outgoing.follow(
+          first.itemId,
+          changes.map((change) => change.field),
+          at,
+        );
+        if (result.item) {
+          const why = supersededNote(source, result.superseded);
+          store.saveFromSource({ source, account, items: [result.item], deleted: [], why });
+        }
+      });
+      entry.writesHeldUntil = null;
+      return 'written';
+    } catch (error) {
+      if (abort.signal.aborted || !isCurrent(entry)) {
+        store.outgoing.release(ids, null);
+        return 'stop';
+      }
+      return writeFailed(entry, changes, error);
+    } finally {
+      entry.writeAbort = null;
+    }
+  }
+
+  function writeFailed(entry: Entry, changes: OutgoingRow[], error: unknown): WriteOutcome {
+    const { id: account, source } = entry.account;
+    const ids = changes.map((change) => change.id);
+    const message = error instanceof Error ? error.message : String(error);
+    log(`A change to ${source} for ${account} did not go through: ${message}`);
+    if (error instanceof WriteRejected) {
+      // Trying again won't help: Couldn't sync at once, and on with the Account's other changes.
+      store.outgoing.fail(ids, { error: message, failed: true, nextAttemptAt: null });
+      return 'next';
+    }
+    if (error instanceof AccessTokenUnavailable && error.reason === 'needs-reconnect') {
+      store.outgoing.release(ids, null);
+      entry.account = { ...entry.account, needsReconnect: true };
+      return 'stop';
+    }
+    if (error instanceof SignInRefused) {
+      // The main process checks the sign-in and may mark the Account Reconnect; until then, wait.
+      store.outgoing.release(ids, null);
+      entry.writesHeldUntil = now() + BACKOFF_BASE_MS;
+      onSignInRefused(account);
+      return 'stop';
+    }
+    if (error instanceof RateLimited) {
+      const wait = Math.max(error.retryAfterMs ?? 0, WRITE_BACKOFF_BASE_MS);
+      store.outgoing.release(ids, null);
+      entry.writesHeldUntil = now() + wait;
+      return 'stop';
+    }
+    if (paused()) {
+      // Lost the connection, or the machine slept, mid-write: it goes when the machine is back.
+      store.outgoing.release(ids, null);
+      return 'stop';
+    }
+    const attempts = Math.max(...changes.map((change) => change.attempts)) + 1;
+    const known = error instanceof SourceUnavailable || error instanceof AccessTokenUnavailable;
+    store.outgoing.fail(ids, {
+      error: known ? message : `Commander couldn’t send this change to ${SOURCE_NAMES[source]}.`,
+      failed: attempts >= MAX_WRITE_ATTEMPTS,
+      nextAttemptAt: now() + writeBackoff(attempts),
+    });
+    return 'stop';
+  }
+
+  // Nothing is on its way after a restart; changes queued (by the window, the gate, an undo) go now.
+  store.outgoing.resetSending();
+  const stopListening = store.outgoing.onChange((account) => {
+    const entry = entries.get(account);
+    if (entry) kickWrites(entry);
+    emit();
+  });
 
   return {
     setAccounts(accounts) {
@@ -328,9 +551,23 @@ export function createSyncEngine({
         if (!adapter) continue;
         const entry = entries.get(account.id);
         if (!entry) {
-          const added: Entry = { account, adapter, timer: null, dueAt: null, running: null, abort: null };
+          const added: Entry = {
+            account,
+            adapter,
+            timer: null,
+            dueAt: null,
+            running: null,
+            abort: null,
+            turn: Promise.resolve(),
+            writing: null,
+            writeAgain: false,
+            writeTimer: null,
+            writeAbort: null,
+            writesHeldUntil: null,
+          };
           entries.set(account.id, added);
           schedule(added);
+          kickWrites(added);
           continue;
         }
         const reconnected = entry.account.needsReconnect && !account.needsReconnect;
@@ -338,9 +575,12 @@ export function createSyncEngine({
         if (reconnected) {
           // A fresh sign-in: forget the old failures and sync at once.
           store.syncState.save({ ...load(entry), failures: 0, retryAt: null, problem: null });
+          entry.writesHeldUntil = null;
           void run(entry, 'refresh');
+          kickWrites(entry);
         } else if (account.needsReconnect) {
           clearTimer(entry);
+          clearWriteTimer(entry);
         }
       }
       emit();
@@ -349,8 +589,17 @@ export function createSyncEngine({
     setSystemState(state) {
       const wasPaused = paused();
       system = { ...state };
-      if (paused()) for (const entry of entries.values()) clearTimer(entry);
-      else if (wasPaused) for (const entry of entries.values()) schedule(entry);
+      if (paused()) {
+        for (const entry of entries.values()) {
+          clearTimer(entry);
+          clearWriteTimer(entry);
+        }
+      } else if (wasPaused) {
+        for (const entry of entries.values()) {
+          schedule(entry);
+          kickWrites(entry);
+        }
+      }
       emit();
     },
 
@@ -378,6 +627,7 @@ export function createSyncEngine({
       const entry = entries.get(account);
       if (entry) drop(entry);
       store.syncState.remove(account);
+      store.outgoing.removeAccount(account);
       emit();
     },
 
@@ -394,9 +644,12 @@ export function createSyncEngine({
     },
 
     stop() {
+      stopListening();
       for (const entry of entries.values()) {
         clearTimer(entry);
+        clearWriteTimer(entry);
         entry.abort?.abort();
+        entry.writeAbort?.abort();
       }
       stopped = true;
       entries.clear();
