@@ -100,16 +100,22 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
   // The defaults, and Act for you can't go above Ask.
   await expect(grid.getByRole('combobox', { name: 'Organise · Everywhere' })).toHaveText('Auto when sure');
   await expect(grid.getByRole('combobox', { name: 'Delete · Everywhere' })).toHaveText('Off');
-  await grid.getByRole('combobox', { name: 'Act for you · Everywhere' }).click();
-  await expect(window.getByRole('option', { name: 'Auto', exact: true })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
-  await expect(window.getByRole('option', { name: 'Auto when sure' })).toHaveAttribute(
-    'aria-disabled',
-    'true',
-  );
-  await window.getByRole('option', { name: 'Ask', exact: true }).click();
+  // Pop-ups close when another window takes focus mid-test, so open it again until the check holds.
+  // (While it's open the rest of the page is hidden from role lookups, so only click when it's shut.)
+  const autoOption = window.getByRole('option', { name: 'Auto', exact: true });
+  await expect(async () => {
+    if (!(await autoOption.isVisible())) {
+      await grid.getByRole('combobox', { name: 'Act for you · Everywhere' }).click({ timeout: 2000 });
+    }
+    await expect(autoOption).toHaveAttribute('aria-disabled', 'true', { timeout: 1000 });
+    await expect(window.getByRole('option', { name: 'Auto when sure' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+      { timeout: 1000 },
+    );
+  }).toPass({ timeout: 15_000 });
+  await window.keyboard.press('Escape');
+  await choose(window, 'Act for you · Everywhere', 'Ask');
 
   // The registered actions, each with a level of its own; ranking the Dashboard says Ask works as Auto.
   await expect(grid.getByTestId('registered-action')).toHaveText([/Suggest Todos/, /Rank the Dashboard/]);
