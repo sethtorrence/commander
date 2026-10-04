@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { eventDetail } from './calendar';
 import { linearIssueDetail } from './linear';
 import { fieldSummary } from './logged-fields';
 import { chatDetail } from './teams';
@@ -94,6 +95,7 @@ export const itemDetail = z.discriminatedUnion('kind', [
   blockDetail,
   linearIssueDetail,
   chatDetail,
+  eventDetail,
 ]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 

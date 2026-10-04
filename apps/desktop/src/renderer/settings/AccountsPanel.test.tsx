@@ -497,6 +497,82 @@ describe('Google in Settings → Accounts', () => {
     );
   });
 
+  it('lists Google Calendar’s calendars, each with a switch that turns it on or off', async () => {
+    const on = { ...alex, sources: [{ source: 'google-calendar' as const, granted: true, enabled: true }] };
+    state = { accounts: [on], sources: withGoogle(true) };
+    const calendars = [
+      {
+        account: alex.id,
+        source: 'google-calendar',
+        id: 'alex@gmail.test',
+        name: 'alex@gmail.test',
+        colour: '#9fe1e7',
+        primary: true,
+        accessRole: 'owner',
+        on: true,
+      },
+      {
+        account: alex.id,
+        source: 'google-calendar',
+        id: 'holidays',
+        name: 'Holidays in United Kingdom',
+        colour: '#16a765',
+        primary: false,
+        accessRole: 'reader',
+        on: false,
+      },
+      {
+        account: 'google:other',
+        source: 'google-calendar',
+        id: 'other',
+        name: 'Someone else’s',
+        colour: '#000000',
+        primary: true,
+        accessRole: 'owner',
+        on: true,
+      },
+    ];
+    const asked: unknown[] = [];
+    Object.assign(window.commander, {
+      itemStore: async (request: { op: string; calendarId?: string; on?: boolean }) => {
+        asked.push(request);
+        if (request.op === 'set-calendar-enabled') {
+          return calendars.map((each) =>
+            each.id === request.calendarId ? { ...each, on: request.on } : each,
+          );
+        }
+        return calendars;
+      },
+    });
+    render(<AccountsPanel no="02" />);
+    const list = await waitFor(() => within(google().getByTestId('calendar-switches')));
+
+    expect(
+      list
+        .getAllByRole('switch')
+        .map((each) => [each.getAttribute('aria-label'), each.getAttribute('aria-checked')]),
+    ).toEqual([
+      ['alex@gmail.test', 'true'],
+      ['Holidays in United Kingdom', 'false'],
+    ]);
+    expect(list.getByText('Subscribed')).toBeTruthy();
+
+    fireEvent.click(list.getByRole('switch', { name: 'Holidays in United Kingdom' }));
+    await waitFor(() =>
+      expect(asked).toContainEqual({
+        op: 'set-calendar-enabled',
+        account: alex.id,
+        calendarId: 'holidays',
+        on: true,
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        list.getByRole('switch', { name: 'Holidays in United Kingdom' }).getAttribute('aria-checked'),
+      ).toBe('true'),
+    );
+  });
+
   it('shows a blocked Workspace plainly under Google', async () => {
     state = { accounts: [], sources: withGoogle(true) };
     const blocked =

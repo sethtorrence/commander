@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type DashboardClears, type DashboardState, dashboardClears, dashboardState } from './ares-ranking';
 import { attachmentMaxBytes, attachmentNamePattern } from './attachments';
+import { type CalendarSummary, calendarSummary, eventQuery } from './calendar';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import {
   type ActivityEntry,
@@ -125,6 +126,17 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // its Item (in the activity log, by the User).
   z.object({ op: z.literal('chat-settings'), account: z.string().min(1).optional() }),
   z.object({ op: z.literal('change-chat-setting'), action: chatSettingAction }),
+  // The Calendar Section: live events overlapping a time range, earliest first; every Account's
+  // calendars and whether each is on; and switching one on or off (off hides its events at once and
+  // stops syncing it; on syncs it again).
+  z.object({ op: z.literal('events'), query: eventQuery }),
+  z.object({ op: z.literal('calendars') }),
+  z.object({
+    op: z.literal('set-calendar-enabled'),
+    account: z.string().min(1),
+    calendarId: z.string().min(1),
+    on: z.boolean(),
+  }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -172,6 +184,9 @@ export type ItemStoreResults = {
   'save-dashboard-clears': DashboardClears;
   'chat-settings': ChatSetting[];
   'change-chat-setting': ChatSettingChange;
+  events: Item[];
+  calendars: CalendarSummary[];
+  'set-calendar-enabled': CalendarSummary[];
 };
 
 export const itemStoreResult = {
@@ -208,6 +223,9 @@ export const itemStoreResult = {
   'save-dashboard-clears': dashboardClears,
   'chat-settings': z.array(chatSetting),
   'change-chat-setting': chatSettingChange,
+  events: z.array(item),
+  calendars: z.array(calendarSummary),
+  'set-calendar-enabled': z.array(calendarSummary),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

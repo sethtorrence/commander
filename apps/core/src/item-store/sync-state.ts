@@ -98,6 +98,7 @@ export function openSyncStateStore(db: BetterSQLite3Database<typeof schema>): Sy
       db.delete(syncState).where(eq(syncState.account, account)).run();
       db.delete(syncRuns).where(eq(syncRuns.account, account)).run();
       db.delete(sourceCatalogs).where(eq(sourceCatalogs.account, account)).run();
+      db.delete(schema.calendars).where(eq(schema.calendars.account, account)).run();
     },
 
     recordRun(run) {

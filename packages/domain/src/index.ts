@@ -6,6 +6,7 @@ export * from './autonomy';
 export * from './autonomy-messages';
 export * from './block-links';
 export * from './block-projects';
+export * from './calendar';
 export * from './core-messages';
 export * from './daily-template';
 export * from './github-watch';

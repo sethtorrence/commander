@@ -26,7 +26,9 @@ import {
   Switch,
   toast,
 } from '@commander/ui';
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { CalendarSwitches } from '../sections/calendar/CalendarSwitches';
+import { calendarSwitchesIn } from '../sections/calendar/calendar-events';
 import { AccountSync } from './AccountSync';
 import {
   describeGitHubAccount,
@@ -84,7 +86,8 @@ function describeAccount(account: AccountSummary): string {
 }
 
 // The Sources a Google or Outlook Account carries: each switchable, and Grant access for one whose
-// permissions weren't given (signing in again for this Account asks for them).
+// permissions weren't given (signing in again for this Account asks for them). Google Calendar, when
+// on, lists the Account's calendars, each with its own switch.
 function CarriedSources({
   account,
   busy,
@@ -96,6 +99,8 @@ function CarriedSources({
   onGrant: (() => void) | null;
   request: (request: AccountsRequest) => void;
 }) {
+  // Read at call time: the calendars live in the Item store, which the Core holds.
+  const switches = useMemo(() => calendarSwitchesIn((query) => window.commander.itemStore(query)), []);
   return (
     <ul data-testid="carried-sources" className="m-0 mt-3 flex max-w-[560px] list-none flex-col gap-2 p-0">
       {account.sources.map((carried) => {
@@ -104,7 +109,7 @@ function CarriedSources({
           <li
             key={carried.source}
             data-testid={`carried-source-${carried.source}`}
-            className="flex min-h-8 items-center gap-3"
+            className="flex min-h-8 flex-wrap items-center gap-3"
           >
             <Switch
               aria-label={name}
@@ -124,6 +129,13 @@ function CarriedSources({
                   Grant access
                 </Button>
               </>
+            )}
+            {carried.source === 'google-calendar' && carried.enabled && (
+              <CalendarSwitches
+                account={account.id}
+                switches={switches}
+                syncedAt={carried.sync?.lastSyncedAt ?? null}
+              />
             )}
           </li>
         );

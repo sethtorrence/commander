@@ -10,8 +10,10 @@ import {
   coreSystemState,
 } from '@commander/domain';
 import {
+  createGoogleCalendarSource,
   createLinearSource,
   createTeamsSource,
+  type GoogleCalendarSourceOptions,
   type LinearSourceOptions,
   type SourceAdapter,
   type TeamsSourceOptions,
@@ -30,6 +32,8 @@ export type SyncOptions = {
   linearSource?: (options: LinearSourceOptions) => SourceAdapter;
   // For tests: stands in for the Teams adapter.
   teamsSource?: (options: TeamsSourceOptions) => SourceAdapter;
+  // For tests: stands in for the Google Calendar adapter.
+  googleCalendarSource?: (options: GoogleCalendarSourceOptions) => SourceAdapter;
   random?: () => number;
   log?: (message: string) => void;
 };
@@ -43,6 +47,7 @@ export function setUpSync(
     accessTokens,
     linearSource = createLinearSource,
     teamsSource = createTeamsSource,
+    googleCalendarSource = createGoogleCalendarSource,
     random,
     log = (message) => console.warn(message),
   }: SyncOptions,
@@ -50,9 +55,28 @@ export function setUpSync(
   // Where Linear lives, from the main process (a fake on this machine in the end-to-end tests).
   let linearApiUrl = 'https://api.linear.app/graphql';
   let graphUrl = 'https://graph.microsoft.com/v1.0';
+  let googleCalendarUrl = 'https://www.googleapis.com/calendar/v3';
   const engine: SyncEngine = createSyncEngine({
     store,
-    adapters: [linearSource({ apiUrl: () => linearApiUrl }), teamsSource({ graphUrl: () => graphUrl })],
+    adapters: [
+      linearSource({ apiUrl: () => linearApiUrl }),
+      teamsSource({ graphUrl: () => graphUrl }),
+      googleCalendarSource({
+        apiUrl: () => googleCalendarUrl,
+        // Each Account's calendars and the User's switches live in the Item store.
+        calendars: {
+          listed: (account, calendars) => store.calendars.listed(account, 'google-calendar', calendars),
+          held: (account, calendarId) =>
+            store.calendarEvents({ source: 'google-calendar', account }, calendarId).map((item) => ({
+              externalId: item.externalId ?? '',
+              title: item.title,
+              people: item.people,
+              status: item.status,
+              detail: item.detail,
+            })),
+        },
+      }),
+    ],
     accessTokens,
     onSignInRefused: (account) => send({ type: 'account-refused', account }),
     random,
@@ -77,6 +101,7 @@ export function setUpSync(
           if (!parsed.success) return reject(parsed.error);
           linearApiUrl = parsed.data.endpoints.linear;
           if (parsed.data.endpoints.graph) graphUrl = parsed.data.endpoints.graph;
+          if (parsed.data.endpoints.googleCalendar) googleCalendarUrl = parsed.data.endpoints.googleCalendar;
           engine.setAccounts(parsed.data.accounts);
           return true;
         }

@@ -7,6 +7,7 @@ import type {
   AutonomySection,
   ChatDetail,
   DashboardBand,
+  EventDetail,
   FieldSummary,
   FiledBy,
   GitHubAccess,
@@ -590,3 +591,44 @@ export const githubWatch = sqliteTable('github_watch', {
   addedOrgs: text('added_orgs', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
   updatedAt: integer('updated_at').notNull(),
 });
+
+// Kind-specific detail for calendar events, as calendar sync reported them (see EventDetail), with
+// the calendar and the time range kept as columns, for the Agenda's range queries and for finding a
+// calendar's events. All-day events' range is widened to their days anywhere on Earth (UTC-12 to
+// UTC+14), so a range query never misses one.
+export const eventDetails = sqliteTable(
+  'event_details',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => items.id),
+    calendarId: text('calendar_id').notNull(),
+    startAt: integer('start_at').notNull(),
+    endAt: integer('end_at').notNull(),
+    // The rest of the detail, without `kind`.
+    data: text('data', { mode: 'json' }).$type<Omit<EventDetail, 'kind'>>().notNull(),
+  },
+  (t) => [
+    index('event_details_range').on(t.startAt, t.endAt),
+    index('event_details_calendar').on(t.calendarId),
+  ],
+);
+
+// Each calendar Account's calendars, as its last sync listed them, and whether the User has each on
+// (null: not switched yet, so its default: primary and owned calendars on, subscribed ones off).
+export const calendars = sqliteTable(
+  'calendars',
+  {
+    account: text('account').notNull(),
+    source: text('source').$type<Source>().notNull(),
+    calendarId: text('calendar_id').notNull(),
+    name: text('name').notNull(),
+    colour: text('colour').notNull(),
+    primary: integer('primary', { mode: 'boolean' }).notNull(),
+    accessRole: text('access_role').notNull(),
+    on: integer('on', { mode: 'boolean' }),
+    // Its place in the Account's list, as the Source lists them.
+    position: integer('position').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.account, t.calendarId] })],
+);

@@ -233,7 +233,7 @@ describe('Settings → Accounts requests from the window', () => {
     };
     const sync = {
       status: (id: string) => (id === 'linear:org-acme' ? status : null),
-      refresh: (id: string) => asked.push(`refresh ${id}`),
+      refresh: (id: string, source?: string) => asked.push(`refresh ${id}${source ? ` ${source}` : ''}`),
       setCadence: (id: string, minutes: number) => asked.push(`cadence ${id} ${minutes}`),
       setAlsoAfterOtherSources: (id: string, enabled: boolean) => asked.push(`alongside ${id} ${enabled}`),
     };
@@ -241,6 +241,12 @@ describe('Settings → Accounts requests from the window', () => {
     const synced = await answerAccountsRequest(
       accounts,
       { op: 'sync-now', accountId: 'linear:org-acme' },
+      sync,
+    );
+    // The Calendar Section refreshes only a Google Account's Google Calendar.
+    await answerAccountsRequest(
+      accounts,
+      { op: 'sync-now', accountId: 'google:1045', source: 'google-calendar' },
       sync,
     );
     await answerAccountsRequest(
@@ -257,6 +263,7 @@ describe('Settings → Accounts requests from the window', () => {
 
     expect(asked).toEqual([
       'refresh linear:org-acme',
+      'refresh google:1045 google-calendar',
       'cadence linear:org-acme 30',
       'alongside teams:tenant-1:u-sam false',
     ]);
@@ -436,6 +443,7 @@ describe('Settings → Accounts requests for a Google Account', () => {
           authorizeUrl: google.authorizeUrl,
           tokenUrl: google.tokenUrl,
           userinfoUrl: google.userinfoUrl,
+          calendarUrl: google.calendarUrl,
         },
         secrets,
         store: createAccountStore(join(dir, 'accounts.json')),

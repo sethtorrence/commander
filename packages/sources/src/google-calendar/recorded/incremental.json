@@ -1,0 +1,235 @@
+[
+  {
+    "request": {
+      "path": "/users/me/calendarList?maxResults=250"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#calendarList",
+        "etag": "\"p33c9pc2v6qvtg0o\"",
+        "items": [
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000000\"",
+            "id": "alex@gmail.test",
+            "summary": "alex@gmail.test",
+            "timeZone": "Europe/London",
+            "colorId": "14",
+            "backgroundColor": "#9fe1e7",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            },
+            "primary": true
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000001\"",
+            "id": "c_tl_standups@group.calendar.google.com",
+            "summary": "Titanlink Standups",
+            "timeZone": "Europe/London",
+            "colorId": "2",
+            "backgroundColor": "#33b679",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "owner",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          },
+          {
+            "kind": "calendar#calendarListEntry",
+            "etag": "\"1759480000000002\"",
+            "id": "en.uk#holiday@group.v.calendar.google.com",
+            "summary": "Holidays in United Kingdom",
+            "timeZone": "Europe/London",
+            "colorId": "8",
+            "backgroundColor": "#16a765",
+            "foregroundColor": "#000000",
+            "selected": true,
+            "accessRole": "reader",
+            "defaultReminders": [],
+            "conferenceProperties": {
+              "allowedConferenceSolutionTypes": ["hangoutsMeet"]
+            }
+          }
+        ],
+        "nextSyncToken": "calendar-list-sync-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/calendars/alex@gmail.test/events?singleEvents=true&maxResults=250&syncToken=sync-primary-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#events",
+        "etag": "\"p33k9b5ub5uqvo0o\"",
+        "summary": "alex@gmail.test",
+        "description": "",
+        "updated": "2026-10-03T11:58:00.000Z",
+        "timeZone": "Europe/London",
+        "accessRole": "owner",
+        "defaultReminders": [
+          {
+            "method": "popup",
+            "minutes": 10
+          }
+        ],
+        "items": [
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000010\"",
+            "id": "dentist2026",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=ZGVudGlzdDIwMjYgYWxleEBnbWFpbC50ZXN0",
+            "created": "2026-09-20T08:00:00.000Z",
+            "updated": "2026-10-03T11:30:00.000Z",
+            "summary": "Dentist",
+            "description": "<p>Bring the <b>form</b>.</p><p><a href=\"https://example.test/form\">Form</a></p><img src=\"https://tracker.test/pixel.png\"><script>alert(1)</script>",
+            "location": "12 High St, London",
+            "creator": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "organizer": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "start": {
+              "dateTime": "2026-10-05T11:00:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "end": {
+              "dateTime": "2026-10-05T11:45:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "visibility": "private",
+            "iCalUID": "dentist2026@google.com",
+            "sequence": 1,
+            "reminders": {
+              "useDefault": true
+            },
+            "eventType": "default"
+          },
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000011\"",
+            "id": "designreview1",
+            "status": "cancelled"
+          },
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000012\"",
+            "id": "farfuture",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=ZmFyZnV0dXJl",
+            "created": "2026-10-03T11:00:00.000Z",
+            "updated": "2026-10-03T11:00:00.000Z",
+            "summary": "Passport renewal",
+            "creator": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "organizer": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "start": {
+              "date": "2028-01-10"
+            },
+            "end": {
+              "date": "2028-01-11"
+            },
+            "iCalUID": "farfuture@google.com",
+            "sequence": 0,
+            "eventType": "default"
+          },
+          {
+            "kind": "calendar#event",
+            "etag": "\"3510000000000013\"",
+            "id": "lunchpriya",
+            "status": "confirmed",
+            "htmlLink": "https://www.google.com/calendar/event?eid=bHVuY2hwcml5YQ",
+            "created": "2026-10-03T11:40:00.000Z",
+            "updated": "2026-10-03T11:40:00.000Z",
+            "summary": "Lunch with Priya",
+            "creator": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "organizer": {
+              "email": "alex@gmail.test",
+              "self": true
+            },
+            "start": {
+              "dateTime": "2026-10-08T12:30:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "end": {
+              "dateTime": "2026-10-08T13:30:00+01:00",
+              "timeZone": "Europe/London"
+            },
+            "iCalUID": "lunchpriya@google.com",
+            "sequence": 0,
+            "eventType": "default"
+          }
+        ],
+        "nextSyncToken": "sync-primary-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/calendars/c_tl_standups@group.calendar.google.com/events?singleEvents=true&maxResults=250&syncToken=sync-standups-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "kind": "calendar#events",
+        "etag": "\"p33k9b5ub5uqvo0o\"",
+        "summary": "Titanlink Standups",
+        "description": "",
+        "updated": "2026-10-03T11:58:00.000Z",
+        "timeZone": "Europe/London",
+        "accessRole": "owner",
+        "defaultReminders": [
+          {
+            "method": "popup",
+            "minutes": 10
+          }
+        ],
+        "items": [
+          {
+            "kind": "calendar#event",
+            "etag": "\"3520000000000099\"",
+            "id": "standup_20261006T080000Z",
+            "status": "cancelled",
+            "recurringEventId": "standup",
+            "originalStartTime": {
+              "dateTime": "2026-10-06T09:00:00+01:00",
+              "timeZone": "Europe/London"
+            }
+          }
+        ],
+        "nextSyncToken": "sync-standups-2"
+      }
+    }
+  }
+]

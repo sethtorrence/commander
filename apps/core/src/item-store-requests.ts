@@ -96,6 +96,18 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.chatSettings.list(request.account) };
       case 'change-chat-setting':
         return { ok: true, result: store.chatSettings.change(request.action, { by: { kind: 'user' } }) };
+      case 'events':
+        return { ok: true, result: store.events(request.query) };
+      case 'calendars':
+        return { ok: true, result: store.calendars.list() };
+      case 'set-calendar-enabled':
+        return {
+          ok: true,
+          result: store.setCalendarOn(
+            { account: request.account, calendarId: request.calendarId, on: request.on },
+            { by: { kind: 'user' } },
+          ),
+        };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

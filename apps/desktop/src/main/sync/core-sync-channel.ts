@@ -59,8 +59,9 @@ export function createCoreSyncChannel({
       });
     },
 
-    refresh(account: string) {
-      send({ type: 'sync-command', command: { op: 'refresh', account } });
+    // Every Source the Account carries, or just `source`.
+    refresh(account: string, source?: Source) {
+      send({ type: 'sync-command', command: { op: 'refresh', account, ...(source ? { source } : {}) } });
     },
 
     setCadence(account: string, minutes: number) {

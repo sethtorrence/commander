@@ -102,8 +102,14 @@ export type GitHubAccountSummary = AccountSummaryBase & {
 };
 // One of the Sources an Account carries, sharing its sign-in. `granted`: the User gave Commander
 // every permission it needs (Google lets them untick some; a Microsoft administrator may approve only
-// some); `enabled`: the User has it switched on. Only a granted Source can be on.
-export type CarriedSource = { source: AccountSyncStatus['source']; granted: boolean; enabled: boolean };
+// some); `enabled`: the User has it switched on. Only a granted Source can be on. `sync`: where that
+// Source's syncing stands, when the Core reported it.
+export type CarriedSource = {
+  source: AccountSyncStatus['source'];
+  granted: boolean;
+  enabled: boolean;
+  sync?: AccountSyncStatus | null;
+};
 export type GoogleAccountSummary = AccountSummaryBase & {
   source: 'google';
   // The Google address signed in with.
@@ -177,8 +183,9 @@ export type AccountsRequest =
   | { op: 'remove'; accountId: string }
   // Switches one of the Sources an Account carries on or off (only a granted one can be on).
   | { op: 'set-source-enabled'; accountId: string; source: CarriedSource['source']; enabled: boolean }
-  // Syncs the Account at once (Sync now; Sections call it when they open).
-  | { op: 'sync-now'; accountId: string }
+  // Syncs the Account at once (Sync now; Sections call it when they open), or just one of the
+  // Sources it carries (the Calendar Section refreshes only Google Calendar).
+  | { op: 'sync-now'; accountId: string; source?: AccountSyncStatus['source'] }
   // Minutes between the Account's syncs, from its Source's choices.
   | { op: 'set-sync-cadence'; accountId: string; minutes: number }
   // Teams: whether to also check whenever another Source syncs.
