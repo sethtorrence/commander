@@ -126,9 +126,9 @@ export function githubConfig(build: BuildConfig, env: NodeJS.ProcessEnv): GitHub
   );
 }
 
-// COMMANDER_TEST_GOOGLE points sign-in and the Calendar API at a fake Google
-// (google/fake-google-server.ts). Without `calendarUrl`, the Calendar API is the fake's own (beside its
-// token endpoint), so a test can never reach the real Google.
+// COMMANDER_TEST_GOOGLE points sign-in, the Calendar API and Gmail at a fake Google
+// (google/fake-google-server.ts). Without `calendarUrl` or `gmailUrl`, each is the fake's own (beside
+// its token endpoint), so a test can never reach the real Google.
 const googleOverride = z
   .object({
     clientId: z.string().min(1).nullable(),
@@ -137,10 +137,12 @@ const googleOverride = z
     tokenUrl: loopbackUrl,
     userinfoUrl: loopbackUrl,
     calendarUrl: loopbackUrl.optional(),
+    gmailUrl: loopbackUrl.optional(),
   })
-  .transform(({ calendarUrl, ...config }) => ({
+  .transform(({ calendarUrl, gmailUrl, ...config }) => ({
     ...config,
     calendarUrl: calendarUrl ?? new URL('/calendar/v3', config.tokenUrl).toString(),
+    gmailUrl: gmailUrl ?? new URL(config.tokenUrl).origin,
   }));
 
 export function googleConfig(build: BuildConfig, env: NodeJS.ProcessEnv): GoogleConfig {

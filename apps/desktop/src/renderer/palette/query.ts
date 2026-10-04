@@ -5,7 +5,7 @@ import type { ProjectFilter } from '../projects/filter';
   The palette's input: words to search for, and filter chips typed among them.
 
   - `#LT` a Project by its Badge code, `#unfiled` Unfiled Items
-  - `in:notes` a Section that holds Items (Notes, Todos, Linear so far)
+  - `in:notes` a Section that holds Items (Notes, Todos, Linear, Email so far)
   - `@acme` an Account by its name, spaces left out
   - `after:2026-09-01`, `before:2026-10-01` (or `today`, `yesterday`): when Items last changed,
     by local day; after counts from the start of its day, before up to the start of its day
@@ -21,6 +21,7 @@ export const SECTION_KINDS: Readonly<Record<string, readonly ItemKind[]>> = {
   notes: ['block', 'daily-note'],
   todos: ['todo'],
   linear: ['linear-issue'],
+  email: ['email'],
 };
 
 export type Chip = { token: string; label: string } & (

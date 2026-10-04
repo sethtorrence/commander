@@ -7,6 +7,7 @@ import type {
   AutonomySection,
   ChatDetail,
   DashboardBand,
+  EmailDetail,
   EventDetail,
   FieldSummary,
   FiledBy,
@@ -283,6 +284,59 @@ export const githubDetails = sqliteTable('github_details', {
   identifier: text('identifier'),
   // The rest of the detail, with its `kind`.
   data: text('data', { mode: 'json' }).$type<GitHubItemDetail>().notNull(),
+});
+
+// Kind-specific detail for emails, one row per message (see EmailDetail), with what the Email
+// Section's thread list and threading look up kept in columns beside it.
+export const emailDetails = sqliteTable(
+  'email_details',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => items.id),
+    messageId: text('message_id'),
+    threadKey: text('thread_key').notNull(),
+    sourceThreadId: text('source_thread_id'),
+    sentAt: integer('sent_at').notNull(),
+    unread: integer('unread', { mode: 'boolean' }).notNull(),
+    inInbox: integer('in_inbox', { mode: 'boolean' }).notNull(),
+    hasAttachments: integer('has_attachments', { mode: 'boolean' }).notNull(),
+    // The rest of the detail, without `kind`.
+    data: text('data', { mode: 'json' }).$type<Omit<EmailDetail, 'kind'>>().notNull(),
+  },
+  (t) => [
+    index('email_details_thread').on(t.threadKey),
+    index('email_details_source_thread').on(t.sourceThreadId),
+    index('email_details_sent_at').on(t.sentAt),
+  ],
+);
+
+// Every Message-ID an email names (its own, its In-Reply-To and References), so mail that arrives
+// can be threaded among the mail already held, in whatever order it comes.
+export const emailMessageIds = sqliteTable(
+  'email_message_ids',
+  {
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id),
+    messageId: text('message_id').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.itemId, t.messageId] }),
+    index('email_message_ids_message').on(t.messageId),
+  ],
+);
+
+// Email bodies (see EmailBody), beside their Items rather than in their detail, so lists and the
+// activity log never carry them. Written before a new email's Item (in the same transaction), so its
+// first search indexing reads it: hence no foreign key. Deleted when the email is tombstoned or its
+// Account removed.
+export const emailBodies = sqliteTable('email_bodies', {
+  itemId: text('item_id').primaryKey(),
+  text: text('text').notNull(),
+  html: text('html'),
+  textFromHtml: integer('text_from_html', { mode: 'boolean' }).notNull(),
+  truncated: integer('truncated', { mode: 'boolean' }).notNull(),
 });
 
 // Where each Account's sync stands, so it carries on after a restart: the Source's cursor, when it

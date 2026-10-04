@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createFakeGmail, type FakeGmail } from './fake-gmail';
 
 // A stand-in for Google's OAuth 2.0 endpoints and its OpenID Connect userinfo, for tests only (unit
 // and end-to-end). It behaves like Google where Commander depends on it, for a "Desktop app" client:
@@ -16,7 +17,8 @@ import type { AddressInfo } from 'node:net';
 // `singleEvents=true`), paged by `maxResults`, with `timeMin`/`timeMax` on a full read and a
 // `nextSyncToken` on the last page; a request with a sync token answers what changed since
 // (cancelled events included). Tokens can be expired (410 Gone) and requests rate limited (403
-// rateLimitExceeded). Nothing here talks to the real Google.
+// rateLimitExceeded). And it serves each user's mailbox through the Gmail API (fake-gmail.ts), at
+// `gmailUrl`, for the tokens it issued. Nothing here talks to the real Google.
 
 export type FakeGoogleUser = { sub: string; email: string; name: string };
 
@@ -39,6 +41,10 @@ export type FakeGoogle = {
   authorizeUrl: string;
   tokenUrl: string;
   userinfoUrl: string;
+  // Like https://gmail.googleapis.com: the Gmail API, under /gmail/v1/users/me/….
+  gmailUrl: string;
+  // Each user's mailbox, by their address: deliver, relabel and delete mail; expire history; throttle.
+  gmail: FakeGmail;
   clientId: string;
   clientSecret: string;
   // Every authorize request the browser made, as its query parameters.
@@ -143,11 +149,14 @@ export async function startFakeGoogle(
     if (!found) throw new Error(`The fake Google has no calendar ${calendarId} for ${sub}`);
     return found;
   };
+  const gmail = createFakeGmail();
 
   const fake: FakeGoogle = {
     authorizeUrl: '',
     tokenUrl: '',
     userinfoUrl: '',
+    gmailUrl: '',
+    gmail,
     clientId,
     clientSecret,
     authorizeRequests: [],
@@ -429,6 +438,13 @@ export async function startFakeGoogle(
     if (request.method === 'GET' && url.pathname === '/o/oauth2/v2/auth') return authorize(url, response);
     if (request.method === 'POST' && url.pathname === '/token') return void tokenEndpoint(request, response);
     if (request.method === 'GET' && url.pathname === '/v1/userinfo') return userinfo(request, response);
+    if (url.pathname.startsWith('/gmail/v1/users/me/')) {
+      const authorization = request.headers.authorization ?? '';
+      const user = authorization.startsWith('Bearer ')
+        ? accessTokens.get(authorization.slice('Bearer '.length))
+        : undefined;
+      return gmail.handle(request, response, url, user?.email ?? null);
+    }
     response.writeHead(404).end();
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -438,5 +454,6 @@ export async function startFakeGoogle(
   fake.tokenUrl = `${base}/token`;
   fake.userinfoUrl = `${base}/v1/userinfo`;
   fake.calendarUrl = `${base}/calendar/v3`;
+  fake.gmailUrl = base;
   return fake;
 }

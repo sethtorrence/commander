@@ -45,17 +45,20 @@ export function createCoreSyncChannel({
         user: { id: string; name: string } | null;
         // The Sources an Account carrying several has, and which are on.
         sources?: CarriedSource[];
+        // When the User connected it (Gmail downloads the 30 days before).
+        connectedAt?: number | null;
       }[],
     ) {
       send({
         type: 'sync-accounts',
         accounts: accounts.flatMap(
-          ({ id, name, source, status, user, sources }): CoreSyncAccounts['accounts'] => {
+          ({ id, name, source, status, user, sources, connectedAt }): CoreSyncAccounts['accounts'] => {
             const account = {
               id,
               needsReconnect: status === 'needs-reconnect',
               me: user?.id ?? null,
               ...(name ? { name } : {}),
+              ...(connectedAt ? { connectedAt } : {}),
             };
             const [only, ...others] = SOURCES_OF_ACCOUNT[source];
             if (!sources && only && others.length === 0) return [{ ...account, source: only }];

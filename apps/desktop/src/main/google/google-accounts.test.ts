@@ -52,6 +52,7 @@ beforeEach(async () => {
     tokenUrl: google.tokenUrl,
     userinfoUrl: google.userinfoUrl,
     calendarUrl: google.calendarUrl,
+    gmailUrl: google.gmailUrl,
   };
   clock = 1_800_000_000_000;
   removedItems = [];

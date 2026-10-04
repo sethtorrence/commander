@@ -132,10 +132,12 @@ export function openWordIndex(
     text: sqlite.prepare<[number], SearchText>(
       'SELECT title, identifier, body FROM search_words WHERE rowid = ?',
     ),
-    addDoc: sqlite.prepare<[Doc], { doc: number }>(
-      `INSERT INTO search_docs (item_id, kind, project_id, account, updated_at, identifier_key, title_key)
-       VALUES (@itemId, @kind, @projectId, @account, @updatedAt, @identifierKey, @titleKey) RETURNING doc`,
+    // `doc` null takes the next rowid.
+    addDoc: sqlite.prepare<[Doc & { doc: number | null }], { doc: number }>(
+      `INSERT INTO search_docs (doc, item_id, kind, project_id, account, updated_at, identifier_key, title_key)
+       VALUES (@doc, @itemId, @kind, @projectId, @account, @updatedAt, @identifierKey, @titleKey) RETURNING doc`,
     ),
+    taken: sqlite.prepare<[number], { doc: number }>('SELECT doc FROM search_docs WHERE doc = ?'),
     setDoc: sqlite.prepare<[Doc & { doc: number }]>(
       `UPDATE search_docs SET kind = @kind, project_id = @projectId, account = @account,
        updated_at = @updatedAt, identifier_key = @identifierKey, title_key = @titleKey WHERE doc = @doc`,
@@ -150,15 +152,26 @@ export function openWordIndex(
     dropText: sqlite.prepare<[number]>('DELETE FROM search_words WHERE rowid = ?'),
   });
 
+  // Emails get rowids that rise with when they were sent (the next free one from sentAt × 1000), so
+  // newest-first email search reads the index in rowid order however mail arrived (the first sync
+  // backfills older mail after newer). Other Items take the next rowid.
+  function rowidFor(item: SearchableItem, taken: { get(doc: number): unknown }): number | null {
+    if (item.detail?.kind !== 'email') return null;
+    for (let doc = item.detail.sentAt * 1000, tries = 0; tries < 1000; doc++, tries++) {
+      if (!taken.get(doc)) return doc;
+    }
+    return null;
+  }
+
   if (indexVersion(sqlite) !== INDEX_VERSION) {
     sqlite.transaction(() => {
       create(sqlite);
-      const { addDoc, addText } = statements();
+      const { addDoc, addText, taken } = statements();
       for (const page of allItems()) {
         for (const item of page) {
           const text = searchTextOf(item);
           if (!text) continue;
-          const { doc } = addDoc.get(docOf(item, text)) as { doc: number };
+          const { doc } = addDoc.get({ ...docOf(item, text), doc: rowidFor(item, taken) }) as { doc: number };
           addText.run(doc, text.title, text.identifier, text.body);
         }
       }
@@ -179,7 +192,7 @@ export function openWordIndex(
     }
     const doc = docOf(item, text);
     if (!found) {
-      const added = write.addDoc.get(doc) as { doc: number };
+      const added = write.addDoc.get({ ...doc, doc: rowidFor(item, write.taken) }) as { doc: number };
       write.addText.run(added.doc, text.title, text.identifier, text.body);
       return;
     }
@@ -196,6 +209,8 @@ export function openWordIndex(
     if (!words.match) return [];
     const filters = filterSql(query);
     const key = exactKey(words.exact);
+    // Only emails: newest first, as mail search reads (their rowids rise with when they were sent).
+    const emailsOnly = query.kinds?.length === 1 && query.kinds[0] === 'email';
     // Exact identifier, then exact title: a quick lookup on search_docs' indexes.
     const exact = sqlite
       .prepare(
@@ -210,7 +225,7 @@ export function openWordIndex(
         `SELECT d.item_id AS itemId FROM search_words w
         JOIN search_docs d ON d.doc = w.rowid
         WHERE search_words MATCH @match${filters.where.map((w) => ` AND ${w}`).join('')}
-        ORDER BY bm25(search_words, ${WEIGHTS}), d.updated_at DESC
+        ORDER BY ${emailsOnly ? 'w.rowid DESC' : `bm25(search_words, ${WEIGHTS}), d.updated_at DESC`}
         LIMIT @limit`,
       )
       .all({ ...filters.params, match: words.match, limit: limit + exact.length }) as { itemId: string }[];

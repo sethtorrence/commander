@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { eventDetail } from './calendar';
+import { emailBody, emailDetail } from './email';
 import { githubIssueDetail, githubReleaseDetail, pullRequestDetail, reviewRequestDetail } from './github';
 import { linearIssueDetail } from './linear';
 import { fieldSummary } from './logged-fields';
@@ -103,6 +104,7 @@ export const itemDetail = z.discriminatedUnion('kind', [
   githubIssueDetail,
   reviewRequestDetail,
   githubReleaseDetail,
+  emailDetail,
 ]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 
@@ -152,6 +154,9 @@ export const sourceItem = z.object({
   people: people.default([]),
   status: itemStatus.default('open'),
   detail: itemDetail.nullable().default(null),
+  // An email's bodies, kept beside its Item (never in its detail or the activity log). Left out, the
+  // bodies already kept stay as they are.
+  body: emailBody.optional(),
 });
 export type SourceItem = z.input<typeof sourceItem>;
 

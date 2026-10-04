@@ -26,6 +26,9 @@ import {
   DELETE_FIELD,
   dailyNoteQuery,
   describeRule,
+  type EmailThread,
+  type EmailThreadList,
+  type EmailThreadQuery,
   type EventQuery,
   type FieldSummary,
   type Filing,
@@ -90,6 +93,7 @@ import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRo
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
+import { emailsIn } from './emails';
 import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
@@ -266,6 +270,13 @@ export type ItemStore = {
     calendar: { account: string; calendarId: string; on: boolean },
     context: ActionContext,
   ): CalendarSummary[];
+  // The external ids of every live Item from an Account's Source: for a re-sync to tell what the
+  // Source no longer has.
+  externalIds(account: { source: Source; account: string }): string[];
+  // The Email Section (emails.ts): the inbox as threads (across Accounts, or one), and one thread's
+  // messages, oldest first, with their bodies (null when it has none).
+  emailThreads(query?: EmailThreadQuery): EmailThreadList;
+  emailThread(account: string, threadKey: string): EmailThread | null;
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
   // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
@@ -341,6 +352,9 @@ type NewEntry = {
   before: unknown;
   after: unknown;
 };
+
+// How much of an email's body the steering check reads, from its start.
+const STEERING_BODY_CHECKED = 20_000;
 
 // Daily Notes and Blocks only make sense with their detail: the day, or the place in the outline.
 const NEEDS_DETAIL: ReadonlySet<ItemKind> = new Set(['daily-note', 'block']);
@@ -432,6 +446,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     now,
     invalid: (message) => new ItemStoreError('invalid', message),
   });
+  // Emails (emails.ts): their detail, threading as they arrive, and their bodies beside them.
+  const emails = emailsIn(db, { withDetails: (rows) => withDetails(rows) });
 
   // Undoes entries that filed Items (a merge, or only a Rule's when `byRule`), as the User, skipping
   // any already undone and any Item filed elsewhere since.
@@ -539,6 +555,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       return withDetails(db.select().from(schema.items).where(inArray(schema.items.id, itemIds)).all());
     },
     projects: () => projects.list(),
+    // An email's text is searched too; it is kept beside the Item, not in it.
+    bodyText: (itemId) => emails.readBody(itemId)?.text ?? null,
   });
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
@@ -607,6 +625,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const found = db.select().from(githubDetails).where(inArray(githubDetails.itemId, githubIds)).all();
       for (const row of found) details.set(row.itemId, githubDetailOf(row));
     }
+    const emailIds = idsOf('email');
+    if (emailIds.length)
+      for (const [itemId, detail] of emails.readDetails(emailIds)) details.set(itemId, detail);
     // The warning mark: an Item's own, or (for a Todo) the Item's behind it.
     const backedBy = (id: string) => {
       const detail = details.get(id);
@@ -684,6 +705,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (detail?.kind !== 'block') db.delete(blockDetails).where(eq(blockDetails.itemId, id)).run();
     if (detail?.kind !== 'linear-issue')
       db.delete(linearIssueDetails).where(eq(linearIssueDetails.itemId, id)).run();
+    emails.writeDetail(id, detail?.kind === 'email' ? detail : null);
     if (isGitHubItemDetail(detail)) {
       const { githubDetails } = schema;
       const identifier =
@@ -1584,7 +1606,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     // The Item's Todo (a Linear Todo) follows it, once it is filed.
     const follow = (itemId: string, before: ItemState | null, entryId?: number) =>
       linearTodos.follow(requireItem(itemId), before, { by, causedBy: entryId ? { entryId } : null });
-    for (const handed of batch.items) {
+    // Emails are threaded among the Account's mail as they arrive; mail already held that they join
+    // to another thread is saved along with them.
+    const threaded = emails.thread(batch.source, batch.account, batch.items);
+    // What the steering check reads beyond the Item: an email's body, from its start.
+    const bodyWords = (item: Item) =>
+      item.kind === 'email' ? (emails.readBody(item.id)?.text ?? '').slice(0, STEERING_BODY_CHECKED) : '';
+    for (const handed of [...threaded.items, ...threaded.moved]) {
       const at = now();
       const incoming = withItemRefs(batch.source, batch.account, handed);
       const existing = findBySourceIdentity(batch.source, batch.account, incoming.externalId);
@@ -1603,19 +1631,25 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           // Changes made in Commander still on their way to the Source stay on top.
           ...withQueuedOnTop(outgoing, existing.id, { status: incoming.status, detail: incoming.detail }),
         };
+        // An email's bodies, beside it: written first, so the search index reads them.
+        const bodyChanged = incoming.body ? emails.writeBody(existing.id, incoming.body) : false;
         if (isDeepStrictEqual(before, after)) {
+          if (bodyChanged) {
+            const { kind, account } = existing;
+            search.put({ id: existing.id, kind, account, updatedAt: existing.updatedAt, ...before });
+          }
           result.unchanged.push(existing.id);
           // Still judged: who the User is may be newly known, or the issue's cycle may be over.
           follow(existing.id, before);
           // And still checked, so an Item saved before the steering check gets its mark.
-          warnings.check(existing, at, null);
+          warnings.check(existing, at, null, bodyWords(existing));
           continue;
         }
         writeState(existing, after, at);
         const logged = log({ by, why: batch.why, action: 'update', itemId: existing.id, before, after }, at);
         applyRules(existing.id, at);
         follow(existing.id, before, logged.id);
-        warnings.check(requireItem(existing.id), at, logged.id);
+        warnings.check(requireItem(existing.id), at, logged.id, bodyWords(existing));
         result.updated.push(existing.id);
         continue;
       }
@@ -1633,14 +1667,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         account: batch.account,
         externalId: incoming.externalId,
       };
-      const { id, state: stored } = insertItem(identity, state, at);
+      // An email's bodies go in first, under the id it is about to get, so its first indexing reads them.
+      const newId = randomUUID();
+      if (incoming.body) emails.writeBody(newId, incoming.body);
+      const { id, state: stored } = insertItem(identity, state, at, newId);
       const logged = log(
         { by, why: batch.why, action: 'create', itemId: id, before: null, after: stored },
         at,
       );
       applyRules(id, at);
       follow(id, null, logged.id);
-      warnings.check(requireItem(id), at, logged.id);
+      warnings.check(requireItem(id), at, logged.id, bodyWords(requireItem(id)));
       result.created.push(id);
     }
     for (const externalId of batch.deleted) {
@@ -1650,6 +1687,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const before = stateOf(existing);
       const after: ItemState = { ...before, deletedAt: at };
       writeState(existing, after, at);
+      // A tombstone keeps its Links and history, not an email's bodies.
+      if (existing.kind === 'email') emails.deleteBodies([existing.id]);
       const logged = log({ by, action: 'tombstone', itemId: existing.id, before, after }, at);
       linearTodos.follow(requireItem(existing.id), before, { by, causedBy: { entryId: logged.id } }, true);
       result.tombstoned.push(existing.id);
@@ -1672,7 +1711,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
   // Deletes Items as one change: they stay as tombstones, so Links to them show them as gone.
   function removeItems(found: Item[], context: ActionContext): string[] {
-    return found.map((item) => {
+    const removed = found.map((item) => {
       const at = now();
       const before = stateOf(item);
       const after: ItemState = { ...before, deletedAt: at };
@@ -1680,6 +1719,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       log({ ...context, action: 'delete', itemId: item.id, before, after }, at);
       return item.id;
     });
+    // Removed mail (an Account's, when it is removed) takes its bodies with it.
+    emails.deleteBodies(found.filter((item) => item.kind === 'email').map((item) => item.id));
+    return removed;
   }
 
   const liveSourceItems = (source: Source, account: string) => {
@@ -1823,6 +1865,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     projectBlocks,
     recheckIds: (account) => linearTodos.recheckIds(account),
     linearTodosLeft: (after) => linearTodos.leftSince(after),
+    externalIds: ({ source, account }) => emails.externalIds(source, account),
+    emailThreads: (query) => emails.threads(query),
+    emailThread: (account, threadKey) => emails.threadView(account, threadKey),
 
     fromSource({ source, account }, externalIds) {
       const { items } = schema;

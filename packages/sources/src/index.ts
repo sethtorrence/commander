@@ -5,6 +5,7 @@ export {
   GITHUB_HOURLY_LIMITS,
   type GitHubSourceOptions,
 } from './github/github-source';
+export { createGmailSource, GMAIL_CADENCE, type GmailSourceOptions } from './gmail/gmail-source';
 export {
   type CalendarChoices,
   createGoogleCalendarSource,

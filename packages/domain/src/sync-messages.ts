@@ -67,6 +67,11 @@ export const accountSyncStatus = z.object({
       complexityLimit: z.number().int().positive(),
     })
     .optional(),
+  // How far a long sync has got (Gmail's 30-day download), while it runs; null otherwise.
+  progress: z
+    .object({ done: z.number().int().nonnegative(), total: z.number().int().nonnegative() })
+    .nullable()
+    .optional(),
 });
 // The zod-free AccountSyncStatus type in ipc.ts (for the preload and window) must match the schema.
 type _StatusMatches = [AccountSyncStatus] extends [z.infer<typeof accountSyncStatus>]
@@ -81,11 +86,13 @@ void _statusMatches;
 // Most Accounts carry one Source (`source`); an Account carrying several that share its sign-in (a
 // Google Account's Gmail and Google Calendar) lists those switched on (`sources`), each synced on its own.
 // `name`: what the User sees ("Acme"), for Ares's Reconnect line.
+// `connectedAt`: when the User connected the Account (Gmail downloads the 30 days before it).
 const syncAccountBase = {
   id: accountId,
   needsReconnect: z.boolean(),
   me: accountId.nullable().optional(),
   name: z.string().optional(),
+  connectedAt: z.number().int().nonnegative().nullable().optional(),
 };
 export const coreSyncAccounts = z.object({
   type: z.literal('sync-accounts'),
@@ -98,12 +105,13 @@ export const coreSyncAccounts = z.object({
   ),
   // Where to reach each Source (the end-to-end tests point Linear and Graph at fakes on this machine).
   // `graph`: Microsoft Graph's base, for Teams. `googleCalendar`: the Google Calendar API's base.
-  // `github`: GitHub's REST API base.
+  // `github`: GitHub's REST API base. `gmail`: the Gmail API's base.
   endpoints: z.object({
     linear: z.string().url(),
     graph: z.string().url().optional(),
     googleCalendar: z.string().url().optional(),
     github: z.string().url().optional(),
+    gmail: z.string().url().optional(),
   }),
 });
 export type CoreSyncAccounts = z.infer<typeof coreSyncAccounts>;
@@ -112,7 +120,8 @@ export type CoreSyncAccounts = z.infer<typeof coreSyncAccounts>;
 export const coreSyncCommand = z.object({
   type: z.literal('sync-command'),
   command: z.discriminatedUnion('op', [
-    // `source`: just one of the Sources the Account carries; otherwise all of them.
+    // `source`: just one of the Sources the Account carries; otherwise all of them. (Opening Email
+    // refreshes only each Google Account's Gmail.)
     z.object({ op: z.literal('refresh'), account: accountId, source: source.optional() }),
     z.object({
       op: z.literal('set-cadence'),

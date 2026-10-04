@@ -4,6 +4,7 @@ import type { AccountSyncStatus } from '@commander/domain/ipc';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const pad = (n: number) => String(n).padStart(2, '0');
+const COUNT = new Intl.NumberFormat('en');
 
 // 14:02 today, or 2 Oct 14:02 on another day.
 export function clockTime(at: number, now: Date): string {
@@ -44,7 +45,13 @@ export function describeSync(
     asleep: 'Paused while asleep',
     'needs-reconnect': 'Paused until reconnected',
   }[status.activity];
-  return { synced, next, problem: status.problem?.message ?? null };
+  // A long first sync says how far it has got (an email Account's 30-day download).
+  const downloading =
+    status.source === 'gmail' || status.source === 'outlook' ? 'Downloading 30 days' : 'Downloading';
+  const progress = status.progress
+    ? `${downloading}: ${COUNT.format(status.progress.done)} of ~${COUNT.format(status.progress.total)}`
+    : null;
+  return { synced, next: progress ?? next, problem: status.problem?.message ?? null };
 }
 
 // What a Source's hourly limits are counted in (GitHub: REST requests and GraphQL points).

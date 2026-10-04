@@ -1,0 +1,451 @@
+[
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/history?startHistoryId=5009&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
+    },
+    "response": {
+      "status": 404,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "error": {
+          "code": 404,
+          "message": "Requested entity was not found.",
+          "errors": [
+            {
+              "message": "Requested entity was not found.",
+              "domain": "global",
+              "reason": "notFound"
+            }
+          ],
+          "status": "NOT_FOUND"
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/labels"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "labels": [
+          {
+            "id": "CHAT",
+            "name": "CHAT",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "SENT",
+            "name": "SENT",
+            "type": "system"
+          },
+          {
+            "id": "INBOX",
+            "name": "INBOX",
+            "type": "system"
+          },
+          {
+            "id": "IMPORTANT",
+            "name": "IMPORTANT",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "TRASH",
+            "name": "TRASH",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "DRAFT",
+            "name": "DRAFT",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "SPAM",
+            "name": "SPAM",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "CATEGORY_UPDATES",
+            "name": "CATEGORY_UPDATES",
+            "type": "system"
+          },
+          {
+            "id": "CATEGORY_PERSONAL",
+            "name": "CATEGORY_PERSONAL",
+            "type": "system"
+          },
+          {
+            "id": "STARRED",
+            "name": "STARRED",
+            "messageListVisibility": "hide",
+            "labelListVisibility": "labelHide",
+            "type": "system"
+          },
+          {
+            "id": "UNREAD",
+            "name": "UNREAD",
+            "type": "system"
+          },
+          {
+            "id": "Label_7",
+            "name": "Receipts",
+            "messageListVisibility": "show",
+            "labelListVisibility": "labelShow",
+            "type": "user"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/profile"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "emailAddress": "alex@gmail.test",
+        "messagesTotal": 18234,
+        "threadsTotal": 9120,
+        "historyId": "7100"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a8a7b8c9d0e107",
+            "threadId": "19a8a7b8c9d0e107"
+          },
+          {
+            "id": "19a6e5f6a7b8c905",
+            "threadId": "19a6e5f6a7b8c905"
+          },
+          {
+            "id": "19a4c3d4e5f6a704",
+            "threadId": "19a1f0c2d3e4f501"
+          },
+          {
+            "id": "19a1f0c2d3e4f501",
+            "threadId": "19a1f0c2d3e4f501"
+          }
+        ],
+        "resultSizeEstimate": 4
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a8a7b8c9d0e107?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a8a7b8c9d0e107",
+        "threadId": "19a8a7b8c9d0e107",
+        "labelIds": ["UNREAD", "CATEGORY_PERSONAL", "INBOX"],
+        "snippet": "The venue is booked for 19–21 Nov.",
+        "sizeEstimate": 2077,
+        "historyId": "4990",
+        "internalDate": "1791622800000",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/alternative",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@gmail.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Sat, 10 Oct 2026 09:00:00 +0000"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<CALe=venue@mail.northwind.test>"
+            },
+            {
+              "name": "Subject",
+              "value": "Venue booked"
+            },
+            {
+              "name": "From",
+              "value": "Lee Chen <lee@northwind.test>"
+            },
+            {
+              "name": "To",
+              "value": "Alex Kim <alex@gmail.test>"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/alternative; boundary=\"000000000000a1b2c3\""
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "partId": "0",
+              "mimeType": "text/plain",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 38,
+                "data": "VGhlIHZlbnVlIGlzIGJvb2tlZCBmb3IgMTnigJMyMSBOb3YuDQo"
+              }
+            },
+            {
+              "partId": "1",
+              "mimeType": "text/html",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "text/html; charset=\"UTF-8\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "quoted-printable"
+                }
+              ],
+              "body": {
+                "size": 43,
+                "data": "PHA-VGhlIHZlbnVlIGlzIGJvb2tlZCBmb3IgMTnigJMyMSBOb3YuPC9wPg"
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=SENT&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "resultSizeEstimate": 0
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=INBOX&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a8a7b8c9d0e107",
+            "threadId": "19a8a7b8c9d0e107"
+          },
+          {
+            "id": "19a6e5f6a7b8c905",
+            "threadId": "19a6e5f6a7b8c905"
+          },
+          {
+            "id": "19a4c3d4e5f6a704",
+            "threadId": "19a1f0c2d3e4f501"
+          }
+        ],
+        "resultSizeEstimate": 3
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=IMPORTANT&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a4c3d4e5f6a704",
+            "threadId": "19a1f0c2d3e4f501"
+          },
+          {
+            "id": "19a1f0c2d3e4f501",
+            "threadId": "19a1f0c2d3e4f501"
+          }
+        ],
+        "resultSizeEstimate": 2
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=CATEGORY_UPDATES&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "resultSizeEstimate": 0
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=CATEGORY_PERSONAL&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a8a7b8c9d0e107",
+            "threadId": "19a8a7b8c9d0e107"
+          },
+          {
+            "id": "19a6e5f6a7b8c905",
+            "threadId": "19a6e5f6a7b8c905"
+          },
+          {
+            "id": "19a4c3d4e5f6a704",
+            "threadId": "19a1f0c2d3e4f501"
+          },
+          {
+            "id": "19a1f0c2d3e4f501",
+            "threadId": "19a1f0c2d3e4f501"
+          }
+        ],
+        "resultSizeEstimate": 4
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=STARRED&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a1f0c2d3e4f501",
+            "threadId": "19a1f0c2d3e4f501"
+          }
+        ],
+        "resultSizeEstimate": 1
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=UNREAD&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "messages": [
+          {
+            "id": "19a8a7b8c9d0e107",
+            "threadId": "19a8a7b8c9d0e107"
+          },
+          {
+            "id": "19a6e5f6a7b8c905",
+            "threadId": "19a6e5f6a7b8c905"
+          }
+        ],
+        "resultSizeEstimate": 2
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/messages?maxResults=500&labelIds=Label_7&q=after:1788436800"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "resultSizeEstimate": 0
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/gmail/v1/users/me/history?startHistoryId=7100&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "historyId": "7100"
+      }
+    }
+  }
+]

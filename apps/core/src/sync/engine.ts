@@ -40,6 +40,7 @@ import {
   type Superseded,
   type SyncCost,
   type SyncMode,
+  type SyncProgress,
   type SyncResult,
   type SyncWatch,
   WriteRejected,
@@ -86,12 +87,15 @@ export function supersededNote(source: Source, superseded: Superseded[]): string
   return `Changed in ${SOURCE_NAMES[source]}${by} at ${pad(at.getHours())}:${pad(at.getMinutes())}`;
 }
 
-// `me`: who the User is at the Source in the Account (their Linear user id), when known. Most
-// Accounts carry one Source (`source`); one that carries several lists those to sync (`sources`).
-export type SyncAccount = { id: string; needsReconnect: boolean; me?: string | null } & (
-  | { source: Source }
-  | { sources: readonly Source[] }
-);
+// `me`: who the User is at the Source in the Account (their Linear user id), when known;
+// `connectedAt`: when the User connected it (Gmail downloads the 30 days before). Most Accounts carry
+// one Source (`source`); one that carries several lists those to sync (`sources`).
+export type SyncAccount = {
+  id: string;
+  needsReconnect: boolean;
+  me?: string | null;
+  connectedAt?: number | null;
+} & ({ source: Source } | { sources: readonly Source[] });
 export const sourcesOf = (account: SyncAccount): readonly Source[] =>
   'sources' in account ? account.sources : [account.source];
 export type SystemState = { awake: boolean; online: boolean };
@@ -150,6 +154,8 @@ type Lane = {
   checkTimer: ReturnType<typeof setTimeout> | null;
   // When the Source's last sync of any kind started.
   lastStartedAt: number | null;
+  // How far the running sync has got, when it says (Gmail's first download).
+  progress: SyncProgress | null;
 };
 
 type Entry = {
@@ -260,6 +266,7 @@ export function createSyncEngine({
       outgoing: store.outgoing.counts(entry.account.id),
       ...(hasLightSync(lane) ? { alsoAfterOtherSources: checksAlongside(lane, state) } : {}),
       ...(lane.adapter.hourlyLimits ? { hourUse: hourUse(entry, lane, lane.adapter.hourlyLimits) } : {}),
+      ...(lane.progress ? { progress: lane.progress } : {}),
     };
   }
 
@@ -365,6 +372,7 @@ export function createSyncEngine({
         await execute(entry, lane, load(entry, lane).cursor, trigger, abort.signal);
       } finally {
         lane.active = false;
+        lane.progress = null;
       }
     })
       .catch((error) => log(`Sync engine error for ${entry.account.id} (${lane.source}): ${String(error)}`))
@@ -408,6 +416,21 @@ export function createSyncEngine({
             cursor,
             mode,
             me: entry.account.me ?? null,
+            connectedAt: entry.account.connectedAt ?? null,
+            heldIds: () => store.externalIds({ source, account }),
+            // Where a long sync has got: kept at once, so a sync that stops (a restart, a rate limit)
+            // starts from there next time. Only a finished sync counts as synced.
+            checkpoint(next) {
+              if (!signal.aborted && isCurrent(entry, lane)) {
+                cursor = next;
+                store.syncState.save({ ...load(entry, lane), cursor: next });
+              }
+            },
+            progress(next) {
+              if (signal.aborted || !isCurrent(entry, lane)) return;
+              lane.progress = next;
+              emit();
+            },
             stored: (externalIds) => storedItems(source, account, externalIds),
             accessToken: () => accessTokens.request(account),
             recheck,
@@ -570,6 +593,7 @@ export function createSyncEngine({
       written: new Set(),
       checkTimer: null,
       lastStartedAt: null,
+      progress: null,
     };
     entry.lanes.set(adapter.source, lane);
     return lane;

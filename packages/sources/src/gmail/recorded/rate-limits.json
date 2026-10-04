@@ -1,0 +1,66 @@
+{
+  "throttled": [
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/history?startHistoryId=5009&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "error": {
+            "code": 403,
+            "message": "Quota exceeded for quota metric 'Queries' and limit 'Queries per minute per user' of service 'gmail.googleapis.com' for consumer 'project_number:123456789012'.",
+            "errors": [
+              {
+                "message": "Quota exceeded for quota metric 'Queries' and limit 'Queries per minute per user' of service 'gmail.googleapis.com' for consumer 'project_number:123456789012'.",
+                "domain": "usageLimits",
+                "reason": "rateLimitExceeded"
+              }
+            ],
+            "status": "PERMISSION_DENIED",
+            "details": [
+              {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                "reason": "RATE_LIMIT_EXCEEDED",
+                "domain": "googleapis.com",
+                "metadata": {
+                  "quota_limit": "QueriesPerMinutePerUser",
+                  "service": "gmail.googleapis.com"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "tooMany": [
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/history?startHistoryId=5009&maxResults=500&historyTypes=messageAdded&historyTypes=messageDeleted&historyTypes=labelAdded&historyTypes=labelRemoved"
+      },
+      "response": {
+        "status": 429,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8",
+          "retry-after": "120"
+        },
+        "body": {
+          "error": {
+            "code": 429,
+            "message": "Too many concurrent requests for user.",
+            "errors": [
+              {
+                "reason": "rateLimitExceeded"
+              }
+            ],
+            "status": "RESOURCE_EXHAUSTED"
+          }
+        }
+      }
+    }
+  ]
+}
