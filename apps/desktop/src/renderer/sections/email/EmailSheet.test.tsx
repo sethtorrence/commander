@@ -273,7 +273,7 @@ describe('the Email sheet', () => {
     await waitFor(() => expect(rows()).toHaveLength(3));
   });
 
-  it('opens a thread with Enter: every message with its headers and its plain-text body', async () => {
+  it('opens a thread with Enter: older read messages collapsed to a line, the newest and unread expanded', async () => {
     renderSheet();
     await waitFor(() => expect(rows()).toHaveLength(3));
 
@@ -287,21 +287,21 @@ describe('the Email sheet', () => {
     });
     await waitFor(() => expect(within(thread).getAllByTestId('email-message')).toHaveLength(3));
     expect(within(thread).getByRole('heading', { name: 'Re: Re: Q4 offsite dates' })).toBeTruthy();
-    const [first, second, third] = within(thread).getAllByTestId('email-message');
-    expect(within(first as HTMLElement).getByText('Dana Whitfield <dana@northwind.test>')).toBeTruthy();
-    expect(within(first as HTMLElement).getByTestId('email-body').textContent).toBe(
-      'Which dates work for you?\n\nDana',
-    );
-    expect(within(second as HTMLElement).getByText('Alex Kim <alex@gmail.test>')).toBeTruthy();
+    const messages = () => within(thread).getAllByTestId('email-message');
+    expect(messages().map((each) => each.getAttribute('data-expanded'))).toEqual(['false', 'false', 'true']);
+    // A collapsed message is its sender, snippet and time.
+    expect(messages()[0]?.textContent).toContain('Dana Whitfield');
+    expect(messages()[1]?.textContent).toContain('me');
+    const third = messages()[2] as HTMLElement;
     // A body is only ever text: markup in it is shown as it is, never rendered.
-    expect(within(third as HTMLElement).getByTestId('email-body').textContent).toBe(
-      '<b>Booked</b> the venue.',
-    );
-    expect(
-      within(third as HTMLElement)
-        .getByTestId('email-body')
-        .querySelector('b'),
-    ).toBeNull();
+    expect(within(third).getByTestId('email-body').textContent).toBe('<b>Booked</b> the venue.');
+    expect(within(third).getByTestId('email-body').querySelector('b')).toBeNull();
+
+    fireEvent.click(within(messages()[0] as HTMLElement).getByRole('button'));
+    const first = messages()[0] as HTMLElement;
+    expect(first.getAttribute('data-expanded')).toBe('true');
+    expect(within(first).getByText('Dana Whitfield <dana@northwind.test>')).toBeTruthy();
+    expect(within(first).getByTestId('email-body').textContent).toBe('Which dates work for you?\n\nDana');
 
     press('Escape');
     expect(reader()).toBeNull();

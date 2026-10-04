@@ -9,6 +9,8 @@ import { setUpAgent } from './agent';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { setUpBusyCopies } from './busy-copies';
+import { setUpEmailReader } from './email-reader';
+import { workerSanitiser } from './email-reader/sanitiser';
 import { setUpGitHubDiscussion } from './github-discussion';
 import { setUpGitHubOversight } from './github-oversight';
 import { setUpGitHubWatch } from './github-watch';
@@ -91,6 +93,22 @@ sync.engine.onSynced((event) => {
   void githubOversight.synced(event).then((itemIds) => {
     if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
   });
+});
+// The email reader (#134): each message's HTML sanitised for the sandboxed frame, its parts fetched
+// through its Source and cached in the Account's folder, and the image rules. The end-to-end tests may
+// save email Items as an email Source's sync will (Outlook's, until its mail sync lands).
+// Sanitising runs in a worker thread beside the Core (built next to it), each message within 10 s.
+const emailSanitiser = workerSanitiser(join(import.meta.dirname, 'email-sanitiser.js'));
+const emailReader = setUpEmailReader({
+  store: itemStore,
+  sanitise: emailSanitiser.sanitise,
+  dataDir,
+  accessTokens,
+  adapterFor: (source) => sync.adapterFor(source),
+  accounts: () => sync.accounts(),
+  send: (message) => port.postMessage(message),
+  testHooks: process.argv.includes('--test-hooks'),
+  onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
 // The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Notes.
 const markdownCopy = setUpMarkdownCopy({
@@ -207,6 +225,7 @@ port.on('message', ({ data }) => {
   if (markdownCopy.handle(data)) return;
   if (updates?.handle(data)) return;
   if (githubWatch.handle(data)) return;
+  if (emailReader.handle(data)) return;
   if (githubDiscussion.handle(data)) return;
   let changed: CoreMessage | null = null;
   let changedIds: string[] = [];
@@ -216,7 +235,11 @@ port.on('message', ({ data }) => {
       ? itemStore.focusSettings.read()
       : null;
   const reply =
-    answerRemoveAccountItems(itemStore, data, sync.forget) ??
+    answerRemoveAccountItems(itemStore, data, (account) => {
+      sync.forget(account);
+      // Its cached attachments and inline images, and its image rules, go too.
+      emailReader.forget(account);
+    }) ??
     answerItemStoreRequest(itemStore, data, (itemIds) => {
       changed = { type: 'items-changed', itemIds };
       changedIds = itemIds;
@@ -260,6 +283,7 @@ const closeStore = () => {
   updates?.stop();
   sync.stop();
   markdownCopy.stop();
+  emailSanitiser.stop();
   itemStore.close();
 };
 process.on('exit', closeStore);

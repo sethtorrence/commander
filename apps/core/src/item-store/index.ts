@@ -29,6 +29,7 @@ import {
   DELETE_FIELD,
   dailyNoteQuery,
   describeRule,
+  type EmailBody,
   type EmailThread,
   type EmailThreadList,
   type EmailThreadQuery,
@@ -105,6 +106,7 @@ import {
 } from './commander-events';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
+import { type EmailImagesStore, emailImagesIn } from './email-images';
 import { emailsIn } from './emails';
 import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
 import { type FocusSettingsStore, focusSettingsIn } from './focus-settings';
@@ -295,6 +297,9 @@ export type ItemStore = {
   meetingChips: MeetingChips;
   // Settings → Calendar (calendar-settings.ts): the opt-in heads-up before each meeting.
   calendarSettings: CalendarSettingsStore;
+  // The email reader's image rules (email-images.ts): Ask before showing images, trusted senders,
+  // and messages whose images the User chose to show.
+  emailImages: EmailImagesStore;
   // Ares's live meeting preps (#130) for these events, at most one each (the prep's detail names its
   // event; its about Link points at it too).
   meetingPreps(eventIds: string[]): Item[];
@@ -314,6 +319,8 @@ export type ItemStore = {
   // messages, oldest first, with their bodies (null when it has none).
   emailThreads(query?: EmailThreadQuery): EmailThreadList;
   emailThread(account: string, threadKey: string): EmailThread | null;
+  // One email's bodies (the reader's HTML among them), or null when none were kept.
+  emailBody(itemId: string): EmailBody | null;
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
   // with the pasted images they use (attachments.ts).
   takeDailySnapshot(): Snapshot | null;
@@ -2105,6 +2112,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     externalIds: ({ source, account }) => emails.externalIds(source, account),
     emailThreads: (query) => emails.threads(query),
     emailThread: (account, threadKey) => emails.threadView(account, threadKey),
+    emailBody: (itemId) => emails.readBody(itemId),
 
     fromSource({ source, account }, externalIds) {
       const { items } = schema;
@@ -2157,6 +2165,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     calendars,
     meetingChips,
     calendarSettings: calendarSettingsIn(db, now),
+    emailImages: emailImagesIn(db, now),
 
     calendarEvents: (account, calendarId) => withDetails(calendarEventRows(db, { ...account, calendarId })),
 

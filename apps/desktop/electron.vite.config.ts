@@ -15,6 +15,9 @@ const runtimeExternals = ['electron', /^node:/];
 // Native modules load their binary from their own package folder, so they stay in node_modules.
 // They must be listed in this app's dependencies so the bundle can resolve them at runtime.
 const nativeExternals = ['better-sqlite3'];
+// The email reader's sanitiser (in the Core) reads files of its own at runtime (jsdom's, css-tree's
+// data), so it stays in node_modules too; listed in this app's dependencies for the same reason.
+const sanitiserExternals = ['jsdom', 'dompurify', 'css-tree'];
 
 // The Core applies its database migrations at start-up from a folder next to its bundle.
 function copyCoreMigrations(): Plugin {
@@ -43,10 +46,12 @@ export default defineConfig({
     build: {
       externalizeDeps: bundleWorkspace,
       rollupOptions: {
-        external: [...runtimeExternals, ...nativeExternals],
+        external: [...runtimeExternals, ...nativeExternals, ...sanitiserExternals],
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
           core: resolve(__dirname, '../core/src/index.ts'),
+          // The Core's email sanitiser runs in a worker thread of its own (email-reader/sanitiser.ts).
+          'email-sanitiser': resolve(__dirname, '../core/src/email-reader/sanitise-worker.ts'),
         },
       },
     },

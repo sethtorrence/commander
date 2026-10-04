@@ -34,6 +34,10 @@ describe('which links leave for the system browser', () => {
     expect(externalUrl('mailto:priya@acme.test')).toBe('mailto:priya@acme.test');
   });
 
+  it('opens mail links with only their addresses, subject, body, cc and bcc', () => {
+    expect(externalUrl('mailto:a@x.test?subject=Hi&attach=/etc/passwd')).toBe('mailto:a@x.test?subject=Hi');
+  });
+
   it('keeps anything else in: files, scripts, custom schemes and garbage', () => {
     for (const url of ['file:///etc/passwd', 'javascript:alert(1)', 'vscode://open', 'not a url', '']) {
       expect(externalUrl(url)).toBeNull();
