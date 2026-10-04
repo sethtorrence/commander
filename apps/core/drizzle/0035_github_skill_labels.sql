@@ -1,0 +1,1 @@
+ALTER TABLE `github_oversight_settings` ADD `skill_labels` text;

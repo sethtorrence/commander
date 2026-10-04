@@ -20,6 +20,11 @@ import { z } from 'zod';
 
 const time = z.string().min(1);
 const nullableTime = time.nullable().optional().default(null);
+const totalCount = z
+  .object({ totalCount: z.number().int().nonnegative() })
+  .nullable()
+  .optional()
+  .default(null);
 const connection = <T extends z.ZodType>(node: T) =>
   z
     .object({ nodes: z.array(node.nullable()).default([]) })
@@ -126,14 +131,33 @@ export const issueNode = z.object({
   author: actor,
   assignees: connection(z.object({ login: z.string().min(1) })),
   labels: connection(z.object({ name: z.string(), color: z.string() })),
-  milestone: z.object({ title: z.string(), dueOn: nullableTime }).nullable().optional().default(null),
-  comments: z.object({ totalCount: z.number().int().nonnegative() }).nullable().optional().default(null),
+  milestone: z
+    .object({ title: z.string(), dueOn: nullableTime, open: totalCount, closed: totalCount })
+    .nullable()
+    .optional()
+    .default(null),
+  comments: totalCount,
   parent: issueRef.nullable().optional().default(null),
   subIssuesSummary: z
     .object({ total: z.number().int().nonnegative(), completed: z.number().int().nonnegative() })
     .nullable()
     .optional()
     .default(null),
+  // Its assignments, latest last (a user's or a bot's; a deleted user has no login).
+  timelineItems: connection(
+    z.object({
+      createdAt: time.optional(),
+      assignee: z.object({ login: z.string().optional() }).nullable().optional(),
+    }),
+  ),
+  // GitHub's issue dependencies: the issues blocking it.
+  blockedBy: connection(
+    z.object({
+      number: z.number().int().positive(),
+      state: z.enum(['OPEN', 'CLOSED']),
+      repository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }),
+    }),
+  ),
 });
 export type IssueNode = z.infer<typeof issueNode>;
 
@@ -478,6 +502,20 @@ const STATE_REASONS: Record<string, GitHubIssueDetail['stateReason']> = {
   DUPLICATE: 'duplicate',
 };
 
+// When the issue was last assigned to one of its current assignees (claimed); null when its
+// timeline doesn't say.
+function claimedAt(node: IssueNode): number | null {
+  const current = new Set(node.assignees.map((each) => each.login.toLowerCase()));
+  let latest: number | null = null;
+  for (const event of node.timelineItems) {
+    const login = event.assignee?.login?.toLowerCase();
+    if (!event.createdAt || !login || !current.has(login)) continue;
+    const when = at(event.createdAt);
+    if (latest === null || when > latest) latest = when;
+  }
+  return latest;
+}
+
 export function toIssueItem(node: IssueNode): SourceItem {
   const repo = repoOf(node.repository);
   const detail: GitHubIssueDetail = {
@@ -489,7 +527,16 @@ export function toIssueItem(node: IssueNode): SourceItem {
     author: node.author?.login ?? null,
     assignees: node.assignees.map((each) => each.login),
     labels: node.labels,
-    milestone: node.milestone ? { title: node.milestone.title, dueOn: atOrNull(node.milestone.dueOn) } : null,
+    milestone: node.milestone
+      ? {
+          title: node.milestone.title,
+          dueOn: atOrNull(node.milestone.dueOn),
+          ...(node.milestone.open &&
+            node.milestone.closed && {
+              issues: { open: node.milestone.open.totalCount, closed: node.milestone.closed.totalCount },
+            }),
+        }
+      : null,
     state: node.state === 'OPEN' ? 'open' : 'closed',
     stateReason: node.stateReason ? (STATE_REASONS[node.stateReason] ?? null) : null,
     body: node.body ?? '',
@@ -507,6 +554,13 @@ export function toIssueItem(node: IssueNode): SourceItem {
         }
       : null,
     subIssues: node.subIssuesSummary && node.subIssuesSummary.total > 0 ? node.subIssuesSummary : null,
+    claimedAt: claimedAt(node),
+    blockedBy: node.blockedBy.map((blocker) => ({
+      owner: blocker.repository.owner.login,
+      name: blocker.repository.name,
+      number: blocker.number,
+      state: blocker.state === 'OPEN' ? 'open' : 'closed',
+    })),
   };
   return {
     externalId: issueId(repo.nodeId, node.number),

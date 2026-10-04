@@ -14,6 +14,7 @@ import {
   type ItemKind,
   type OversightRangeSpan,
   type OversightSettings,
+  type OversightSettingsInput,
   type OversightSummary,
   oversightSettings,
   oversightSummary,
@@ -35,8 +36,8 @@ export type StaleWriterDetail = { itemId: string; account: string; nodeId: strin
 export type GitHubOversightStore = {
   // Settings → GitHub → Oversight summary: the defaults until the User saves their own.
   settings(): OversightSettings;
-  // Validates, saves and returns them.
-  saveSettings(settings: OversightSettings): OversightSettings;
+  // Validates, saves and returns them (the skill-managed labels, left out, stay as they are).
+  saveSettings(settings: OversightSettingsInput): OversightSettings;
   // The summary for a range, over everything, one Project (its id) or Unfiled (null).
   summary(request: OversightRequest): OversightSummary;
   // The writer's detail last kept for a live pull request; null when there is none.
@@ -82,8 +83,9 @@ export function githubOversightIn(
 
   const settings = (): OversightSettings => {
     const row = db.select().from(table).where(eq(table.id, 1)).get();
-    if (!row) return { ...defaultOversightSettings, bots: [...defaultOversightSettings.bots] };
-    return { longRunningDays: row.longRunningDays, idleDays: row.idleDays, bots: row.bots };
+    const skillLabels = [...(row?.skillLabels ?? defaultOversightSettings.skillLabels)];
+    if (!row) return { ...defaultOversightSettings, bots: [...defaultOversightSettings.bots], skillLabels };
+    return { longRunningDays: row.longRunningDays, idleDays: row.idleDays, bots: row.bots, skillLabels };
   };
 
   const liveOfKinds = (kinds: ItemKind[], itemIds?: readonly string[]): Item[] => {
@@ -136,12 +138,14 @@ export function githubOversightIn(
     settings,
 
     saveSettings(input) {
-      const parsed = oversightSettings.parse(input);
-      const bots = [...new Set(parsed.bots.map((bot) => bot.trim()))];
+      // Left out, the skill-managed labels stay as they are.
+      const parsed = oversightSettings.parse({ skillLabels: settings().skillLabels, ...input });
+      const unique = (list: string[]) => [...new Set(list.map((each) => each.trim()))];
       const values = {
         longRunningDays: parsed.longRunningDays,
         idleDays: parsed.idleDays,
-        bots,
+        bots: unique(parsed.bots),
+        skillLabels: unique(parsed.skillLabels),
         updatedAt: now(),
       };
       db.insert(table)

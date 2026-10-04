@@ -1,4 +1,11 @@
-import { type ActivityEntry, type GitHubDiscussion, githubTabCount, type Item } from '@commander/domain';
+import {
+  type ActivityEntry,
+  DEFAULT_SKILL_LABELS,
+  type GitHubDiscussion,
+  githubTabCount,
+  type Item,
+  skillIssues,
+} from '@commander/domain';
 import type { GitHubAccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -9,6 +16,8 @@ import {
   type FilterKey,
   type FilterOptions,
   filterOptions,
+  type GroupId,
+  groupIssues,
   groupWork,
   groupYourWork,
   inFilters,
@@ -66,6 +75,9 @@ export interface GitHubState {
   /** Whether the Closed group is expanded. It starts collapsed. */
   closedShown: boolean;
   showClosed(shown?: boolean): void;
+  /** Whether a map's or milestone's group (#120) is expanded. Each starts collapsed. */
+  groupShown(id: GroupId): boolean;
+  showGroup(id: GroupId, shown: boolean): void;
   /** The selected pull request or issue: always one that is shown. */
   selected: Work | null;
   select(itemId: string): void;
@@ -142,6 +154,9 @@ export function useGitHub({
   // People, so the author filter offers a Person once for all their GitHub logins.
   const people = usePeople();
   const [closedShown, setClosedShown] = useState(false);
+  // The skill-managed labels (#120), read with the work; the defaults until then.
+  const [skillLabels, setSkillLabels] = useState<readonly string[]>(DEFAULT_SKILL_LABELS);
+  const [shownGroups, setShownGroups] = useState<ReadonlySet<GroupId>>(new Set());
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [history, setHistory] = useState<ActivityEntry[]>([]);
@@ -168,6 +183,7 @@ export function useGitHub({
     let current = true;
     client.list().then((next) => current && setItems(next), report);
     client.reviewRequests().then((next) => current && setRequests(next), report);
+    client.skillLabels().then((next) => current && setSkillLabels(next), report);
     return () => {
       current = false;
     };
@@ -209,9 +225,23 @@ export function useGitHub({
   );
   const groups = useMemo(
     // A summary line's Items are listed as they are, whatever the view.
-    () => (view === 'mine' && !only ? groupYourWork(listed, mine) : groupWork(listed)),
-    [view, only, listed, mine],
+    () =>
+      only
+        ? groupWork(listed)
+        : view === 'mine'
+          ? groupYourWork(listed, mine)
+          : view === 'issues'
+            ? groupIssues(listed, all, skillLabels)
+            : groupWork(listed),
+    [view, only, listed, mine, all, skillLabels],
   );
+  // Each skill-managed issue's group in the Issues view, so revealing one opens it.
+  const skillGroupOf = useMemo(() => {
+    const found = new Map<string, GroupId>();
+    for (const [itemId, key] of skillIssues(all, skillLabels).groupOf)
+      if (key) found.set(itemId, `skill:${key}`);
+    return found;
+  }, [all, skillLabels]);
   const options = useMemo(() => filterOptions(narrowed, filters, people), [narrowed, filters, people]);
   const forProjectFilter = useMemo(
     () => viewed.filter((work) => isOpen(work) && inFilters(work, filters, undefined, people)),
@@ -243,8 +273,13 @@ export function useGitHub({
 
   const closedListed = closedShown || only !== null;
   const shown = useMemo(
-    () => groups.flatMap((group) => (group.id === 'closed' && !closedListed ? [] : group.work)),
-    [groups, closedListed],
+    () =>
+      groups.flatMap((group) =>
+        (group.id === 'closed' && !closedListed) || (group.skill && !shownGroups.has(group.id))
+          ? []
+          : group.work,
+      ),
+    [groups, closedListed, shownGroups],
   );
   const selected =
     shown.find((work) => work.id === selectedId) ??
@@ -339,6 +374,16 @@ export function useGitHub({
   );
 
   const showClosed = useCallback((value?: boolean) => setClosedShown((now) => value ?? !now), []);
+  const showGroup = useCallback(
+    (id: GroupId, value: boolean) =>
+      setShownGroups((now) => {
+        const next = new Set(now);
+        if (value) next.add(id);
+        else next.delete(id);
+        return next;
+      }),
+    [],
+  );
 
   const reveal = useCallback(
     (itemId: string) => {
@@ -353,10 +398,12 @@ export function useGitHub({
       if (!work || !inFilters(work, filters, undefined, people)) setFilters(NO_FILTERS);
       if (only && !only.itemIds.has(target)) setOnly(null);
       if (!work || !isOpen(work)) setClosedShown(true);
+      const group = skillGroupOf.get(target);
+      if (group) showGroup(group, true);
       setSelectedId(target);
       setDetailOpen(true);
     },
-    [requests, all, view, filters, only, reload, setView, people, mine],
+    [requests, all, view, filters, only, reload, setView, people, mine, skillGroupOf, showGroup],
   );
 
   const apply = useCallback(
@@ -416,6 +463,8 @@ export function useGitHub({
     openCount: listed.filter(isOpen).length,
     closedShown: closedListed,
     showClosed,
+    groupShown: (id) => shownGroups.has(id),
+    showGroup,
     selected,
     select: setSelectedId,
     reveal,

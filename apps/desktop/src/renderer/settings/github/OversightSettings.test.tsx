@@ -1,13 +1,14 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
+import { defaultOversightSettings } from '@commander/domain';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { OversightSettings } from './OversightSettings';
 
-// Settings → GitHub → Oversight summary (#119): the two Stuck settings and the bots, against a real
-// Item store.
+// Settings → GitHub → Oversight summary (#119): the two Stuck settings, the bots and the
+// skill-managed labels (#120), against a real Item store.
 
 let store: ItemStore;
 let client: ItemStoreClient;
@@ -43,7 +44,23 @@ describe('Settings → GitHub → Oversight summary', () => {
         longRunningDays: 10,
         idleDays: 3,
         bots: ['dependabot', 'acme-release-bot'],
+        skillLabels: defaultOversightSettings.skillLabels,
       }),
+    );
+  });
+
+  it('edits the skill-managed labels (#120), a trailing * matching any suffix', async () => {
+    render(<OversightSettings itemStore={client} />);
+    const labels = screen.getByLabelText('Skill-managed labels') as HTMLInputElement;
+    await waitFor(() =>
+      expect(labels.value).toBe(
+        'wayfinder:*, needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix',
+      ),
+    );
+    fireEvent.change(labels, { target: { value: 'wayfinder:*, build-ticket' } });
+    fireEvent.blur(labels);
+    await waitFor(() =>
+      expect(store.githubOversight.settings().skillLabels).toEqual(['wayfinder:*', 'build-ticket']),
     );
   });
 

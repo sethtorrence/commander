@@ -9,6 +9,8 @@ import {
   githubRepoName,
   type PullRequestDetail,
 } from './github';
+import { closingIssueRefs } from './github-finishes';
+import { changedIn, DEFAULT_SKILL_LABELS, skillIssues, type TicketKind } from './github-skill-issues';
 import type { Item } from './items';
 
 /*
@@ -32,9 +34,18 @@ import type { Item } from './items';
   repo. Groups go by Project (the Items' filing; a repo's fire goes where most of its Items are filed)
   in the Projects' order, Unfiled last, then by repo. GitHub users stay handles until People land.
 
-  Skill-managed issues (wayfinder maps and tickets) get their own handling in #120: `isSkillManaged`
-  is its seam, and what it claims is left out here. Issues are never Stuck, so long-lived ones never
-  read as stuck.
+  Skill-managed issues (#120, github-skill-issues.ts: wayfinder maps and tickets, by the labels in
+  the settings) are progress, not neglect:
+
+  - Progress: one entry per map or milestone of build tickets where tickets opened or closed in the
+    range (or the map itself opened), with closed of all tickets ("15 of 26 decided", "7 of 10
+    done"), what opened and closed in the range and how many are blocked. A map goes where it is
+    filed, a milestone where most of its tickets are.
+  - Started counts a ticket when it is claimed (assigned) in the range, never for being opened.
+  - Shipped counts a ticket closed as done in the range; a pull request merged in the range that
+    closed one shows once, with its ticket, rather than among the merged ones. Tickets closed as not
+    planned count in progress, never as work.
+  - Issues are never Stuck, so long-lived tickets never read as stuck.
 */
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -53,12 +64,20 @@ export const oversightSettings = z.object({
   // Authors whose pull requests and issues never count as Started (besides every `[bot]` login), as
   // GitHub logins, matched whatever their case and with or without `[bot]`.
   bots: z.array(z.string().trim().min(1).max(100)).max(200),
+  // Labels that make an issue skill-managed (#120); a trailing `*` matches any suffix.
+  skillLabels: z
+    .array(z.string().trim().min(1).max(100))
+    .max(100)
+    .default(() => [...DEFAULT_SKILL_LABELS]),
 });
 export type OversightSettings = z.infer<typeof oversightSettings>;
+// What saving takes: the skill-managed labels may be left out.
+export type OversightSettingsInput = z.input<typeof oversightSettings>;
 export const defaultOversightSettings: OversightSettings = {
   longRunningDays: 7,
   idleDays: 5,
   bots: ['dependabot', 'renovate'],
+  skillLabels: [...DEFAULT_SKILL_LABELS],
 };
 
 // What a summary covers: from one instant to another (the range's end is "now" for Stuck).
@@ -90,6 +109,8 @@ export const stuckReason = z.discriminatedUnion('kind', [
 ]);
 export type StuckReason = z.infer<typeof stuckReason>;
 
+const ticketKinds = ['map', 'map-ticket', 'build-ticket', 'ticket'] as const satisfies readonly TicketKind[];
+
 export const oversightFacts = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('shipped'),
@@ -97,11 +118,37 @@ export const oversightFacts = z.discriminatedUnion('kind', [
     issuesClosed: z.number().int().nonnegative(),
     // Release tags, oldest first.
     releases: z.array(z.string()),
+    // Skill-managed tickets closed as done, oldest first, each with the pull request that closed it
+    // (merged in the range; it isn't among `merged` then).
+    tickets: z.array(
+      z.object({
+        number: z.number().int().positive(),
+        title: z.string(),
+        kind: z.enum(ticketKinds),
+        pullRequest: z.number().int().positive().nullable(),
+      }),
+    ),
   }),
   z.object({
     kind: z.literal('started'),
     pullRequests: z.number().int().nonnegative(),
     issues: z.number().int().nonnegative(),
+    // Skill-managed tickets claimed (assigned) in the range, in the order claimed, with by whom.
+    claimed: z.array(
+      z.object({ number: z.number().int().positive(), title: z.string(), by: z.array(z.string()) }),
+    ),
+  }),
+  z.object({
+    kind: z.literal('progress'),
+    group: z.enum(['map', 'milestone']),
+    // The map's number; null for a milestone.
+    number: z.number().int().positive().nullable(),
+    title: z.string(),
+    done: z.number().int().nonnegative(),
+    total: z.number().int().nonnegative(),
+    opened: z.number().int().nonnegative(),
+    closed: z.number().int().nonnegative(),
+    blocked: z.number().int().nonnegative(),
   }),
   z.object({
     kind: z.literal('stuck'),
@@ -137,7 +184,7 @@ export const oversightGroup = z.object({
 });
 export type OversightGroup = z.infer<typeof oversightGroup>;
 
-export const oversightSectionKinds = ['shipped', 'started', 'stuck', 'on-fire'] as const;
+export const oversightSectionKinds = ['shipped', 'started', 'progress', 'stuck', 'on-fire'] as const;
 export type OversightSectionKind = (typeof oversightSectionKinds)[number];
 export const oversightSection = z.object({
   kind: z.enum(oversightSectionKinds),
@@ -171,8 +218,6 @@ export type OversightSummary = z.infer<typeof oversightSummarySchema>;
 type PullRequest = Item & { detail: PullRequestDetail };
 type Issue = Item & { detail: GitHubIssueDetail };
 type Release = Item & { detail: GitHubReleaseDetail };
-/** A pull request or issue, as `isSkillManaged` sees it. */
-export type OversightWork = PullRequest | Issue;
 
 export type OversightInput = {
   range: OversightRangeSpan;
@@ -185,8 +230,6 @@ export type OversightInput = {
   // Every Project, in order (archived ones too, so their Items still group under them).
   projects: readonly OversightProject[];
   settings: OversightSettings;
-  // #120's seam: skill-managed issues it handles itself, left out here.
-  isSkillManaged?: (work: OversightWork) => boolean;
   // The Person a GitHub login is matched to (People, #117); null (or left out) keeps the login.
   personOf?: (login: string) => { id: string; name: string } | null;
 };
@@ -259,6 +302,15 @@ function waitingOn(pull: PullRequestDetail, reasons: StuckReason[]): string | nu
     : null;
 }
 
+type ShippedTicket = Extract<OversightFacts, { kind: 'shipped' }>['tickets'][number];
+type ClaimedTicket = Extract<OversightFacts, { kind: 'started' }>['claimed'][number];
+type ProgressFacts = Extract<OversightFacts, { kind: 'progress' }>;
+// Maps first, by number; then milestones, by title.
+const progressOrder = (a: ProgressFacts, b: ProgressFacts) =>
+  (a.number === null ? 1 : 0) - (b.number === null ? 1 : 0) ||
+  (a.number ?? 0) - (b.number ?? 0) ||
+  a.title.localeCompare(b.title);
+
 const KIND_ORDER: Item['kind'][] = ['pull-request', 'github-issue', 'github-release'];
 
 type Placed = { projectId: string | null; repo: GitHubRepoName; itemIds: string[]; facts: OversightFacts };
@@ -273,11 +325,29 @@ export function oversightSummary(input: OversightInput): OversightSummary {
   const kinds = new Map(input.items.map((item) => [item.id, item.kind]));
   const personOf = (login: string) => input.personOf?.(login) ?? null;
   const nameOf = (login: string) => personOf(login)?.name ?? login;
-  const managed = (work: OversightWork) => input.isSkillManaged?.(work) ?? false;
+  const skill = skillIssues(issues, settings.skillLabels ?? DEFAULT_SKILL_LABELS);
+  const managed = (issue: Issue) => skill.managed.has(issue.id);
   const projectOf = (item: Item) => item.filing?.projectId ?? null;
+  const order = new Map(input.projects.map((project, index) => [project.id, index]));
+  // The Project most of some Items are filed in (the first in order on a tie); null when none is.
+  const mostFiled = (items: readonly Item[]): string | null => {
+    const counts = new Map<string, number>();
+    for (const each of items) {
+      const projectId = projectOf(each);
+      if (projectId) counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
+    }
+    let best: string | null = null;
+    for (const [projectId, n] of counts) {
+      const current = best === null ? -1 : (counts.get(best) ?? 0);
+      if (n > current || (n === current && (order.get(projectId) ?? 1e9) < (order.get(best ?? '') ?? 1e9)))
+        best = projectId;
+    }
+    return best;
+  };
   const placed: Record<OversightSectionKind, Placed[]> = {
     shipped: [],
     started: [],
+    progress: [],
     stuck: [],
     'on-fire': [],
   };
@@ -290,8 +360,10 @@ export function oversightSummary(input: OversightInput): OversightSummary {
     merged: number;
     issuesClosed: number;
     releases: [number, string][];
+    tickets: [number, ShippedTicket][];
     pullRequests: number;
     issues: number;
+    claimed: [number, ClaimedTicket][];
   };
   const tally = (into: Map<string, Tally>, item: Item, repo: GitHubRepoName, at: number) => {
     const key = `${projectOf(item) ?? ''}\u0000${repo.nodeId}`;
@@ -304,8 +376,10 @@ export function oversightSummary(input: OversightInput): OversightSummary {
         merged: 0,
         issuesClosed: 0,
         releases: [],
+        tickets: [],
         pullRequests: 0,
         issues: 0,
+        claimed: [],
       };
       into.set(key, found);
     }
@@ -318,16 +392,51 @@ export function oversightSummary(input: OversightInput): OversightSummary {
     [...each.items].sort((a, b) => kindRank(a.id) - kindRank(b.id) || a.at - b.at).map((one) => one.id);
 
   const shipped = new Map<string, Tally>();
-  for (const pull of pulls) {
-    if (pull.detail.state !== 'merged' || !inRange(pull.detail.mergedAt, range)) continue;
-    const entry = tally(shipped, pull, pull.detail.repo, pull.detail.mergedAt ?? 0);
-    entry.merged += 1;
+  const merged = pulls.filter(
+    (pull) => pull.detail.state === 'merged' && inRange(pull.detail.mergedAt, range),
+  );
+  const closedAsDone = issues.filter(
+    ({ detail }) =>
+      detail.state === 'closed' &&
+      inRange(detail.closedAt, range) &&
+      (detail.stateReason === 'completed' || detail.stateReason === null),
+  );
+  // The pull request merged in the range that closed each skill-managed ticket, where one did.
+  const refKey = (ref: { owner: string; name: string; number: number }) =>
+    `${ref.owner}/${ref.name}#${ref.number}`.toLowerCase();
+  const closer = new Map<string, PullRequest>();
+  for (const pull of merged)
+    for (const ref of [...pull.detail.closingIssues, ...closingIssueRefs(pull.detail.body, pull.detail.repo)])
+      if (!closer.has(refKey(ref))) closer.set(refKey(ref), pull);
+  const ticketsBy = new Map<string, Issue[]>();
+  const shippedTicket = (ticket: Issue, pullRequest: number | null): ShippedTicket => ({
+    number: ticket.detail.number,
+    title: ticket.title,
+    kind: skill.ticketKind(ticket.id) ?? 'ticket',
+    pullRequest,
+  });
+  for (const ticket of closedAsDone) {
+    if (!managed(ticket)) continue;
+    const pull = closer.get(refKey({ ...ticket.detail.repo, number: ticket.detail.number }));
+    if (pull) ticketsBy.set(pull.id, [...(ticketsBy.get(pull.id) ?? []), ticket]);
+    else {
+      const at = ticket.detail.closedAt ?? 0;
+      tally(shipped, ticket, ticket.detail.repo, at).tickets.push([at, shippedTicket(ticket, null)]);
+    }
   }
-  for (const issue of issues) {
-    const { detail } = issue;
-    if (detail.state !== 'closed' || !inRange(detail.closedAt, range) || managed(issue)) continue;
-    if (detail.stateReason !== 'completed' && detail.stateReason !== null) continue;
-    const entry = tally(shipped, issue, detail.repo, detail.closedAt ?? 0);
+  for (const pull of merged) {
+    const entry = tally(shipped, pull, pull.detail.repo, pull.detail.mergedAt ?? 0);
+    const closed = ticketsBy.get(pull.id);
+    if (!closed) entry.merged += 1;
+    for (const ticket of closed ?? []) {
+      const at = ticket.detail.closedAt ?? 0;
+      entry.items.push({ id: ticket.id, at });
+      entry.tickets.push([at, shippedTicket(ticket, pull.detail.number)]);
+    }
+  }
+  for (const issue of closedAsDone) {
+    if (managed(issue)) continue;
+    const entry = tally(shipped, issue, issue.detail.repo, issue.detail.closedAt ?? 0);
     entry.issuesClosed += 1;
   }
   for (const each of releases) {
@@ -346,6 +455,7 @@ export function oversightSummary(input: OversightInput): OversightSummary {
         merged: each.merged,
         issuesClosed: each.issuesClosed,
         releases: [...each.releases].sort((a, b) => a[0] - b[0]).map(([, tag]) => tag),
+        tickets: [...each.tickets].sort((a, b) => a[0] - b[0]).map(([, ticket]) => ticket),
       },
     });
 
@@ -360,7 +470,19 @@ export function oversightSummary(input: OversightInput): OversightSummary {
   }
   for (const issue of issues) {
     const { detail } = issue;
-    if (!inRange(detail.createdAt, range) || isBot(detail.author, settings.bots) || managed(issue)) continue;
+    if (managed(issue)) {
+      // A ticket starts when it is claimed.
+      const claimed = detail.claimedAt ?? null;
+      if (skill.ticketKind(issue.id) === 'map' || !detail.assignees.length || !inRange(claimed, range))
+        continue;
+      const entry = tally(started, issue, detail.repo, claimed ?? 0);
+      entry.claimed.push([
+        claimed ?? 0,
+        { number: detail.number, title: issue.title, by: [...detail.assignees] },
+      ]);
+      continue;
+    }
+    if (!inRange(detail.createdAt, range) || isBot(detail.author, settings.bots)) continue;
     const entry = tally(started, issue, detail.repo, detail.createdAt);
     entry.issues += 1;
   }
@@ -369,8 +491,36 @@ export function oversightSummary(input: OversightInput): OversightSummary {
       projectId: each.projectId,
       repo: each.repo,
       itemIds: ordered(each),
-      facts: { kind: 'started', pullRequests: each.pullRequests, issues: each.issues },
+      facts: {
+        kind: 'started',
+        pullRequests: each.pullRequests,
+        issues: each.issues,
+        claimed: [...each.claimed].sort((a, b) => a[0] - b[0]).map(([, ticket]) => ticket),
+      },
     });
+
+  // Progress: per map or milestone that moved in the range.
+  for (const group of skill.groups) {
+    const { opened, closed } = changedIn(group, range);
+    const mapOpened = !!group.map && inRange(group.map.detail.createdAt, range);
+    if (!opened && !closed && !mapOpened) continue;
+    placed.progress.push({
+      projectId: group.map ? projectOf(group.map) : mostFiled(group.tickets),
+      repo: group.repo,
+      itemIds: [...(group.map ? [group.map.id] : []), ...group.tickets.map((ticket) => ticket.id)],
+      facts: {
+        kind: 'progress',
+        group: group.kind,
+        number: group.map?.detail.number ?? null,
+        title: group.title,
+        done: group.done,
+        total: group.total,
+        opened,
+        closed,
+        blocked: group.blocked,
+      },
+    });
+  }
 
   // Stuck: one entry per pull request.
   const stuckWaits = new Map<string, string>();
@@ -394,22 +544,8 @@ export function oversightSummary(input: OversightInput): OversightSummary {
   }
 
   // On fire: per watched repo, filed where most of its Items are.
-  const order = new Map(input.projects.map((project, index) => [project.id, index]));
-  const repoProject = (repo: GitHubRepoName): string | null => {
-    const counts = new Map<string, number>();
-    for (const work of [...pulls, ...issues]) {
-      const projectId = projectOf(work);
-      if (projectId && work.detail.repo.nodeId === repo.nodeId)
-        counts.set(projectId, (counts.get(projectId) ?? 0) + 1);
-    }
-    let best: string | null = null;
-    for (const [projectId, n] of counts) {
-      const current = best === null ? -1 : (counts.get(best) ?? 0);
-      if (n > current || (n === current && (order.get(projectId) ?? 1e9) < (order.get(best ?? '') ?? 1e9)))
-        best = projectId;
-    }
-    return best;
-  };
+  const repoProject = (repo: GitHubRepoName): string | null =>
+    mostFiled([...pulls, ...issues].filter((work) => work.detail.repo.nodeId === repo.nodeId));
   for (const health of input.repos) {
     const branch = health.defaultBranch ?? 'main';
     if (health.head && failing(health.head.checks))
@@ -471,7 +607,10 @@ export function oversightSummary(input: OversightInput): OversightSummary {
           entries: entries.sort(
             (a, b) =>
               fullName(a.repo).localeCompare(fullName(b.repo)) ||
-              (a.facts.kind === 'stuck' && b.facts.kind === 'stuck' ? a.facts.number - b.facts.number : 0),
+              (a.facts.kind === 'stuck' && b.facts.kind === 'stuck' ? a.facts.number - b.facts.number : 0) ||
+              (a.facts.kind === 'progress' && b.facts.kind === 'progress'
+                ? progressOrder(a.facts, b.facts)
+                : 0),
           ),
         })),
     };
@@ -523,7 +662,13 @@ export function oversightSummary(input: OversightInput): OversightSummary {
 // ---------------------------------------------------------------------------------------------
 // The plain summary
 
-export type PlainLine = { text: string; itemIds: string[]; repo: GitHubRepoName };
+export type PlainLine = {
+  text: string;
+  itemIds: string[];
+  repo: GitHubRepoName;
+  // A Progress line's counts, for its progress bar.
+  progress?: { done: number; total: number };
+};
 export type PlainGroup = { project: OversightProject | null; title: string; lines: PlainLine[] };
 export type PlainSection = { kind: OversightSectionKind; title: string; groups: PlainGroup[] };
 export type PlainSummary = {
@@ -537,8 +682,16 @@ export type PlainSummary = {
 export const OVERSIGHT_SECTION_TITLES: Record<OversightSectionKind, string> = {
   shipped: 'Shipped',
   started: 'Started',
+  progress: 'Progress',
   stuck: 'Stuck',
   'on-fire': 'On fire',
+};
+
+const TICKET_WORDS: Record<TicketKind, string> = {
+  map: 'map',
+  'map-ticket': 'map ticket',
+  'build-ticket': 'build ticket',
+  ticket: 'ticket',
 };
 
 const counted = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -567,15 +720,40 @@ export function plainLine({ repo, facts }: OversightEntry): string {
         ...(facts.releases.length
           ? [`${facts.releases.length === 1 ? 'release' : 'releases'} ${and(facts.releases)}`]
           : []),
+        ...facts.tickets.map((ticket) =>
+          ticket.pullRequest === null
+            ? `#${ticket.number} done (${TICKET_WORDS[ticket.kind]})`
+            : `#${ticket.pullRequest} closes #${ticket.number} (${TICKET_WORDS[ticket.kind]})`,
+        ),
       ];
       return `${name}: ${parts.join(', ')}`;
     }
     case 'started': {
-      const parts = [
+      const opened = [
         ...(facts.pullRequests ? [counted(facts.pullRequests, 'PR')] : []),
         ...(facts.issues ? [counted(facts.issues, 'issue')] : []),
       ];
-      return `${name}: ${and(parts)} opened`;
+      const parts = [
+        ...(opened.length ? [`${and(opened)} opened`] : []),
+        ...facts.claimed.map((ticket) => `claimed #${ticket.number} ${ticket.title} (${and(ticket.by)})`),
+      ];
+      return `${name}: ${parts.join(', ')}`;
+    }
+    case 'progress': {
+      const what =
+        facts.group === 'map' && facts.number !== null
+          ? `${githubIdentifier(repo, facts.number)} ${facts.title}`
+          : `${name} milestone ${facts.title}`;
+      const moved = [
+        ...(facts.opened ? [`${facts.opened} opened`] : []),
+        ...(facts.closed ? [`${facts.closed} closed`] : []),
+      ];
+      const parts = [
+        `${facts.done} of ${facts.total} ${facts.group === 'map' ? 'decided' : 'done'}`,
+        ...(moved.length ? [and(moved)] : []),
+        ...(facts.blocked ? [`${facts.blocked} blocked`] : []),
+      ];
+      return `${what}: ${parts.join(', ')}`;
     }
     case 'stuck':
       return `${githubIdentifier(repo, facts.number)} ${facts.title}: ${facts.reasons.map(reasonText).join(', ')}`;
@@ -601,6 +779,9 @@ export function plainSummary(summary: OversightSummary): PlainSummary {
           text: plainLine(entry),
           itemIds: entry.itemIds,
           repo: entry.repo,
+          ...(entry.facts.kind === 'progress' && {
+            progress: { done: entry.facts.done, total: entry.facts.total },
+          }),
         })),
       })),
     }),

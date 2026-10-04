@@ -6,13 +6,16 @@ import {
   isReviewRequestItem,
   isTheirs,
   type PullRequestDetail,
+  type SkillGroup,
+  skillIssues,
 } from '@commander/domain';
 import { NO_PEOPLE, type PeopleLookup } from '../../people/people';
 
 /*
   The GitHub Section's list, worked out from the `pull-request` and `github-issue` Items: the two
   views (Pull requests, Issues), each one's state, the groups (open by latest activity, then merged
-  and closed behind Closed), and the GitHub filters (org, repo, author, state, label) with a count
+  and closed behind Closed; in Issues, skill-managed issues under their map or milestone, #120), and
+  the GitHub filters (org, repo, author, state, label) with a count
   for each choice. Pure functions, so the Section's hook and its tests share them; open work (#116)
   and the People view (#122) can read the same. The app-wide Project filter is applied beside these
   (projects/filter.ts).
@@ -155,11 +158,75 @@ export function ageOf(at: number, now: number): string {
 // ---------------------------------------------------------------------------------------------
 // Groups
 
-export type GroupId = 'open' | 'closed' | 'your-pulls' | 'reviews' | 'assigned';
+export type GroupId = 'open' | 'closed' | 'your-pulls' | 'reviews' | 'assigned' | `skill:${string}`;
 export interface WorkGroup {
   id: GroupId;
   title: string;
   work: Work[];
+  /** A map or a milestone of build tickets (#120): its progress, over every ticket Commander holds. */
+  skill?: SkillProgress;
+}
+
+/** A map's or milestone's progress, as the Issues view shows it. */
+export interface SkillProgress {
+  kind: SkillGroup['kind'];
+  done: number;
+  total: number;
+  blocked: number;
+  /** "15 of 26 decided, 2 blocked". */
+  line: string;
+  /** The map's Item id; null for a milestone. */
+  mapId: string | null;
+}
+
+/** "15 of 26 decided" (a map) or "7 of 10 done" (build tickets), with how many are blocked. */
+export function progressLine({
+  kind,
+  done,
+  total,
+  blocked,
+}: Pick<SkillGroup, 'kind' | 'done' | 'total' | 'blocked'>): string {
+  return `${done} of ${total} ${kind === 'map' ? 'decided' : 'done'}${blocked ? `, ${blocked} blocked` : ''}`;
+}
+
+/**
+ * The Issues view's groups (#120): open issues first, then each map and milestone of build tickets
+ * with the skill-managed issues under it (the map's own row first, then its tickets, open first), then
+ * Closed. Progress counts every ticket Commander holds (`all`), whatever the filters let through; a
+ * group shows while any of its issues is listed.
+ */
+export function groupIssues(
+  list: readonly Work[],
+  all: readonly Work[],
+  skillLabels: readonly string[],
+): WorkGroup[] {
+  const skill = skillIssues(all, skillLabels);
+  const listed = new Set(list.map((work) => work.id));
+  const groups = skill.groups.flatMap((group): WorkGroup[] => {
+    const id: GroupId = `skill:${group.key}`;
+    const members = [...(group.map ? [group.map] : []), ...group.tickets].filter(
+      (issue) => listed.has(issue.id) && skill.groupOf.get(issue.id) === group.key,
+    );
+    if (!members.length) return [];
+    return [
+      {
+        id,
+        title: group.title,
+        work: members,
+        skill: {
+          kind: group.kind,
+          done: group.done,
+          total: group.total,
+          blocked: group.blocked,
+          line: progressLine(group),
+          mapId: group.map?.id ?? null,
+        },
+      },
+    ];
+  });
+  const rest = list.filter((work) => !skill.groupOf.get(work.id));
+  const [open, closed] = groupWork(rest) as [WorkGroup, WorkGroup];
+  return [open, ...groups, closed];
 }
 
 const closedAt = (work: Work) =>

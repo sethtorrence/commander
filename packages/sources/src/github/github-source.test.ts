@@ -262,7 +262,7 @@ describe('the first sync', () => {
     });
   });
 
-  it('saves an issue with its milestone, parent and sub-issue summary', async () => {
+  it('saves an issue with its milestone and its counts, parent, sub-issue summary, claim and blockers', async () => {
     const { items } = await afterFirstSync();
     expect(byId(items, 'R_kgDOAcmeApi:issue/30')).toEqual({
       externalId: 'R_kgDOAcmeApi:issue/30',
@@ -280,7 +280,11 @@ describe('the first sync', () => {
         author: 'priya',
         assignees: ['octocat'],
         labels: [{ name: 'bug', color: 'd73a4a' }],
-        milestone: { title: 'October', dueOn: Date.parse('2026-10-31T00:00:00Z') },
+        milestone: {
+          title: 'October',
+          dueOn: Date.parse('2026-10-31T00:00:00Z'),
+          issues: { open: 3, closed: 5 },
+        },
         state: 'open',
         stateReason: null,
         body: 'When the receiver answers 502 we drop the event.',
@@ -296,6 +300,9 @@ describe('the first sync', () => {
           url: 'https://github.com/acme/api/issues/25',
         },
         subIssues: null,
+        // Assigned to octocat (its one assignee) on 28 September; priya's earlier assignment is past.
+        claimedAt: Date.parse('2026-09-28T08:00:00Z'),
+        blockedBy: [{ owner: 'acme', name: 'api', number: 28, state: 'closed' }],
       },
     });
     expect(byId(items, 'R_kgDOAcmeApi:issue/25')?.detail).toMatchObject({
