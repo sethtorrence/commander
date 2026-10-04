@@ -3,10 +3,12 @@ import {
   type Actor,
   COMMENT_FIELD,
   type Item,
+  type ItemAction,
   type ItemChange,
   LABEL_FIELD,
   type LinearCatalog,
   type LinearComment,
+  type LinearIssueDraft,
   type OutgoingChange,
   type Project,
   syncedFieldsOf,
@@ -53,12 +55,20 @@ export interface LinearIssues {
   retry(itemId: string): Promise<void>;
   /** What an Account's Linear offers the pickers, as its last sync fetched it (null before then). */
   catalog(accountId: string): Promise<LinearCatalog | null>;
+  /**
+   * New Linear issue: makes it at once and sends it to Linear in the background. Returns its creation
+   * entry; undoing that entry here undoes the whole send (deleting the issue in Linear).
+   */
+  sendToLinear(draft: LinearIssueDraft): Promise<ActivityEntry>;
 }
 
 // The Item store answers at most 1000 Items a query.
 const MOST = 1000;
 
 export function linearIssuesIn(itemStore: ItemStoreClient): LinearIssues {
+  // Changes made here that were recorded as several entries (a send), by their first entry's id.
+  const together = new Map<number, number[]>();
+
   return {
     async list() {
       const [open, closed] = await Promise.all([
@@ -81,8 +91,14 @@ export function linearIssuesIn(itemStore: ItemStoreClient): LinearIssues {
       return itemStore({ op: 'activity', query: { itemId } });
     },
 
-    undo(entryId) {
-      return itemStore({ op: 'record', action: { type: 'undo', entryId } });
+    async undo(entryId) {
+      const entries = together.get(entryId);
+      if (!entries) return itemStore({ op: 'record', action: { type: 'undo', entryId } });
+      const actions = [...entries].reverse().map((id): ItemAction => ({ type: 'undo', entryId: id }));
+      const [first] = await itemStore({ op: 'record-all', actions });
+      if (!first) throw new Error('Nothing was undone');
+      together.delete(entryId);
+      return first;
     },
 
     edit(itemId, fields) {
@@ -110,6 +126,17 @@ export function linearIssuesIn(itemStore: ItemStoreClient): LinearIssues {
 
     catalog(accountId) {
       return itemStore({ op: 'source-catalog', account: accountId });
+    },
+
+    async sendToLinear(draft) {
+      const entries = await itemStore({ op: 'send-to-linear', draft });
+      const [first] = entries;
+      if (!first) throw new Error('Nothing was sent');
+      together.set(
+        first.id,
+        entries.map((entry) => entry.id),
+      );
+      return first;
     },
   };
 }

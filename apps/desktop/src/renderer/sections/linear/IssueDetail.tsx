@@ -214,6 +214,8 @@ function SyncLine({ editing }: { editing: Editing }) {
 
 /** Opens the issue (or anything on Linear) in the system browser, through the window's new-window handler. */
 function OutLink({ href, className, children }: { href: string; className?: string; children: ReactNode }) {
+  // A new issue on its way to Linear has no address there yet.
+  if (!href) return <span className={className}>{children}</span>;
   return (
     <a href={href} target="_blank" rel="noreferrer" className={className}>
       {children}

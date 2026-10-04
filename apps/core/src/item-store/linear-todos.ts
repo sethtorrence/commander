@@ -10,6 +10,7 @@ import {
   type ActivityEntry,
   type Actor,
   type CausedBy,
+  CREATE_FIELD,
   completedStateOf,
   type Filing,
   type Item,
@@ -19,8 +20,9 @@ import {
   linearTodoFate,
   reopenStateOf,
   type Source,
+  sentWhy,
 } from '@commander/domain';
-import { and, asc, desc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, notExists } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { stateOf } from './rows';
@@ -189,6 +191,46 @@ export function linearTodosIn(deps: LinearTodosDeps) {
     },
 
     /**
+     * A new issue sent to Linear from Commander (linear-send.ts), whose Todo, if it was sent from one,
+     * is already backed by it: the Todo follows the issue (title, Project, done), or goes when the
+     * issue isn't one of the User's Linear Todos, saying why; an issue sent from a Block or the Linear
+     * Section that is one gets its Todo.
+     */
+    sent(item: Item, entry: Entry) {
+      if (item.detail?.kind !== 'linear-issue') return;
+      const issue = item as Issue;
+      const me = (issue.account && users.get(issue.account)) || null;
+      const live = backing(issue.id).find((todo) => todo.deletedAt === null && todo.detail?.kind === 'todo');
+      const by = { by: entry.by, causedBy: { ...entry.causedBy, itemId: issue.id } };
+      const why = sentWhy(issue.detail, me, now());
+      if (why) {
+        if (live) deps.change(live, { ...stateOf(live), deletedAt: now() }, { ...by, action: 'delete', why });
+        return;
+      }
+      const wanted = { title: issue.title, filing: inherited(issue.filing) };
+      if (!live) {
+        if (me === null || linearTodoFate(issue.detail, me, now()).todo !== 'open') return;
+        const todo: ItemState = {
+          ...wanted,
+          people: [],
+          status: 'open',
+          detail: { kind: 'todo', origin: 'linear', dueOn: null, backedBy: issue.id },
+          deletedAt: null,
+        };
+        deps.create(todo, issue.id, { ...by, why: 'Sent to Linear, assigned to you' });
+        return;
+      }
+      const current = stateOf(live);
+      const after: ItemState = {
+        ...current,
+        ...wanted,
+        status: isDone(issue.detail) ? 'done' : current.status,
+      };
+      if (!isDeepStrictEqual(current, after))
+        deps.change(live, after, { ...by, action: 'update', why: 'Sent to Linear' });
+    },
+
+    /**
      * After a Todo was ticked or unticked (not by the Source): moves the issue behind it to its team's
      * default completed state, or back to the state it was in before, unless it is there already.
      */
@@ -226,7 +268,10 @@ export function linearTodosIn(deps: LinearTodosDeps) {
       return item && item.deletedAt === null && item.detail?.kind === 'linear-issue' ? item : null;
     },
 
-    /** The external ids of the Account's live Items behind open Todos: each sync re-reads them. */
+    /**
+     * The external ids of the Account's live Items behind open Todos: each sync re-reads them. Not an
+     * issue still being made (Send to Linear), which Linear doesn't have yet.
+     */
     recheckIds({ source, account }: { source: Source; account: string }): string[] {
       const { todoDetails, items } = schema;
       const issues = alias(items, 'issues');
@@ -242,6 +287,17 @@ export function linearTodosIn(deps: LinearTodosDeps) {
             eq(issues.source, source),
             eq(issues.account, account),
             isNull(issues.deletedAt),
+            notExists(
+              db
+                .select({ id: schema.outgoingChanges.id })
+                .from(schema.outgoingChanges)
+                .where(
+                  and(
+                    eq(schema.outgoingChanges.itemId, issues.id),
+                    eq(schema.outgoingChanges.field, CREATE_FIELD),
+                  ),
+                ),
+            ),
           ),
         )
         .orderBy(asc(issues.externalId))

@@ -1,0 +1,77 @@
+/*
+  A Block's Linear issue chip (after the Todo tag, in the same pill shape) and its margin menu, which
+  shows at the end of the row while the row is pointed at or being written in.
+*/
+@layer components {
+  .n-issue {
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .n-issue .n-issue-state {
+    width: 10px;
+    height: 10px;
+  }
+  .n-issue .n-issue-name {
+    font-weight: 500;
+    color: var(--muted);
+  }
+  .n-menu {
+    position: relative;
+    flex: none;
+    margin: 5px 0 0 8px;
+    visibility: hidden;
+  }
+  .n-row:hover > .n-menu,
+  .n-row:focus-within > .n-menu,
+  .n-menu[data-open] {
+    visibility: visible;
+  }
+  .n-menu-button {
+    height: 20px;
+    min-width: 22px;
+    padding: 0 4px;
+    border: 1px solid transparent;
+    background: none;
+    color: var(--muted);
+    font: 600 12px / 1 var(--mono);
+    cursor: pointer;
+  }
+  .n-menu-button:hover,
+  .n-menu[data-open] .n-menu-button {
+    border-color: var(--line);
+    color: var(--ink);
+  }
+  .n-menu-list {
+    position: absolute;
+    top: 22px;
+    right: 0;
+    z-index: 30;
+    min-width: 210px;
+    border: 1px solid var(--ink);
+    background: var(--sheet);
+  }
+  .n-menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 7px 10px;
+    border: 0;
+    background: none;
+    color: var(--text);
+    font: 500 13px / 1.3 var(--sans);
+    text-align: left;
+    cursor: pointer;
+  }
+  .n-menu-item:hover,
+  .n-menu-item:focus-visible {
+    background: var(--ink);
+    color: var(--sheet);
+  }
+  .n-menu-item kbd {
+    font: 500 9px / 1 var(--mono);
+    letter-spacing: 0.08em;
+    opacity: 0.7;
+  }
+}

@@ -10,6 +10,7 @@ import {
   actionContext,
   activityQuery,
   type BlockDetail,
+  type BlockIssue,
   type BlockTodo,
   type BlockTodoQuery,
   blockLinksIn,
@@ -19,6 +20,7 @@ import {
   type DailyNoteProjects,
   type DailyNoteQuery,
   type DailyTemplate,
+  DELETE_FIELD,
   dailyNoteQuery,
   describeRule,
   type Filing,
@@ -32,11 +34,15 @@ import {
   type ItemView,
   itemAction,
   itemQuery,
+  type LinearCatalog,
+  type LinearIssueDraft,
+  type LinearSendPrefill,
   type Link,
   type LinkEnd,
   type LinkTarget,
   type LinkTargetType,
   type LinkType,
+  linearCatalog,
   type Mention,
   type MentionQuery,
   mentionQuery,
@@ -72,6 +78,7 @@ import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
+import { linearSendIn } from './linear-send';
 import { linearTodosIn } from './linear-todos';
 import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-copy-folder';
 import { type ModelStore, openModelStore } from './models';
@@ -138,6 +145,13 @@ export type ItemStore = {
   mentions(query: MentionQuery): Mention[];
   // Every change made in Commander goes through here, and each one records an activity entry.
   record(action: ItemAction, context: ActionContext): ActivityEntry;
+  // Send to Linear (linear-send.ts): makes a new Linear issue's Item, from a Todo, a Block or nothing,
+  // and queues its creation for Linear, all as one change. Returns every entry it recorded, in order,
+  // the issue's creation first; undoing them all, last first, undoes the send (deleting the issue in
+  // Linear once it is there).
+  sendToLinear(draft: LinearIssueDraft, context: ActionContext): ActivityEntry[];
+  // Where the Send to Linear dialog starts for a Todo or Block, or (from the Linear Section) a Project.
+  linearSendPrefill(request: { from?: string; projectId?: string | null }): LinearSendPrefill;
   // Records several actions in order, all or none: a refused action rolls back the ones before it.
   recordAll(actions: ItemAction[], context: ActionContext): ActivityEntry[];
   activity(query?: ActivityQuery): ActivityEntry[];
@@ -181,6 +195,9 @@ export type ItemStore = {
   saveDailyTemplate(template: DailyTemplate): DailyTemplate;
   // Live Todos made from live Blocks (a made-from Link to the Block), with the Block and its day.
   blockTodos(query: BlockTodoQuery): BlockTodo[];
+  // Live Linear issues sent from live Blocks of these Daily Notes (a made-from Link to the Block), in
+  // the order they were sent.
+  blockIssues(dailyNoteIds: string[]): BlockIssue[];
   // Each Daily Note with written Blocks, newest first: the Projects they are filed under, and whether
   // any is Unfiled (the Project filter's counts in Notes).
   dailyNoteProjects(): DailyNoteProjects[];
@@ -354,6 +371,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const rule = firstMatch(list, item);
     if (!rule) return null;
     const filing: Filing = { projectId: rule.target.projectId, filedBy: 'rule' };
+    // An Item already in the Rule's Project by inheritance (an issue sent to Linear takes its item's
+    // Project) stays filed as it is.
+    if (item.filing?.filedBy === 'inherited' && item.filing.projectId === filing.projectId) return null;
     return isDeepStrictEqual(item.filing, filing) ? null : { rule, filing };
   }
 
@@ -942,10 +962,40 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     }
     const settled = writeState(item, blockFiling.settled(item.id, item.kind, restored), at);
     const logged = logAndQueue(item, { ...undoEntry, before: current, after: settled }, at);
+    queueDeletion(item, target, current, settled, logged);
     blockFiling.afterUpdate({ ...item, ...settled }, current, logged, at);
     afterWrite(item.id, settled, entry, at, current);
     afterChange(item, current, settled, logged);
     return logged;
+  }
+
+  // A Source Item made in Commander (Send to Linear): undoing its creation deletes it at the Source
+  // too, and bringing it back (redo) takes that deletion back while it hasn't been sent.
+  function queueDeletion(
+    item: Item,
+    target: typeof schema.activity.$inferSelect,
+    before: ItemState,
+    after: ItemState,
+    entry: ActivityEntry,
+  ) {
+    if (!item.source || !item.account || !item.externalId) return;
+    const creation = target.action === 'create' && target.actor !== 'source';
+    let value: true | null;
+    if (creation && before.deletedAt === null && after.deletedAt !== null) value = true;
+    else if (before.deletedAt !== null && after.deletedAt === null) value = null;
+    else return;
+    const { account, source, externalId } = item;
+    outgoing.queue({
+      account,
+      source,
+      itemId: item.id,
+      externalId,
+      field: DELETE_FIELD,
+      value,
+      synced: null,
+      madeAt: entry.at,
+      entryId: entry.id,
+    });
   }
 
   // Logs a change, and queues what it changed in a Source Item's synced fields for the Source (Two-way
@@ -959,6 +1009,48 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const recordAll = sqlite.transaction((actions: ItemAction[], context: ActionContext): ActivityEntry[] =>
     actions.map((action) => record(action, context)),
   );
+
+  // Send to Linear (linear-send.ts).
+  const linearSend = linearSendIn({
+    db,
+    sqlite,
+    readItem,
+    insert: (identity, state, at) => insertItem(identity, state, at),
+    log,
+    link: (link, entry, at) => recordLink(link, true, entry, at),
+    update,
+    outgoing,
+    linearTodos,
+    catalog: (account) => syncState.catalog(account),
+    catalogs() {
+      const { sourceCatalogs } = schema;
+      const rows = db.select().from(sourceCatalogs).where(eq(sourceCatalogs.source, 'linear')).all();
+      return new Map<string, LinearCatalog | null>(
+        rows.map((row) => {
+          const parsed = linearCatalog.safeParse(row.catalog);
+          return [row.account, parsed.success ? parsed.data : null];
+        }),
+      );
+    },
+    rules: () => rules.list(),
+    projects: () => projects.list(),
+    checkFiling: (filing) => projects.checkFiling(filing),
+    invalid: (message) => new ItemStoreError('invalid', message),
+  });
+
+  const sendToLinear = sqlite.transaction((draft: LinearIssueDraft, rawContext: ActionContext) => {
+    const context = actionContext.parse(rawContext);
+    const { activity } = schema;
+    const last = db.select({ id: activity.id }).from(activity).orderBy(desc(activity.id)).limit(1).get();
+    linearSend.send(draft, { by: context.by, why: context.why, causedBy: context.causedBy }, now());
+    return db
+      .select()
+      .from(activity)
+      .where(gt(activity.id, last?.id ?? 0))
+      .orderBy(asc(activity.id))
+      .all()
+      .map(toEntry);
+  });
 
   function findDailyNote(day: string): Item | undefined {
     const { items, dailyNoteDetails } = schema;
@@ -1144,6 +1236,31 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return rows.map((row, i) => ({ todo: todos[i] as Item, block: blocksFound[i] as Item, day: row.day }));
   }
 
+  function blockIssues(dailyNoteIds: string[]): BlockIssue[] {
+    if (!dailyNoteIds.length) return [];
+    const { items, links, blockDetails } = schema;
+    const blockItems = alias(items, 'block_items');
+    const rows = db
+      .select({ issue: items, blockId: blockItems.id })
+      .from(links)
+      .innerJoin(items, eq(items.id, links.fromItemId))
+      .innerJoin(blockItems, eq(blockItems.id, links.toItemId))
+      .innerJoin(blockDetails, eq(blockDetails.itemId, blockItems.id))
+      .where(
+        and(
+          eq(links.type, 'made-from'),
+          eq(items.kind, 'linear-issue'),
+          isNull(items.deletedAt),
+          isNull(blockItems.deletedAt),
+          inArray(blockDetails.dailyNoteId, dailyNoteIds),
+        ),
+      )
+      .orderBy(asc(links.id))
+      .all();
+    const issues = withDetails(rows.map((row) => row.issue));
+    return rows.map((row, i) => ({ blockId: row.blockId, issue: issues[i] as Item }));
+  }
+
   function dailyNoteProjects(): DailyNoteProjects[] {
     const rows = sqlite
       .prepare(
@@ -1230,6 +1347,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     for (const incoming of batch.items) {
       const at = now();
       const existing = findBySourceIdentity(batch.source, batch.account, incoming.externalId);
+      if (existing && existing.deletedAt !== null && outgoing.queued(existing.id, DELETE_FIELD)) {
+        // Deleted in Commander (an undone Send to Linear), on its way to being deleted at the Source.
+        result.unchanged.push(existing.id);
+        continue;
+      }
       if (existing) {
         const before = stateOf(existing);
         const after: ItemState = {
@@ -1364,6 +1486,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
     record,
     recordAll,
+    sendToLinear,
+    linearSendPrefill: (request) => linearSend.prefill(request),
     ensureDailyNote: (day, context, options) =>
       options?.fromTemplate ? ensureFromTemplate(day, context) : ensureDailyNote(day, context),
     dailyNotes,
@@ -1371,6 +1495,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     dailyTemplate: () => template.read(),
     saveDailyTemplate: (input) => template.save(input),
     blockTodos,
+    blockIssues,
     dailyNoteProjects,
     projectBlocks,
     recheckIds: (account) => linearTodos.recheckIds(account),

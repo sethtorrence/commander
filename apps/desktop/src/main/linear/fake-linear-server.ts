@@ -55,6 +55,9 @@ export type FakeLinear = {
   // Two-way sync's writes (issueUpdate, commentCreate, commentDelete) are refused with this message
   // until switched back with null, as Linear refuses a change it won't take.
   refuseWrites(message: string | null): void;
+  // Holds the answer to each write (issueCreate, issueUpdate…) this long after making it, to let a
+  // test stop Commander between Linear making a change and Commander hearing of it.
+  delayWriteAnswers(ms: number): void;
   close(): Promise<void>;
 };
 
@@ -98,6 +101,7 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
   let refreshFailing = false;
   let refreshDelay = 0;
   let writesRefused: string | null = null;
+  let writeAnswerDelay = 0;
 
   const fake: FakeLinear = {
     url: '',
@@ -136,6 +140,9 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
     graphqlRequests: [],
     refuseWrites: (message) => {
       writesRefused = message;
+    },
+    delayWriteAnswers: (ms) => {
+      writeAnswerDelay = ms;
     },
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
@@ -252,6 +259,13 @@ export async function startFakeLinear(options: FakeLinearOptions = {}): Promise<
     } catch (error) {
       if (error instanceof FakeLinearRefusal) return refuse(error.message);
       throw error;
+    }
+    if (
+      answer !== null &&
+      writeAnswerDelay &&
+      /^Commander(Issue|Comment)(Create|Update|Delete)$/.test(operationName)
+    ) {
+      await new Promise((resolve) => setTimeout(resolve, writeAnswerDelay));
     }
     if (answer !== null) return json(response, 200, { data: answer }, { 'x-complexity': '42' });
     if (!/viewer\s*{[^{}]*organization\s*{/.test(query))

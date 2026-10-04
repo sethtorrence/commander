@@ -42,6 +42,8 @@ export type OutgoingStore = {
   list(query?: OutgoingQuery): OutgoingChange[];
   // Every queued change to one Item, oldest first.
   forItem(itemId: string): OutgoingRow[];
+  // Whether a change to the Item's field is queued (waiting, on its way, or Couldn't sync).
+  queued(itemId: string, field: string): boolean;
   // The Account's changes due to be sent now, grouped by Item (the Item changed longest ago first).
   due(account: string, now: number): OutgoingRow[][];
   // When the Account's next change waiting on a back-off is due; null when none is waiting.
@@ -172,6 +174,14 @@ export function openOutgoingQueue(db: BetterSQLite3Database<typeof schema>): Out
 
     forItem(itemId) {
       return db.select().from(table).where(eq(table.itemId, itemId)).orderBy(asc(table.id)).all().map(toRow);
+    },
+
+    queued(itemId, field) {
+      return !!db
+        .select({ id: table.id })
+        .from(table)
+        .where(and(eq(table.itemId, itemId), eq(table.field, field)))
+        .get();
     },
 
     due(account, now) {

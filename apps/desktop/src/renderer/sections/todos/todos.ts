@@ -6,6 +6,7 @@ import type {
   ItemAction,
   ItemChange,
   LinearIssueDetail,
+  LinearIssueDraft,
   LinkEnd,
   LinkType,
   Project,
@@ -65,6 +66,11 @@ export interface Todos {
   linearStates(issue: Item): Promise<LinearState[]>;
   /** Moves a Linear Todo's issue to another state (Set Linear state…); its Todo follows. */
   setLinearState(issueId: string, state: LinearState): Promise<ActivityEntry>;
+  /**
+   * Sends a Todo to Linear as a new issue (the draft names it in `from`): the Todo becomes backed by
+   * the issue. Returns the issue's creation entry; undoing it undoes the whole send.
+   */
+  sendToLinear(draft: LinearIssueDraft): Promise<ActivityEntry>;
 }
 
 export type LinearState = LinearIssueDetail['state'];
@@ -224,6 +230,17 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
 
     setLinearState(issueId, state) {
       return itemStore({ op: 'record', action: { type: 'edit-fields', itemId: issueId, fields: { state } } });
+    },
+
+    async sendToLinear(draft) {
+      const entries = await itemStore({ op: 'send-to-linear', draft });
+      const [first] = entries;
+      if (!first) throw new Error('Nothing was sent');
+      together.set(
+        first.id,
+        entries.map((entry) => entry.id),
+      );
+      return first;
     },
   };
 }

@@ -11,7 +11,8 @@
 // Item at a time, never alongside that Account's sync. They wait while offline or asleep and for a
 // reconnect; retry with back-off (honouring Retry-After); stop as Couldn't sync after repeated
 // failure or when the Source refuses the change outright; and are followed by a refresh. A change
-// that lost to a newer one at the Source is dropped, with the Source's value saved and a note.
+// that lost to a newer one at the Source is dropped, with the Source's value saved and a note. What a
+// write saved from the Source's answer (a new issue numbered by Linear) is reported with the refresh.
 import type {
   AccountSyncStatus,
   Source,
@@ -118,6 +119,8 @@ type Entry = {
   writeAbort: AbortController | null;
   // No writes before this (a rate limit, or a refused sign-in being checked).
   writesHeldUntil: number | null;
+  // Items saved from the Source's answers to writes since the last sync, reported with the next one.
+  written: Set<string>;
 };
 
 const backoff = (failures: number) =>
@@ -265,7 +268,8 @@ export function createSyncEngine({
     const { id: account, source } = entry.account;
     const startedAt = now();
     const saved = { created: 0, updated: 0, tombstoned: 0, unchanged: 0 };
-    const changed = new Set<string>();
+    const changed = new Set<string>(entry.written);
+    entry.written.clear();
     const recheck = store.recheckIds({ source, account });
     let result: SyncResult | null = null;
     let failure: unknown = null;
@@ -482,9 +486,10 @@ export function createSyncEngine({
           changes.map((change) => change.field),
           at,
         );
+        entry.written.add(first.itemId);
         if (result.item) {
           const why = supersededNote(source, result.superseded);
-          store.saveFromSource({
+          const saved = store.saveFromSource({
             source,
             account,
             items: [result.item],
@@ -492,6 +497,8 @@ export function createSyncEngine({
             why,
             me: entry.account.me ?? null,
           });
+          for (const ids of [saved.created, saved.updated, saved.tombstoned, saved.todos])
+            for (const id of ids) entry.written.add(id);
         }
       });
       entry.writesHeldUntil = null;
@@ -580,6 +587,7 @@ export function createSyncEngine({
             writeTimer: null,
             writeAbort: null,
             writesHeldUntil: null,
+            written: new Set(),
           };
           entries.set(account.id, added);
           schedule(added);

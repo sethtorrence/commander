@@ -74,6 +74,15 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.projectBlocks(request.projectId) };
       case 'mentions':
         return { ok: true, result: store.mentions(request.query) };
+      case 'send-to-linear':
+        return { ok: true, result: store.sendToLinear(request.draft, { by: { kind: 'user' } }) };
+      case 'linear-send-prefill':
+        return {
+          ok: true,
+          result: store.linearSendPrefill({ from: request.from, projectId: request.projectId }),
+        };
+      case 'block-issues':
+        return { ok: true, result: store.blockIssues(request.dailyNoteIds) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -110,7 +119,7 @@ export function answerItemStoreRequest(
   if (!parsed.success) return null;
   const { request } = message as { request?: unknown };
   const op = (request as { op?: unknown } | undefined)?.op;
-  const records = onChanged && (op === 'record' || op === 'record-all');
+  const records = onChanged && (op === 'record' || op === 'record-all' || op === 'send-to-linear');
   const since = records ? (store.activity({ limit: 1 })[0]?.id ?? 0) : 0;
   const response = answer(store, request);
   if (onChanged && records) {

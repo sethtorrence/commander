@@ -362,6 +362,10 @@ export type BlockTodoQuery = z.input<typeof blockTodoQuery>;
 export const blockTodo = z.object({ todo: item, block: item, day: z.iso.date() });
 export type BlockTodo = z.infer<typeof blockTodo>;
 
+// A Linear issue sent to Linear from a Block (a made-from Link from the issue to it): the Block's chip.
+export const blockIssue = z.object({ blockId: id, issue: item });
+export type BlockIssue = z.infer<typeof blockIssue>;
+
 // The Project filter in Notes: each Daily Note with something written, with the Projects its written
 // Blocks are filed under (own or inherited) and whether any of them is Unfiled. Newest first.
 export const dailyNoteProjects = z.object({

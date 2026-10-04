@@ -13,6 +13,7 @@ import {
   useRef,
 } from 'react';
 import { BlockImage } from './BlockImage';
+import { BlockIssueChips, BlockMenu } from './BlockLinear';
 import { type OutlineLinks, useBlockLinks } from './BlockLinks';
 import { BlockMargin } from './BlockMargin';
 import { TodoCheck, TodoTag } from './BlockTodo';
@@ -48,6 +49,8 @@ export interface OutlineControls {
   projects?: OutlineProjects;
   /** `[[` links: the picker's targets, chip labels and following a chip (BlockLinks.tsx). */
   links?: OutlineLinks;
+  /** Send to Linear from a Block's margin menu, where Blocks can be sent (the Notes Section). */
+  sendToLinear?: (day: string, block: Block) => void;
 }
 
 /** Block Projects in the outline (#51): the `#` picker, the inline Badges and the margin's picker. */
@@ -360,7 +363,7 @@ interface BlockViewProps {
 }
 
 function BlockView({ day, block, depth, tree, numbers, outline, projectView }: BlockViewProps) {
-  const { notebook, focus, projects } = useControls();
+  const { notebook, focus, projects, sendToLinear } = useControls();
   // Under the Project filter, Blocks outside it (and not above one in it) aren't shown.
   const children = (tree.get(block.id) ?? []).filter((child) => !projectView?.hidden.has(child.id));
   const filing = projectView?.filings.get(block.id) ?? null;
@@ -432,6 +435,8 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
           </button>
         )}
         <TodoTag block={block} />
+        <BlockIssueChips blockId={block.id} />
+        {sendToLinear && <BlockMenu label={block.text} onSendToLinear={() => sendToLinear(day, block)} />}
       </div>
       {hasKids && !folded && (
         <div className={cn('n-kids', opening && 'opening')}>

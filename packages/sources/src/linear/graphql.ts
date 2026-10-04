@@ -88,6 +88,20 @@ export const COMMENT_CREATE = `mutation CommanderCommentCreate($input: CommentCr
   commentCreate(input: $input) { success }
 }`;
 
+// Send to Linear: a new issue, made under Commander's own id for it (a UUID made with the Item), so
+// a retried creation can be recognised (ISSUES with `id: { in: [id] }` first) rather than made twice.
+export const ISSUE_CREATE = `mutation CommanderIssueCreate($input: IssueCreateInput!) {
+  issueCreate(input: $input) {
+    success
+    issue { ${ISSUE} }
+  }
+}`;
+
+// Undoing a send deletes the issue (Linear keeps it in its trash for a while).
+export const ISSUE_DELETE = `mutation CommanderIssueDelete($id: String!) {
+  issueDelete(id: $id) { success }
+}`;
+
 export const COMMENT_DELETE = `mutation CommanderCommentDelete($id: String!) {
   commentDelete(id: $id) { success }
 }`;
@@ -98,6 +112,7 @@ export const CATALOG = `query CommanderCatalog($cycles: CycleFilter) {
   teams(first: 25) {
     nodes {
       id key name
+      defaultIssueState { id }
       states(first: 30) { nodes { id name type color position } }
       members(first: 50) { nodes { ${USER} active } }
       cycles(first: 10, filter: $cycles) { nodes { id number name startsAt endsAt } }

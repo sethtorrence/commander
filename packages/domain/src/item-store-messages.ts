@@ -5,7 +5,9 @@ import {
   type ActivityEntry,
   activityEntry,
   activityQuery,
+  type BlockIssue,
   type BlockTodo,
+  blockIssue,
   blockTodo,
   blockTodoQuery,
   type DailyNotePage,
@@ -26,6 +28,7 @@ import {
   projectBlock,
 } from './items';
 import { type LinearCatalog, linearCatalog } from './linear';
+import { type LinearSendPrefill, linearIssueDraft, linearSendPrefill } from './linear-send';
 import { type OutgoingChange, outgoingChange, outgoingQuery } from './outgoing';
 import {
   type Project,
@@ -101,6 +104,16 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('project-blocks'), projectId: z.string().min(1) }),
   // The Blocks whose `[[` links point at these days' Daily Notes or Projects ("Mentioned in").
   z.object({ op: z.literal('mentions'), query: mentionQuery }),
+  // Send to Linear: a new Linear issue from a Todo, a Block or the Linear Section, as one change (its
+  // entries come back, the issue's creation first, so undoing them all undoes it); where the dialog
+  // starts; and the issues made from these Daily Notes' Blocks, for their chips.
+  z.object({ op: z.literal('send-to-linear'), draft: linearIssueDraft }),
+  z.object({
+    op: z.literal('linear-send-prefill'),
+    from: z.string().min(1).optional(),
+    projectId: z.string().min(1).nullable().optional(),
+  }),
+  z.object({ op: z.literal('block-issues'), dailyNoteIds: z.array(z.string().min(1)).max(1000) }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -132,6 +145,9 @@ export type ItemStoreResults = {
   'daily-note-projects': DailyNoteProjects[];
   'project-blocks': ProjectBlock[];
   mentions: Mention[];
+  'send-to-linear': ActivityEntry[];
+  'linear-send-prefill': LinearSendPrefill;
+  'block-issues': BlockIssue[];
 };
 
 export const itemStoreResult = {
@@ -161,6 +177,9 @@ export const itemStoreResult = {
   'daily-note-projects': z.array(dailyNoteProjects),
   'project-blocks': z.array(projectBlock),
   mentions: z.array(mention),
+  'send-to-linear': z.array(activityEntry),
+  'linear-send-prefill': linearSendPrefill,
+  'block-issues': z.array(blockIssue),
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =
