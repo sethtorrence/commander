@@ -18,6 +18,7 @@ export * from './github-discussion';
 export * from './github-watch';
 export * from './github-watch-messages';
 export * from './injection-warnings';
+export * from './invitations';
 export * from './ipc';
 export * from './item-store-messages';
 export * from './items';

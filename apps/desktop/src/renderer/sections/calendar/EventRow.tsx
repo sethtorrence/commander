@@ -1,5 +1,5 @@
 import { cn } from '@commander/ui';
-import { useEffect, useRef } from 'react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar, waitingSuggestion } from '../../projects/badges';
@@ -70,6 +70,8 @@ export function EventRow({
   account,
   compact = false,
   clashes = [],
+  answer,
+  suggestion,
   onOpen,
 }: {
   entry: AgendaEntry;
@@ -79,6 +81,10 @@ export function EventRow({
   compact?: boolean;
   /** The events of other Accounts it clashes with. */
   clashes?: readonly CalendarEvent[];
+  /** An invitation's Accept, Maybe and Decline, at the end of the line (#129). */
+  answer?: ReactNode;
+  /** Ares's suggested reply to an invitation, under the line. */
+  suggestion?: ReactNode;
   onOpen: () => void;
 }) {
   const row = useRef<HTMLLIElement>(null);
@@ -98,7 +104,7 @@ export function EventRow({
       data-item-id={event.id}
       onClick={onOpen}
       className={cn(
-        'relative flex min-h-10 cursor-default items-start border-b border-line2 py-[5px] pr-5 pl-13',
+        'relative flex min-h-10 cursor-default flex-wrap items-start border-b border-line2 py-[5px] pr-5 pl-13',
         selected
           ? 'bg-signal-focus shadow-[inset_3px_0_0_var(--signal)]'
           : 'hover:bg-[color-mix(in_srgb,var(--raise)_55%,transparent)]',
@@ -130,7 +136,9 @@ export function EventRow({
         )}
         {!compact && !event.detail.busy && <Tag>Free</Tag>}
         {account && !compact && <Tag className="border-dashed">{account}</Tag>}
+        {!compact && answer}
       </span>
+      {suggestion && <div className="basis-full pt-1 pl-[124px]">{suggestion}</div>}
     </li>
   );
 }

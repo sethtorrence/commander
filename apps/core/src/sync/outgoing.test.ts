@@ -250,6 +250,19 @@ describe('a change made in Commander', () => {
     expect(reported.at(-1)).toContain(issueId());
   });
 
+  it('lets the adapter read the Item as Commander holds it (a calendar event’s calendar, say)', async () => {
+    let held: unknown = null;
+    linear.next(async (request) => {
+      held = request.stored?.([request.externalId]);
+      return linear.applies(request);
+    });
+    edit({ priority: 1 });
+    await vi.advanceTimersByTimeAsync(1);
+    expect(held).toEqual([
+      expect.objectContaining({ externalId: 'issue-418', title: 'Fix the login loop', status: 'open' }),
+    ]);
+  });
+
   it('sends one Item’s changes together, only the fields that changed', async () => {
     store.recordAll(
       [

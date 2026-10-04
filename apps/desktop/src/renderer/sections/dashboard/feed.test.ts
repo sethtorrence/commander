@@ -2,6 +2,7 @@ import {
   type ChatDetail,
   type ChatMessage,
   chatFlags,
+  type EventDetail,
   type Item,
   type LinearIssueDetail,
   type Ranking,
@@ -251,6 +252,38 @@ describe('a meeting on the Dashboard', () => {
     expect(rowMeta(row, NOW)).toEqual(['12M', 'Starts']);
     expect(rowMeta(row, start + 60_000)).toEqual(['Now', 'Ends 12:22']);
   });
+
+  it('as an invitation waiting in Today, says which day it is and that it needs an answer', () => {
+    const later = start + 3 * DAY;
+    const invitation: Item = {
+      ...sync,
+      detail: {
+        ...(sync.detail as EventDetail),
+        start: { at: later, timeZone: null, date: null },
+        end: { at: later + 30 * 60_000, timeZone: null, date: null },
+        organiser: { email: 'dana@acme.test', name: 'Dana Reyes', self: false },
+        myResponse: 'needs-action',
+      },
+    };
+    const today = { item: invitation, band: 'today' as const, reason: '', rank: 1, done: false };
+    expect(rowMeta(today, NOW)).toEqual([SHORT_DAY[new Date(later).getDay()], 'Invite']);
+    expect(
+      rowMeta(
+        {
+          ...today,
+          item: {
+            ...invitation,
+            detail: {
+              ...(sync.detail as EventDetail),
+              organiser: { email: 'dana@acme.test', name: null, self: false },
+              myResponse: 'needs-action',
+            },
+          },
+        },
+        NOW,
+      ),
+    ).toEqual(['Today', 'Invite']);
+  });
 });
 
 describe('Chats on the Dashboard (#107)', () => {
@@ -346,3 +379,5 @@ describe('Chats on the Dashboard (#107)', () => {
     expect(launchRow && rowMeta(launchRow, NOW)).toEqual(['3H', 'Mention']);
   });
 });
+
+const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

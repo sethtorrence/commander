@@ -66,8 +66,11 @@ export function EventDetail({
   onClose,
   onOpenLink,
   Prep,
+  invitation,
 }: {
   event: CalendarEvent | null;
+  /** Answering the event, when it is an invitation (#129). */
+  invitation?: ReactNode;
   /** Where Edit opens the event (Google Calendar or Outlook on the web, as its Account); null without a link. */
   editUrl: string | null;
   timeZone: string;
@@ -186,6 +189,7 @@ export function EventDetail({
                 <span>{clashText(other)}</span>
               </p>
             ))}
+            {invitation}
             {Prep && <Prep event={event} />}
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact field="calendar" label="Calendar">

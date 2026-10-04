@@ -10,6 +10,9 @@ import type { Item } from './items';
   - Overlapping means sharing some time: back-to-back events don't clash.
   - One meeting the User is invited to through both Accounts (the same title, start and end) is taken
     for one meeting seen twice, not a clash.
+
+  Double-bookings (#129) use the same rules, but across every Account and calendar, the same Account
+  included: `overlapping` finds what double-books the User with an invitation, for Ares to judge.
 */
 
 export type ClashingEvent = Pick<Item, 'id' | 'account' | 'title' | 'deletedAt'> & {
@@ -61,4 +64,26 @@ export function findClashes<Event extends ClashingEvent>(events: readonly Event[
   }
   for (const list of found.values()) list.sort((a, b) => a.detail.start.at - b.detail.start.at);
   return found;
+}
+
+/**
+ * The events that double-book the User with an invitation (#129): those keeping them busy (as for
+ * clashes) that share some of its time, from every Account and calendar, the same one included,
+ * earliest first. The invitation itself, and the same meeting seen twice, aren't among them.
+ */
+export function overlapping<Event extends ClashingEvent>(
+  invitation: ClashingEvent,
+  events: readonly Event[],
+): Event[] {
+  const { start, end } = invitation.detail;
+  return events
+    .filter(
+      (other) =>
+        other.id !== invitation.id &&
+        busyForClashes(other) &&
+        other.detail.start.at < end.at &&
+        other.detail.end.at > start.at &&
+        !sameMeeting(other, invitation),
+    )
+    .sort((a, b) => a.detail.start.at - b.detail.start.at || a.detail.end.at - b.detail.end.at);
 }

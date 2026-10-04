@@ -27,6 +27,13 @@ export function bulkAcceptable(kind: ActionKind): boolean {
 
 const KIND_NAMES: Partial<Record<ItemKind, string>> = { todo: 'Todo', block: 'Block', event: 'event' };
 
+// A reply to an invitation (#129), by the answer it gives: to that event, and to its whole series.
+const REPLIES: Record<string, [string, string]> = {
+  accepted: ['Accept the invitation', 'Accept every event in the series'],
+  tentative: ['Answer Maybe to the invitation', 'Answer Maybe to every event in the series'],
+  declined: ['Decline the invitation', 'Decline every event in the series'],
+};
+
 /**
  * What a proposal does (or would do), one plain line per change, so it can be judged before
  * accepting. `projectName` names a Project by its id ("TL · Titanlink"), where the Projects are known.
@@ -53,6 +60,11 @@ export function describeItemActions(
               : []),
           ...(people ? [`Set the people to ${people.join(', ') || 'nobody'}`] : []),
         ];
+      }
+      case 'edit-fields': {
+        const reply = REPLIES[String(action.fields.response)];
+        if (!reply) return Object.keys(action.fields).map((field) => `Change its ${field}`);
+        return [action.fields.seriesResponse ? reply[1] : reply[0]];
       }
       default:
         return [];

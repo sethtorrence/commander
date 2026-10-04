@@ -21,6 +21,17 @@ describe('describeItemActions', () => {
     ).toEqual(['Mark it archived', 'Rename it “Q3 numbers (sent)”', 'File it under TL', 'Unfile it']);
   });
 
+  it('names the answer a reply to an invitation would give', () => {
+    expect(
+      describeItemActions([{ type: 'edit-fields', itemId: 'e1', fields: { response: 'declined' } }]),
+    ).toEqual(['Decline the invitation']);
+    expect(
+      describeItemActions([
+        { type: 'edit-fields', itemId: 'e1', fields: { response: 'tentative', seriesResponse: 'tentative' } },
+      ]),
+    ).toEqual(['Answer Maybe to every event in the series']);
+  });
+
   it('says plainly when it deletes, and shows Links when they are all it does', () => {
     expect(describeItemActions([{ type: 'delete', itemId: 'm1' }])).toEqual(['Delete it']);
     expect(describeItemActions([{ type: 'link', from: 'a', linkType: 'about', to: 'b' }])).toEqual([

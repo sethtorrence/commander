@@ -128,7 +128,14 @@ export type AgentJob<Input extends JobInput = JobInput, Output = unknown> = {
   name: string;
   tier: ModelTier;
   reasoningEffort?: ReasoningEffort;
-  action: { action: string; actionKind: ActionKind; section: AutonomySection | null; hint?: string };
+  // `name`: the action's own name in the Settings grid, when it isn't the job's ("Reply to invitations").
+  action: {
+    action: string;
+    actionKind: ActionKind;
+    section: AutonomySection | null;
+    hint?: string;
+    name?: string;
+  };
   triggers: JobTriggers;
   // What this run should look at, or null (or no items) when there is nothing to do: no call then.
   gather(context: GatherContext): Input | null;
@@ -278,8 +285,8 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
 
   // Every start: the gate knows each action, so the Settings grid can list it.
   for (const job of jobs.values()) {
-    const { action, actionKind, hint } = job.action;
-    gate.registerAction({ action, actionKind, name: job.name, ...(hint && { hint }) });
+    const { action, actionKind, hint, name } = job.action;
+    gate.registerAction({ action, actionKind, name: name ?? job.name, ...(hint && { hint }) });
   }
 
   // Jobs waiting to run, each with every trigger since it was queued, in the order they were queued.

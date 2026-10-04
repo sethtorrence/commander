@@ -4,21 +4,26 @@ import {
   type AccessToken,
   type Cadence,
   CursorExpired,
+  type FieldChange,
   RateLimited,
   retryAfterMs,
   SignInRefused,
   type SourceAdapter,
   SourceUnavailable,
   type StoredItem,
+  type Superseded,
   type SyncCost,
   type SyncRequest,
+  WriteRejected,
 } from '../source';
 import {
   calendarListPage,
   eventExternalId,
   eventsPage,
   type GoogleEvent,
+  googleEvent,
   type ListedCalendar,
+  RESPONSES,
   toEventItem,
   toListedCalendar,
 } from './shapes';
@@ -42,6 +47,14 @@ import {
 //   calendars again from scratch. Quota answers (403 rateLimitExceeded / userRateLimitExceeded,
 //   and 429) raise RateLimited.
 // - Calendars switched off, or no longer listed, drop out of the cursor (their held events go too).
+//
+// Answering invitations (#129, Two-way sync): the synced fields `response` (this event) and
+// `seriesResponse` (the whole series an instance belongs to). Each is judged against the event as
+// Google has it now: an answer Google already has is skipped (a retry whose reply was lost), and one
+// changed in Google Calendar since Commander last saw it, later than the User answered, wins (by the
+// event's `updated` time). The rest are sent as a patch of the User's own attendee line only
+// (`attendeesOmitted`), with `sendUpdates=all` so the organiser hears. The series goes first, through
+// its recurring event; the instance is then read again and only sent if it didn't follow.
 
 export const GOOGLE_CALENDAR_CADENCE: Cadence = { defaultMinutes: 15, choices: [15, 30, 60] };
 
@@ -110,22 +123,35 @@ const overlaps = (item: Pick<SourceItem, 'detail'> | StoredItem, window: Window)
   return !!detail && detail.end.at > window.min && detail.start.at < window.max;
 };
 
-function connect(baseUrl: string, fetch: typeof globalThis.fetch, now: () => number, request: SyncRequest) {
+function connect(
+  baseUrl: string,
+  fetch: typeof globalThis.fetch,
+  now: () => number,
+  request: Pick<SyncRequest, 'accessToken' | 'signal'>,
+) {
   const cost: SyncCost = { requests: 0, complexity: null };
   const base = baseUrl.replace(/\/$/, '');
 
-  // GETs a path under the API's base. `calendar`: the request reads one calendar's events, so a
-  // refusal is that calendar's alone; `withToken`: it carries a sync token, so a 410 means expired.
+  // Calls a path under the API's base (a GET unless `send` says otherwise). `calendar`: the request
+  // reads one calendar's events, so a refusal is that calendar's alone; `withToken`: it carries a sync
+  // token, so a 410 means expired; `event`: it reads or writes one event, so a 404 or 410 means the
+  // event is gone and a refusal is final (both WriteRejected).
   async function get<T>(
     path: string,
     shape: z.ZodType<T>,
-    about: { calendar?: boolean; withToken?: boolean } = {},
+    about: { calendar?: boolean; withToken?: boolean; event?: boolean } = {},
+    send?: { method: 'PATCH'; body: unknown },
   ): Promise<T> {
     const token: AccessToken = await request.accessToken();
     let response: Response;
     try {
       response = await fetch(`${base}${path}`, {
-        headers: { authorization: `Bearer ${token.token}`, accept: 'application/json' },
+        ...(send && { method: send.method, body: JSON.stringify(send.body) }),
+        headers: {
+          authorization: `Bearer ${token.token}`,
+          accept: 'application/json',
+          ...(send && { 'content-type': 'application/json' }),
+        },
         signal: request.signal,
       });
     } catch (error) {
@@ -153,6 +179,14 @@ function connect(baseUrl: string, fetch: typeof globalThis.fetch, now: () => num
       throw new CursorExpired('Google Calendar no longer accepts this calendar’s sync token.');
     }
     if (response.status === 401) throw new SignInRefused('Google refused this Account’s sign-in.');
+    if ((response.status === 404 || response.status === 410) && about.event) {
+      throw new WriteRejected('This event is no longer in Google Calendar.');
+    }
+    if ((response.status === 400 || response.status === 403) && about.event) {
+      throw new WriteRejected(
+        `Google Calendar wouldn’t take this answer${problem?.message ? `: ${problem.message}` : '.'}`,
+      );
+    }
     if ((response.status === 403 || response.status === 404) && about.calendar) {
       throw new CalendarUnreadable(`Google Calendar wouldn’t share a calendar (HTTP ${response.status}).`);
     }
@@ -270,7 +304,84 @@ export function createGoogleCalendarSource({
         return token;
       }
     },
+
+    async write(request) {
+      const api = connect(apiUrl(), fetch, now, request);
+      const slash = request.externalId.lastIndexOf('/');
+      const calendarId = request.externalId.slice(0, slash);
+      const eventId = request.externalId.slice(slash + 1);
+      if (slash <= 0 || !eventId)
+        throw new WriteRejected('Commander doesn’t know this event in Google Calendar.');
+      const pathOf = (id: string) =>
+        `/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(id)}`;
+      const read = (id: string) => api.get(pathOf(id), googleEvent, { event: true });
+      const answer = (id: string, event: GoogleEvent, value: unknown) =>
+        api.get(
+          `${pathOf(id)}?sendUpdates=all`,
+          googleEvent,
+          { event: true },
+          {
+            method: 'PATCH',
+            body: {
+              attendeesOmitted: true,
+              attendees: [{ email: selfOf(event).email, responseStatus: GOOGLE_RESPONSES[String(value)] }],
+            },
+          },
+        );
+
+      const superseded: Superseded[] = [];
+      const seriesChange = request.changes.find((change) => change.field === 'seriesResponse');
+      const instanceChange = request.changes.find((change) => change.field === 'response');
+      let event = await read(eventId);
+      if (seriesChange && event.recurringEventId) {
+        const series = await read(event.recurringEventId);
+        const judged = judge(series, seriesChange);
+        if (judged === 'send') {
+          await answer(event.recurringEventId, series, seriesChange.value);
+          // The instance follows its series unless it was answered on its own.
+          event = await read(eventId);
+        } else if (judged !== 'has') superseded.push(judged);
+      }
+      if (instanceChange) {
+        const judged = judge(event, instanceChange);
+        if (judged === 'send') event = await answer(eventId, event, instanceChange.value);
+        else if (judged !== 'has') superseded.push(judged);
+      }
+
+      const [stored] = request.stored?.([request.externalId]) ?? [];
+      const held = stored?.detail?.kind === 'event' ? stored.detail : null;
+      const item = held ? toEventItem(event, held.calendar, held.start.timeZone, held.accountEmail) : null;
+      return { item, superseded, cost: api.cost };
+    },
   };
+}
+
+const GOOGLE_RESPONSES: Record<string, string> = {
+  accepted: 'accepted',
+  tentative: 'tentative',
+  declined: 'declined',
+  'needs-action': 'needsAction',
+};
+
+// The User's own line among the event's guests.
+function selfOf(event: GoogleEvent) {
+  const self = event.attendees?.find((each) => each.self === true && each.email?.trim());
+  if (!self?.email) throw new WriteRejected('You’re no longer among this event’s guests in Google Calendar.');
+  return { email: self.email.trim(), response: RESPONSES[self.responseStatus ?? ''] ?? 'needs-action' };
+}
+
+// What to do with an answer, given the event as Google has it now: nothing when Google already has it,
+// nothing (reporting it) when Google's answer changed after the User's, otherwise send it.
+function judge(event: GoogleEvent, change: FieldChange): 'send' | 'has' | Superseded {
+  if (!(String(change.value) in GOOGLE_RESPONSES))
+    throw new WriteRejected('That isn’t an answer Google Calendar takes.');
+  const now = selfOf(event).response;
+  if (now === change.value) return 'has';
+  const changedAt = event.updated ? Date.parse(event.updated) : Number.NaN;
+  if (now !== (change.synced ?? null) && Number.isFinite(changedAt) && changedAt > change.madeAt) {
+    return { field: change.field, by: null, at: changedAt };
+  }
+  return 'send';
 }
 
 // A cancelled recurring event (the series itself, not one instance) takes every held instance with it.

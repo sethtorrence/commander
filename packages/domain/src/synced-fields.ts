@@ -1,3 +1,5 @@
+import type { EventDetail, EventResponse } from './calendar';
+import { canAnswer } from './invitations';
 import type { ItemDetail, ItemKind, ItemStatus } from './items';
 import type { LinearIssueDetail } from './linear';
 import { type ChatDetail, type ChatReply, latestFromOthers } from './teams';
@@ -16,6 +18,11 @@ import { type ChatDetail, type ChatReply, latestFromOthers } from './teams';
 // per reply written in Commander that Teams doesn't have yet (the reply, or null once cancelled).
 // Once Teams has a reply it is one of the Chat's messages, under Teams's id, and no longer a synced
 // field: a message that reached other people can't be recalled (see isUnrecallableField).
+//
+// Calendar events (#129): only an invitation (an event the User is a guest of, not its organiser)
+// has synced fields: `response`, the User's answer, and for an instance of a series `seriesResponse`,
+// their answer to the whole series. Everything else about an event is changed in Google Calendar or
+// Outlook (Edit hands over to them).
 
 export type SyncedFields = Record<string, unknown>;
 
@@ -101,9 +108,34 @@ function withChatFields(detail: ChatDetail, fields: SyncedFields): ChatDetail {
 const isChatField = (field: string) =>
   field === READ_FIELD || (field.startsWith(MESSAGE_FIELD) && field.length > MESSAGE_FIELD.length);
 
+const RESPONSE_FIELD = 'response';
+const SERIES_RESPONSE_FIELD = 'seriesResponse';
+
+function eventFields(detail: EventDetail): SyncedFields | null {
+  if (!canAnswer(detail)) return null;
+  const fields: SyncedFields = { [RESPONSE_FIELD]: detail.myResponse };
+  if (detail.seriesId) fields[SERIES_RESPONSE_FIELD] = detail.seriesResponse ?? detail.myResponse;
+  return fields;
+}
+
+function withEventFields(detail: EventDetail, fields: SyncedFields): EventDetail {
+  const response = (fields[RESPONSE_FIELD] ?? detail.myResponse) as EventResponse | null;
+  const next: EventDetail = {
+    ...detail,
+    myResponse: response,
+    // The User's own line among the guests says the same.
+    attendees: detail.attendees.map((each) => (each.self && response ? { ...each, response } : each)),
+  };
+  delete next.seriesResponse;
+  const series = fields[SERIES_RESPONSE_FIELD] as EventResponse | null | undefined;
+  if (detail.seriesId && series) next.seriesResponse = series;
+  return next;
+}
+
 /** Whether `field` names one of a detail kind's synced fields. */
 export function isSyncedField(kind: ItemDetail['kind'], field: string): boolean {
   if (kind === 'chat') return isChatField(field);
+  if (kind === 'event') return field === RESPONSE_FIELD || field === SERIES_RESPONSE_FIELD;
   if (kind !== 'linear-issue') return false;
   return (
     isScalar(field) ||
@@ -124,6 +156,7 @@ export function isUnrecallableField(kind: ItemKind, field: string): boolean {
 export function syncedFieldsOf(detail: ItemDetail | null): SyncedFields | null {
   if (detail?.kind === 'linear-issue') return linearIssueFields(detail);
   if (detail?.kind === 'chat') return chatFields(detail);
+  if (detail?.kind === 'event') return eventFields(detail);
   return null;
 }
 
@@ -134,6 +167,7 @@ export function syncedFieldsOf(detail: ItemDetail | null): SyncedFields | null {
 export function withSyncedFields<D extends ItemDetail>(detail: D, fields: SyncedFields): D {
   if (detail.kind === 'linear-issue') return withLinearIssueFields(detail, fields) as D;
   if (detail.kind === 'chat') return withChatFields(detail, fields) as D;
+  if (detail.kind === 'event') return withEventFields(detail, fields) as D;
   return detail;
 }
 

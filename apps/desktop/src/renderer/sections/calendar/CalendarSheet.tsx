@@ -1,3 +1,4 @@
+import { ANSWER_NAMES, canAnswer, INVITATION_ANSWERS } from '@commander/domain';
 import { Button, ButtonGroup, cn, Kbd, Led, Switch } from '@commander/ui';
 import { type ComponentType, type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useReveal } from '../../frame/reveal';
@@ -7,6 +8,7 @@ import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { SideCard } from '../../projects/page/SideCard';
 import { useShortcuts } from '../../shortcuts/react';
+import { supersededNote } from '../linear/editing';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
 import { TodoGroup } from '../todos/TodoGroup';
@@ -23,9 +25,12 @@ import {
 import { type CalendarSettingsClient, useSecondTimeZone } from './calendar-settings';
 import { EventDetail } from './EventDetail';
 import { CalendarSwatch, EventRow } from './EventRow';
+import { ANSWER_KEYS, InvitationPanel, RowAnswer, SuggestedReplyCard } from './InvitationAnswer';
+import type { InvitationsClient } from './invitations';
 import { MonthGrid } from './MonthGrid';
 import { TimeGrid } from './TimeGrid';
 import { keyOfCalendar, useCalendar } from './use-calendar';
+import { useInvitations } from './use-invitations';
 import { CALENDAR_VIEWS, type CalendarView, rangeTitle, VIEW_NAMES } from './views';
 
 // Enter opens the selected event, except on a control that Enter presses (a button, a link).
@@ -126,9 +131,12 @@ export function CalendarSheet({
   settings,
   open = openInBrowser,
   Prep,
+  invitations = null,
 }: {
   events: CalendarEvents;
   accounts: CalendarAccountsClient;
+  /** Answering invitations and Ares's suggested replies (#129); none in views that don't offer them. */
+  invitations?: InvitationsClient | null;
   /** The User's time zone (the machine's), which the Agenda's days follow. */
   timeZone?: string;
   /** Settings → Calendar: the second time zone. */
@@ -145,6 +153,12 @@ export function CalendarSheet({
   const state = useCalendar({ events, accounts, include, now: now.getTime(), timeZone });
   const { selected, selectedEntry, detailOpen, setDetailOpen } = state;
   const badges = useBadgePicker(state.apply, state.undo);
+  const invites = useInvitations({
+    client: invitations,
+    accounts: state.accounts,
+    events: state.entries,
+    apply: state.apply,
+  });
   const openSection = useOpenSection();
   const several = state.accounts.length > 1;
   const { active } = useSection();
@@ -216,6 +230,14 @@ export function CalendarSheet({
     { keys: 't', label: 'Today', run: () => state.goToday() },
     { keys: '[', label: 'Back', run: () => state.step(-1) },
     { keys: ']', label: 'Forward', run: () => state.step(1) },
+    ...INVITATION_ANSWERS.map((answer) => ({
+      keys: ANSWER_KEYS[answer],
+      label: `${ANSWER_NAMES[answer]} the invitation`,
+      when: () => invites.enabled && !!selected && canAnswer(selected.detail),
+      run: () => {
+        if (selected) void invites.answer(selected, answer);
+      },
+    })),
   ]);
   // From the palette: open an event it found.
   useReveal('calendar', (itemId) => void state.reveal(itemId));
@@ -410,6 +432,26 @@ export function CalendarSheet({
                               }
                               compact={detailOpen}
                               clashes={state.clashes.get(entry.event.id) ?? []}
+                              answer={
+                                invites.enabled && (
+                                  <RowAnswer
+                                    event={entry.event}
+                                    sync={invites.syncOf(entry.event.id)}
+                                    onAnswer={(answer) => void invites.answer(entry.event, answer)}
+                                  />
+                                )
+                              }
+                              suggestion={(() => {
+                                const reply = invites.suggestions.get(entry.event.id);
+                                return reply ? (
+                                  <SuggestedReplyCard
+                                    compact
+                                    reply={reply}
+                                    onSend={() => void invites.send(reply)}
+                                    onDismiss={() => void invites.dismiss(reply)}
+                                  />
+                                ) : null;
+                              })()}
                               onOpen={() => openEntry(entry)}
                             />
                           ))}
@@ -442,6 +484,21 @@ export function CalendarSheet({
                   onClose={() => setDetailOpen(false)}
                   onOpenLink={openLink}
                   Prep={Prep}
+                  invitation={
+                    selected &&
+                    invites.enabled && (
+                      <InvitationPanel
+                        event={selected}
+                        reply={invites.suggestions.get(selected.id) ?? null}
+                        sync={invites.syncOf(selected.id)}
+                        note={supersededNote(state.history)}
+                        onAnswer={(answer, series) => void invites.answer(selected, answer, series)}
+                        onSend={(reply) => void invites.send(reply)}
+                        onDismiss={(reply) => void invites.dismiss(reply)}
+                        onRetry={() => void invites.retry(selected.id)}
+                      />
+                    )
+                  }
                 />
               )}
             </div>

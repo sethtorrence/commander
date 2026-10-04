@@ -112,6 +112,8 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.people.list() };
       case 'change-people':
         return { ok: true, result: store.people.change(request.action) };
+      case 'invitations':
+        return { ok: true, result: store.invitations() };
       case 'set-calendar-enabled':
         return {
           ok: true,

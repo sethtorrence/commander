@@ -44,6 +44,8 @@ const person = z.object({ email: text, displayName: text, self: flag }).nullish(
 export const googleEvent = z.object({
   id: z.string().min(1),
   status: text,
+  // When the event last changed (RFC 3339): the newer change wins, for an answer (#129).
+  updated: text,
   htmlLink: text,
   summary: text,
   description: text,
@@ -114,7 +116,7 @@ export const eventExternalId = (calendarId: string, eventId: string) => `${calen
 const isWebLink = (url: string | null | undefined): url is string =>
   !!url && /^https?:\/\//i.test(url.trim());
 
-const RESPONSES: Record<string, EventResponse> = {
+export const RESPONSES: Record<string, EventResponse> = {
   accepted: 'accepted',
   tentative: 'tentative',
   declined: 'declined',

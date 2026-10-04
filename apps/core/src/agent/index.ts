@@ -17,6 +17,7 @@ import { createJobRunner, type JobRunner } from './runner';
 import { createSeriesFiling } from './series-filing';
 import { spotStuckLinearJob } from './spot-stuck-linear';
 import { clearAnswered, spotWaitingJob } from './spot-waiting';
+import { dismissAnsweredInvitations, suggestInvitationRepliesJob } from './suggest-invitation-replies';
 import { suggestTodosJob } from './suggest-todos';
 
 export type { JobRunner } from './runner';
@@ -82,6 +83,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
         enqueue: options.enqueue ?? (() => {}),
         onItemsChanged: options.onItemsChanged,
       }),
+      suggestInvitationRepliesJob(itemStore, { now }),
     ],
     client: options.client,
     gate: options.gate,
@@ -102,12 +104,14 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   });
 
   const filing = createFiling({ itemStore, gate: options.gate });
-  // Ares's filing suggestions the User or a Rule has since overruled: they no longer stand.
+  // Ares's filing suggestions the User or a Rule has since overruled, and his suggested replies to
+  // invitations the User has since answered (or that are over): they no longer stand.
   const dismissStale = () => {
     try {
       filing.dismissStale();
+      dismissAnsweredInvitations(itemStore, options.gate, now());
     } catch (error) {
-      options.log?.(`Couldn’t settle Ares’s overruled filing suggestions: ${error}`);
+      options.log?.(`Couldn’t settle Ares’s suggestions that no longer stand: ${error}`);
     }
   };
 

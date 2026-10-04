@@ -1,4 +1,5 @@
 import {
+  awaitingAnswer,
   type ChatAttention,
   type ChatType,
   type ClearMark,
@@ -215,6 +216,11 @@ export function sourceTag(item: Item, suggested = false): { stamp: string; text:
 export function rowMeta(row: FeedRow, now: number): [string, string] {
   const { item, band } = row;
   if (row.suggestion) return ['New', 'Suggested'];
+  // An invitation waiting for the User's answer (#129): its day, until they answer it.
+  if (band !== 'now' && awaitingAnswer(item, now)) {
+    const day = localDay(item.detail.start.at);
+    return [day === localDay(now) ? 'Today' : (SHORT_DAYS[dateOf(day).getDay()] ?? ''), 'Invite'];
+  }
   if (item.detail?.kind === 'event') {
     const { start, end } = item.detail;
     if (now < start.at) return [`${Math.ceil((start.at - now) / 60_000)}M`, 'Starts'];

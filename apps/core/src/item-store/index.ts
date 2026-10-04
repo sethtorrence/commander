@@ -9,6 +9,7 @@ import {
   type Actor,
   actionContext,
   activityQuery,
+  awaitingAnswer,
   type BlockDetail,
   type BlockIssue,
   type BlockTodo,
@@ -260,6 +261,8 @@ export type ItemStore = {
   fromSource(account: { source: Source; account: string }, externalIds: string[]): Item[];
   // The Calendar Section: live events overlapping a time range, earliest first (calendars.ts).
   events(query: EventQuery): Item[];
+  // Invitations still to come that wait for the User's answer, earliest first (#129).
+  invitations(): Item[];
   // Each calendar Account's calendars and the User's switch for each, in the same database.
   calendars: CalendarStore;
   // Today's meeting chips (meeting-chips.ts): one per meeting under today's Meetings Block, made and
@@ -372,6 +375,8 @@ type NewEntry = {
 
 // How much of an email's body the steering check reads, from its start.
 const STEERING_BODY_CHECKED = 20_000;
+// How far ahead invitations awaiting an answer are looked for: calendar sync's window, and a little.
+const INVITATIONS_AHEAD_MS = 400 * 24 * 60 * 60_000;
 
 // Daily Notes and Blocks only make sense with their detail: the day, or the place in the outline.
 const NEEDS_DETAIL: ReadonlySet<ItemKind> = new Set(['daily-note', 'block']);
@@ -1994,6 +1999,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         seen.add(eventId);
         return true;
       });
+    },
+    invitations: () => {
+      const at = now();
+      return withDetails(eventRows(db, { from: at, to: at + INVITATIONS_AHEAD_MS, limit: 5000 })).filter(
+        (item) => awaitingAnswer(item, at),
+      );
     },
 
     calendars,

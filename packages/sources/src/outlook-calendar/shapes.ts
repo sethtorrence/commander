@@ -73,7 +73,9 @@ export const graphEvent = z.object({
       }),
     )
     .nullish(),
-  responseStatus: z.object({ response: text }).nullish(),
+  // The User's answer, and when they gave it (0001-01-01 when they haven't).
+  responseStatus: z.object({ response: text, time: text }).nullish(),
+  lastModifiedDateTime: text,
   onlineMeeting: z.object({ joinUrl: text }).nullish(),
   onlineMeetingUrl: text,
 });
@@ -140,7 +142,7 @@ const RESPONSES: Record<string, EventResponse> = {
   none: 'needs-action',
   notResponded: 'needs-action',
 };
-const responseOf = (value: string | null | undefined): EventResponse =>
+export const responseOf = (value: string | null | undefined): EventResponse =>
   RESPONSES[value ?? ''] ?? 'needs-action';
 
 function toTime(

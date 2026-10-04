@@ -10,21 +10,26 @@ import {
   type AccessToken,
   type Cadence,
   CursorExpired,
+  type FieldChange,
   RateLimited,
   retryAfterMs,
   SignInRefused,
   type SourceAdapter,
   SourceUnavailable,
   type StoredItem,
+  type Superseded,
   type SyncCost,
   type SyncRequest,
+  WriteRejected,
 } from '../source';
 import {
   calendarsPage,
   eventsPage,
   type GraphCalendar,
   type GraphEvent,
+  graphEvent,
   isGone,
+  responseOf,
   toEventItem,
   toListedCalendar,
 } from './shapes';
@@ -50,6 +55,14 @@ import {
 //   RateLimited, and the engine waits as long as Microsoft asked.
 // - Calendars are read side by side, but no more than 4 requests run at once per mailbox (Outlook's
 //   limit), shared by every sync of the Account.
+//
+// Answering invitations (#129, Two-way sync): the synced fields `response` (this event) and
+// `seriesResponse` (the whole series an instance belongs to), judged against the event as Graph has it
+// now: an answer Outlook already has is skipped, and one given in Outlook since Commander last saw it,
+// later than the User answered (by `responseStatus.time`), wins. The rest go as `accept`,
+// `tentativelyAccept` or `decline` with `sendResponse: true`, so the organiser hears; the series
+// through its series master first, then the instance only if it didn't follow. Graph has no way to
+// take an answer back to "not answered", so that one is refused (Couldn't sync).
 
 export const OUTLOOK_CALENDAR_CADENCE: Cadence = { defaultMinutes: 15, choices: [15, 30, 60] };
 export const MAX_CONCURRENT_REQUESTS = 4;
@@ -142,18 +155,21 @@ function connect(
   fetch: typeof globalThis.fetch,
   now: () => number,
   run: Gate,
-  request: SyncRequest,
+  request: Pick<SyncRequest, 'accessToken'>,
   signal: AbortSignal,
 ) {
   const cost: SyncCost = { requests: 0, complexity: null };
   const base = baseUrl.replace(/\/$/, '');
 
-  // GETs a path under Graph's base, or a link Graph gave. `calendar`: the request reads one calendar's
-  // events, so a refusal is that calendar's alone.
+  // GETs a path under Graph's base, or a link Graph gave (or POSTs `send`, whose answer is ignored).
+  // `calendar`: the request reads one calendar's events, so a refusal is that calendar's alone;
+  // `event`: it reads or answers one event, so a 404 means it is gone and a refusal is final (both
+  // WriteRejected).
   async function get<T>(
     pathOrLink: string,
     shape: z.ZodType<T>,
-    about: { calendar?: boolean } = {},
+    about: { calendar?: boolean; event?: boolean } = {},
+    send?: { method: 'POST'; body: unknown },
   ): Promise<T> {
     const url = pathOrLink.startsWith('/') ? `${base}${pathOrLink}` : pathOrLink;
     // A link anywhere else would carry the User's token off Graph.
@@ -166,7 +182,13 @@ function connect(
       let response: Response;
       try {
         response = await fetch(url, {
-          headers: { authorization: `Bearer ${token.token}`, accept: 'application/json', prefer: PREFER },
+          ...(send && { method: send.method, body: JSON.stringify(send.body) }),
+          headers: {
+            authorization: `Bearer ${token.token}`,
+            accept: 'application/json',
+            prefer: PREFER,
+            ...(send && { 'content-type': 'application/json' }),
+          },
           signal,
         });
       } catch (error) {
@@ -174,6 +196,7 @@ function connect(
         throw new SourceUnavailable('Commander couldn’t reach Outlook Calendar.', cost);
       }
       cost.requests += 1;
+      if (response.ok && send) return undefined as T;
       if (response.ok) {
         const parsed = shape.safeParse(await response.json().catch(() => null));
         if (!parsed.success) {
@@ -190,6 +213,13 @@ function connect(
           retryAfter,
           cost,
         );
+      }
+      if ((response.status === 404 || response.status === 410) && about.event) {
+        throw new WriteRejected('This event is no longer in Outlook.');
+      }
+      if ((response.status === 400 || response.status === 403) && about.event) {
+        const message = body.success ? body.data?.error?.message : null;
+        throw new WriteRejected(`Outlook wouldn’t take this answer${message ? `: ${message}` : '.'}`);
       }
       if (response.status === 410 || RESYNC_CODES.has(code)) {
         throw new CursorExpired('Outlook Calendar no longer accepts this calendar’s delta link.');
@@ -351,7 +381,82 @@ export function createOutlookCalendarSource({
         request.signal.removeEventListener('abort', onAbort);
       }
     },
+
+    async write(request) {
+      const api = connect(graphUrl(), fetch, now, gateOf(request.account), request, request.signal);
+      const pathOf = (id: string) => `/me/events/${encodeURIComponent(id)}`;
+      const read = (id: string) => api.get(pathOf(id), graphEvent, { event: true });
+      const answer = (id: string, value: unknown) =>
+        api.get(
+          `${pathOf(id)}/${GRAPH_ANSWERS[String(value)]}`,
+          z.unknown(),
+          { event: true },
+          {
+            method: 'POST',
+            body: { sendResponse: true },
+          },
+        );
+
+      const superseded: Superseded[] = [];
+      const seriesChange = request.changes.find((change) => change.field === 'seriesResponse');
+      const instanceChange = request.changes.find((change) => change.field === 'response');
+      let event = await read(request.externalId);
+      if (seriesChange && event.seriesMasterId) {
+        const series = await read(event.seriesMasterId);
+        const judged = judge(series, seriesChange);
+        if (judged === 'send') {
+          await answer(event.seriesMasterId, seriesChange.value);
+          event = await read(request.externalId);
+        } else if (judged !== 'has') superseded.push(judged);
+      }
+      if (instanceChange) {
+        const judged = judge(event, instanceChange);
+        if (judged === 'send') {
+          await answer(request.externalId, instanceChange.value);
+          event = await read(request.externalId);
+        } else if (judged !== 'has') superseded.push(judged);
+      }
+
+      const [stored] = request.stored?.([request.externalId]) ?? [];
+      const held = stored?.detail?.kind === 'event' ? stored.detail : null;
+      const item = held && !isGone(event) ? toEventItem(event, held.calendar, held.accountEmail) : null;
+      return { item, superseded, cost: api.cost };
+    },
   };
+}
+
+// Graph's answer to each of Commander's, by the action that sends it.
+const GRAPH_ANSWERS: Record<string, string> = {
+  accepted: 'accept',
+  tentative: 'tentativelyAccept',
+  declined: 'decline',
+};
+
+// Graph writes 0001-01-01 for "never"; anything before 1971 is taken as no time at all.
+const graphTime = (value: string | null | undefined) => {
+  const at = value
+    ? Date.parse(value.endsWith('Z') || /[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`)
+    : Number.NaN;
+  return Number.isFinite(at) && at > 365 * DAY_MS ? at : null;
+};
+
+// What to do with an answer, given the event as Graph has it now: nothing when Outlook already has
+// it, nothing (reporting it) when Outlook's answer was given after the User's, otherwise send it.
+function judge(event: GraphEvent, change: FieldChange): 'send' | 'has' | Superseded {
+  if (event.isOrganizer === true)
+    throw new WriteRejected('You organise this event in Outlook: there is nothing to answer.');
+  const now = responseOf(event.responseStatus?.response);
+  if (now === change.value) return 'has';
+  const changedAt = graphTime(event.responseStatus?.time) ?? graphTime(event.lastModifiedDateTime);
+  if (now !== (change.synced ?? null) && changedAt !== null && changedAt > change.madeAt) {
+    return { field: change.field, by: null, at: changedAt };
+  }
+  if (!(String(change.value) in GRAPH_ANSWERS)) {
+    throw new WriteRejected(
+      'Outlook can’t take an answer back to “not answered”. Choose Accept, Maybe or Decline instead.',
+    );
+  }
+  return 'send';
 }
 
 // The external ids a removed or cancelled event takes with it: itself (a cancelled one wherever it is,
