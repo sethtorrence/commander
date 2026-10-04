@@ -24,13 +24,19 @@ import {
 } from '@commander/ui';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { AccountSync } from './AccountSync';
+import {
+  describeGitHubAccount,
+  GitHubConnectRow,
+  GitHubInstallations,
+  type GitHubTokenForm,
+} from './GitHubAccounts';
 import { SettingRow, SettingsGroup } from './parts';
 
 // Settings → Accounts: the User's signed-in Accounts, grouped by Source, each Source with its own
 // Connect. Tokens and keys stay in the main process: the window sees Account names and their state,
 // nothing more.
 
-type Busy = null | { source: AccountSource; kind: 'oauth' | 'api-key' | 'remove' };
+type Busy = null | { source: AccountSource; kind: 'oauth' | 'api-key' | 'cli' | 'remove' | 'refresh' };
 // What went wrong, under the Source it's about.
 type Problem = null | { source: AccountSource | null; message: string; adminConsent?: AdminConsentNeeded };
 // The Linear API key form, open for a new Account or to reconnect an existing one.
@@ -40,11 +46,13 @@ type KeyForm = null | { reconnect?: AccountSummary };
 const SOURCES: Record<AccountSource, { name: string; items: string }> = {
   linear: { name: 'Linear', items: 'Linear issues' },
   teams: { name: 'Microsoft Teams', items: 'Teams Chats' },
+  github: { name: 'GitHub', items: 'GitHub pull requests and issues' },
 };
 
 const linearMethods = { oauth: 'Signed in with Linear', 'api-key': 'Personal API key' } as const;
 
 function describeAccount(account: AccountSummary): string {
+  if (account.source === 'github') return describeGitHubAccount(account);
   return account.source === 'linear'
     ? `Linear workspace · linear.app/${account.urlKey} · ${linearMethods[account.method]}`
     : `Microsoft work account · ${account.user?.name ?? account.userPrincipalName} · Signed in with Microsoft`;
@@ -93,6 +101,7 @@ function AccountRow({
   onReconnect,
   onRemove,
   request,
+  children,
 }: {
   account: AccountSummary;
   busy: boolean;
@@ -100,6 +109,8 @@ function AccountRow({
   onReconnect: (() => void) | null;
   onRemove: () => Promise<boolean>;
   request: (request: AccountsRequest) => void;
+  // What only the Account's Source shows (GitHub: where its app is installed).
+  children?: ReactNode;
 }) {
   return (
     <SettingRow
@@ -123,6 +134,7 @@ function AccountRow({
           <RemoveAccount account={account} onRemove={onRemove} />
         </ButtonGroup>
       </div>
+      {children}
       <AccountSync account={account} request={request} />
     </SettingRow>
   );
@@ -250,6 +262,7 @@ export function AccountsPanel({ no }: { no: string }) {
   const [busy, setBusy] = useState<Busy>(null);
   const [problem, setProblem] = useState<Problem>(null);
   const [keyForm, setKeyForm] = useState<KeyForm>(null);
+  const [githubForm, setGitHubForm] = useState<GitHubTokenForm>(null);
 
   useEffect(() => {
     window.commander.accounts({ op: 'list' }).then((response) => setState(response.state));
@@ -294,8 +307,27 @@ export function AccountsPanel({ no }: { no: string }) {
     if (ok) setKeyForm(null);
   };
 
+  // Without the GitHub App in this build, the token form is the way to connect GitHub.
+  const githubOAuth = signInOf('github')?.oauth ?? false;
+  const githubTokenForm: GitHubTokenForm = githubForm ?? (state && !githubOAuth ? {} : null);
+  const connectGitHubWith = async (method: 'api-key' | 'cli', apiKey = '') => {
+    const reconnect = githubTokenForm?.reconnect?.id;
+    const ok = await run(
+      'github',
+      method,
+      method === 'cli'
+        ? { op: 'connect', source: 'github', method, reconnect }
+        : { op: 'connect', source: 'github', method, apiKey, reconnect },
+    );
+    if (ok) setGitHubForm(null);
+    return ok;
+  };
+
   const reconnectOf = (account: AccountSummary): (() => void) | null => {
     const oauth = signInOf(account.source)?.oauth ?? false;
+    if (account.source === 'github' && !(account.method === 'oauth' && oauth)) {
+      return () => setGitHubForm({ reconnect: account });
+    }
     if (account.source === 'linear' && !(account.method === 'oauth' && oauth)) {
       return () => setKeyForm({ reconnect: account });
     }
@@ -373,6 +405,24 @@ export function AccountsPanel({ no }: { no: string }) {
         {problemFor('teams')}
       </SettingRow>
     ),
+    github: (signIn) => (
+      <GitHubConnectRow
+        signIn={signIn}
+        ready={state !== null}
+        busy={busy !== null}
+        waiting={waiting('github')}
+        checking={busy?.source === 'github' && (busy.kind === 'api-key' || busy.kind === 'cli')}
+        deviceCode={state?.deviceCode?.source === 'github' ? state.deviceCode : null}
+        form={githubTokenForm}
+        problem={problemFor('github')}
+        onConnect={() => connectWithBrowser('github')}
+        onCancelSignIn={() => window.commander.accounts({ op: 'cancel-sign-in' })}
+        onToken={(token) => connectGitHubWith('api-key', token)}
+        onCli={() => connectGitHubWith('cli')}
+        onOpenForm={() => setGitHubForm({})}
+        onCloseForm={() => setGitHubForm(null)}
+      />
+    ),
   };
 
   return (
@@ -391,7 +441,15 @@ export function AccountsPanel({ no }: { no: string }) {
                 request={(request) =>
                   window.commander.accounts(request).then((response) => setState(response.state))
                 }
-              />
+              >
+                {account.source === 'github' && (
+                  <GitHubInstallations
+                    account={account}
+                    busy={busy !== null}
+                    onCheck={() => run('github', 'refresh', { op: 'refresh-details', accountId: account.id })}
+                  />
+                )}
+              </AccountRow>
             ))}
           {connectRows[signIn.source](signIn)}
         </div>

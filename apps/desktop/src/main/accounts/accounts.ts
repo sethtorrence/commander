@@ -1,4 +1,4 @@
-import type { AccountSource, SourceSignIn } from '@commander/domain/ipc';
+import type { AccountSource, DeviceCodePrompt, SourceSignIn } from '@commander/domain/ipc';
 import {
   type AccessToken,
   AccessTokenError,
@@ -23,6 +23,11 @@ export type Accounts = {
   remove(accountId: string): Promise<void>;
   reportRefused(accountId: string): Promise<void>;
   identifyUsers(): Promise<void>;
+  // Asks the Source again about one Account, or every Account of every Source that has details that
+  // change (GitHub: where its app is installed).
+  refreshDetails(accountId?: string): Promise<void>;
+  // The device sign-in waiting for the User to enter its code, if any.
+  deviceCode(): (DeviceCodePrompt & { source: AccountSource }) | null;
   // Cancels any browser sign-in waiting for the User.
   cancelSignIn(): void;
   onChange(listener: () => void): () => void;
@@ -37,10 +42,11 @@ export function combineAccounts(sources: readonly SourceAccounts[]): Accounts {
     sources,
 
     signIns: () =>
-      sources.map(({ source, oauthAvailable, apiKeyAvailable }) => ({
+      sources.map(({ source, oauthAvailable, apiKeyAvailable, cliAvailable }) => ({
         source,
         oauth: oauthAvailable,
         apiKey: apiKeyAvailable,
+        ...(cliAvailable ? { cli: true } : {}),
       })),
 
     of(source) {
@@ -68,6 +74,16 @@ export function combineAccounts(sources: readonly SourceAccounts[]): Accounts {
 
     async identifyUsers() {
       await Promise.all(sources.map((accounts) => accounts.identifyUsers()));
+    },
+
+    async refreshDetails(accountId) {
+      if (accountId === undefined) await Promise.all(sources.map((accounts) => accounts.refreshDetails()));
+      else await owner(accountId)?.refreshDetails(accountId);
+    },
+
+    deviceCode() {
+      for (const { source, deviceCode } of sources) if (deviceCode) return { ...deviceCode, source };
+      return null;
     },
 
     cancelSignIn() {

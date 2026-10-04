@@ -6,5 +6,9 @@
   "microsoft": {
     "clientId": null,
     "tenantId": null
+  },
+  "github": {
+    "clientId": null,
+    "appSlug": null
   }
 }

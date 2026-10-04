@@ -21,7 +21,7 @@ const noSync: AccountsSync = { status: () => null, refresh: () => {}, setCadence
 
 export async function accountsState(accounts: Accounts, sync: AccountsSync = noSync): Promise<AccountsState> {
   const listed = (await accounts.list()).map((account) => ({ ...account, sync: sync.status(account.id) }));
-  return { accounts: listed, sources: accounts.signIns() };
+  return { accounts: listed, sources: accounts.signIns(), deviceCode: accounts.deviceCode() };
 }
 
 // The Source an Account id belongs to ("<source>:…"), if it is one of the Accounts' Sources.
@@ -51,6 +51,7 @@ export async function answerAccountsRequest(
         source = request.source;
         const of = accounts.of(request.source);
         if (request.method === 'oauth') await of.connectWithBrowser({ reconnect: request.reconnect });
+        else if (request.method === 'cli') await of.connectWithCli({ reconnect: request.reconnect });
         else await of.connectWithApiKey(request.apiKey, { reconnect: request.reconnect });
         break;
       }
@@ -60,6 +61,10 @@ export async function answerAccountsRequest(
       case 'remove':
         source = sourceOf(accounts, request.accountId);
         await accounts.remove(request.accountId);
+        break;
+      case 'refresh-details':
+        source = sourceOf(accounts, request.accountId);
+        await accounts.refreshDetails(request.accountId);
         break;
       case 'sync-now':
         sync.refresh(request.accountId);

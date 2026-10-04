@@ -2,7 +2,9 @@ import { join } from 'node:path';
 import type { CoreAccessTokenReply, CoreRemoveAccountItems } from '@commander/domain';
 import { ipc } from '@commander/domain/ipc';
 import { app, BrowserWindow, ipcMain, net, powerMonitor, shell } from 'electron';
-import { linearConfig, microsoftConfig, parseBuildConfig } from '../build-config';
+import { githubConfig, linearConfig, microsoftConfig, parseBuildConfig } from '../build-config';
+import { ghCli } from '../github/gh-cli';
+import { createGitHubAccounts } from '../github/github-accounts';
 import { createLinearAccounts } from '../linear/linear-accounts';
 import { createTeamsAccounts } from '../microsoft/teams-accounts';
 import type { Secrets } from '../secrets';
@@ -55,11 +57,17 @@ export function setUpAccounts({
       config: microsoftConfig(build, process.env),
       removeItems: ({ id, name }) => core.removeItems({ source: 'teams', account: id, name }),
     }),
+    createGitHubAccounts({
+      ...shared,
+      config: githubConfig(build, process.env),
+      gh: ghCli(),
+      removeItems: ({ id, name }) => core.removeItems({ source: 'github', account: id, name }),
+    }),
   ]);
 
   // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
   // reports a sign-in a Source refused, which may mean the Account needs reconnecting. Sources the
-  // Core can't sync yet (Teams, for now) are passed on and left alone there.
+  // Core can't sync yet (Teams and GitHub, for now) are passed on and left alone there.
   const sync = createCoreSyncChannel({
     send: sendToCore,
     endpoints: { linear: linearSettings.apiUrl },
@@ -69,6 +77,8 @@ export function setUpAccounts({
   void syncAccounts();
   // Accounts connected before Commander kept who signed in find out now.
   void accounts.identifyUsers();
+  // Where Commander's GitHub App is installed may have changed since the last start.
+  void accounts.refreshDetails();
   // Syncing pauses while the machine is asleep or offline.
   let testOffline = testHooks && process.env.COMMANDER_TEST_OFFLINE === '1';
   watchSystemState({

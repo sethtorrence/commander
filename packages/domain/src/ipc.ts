@@ -54,13 +54,13 @@ export type SaveModelKeyResult = { ok: true } | { ok: false; error: string };
 
 // Accounts, as the window sees them: never a token or an API key.
 // The Sources the User can connect Accounts to so far (see account-messages.ts).
-export type AccountSource = 'linear' | 'teams';
+export type AccountSource = 'linear' | 'teams' | 'github';
 export type AccountMethod = 'oauth' | 'api-key';
 // 'needs-reconnect': its sign-in failed for good (revoked, or a refresh past the replay window).
 export type AccountStatus = 'connected' | 'needs-reconnect';
 type AccountSummaryBase = {
   id: string;
-  // What the User sees: a Linear workspace's name; "Teams · <user principal name>".
+  // What the User sees: a Linear workspace's name; "Teams · <user principal name>"; a GitHub login.
   name: string;
   method: AccountMethod;
   status: AccountStatus;
@@ -80,15 +80,32 @@ export type TeamsAccountSummary = AccountSummaryBase & {
   // The work account signed in with (its user principal name, usually its email address).
   userPrincipalName: string;
 };
-export type AccountSummary = LinearAccountSummary | TeamsAccountSummary;
+export type GitHubAccountSummary = AccountSummaryBase & {
+  source: 'github';
+  // The GitHub user's login (github.com/<login>).
+  login: string;
+  // Commander's GitHub App (device flow), a classic personal access token, or gh's sign-in.
+  signedInWith: 'github-app' | 'classic-token' | 'gh';
+  // Where Commander's GitHub App is installed (user and organisation logins), as of the last check;
+  // null for token Accounts, which don't go through the app.
+  installations: string[] | null;
+  // The app's "install on another account or org" page; null when this build doesn't know the app.
+  installUrl: string | null;
+};
+export type AccountSummary = LinearAccountSummary | TeamsAccountSummary | GitHubAccountSummary;
 // How this build can connect each Source's Accounts.
 export type SourceSignIn = {
   source: AccountSource;
   // Through the browser: this build has the Source's app registration (in config/local.json).
   oauth: boolean;
-  // With a personal API key instead (Linear only).
+  // With a personal API key or token instead (Linear, GitHub).
   apiKey: boolean;
+  // By reusing a command-line tool's sign-in on this machine (GitHub: gh), when it is installed.
+  cli?: boolean;
 };
+// A device sign-in waiting for the User to enter its code at the Source (GitHub): the short code
+// to type, and where. Never the device code Commander polls with.
+export type DeviceCodePrompt = { userCode: string; verificationUri: string; expiresAt: number };
 // The Source's organisation needs an administrator to approve Commander before the User can sign
 // in: which permissions to approve, and the organisation's admin consent page for Commander's app.
 export type AdminConsentNeeded = { permissions: string[]; url: string };
@@ -110,13 +127,19 @@ export type AccountsState = {
   accounts: AccountSummary[];
   // Each Source's ways of connecting in this build, in the order Settings → Accounts shows them.
   sources: SourceSignIn[];
+  // The device sign-in waiting for its code to be entered, if any.
+  deviceCode?: (DeviceCodePrompt & { source: AccountSource }) | null;
 };
 export type AccountsRequest =
   | { op: 'list' }
   // `reconnect` names the Account being reconnected: the sign-in must be for the same identity
-  // (Linear: its workspace; Teams: its user).
+  // (Linear: its workspace; Teams and GitHub: its user).
   | { op: 'connect'; source: AccountSource; method: 'oauth'; reconnect?: string }
-  | { op: 'connect'; source: 'linear'; method: 'api-key'; apiKey: string; reconnect?: string }
+  | { op: 'connect'; source: 'linear' | 'github'; method: 'api-key'; apiKey: string; reconnect?: string }
+  // Reuses gh's sign-in on this machine (`gh auth token`).
+  | { op: 'connect'; source: 'github'; method: 'cli'; reconnect?: string }
+  // Asks the Source again about the Account (GitHub: where Commander's app is installed).
+  | { op: 'refresh-details'; accountId: string }
   | { op: 'cancel-sign-in' }
   | { op: 'remove'; accountId: string }
   // Syncs the Account at once (Sync now; Sections call it when they open).
