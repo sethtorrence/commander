@@ -38,6 +38,9 @@ export const ipc = {
   askForUpdate: 'ask-for-update',
   // Settings → GitHub: what each GitHub Account watches; see github-watch-messages.ts.
   githubWatch: 'github-watch',
+  // The GitHub Section: a pull request's or issue's discussion, fetched on demand; see
+  // github-discussion.ts.
+  githubDiscussion: 'github-discussion',
   // Main tells the window to show an Item where it lives (a meeting's heads-up was clicked), as an
   // OpenItem.
   openItem: 'open-item',

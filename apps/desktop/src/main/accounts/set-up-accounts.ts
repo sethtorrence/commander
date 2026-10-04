@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type {
   CoreAccessTokenReply,
+  CoreGitHubDiscussionRequest,
   CoreGitHubTestItems,
   CoreGitHubWatchRequest,
   CoreRemoveAccountItems,
@@ -10,6 +11,7 @@ import { app, BrowserWindow, ipcMain, net, powerMonitor, shell } from 'electron'
 import { githubConfig, googleConfig, linearConfig, microsoftConfig, parseBuildConfig } from '../build-config';
 import { ghCli } from '../github/gh-cli';
 import { createGitHubAccounts } from '../github/github-accounts';
+import { createGitHubDiscussionChannel } from '../github/github-discussion-channel';
 import { createGitHubWatchChannel } from '../github/github-watch-channel';
 import { createGoogleAccounts } from '../google/google-accounts';
 import { createLinearAccounts } from '../linear/linear-accounts';
@@ -41,6 +43,7 @@ export function setUpAccounts({
       | CoreRemoveAccountItems
       | CoreSyncMessage
       | CoreGitHubWatchRequest
+      | CoreGitHubDiscussionRequest
       | CoreGitHubTestItems,
   ) => void;
   // End-to-end tests (COMMANDER_TEST_HOOKS=1) may take the machine offline: COMMANDER_TEST_OFFLINE=1
@@ -149,6 +152,9 @@ export function setUpAccounts({
   // Settings → GitHub: the Core lists what each GitHub Account reaches, with the token it borrows.
   const githubWatch = createGitHubWatchChannel({ apiUrl: githubSettings.apiUrl, send: sendToCore });
   ipcMain.handle(ipc.githubWatch, (_event, request: unknown) => githubWatch.request(request));
+  // The GitHub Section: the Core fetches a pull request's or issue's discussion when it is opened.
+  const githubDiscussion = createGitHubDiscussionChannel({ apiUrl: githubSettings.apiUrl, send: sendToCore });
+  ipcMain.handle(ipc.githubDiscussion, (_event, request: unknown) => githubDiscussion.request(request));
   // Status changes (an Account needing reconnecting, a sync finishing) happen without the window asking.
   const broadcast = async () => {
     const state = await accountsState(accounts, sync);
@@ -161,7 +167,8 @@ export function setUpAccounts({
   sync.onChange(() => void broadcast());
 
   return {
-    fromCore: (raw) => core.handle(raw) || sync.handle(raw) || githubWatch.settle(raw),
+    fromCore: (raw) =>
+      core.handle(raw) || sync.handle(raw) || githubWatch.settle(raw) || githubDiscussion.settle(raw),
     setOnline: (online) => {
       if (testHooks) testOffline = !online;
     },

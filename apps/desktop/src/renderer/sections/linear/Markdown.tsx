@@ -7,7 +7,10 @@ import { type ReactNode, useMemo } from 'react';
   tokens become React elements here, so nothing is ever set as HTML: raw HTML shows as the text it
   is, only web and mail addresses become links (opened in the system browser through the window's
   new-window handler, see main/external-links.ts), and images become links to them, so a remote
-  image is never fetched (the window's CSP would refuse it anyway).
+  image is never fetched (the window's CSP would refuse it anyway). A lone HTML <img> (how GitHub
+  writes uploaded screenshots) becomes a link to its image too; an image inside a link (a badge) is
+  the link's text, so links never nest. The GitHub Section reuses it for pull request and issue
+  bodies and their discussion.
 */
 
 const linkable = (href: string) => /^(https?:|mailto:)/i.test(href.trim());
@@ -45,18 +48,42 @@ function ExternalLink({
   );
 }
 
-function inline(tokens: readonly Token[] | undefined, key = ''): ReactNode[] {
-  return (tokens ?? []).map((token, index) => inlineToken(token, `${key}${index}`));
+// A lone HTML image tag, as GitHub writes uploaded screenshots: its address and words, read as text.
+// One carrying script handlers (onerror=…) isn't an upload: it stays the text it is, for all to see.
+function htmlImage(raw: string): { src: string; alt: string } | null {
+  const tag = raw.trim();
+  if (!/^<img\b[^<>]*>$/i.test(tag) || /\son[a-z]+\s*=/i.test(tag)) return null;
+  const attribute = (name: string) => {
+    const found = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'>]+))`, 'i').exec(tag);
+    return found ? decode(found[1] ?? found[2] ?? found[3] ?? '') : '';
+  };
+  const src = attribute('src');
+  return linkable(src) ? { src, alt: attribute('alt') } : null;
 }
 
-function inlineToken(token: Token, key: string): ReactNode {
+function imageLink(key: string, href: string, text: string, inLink: boolean): ReactNode {
+  const label = `Image: ${text || href}`;
+  // Inside a link (a badge), or at an address that isn't a web one: just its words.
+  if (inLink || !linkable(href)) return <span key={key}>[{label}]</span>;
+  return (
+    <ExternalLink key={key} href={href} title="Opens the image in your browser">
+      [{label}]
+    </ExternalLink>
+  );
+}
+
+function inline(tokens: readonly Token[] | undefined, key = '', inLink = false): ReactNode[] {
+  return (tokens ?? []).map((token, index) => inlineToken(token, `${key}${index}`, inLink));
+}
+
+function inlineToken(token: Token, key: string, inLink = false): ReactNode {
   switch (token.type) {
     case 'strong':
-      return <strong key={key}>{inline(token.tokens, `${key}.`)}</strong>;
+      return <strong key={key}>{inline(token.tokens, `${key}.`, inLink)}</strong>;
     case 'em':
-      return <em key={key}>{inline(token.tokens, `${key}.`)}</em>;
+      return <em key={key}>{inline(token.tokens, `${key}.`, inLink)}</em>;
     case 'del':
-      return <del key={key}>{inline(token.tokens, `${key}.`)}</del>;
+      return <del key={key}>{inline(token.tokens, `${key}.`, inLink)}</del>;
     case 'codespan':
       return (
         <code key={key} className="border border-line2 bg-raise px-1 font-mono text-[0.88em]">
@@ -67,8 +94,8 @@ function inlineToken(token: Token, key: string): ReactNode {
       return <br key={key} />;
     case 'link': {
       const { href, title } = token as Tokens.Link;
-      const children = inline(token.tokens, `${key}.`);
-      if (!linkable(href)) return <span key={key}>{children}</span>;
+      const children = inline(token.tokens, `${key}.`, true);
+      if (inLink || !linkable(href)) return <span key={key}>{children}</span>;
       return (
         <ExternalLink key={key} href={href} title={title}>
           {children}
@@ -77,17 +104,16 @@ function inlineToken(token: Token, key: string): ReactNode {
     }
     case 'image': {
       const { href, text } = token as Tokens.Image;
-      const label = `Image: ${decode(text) || href}`;
-      if (!linkable(href)) return <span key={key}>[{label}]</span>;
-      return (
-        <ExternalLink key={key} href={href} title="Opens the image in your browser">
-          [{label}]
-        </ExternalLink>
-      );
+      return imageLink(key, href, decode(text), inLink);
+    }
+    case 'html': {
+      const image = htmlImage(token.raw);
+      if (image) return imageLink(key, image.src, image.alt, inLink);
+      return <span key={key}>{token.raw}</span>;
     }
     case 'text':
       // A list item's text holds its own inline tokens.
-      if (token.tokens?.length) return <span key={key}>{inline(token.tokens, `${key}.`)}</span>;
+      if (token.tokens?.length) return <span key={key}>{inline(token.tokens, `${key}.`, inLink)}</span>;
       return <span key={key}>{decode(token.text)}</span>;
     case 'escape':
       return <span key={key}>{token.text}</span>;
@@ -208,12 +234,14 @@ function block(token: Token, key: string): ReactNode {
         </div>
       );
     }
-    case 'html':
+    case 'html': {
+      const image = htmlImage(token.raw);
       return (
         <p key={key} className="my-0 mb-3 whitespace-pre-wrap last:mb-0">
-          {token.raw.trimEnd()}
+          {image ? imageLink(`${key}.i`, image.src, image.alt, false) : token.raw.trimEnd()}
         </p>
       );
+    }
     case 'text':
       return (
         <p key={key} className="my-0 mb-3 last:mb-0">

@@ -300,10 +300,15 @@ export function describeIssueEntry(
 
 /**
  * The Section's thin status line: when Linear last synced ("Synced 14:02"), that it is syncing now,
- * or the sync engine's problem in its own words. With several Accounts each is named.
+ * or the sync engine's problem in its own words. With several Accounts each is named. The GitHub
+ * Section shares it, with its own words for no Account.
  */
-export function syncLine(accounts: readonly AccountSummary[], now: Date): { text: string; problem: boolean } {
-  if (!accounts.length) return { text: 'No Linear Account connected', problem: false };
+export function syncLine(
+  accounts: readonly AccountSummary[],
+  now: Date,
+  none = 'No Linear Account connected',
+): { text: string; problem: boolean } {
+  if (!accounts.length) return { text: none, problem: false };
   const each = accounts.map((account) => {
     const sync = account.sync;
     if (sync?.problem) return { text: sync.problem.message, problem: true, sep: ': ' };

@@ -10,8 +10,9 @@ import type { AddressInfo } from 'node:net';
 // repos (what Settings → GitHub lists, #113), and what GitHub sync reads (#114): the gates (org repos
 // and issues, the User's repos and teams, a repo's issues) answering If-None-Match with a free 304,
 // X-RateLimit headers, and the GraphQL GitHub sync sends (open work, search, repos, the sweep) over
-// pull requests, issues, releases and commits added here. It can also refuse with a rate limit (403 or
-// 429, with Retry-After). Nothing here talks to the real GitHub.
+// pull requests, issues, releases and commits added here. It also answers the GitHub Section's
+// discussion query (#115): comments, reviews, review comments and a pull request's checks. It can
+// also refuse with a rate limit (403 or 429, with Retry-After). Nothing here talks to the real GitHub.
 //
 // What a GitHub App's user token may see of orgs without an install is untested against GitHub: here
 // /user/memberships/orgs and /user/orgs refuse it ("Resource not accessible by integration"), the
@@ -55,6 +56,31 @@ export type FakeGitHubRepo = {
   collaborators?: number[];
 };
 
+// A comment on a pull request or issue, by a user (login); with a `path` (and line), a review
+// comment on a line of a pull request's code. Times are ISO strings.
+export type FakeGitHubComment = {
+  author: string;
+  body: string;
+  createdAt?: string;
+  path?: string;
+  line?: number;
+};
+
+// A submitted review of a pull request.
+export type FakeGitHubReview = {
+  author: string;
+  state: 'APPROVED' | 'CHANGES_REQUESTED' | 'COMMENTED' | 'DISMISSED';
+  body?: string;
+  submittedAt?: string;
+};
+
+// A check run on a pull request's head commit: its conclusion once done, null while it runs.
+export type FakeGitHubCheckRun = {
+  name: string;
+  conclusion: 'SUCCESS' | 'FAILURE' | 'NEUTRAL' | 'SKIPPED' | 'CANCELLED' | null;
+  url?: string;
+};
+
 // A pull request: in a repo ("owner/name"), by a user (login). `reviewers` and `teams` ("org/slug")
 // are asked to review it. Times are ISO strings.
 export type FakeGitHubPullRequest = {
@@ -70,6 +96,12 @@ export type FakeGitHubPullRequest = {
   assignees?: string[];
   labels?: string[];
   checks?: 'SUCCESS' | 'FAILURE' | 'PENDING' | null;
+  // Its head commit's check runs (their rollup stands for `checks`), for the discussion query.
+  checkRuns?: FakeGitHubCheckRun[];
+  reviews?: FakeGitHubReview[];
+  comments?: FakeGitHubComment[];
+  // Issues in the same repo it closes when merged, by number.
+  closes?: number[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -83,6 +115,7 @@ export type FakeGitHubIssue = {
   state?: 'OPEN' | 'CLOSED';
   assignees?: string[];
   labels?: string[];
+  comments?: FakeGitHubComment[];
   createdAt?: string;
   updatedAt?: string;
 };
@@ -163,6 +196,10 @@ export type FakeGitHub = {
   // Changes a pull request (and its updatedAt, to now unless given).
   updatePullRequest(repo: string, number: number, changes: Partial<FakeGitHubPullRequest>): void;
   addIssue(issue: FakeGitHubIssue): void;
+  // Comments on a pull request or issue (by number), moving its updatedAt to now, as GitHub does.
+  addComment(repo: string, number: number, comment: FakeGitHubComment): void;
+  // The pull request as it stands here.
+  pullRequest(repo: string, number: number): FakeGitHubPullRequest | undefined;
   addRelease(release: FakeGitHubRelease): void;
   addCommit(commit: FakeGitHubCommit): void;
   addTeam(team: FakeGitHubTeam): void;
@@ -313,6 +350,16 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     addIssue: (issue) => {
       issues.push(issue);
     },
+    addComment: (repo, number, comment) => {
+      const entry =
+        pulls.find((each) => each.repo === repo && each.number === number) ??
+        issues.find((each) => each.repo === repo && each.number === number);
+      if (!entry) return;
+      const now = new Date().toISOString();
+      entry.comments = [...(entry.comments ?? []), { createdAt: now, ...comment }];
+      entry.updatedAt = now;
+    },
+    pullRequest: (repo, number) => pulls.find((each) => each.repo === repo && each.number === number),
     addRelease: (release) => {
       releases.push(release);
     },
@@ -529,6 +576,23 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
       ...(pull.reviewers ?? []).map((login) => ({ __typename: 'User', login })),
       ...(pull.teams ?? []).map(teamRef),
     ];
+    // Each reviewer's latest review, and GitHub's decision from them.
+    const latest = [...new Map((pull.reviews ?? []).map((review) => [review.author, review])).values()];
+    const decision = latest.some((review) => review.state === 'CHANGES_REQUESTED')
+      ? 'CHANGES_REQUESTED'
+      : latest.some((review) => review.state === 'APPROVED')
+        ? 'APPROVED'
+        : asked.length
+          ? 'REVIEW_REQUIRED'
+          : null;
+    const runs = pull.checkRuns;
+    const rollup = runs
+      ? runs.some((run) => run.conclusion === 'FAILURE')
+        ? 'FAILURE'
+        : runs.some((run) => run.conclusion === null)
+          ? 'PENDING'
+          : 'SUCCESS'
+      : pull.checks;
     return {
       __typename: 'PullRequest',
       id: pullId(pull),
@@ -547,25 +611,99 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
       changedFiles: 1,
       baseRefName: 'main',
       headRefName: `branch-${pull.number}`,
-      reviewDecision: asked.length ? 'REVIEW_REQUIRED' : null,
+      reviewDecision: decision,
       repository: repoRef(repo),
       author: { login: pull.author, email: '' },
       labels: { nodes: (pull.labels ?? []).map((name) => ({ name, color: 'ededed' })) },
       assignees: { nodes: (pull.assignees ?? []).map((login) => ({ login })) },
       reviewRequests: { nodes: asked.map((requestedReviewer) => ({ requestedReviewer })) },
       timelineItems: { nodes: asked.map((requestedReviewer) => ({ createdAt: updated, requestedReviewer })) },
-      latestReviews: { nodes: [] },
+      latestReviews: {
+        nodes: latest.map((review) => ({
+          author: { login: review.author },
+          state: review.state,
+          submittedAt: review.submittedAt ?? updated,
+        })),
+      },
       commits: {
         nodes: [
           {
             commit: {
-              statusCheckRollup: pull.checks === null ? null : { state: pull.checks ?? 'SUCCESS' },
+              statusCheckRollup: rollup === null ? null : { state: rollup ?? 'SUCCESS' },
               author: { email: '', user: { login: pull.author } },
             },
           },
         ],
       },
-      closingIssuesReferences: { nodes: [] },
+      closingIssuesReferences: {
+        nodes: (pull.closes ?? []).flatMap((number) => {
+          const closed = issues.find((each) => each.repo === pull.repo && each.number === number);
+          return closed
+            ? [
+                {
+                  number,
+                  title: closed.title,
+                  url: `${fake.webUrl}/${closed.repo}/issues/${number}`,
+                  repository: { name: repo.name, owner: { login: repo.owner } },
+                },
+              ]
+            : [];
+        }),
+      },
+    };
+  }
+
+  // A pull request's or issue's discussion and checks, as the GitHub Section's query reads them.
+  function discussionNode(work: Work, latest: number) {
+    const entry = entryOf(work);
+    const base = `${fake.webUrl}/${entry.repo}/${work.kind === 'pull' ? 'pull' : 'issues'}/${entry.number}`;
+    const all = (entry.comments ?? []).map((comment, index) => ({
+      comment,
+      node: {
+        id: `C_fake_${slug(entry.repo)}_${entry.number}_${index}`,
+        url: `${base}#comment-${index}`,
+        body: comment.body,
+        createdAt: comment.createdAt ?? updatedOf(entry),
+        author: { login: comment.author },
+      },
+    }));
+    const conversation = all.filter(({ comment }) => !comment.path);
+    const comments = {
+      totalCount: conversation.length,
+      nodes: conversation.slice(-latest).map(({ node }) => node),
+    };
+    if (work.kind === 'issue') return { __typename: 'Issue', comments };
+    const { pull } = work;
+    const reviews = (pull.reviews ?? []).map((review, index) => ({
+      id: `R_fake_${slug(pull.repo)}_${pull.number}_${index}`,
+      url: `${base}#review-${index}`,
+      body: review.body ?? '',
+      state: review.state,
+      createdAt: review.submittedAt ?? updatedOf(pull),
+      submittedAt: review.submittedAt ?? updatedOf(pull),
+      author: { login: review.author },
+    }));
+    const threads = all
+      .filter(({ comment }) => comment.path)
+      .map(({ comment, node }) => ({
+        path: comment.path,
+        line: comment.line ?? null,
+        originalLine: null,
+        comments: { totalCount: 1, nodes: [node] },
+      }));
+    const contexts = (pull.checkRuns ?? []).map((run) => ({
+      __typename: 'CheckRun',
+      name: run.name,
+      status: run.conclusion === null ? 'IN_PROGRESS' : 'COMPLETED',
+      conclusion: run.conclusion,
+      detailsUrl: run.url ?? null,
+    }));
+    return {
+      __typename: 'PullRequest',
+      comments,
+      reviews: { totalCount: reviews.length, nodes: reviews.slice(-latest) },
+      reviewThreads: { totalCount: threads.length, nodes: threads.slice(-latest) },
+      commits: { nodes: [{ commit: { statusCheckRollup: { contexts: { nodes: contexts } } } }] },
     };
   }
 
@@ -772,6 +910,16 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
             return repo && reaches(who, repo) ? repoNode(repo, String(variables.since)) : null;
           }),
         };
+      case 'CommanderDiscussion': {
+        const work = workOf().find(
+          (each) => (each.kind === 'pull' ? pullId(each.pull) : issueId(each.issue)) === variables.id,
+        );
+        const repo = work ? repoNamed(entryOf(work).repo) : undefined;
+        return {
+          node:
+            work && repo && reaches(who, repo) ? discussionNode(work, Number(variables.latest ?? 50)) : null,
+        };
+      }
       case 'CommanderSweep':
         return {
           items: ((variables.ids as string[]) ?? []).map((id) => {
