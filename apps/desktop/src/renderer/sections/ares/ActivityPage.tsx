@@ -8,6 +8,7 @@ import {
   autonomySections,
 } from '@commander/domain';
 import {
+  AresText,
   Button,
   ButtonGroup,
   cn,
@@ -140,6 +141,8 @@ function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<type
   const where = row.section ? AUTONOMY_SECTION_NAMES[row.section] : 'Everywhere';
   // Act for you and Delete are accepted one at a time, with everything they'll do in view.
   const oneAtATime = !bulkAcceptable(row.actionKind);
+  // What Ares wrote may link only to what the Items it was about say (AresText).
+  const sources = [row.item?.title ?? '', row.cause?.item?.title ?? ''];
   return (
     <li
       aria-label={`${row.name}: ${row.item?.title ?? 'an Item'}`}
@@ -178,7 +181,7 @@ function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<type
       <div className="min-w-0">
         {describeItemActions(row.itemActions).map((line) => (
           <p key={line} className="m-0 text-row leading-6 font-semibold text-ink">
-            {line}
+            <AresText inline text={line} sources={sources} />
           </p>
         ))}
         <p className="m-0 text-note leading-5 text-muted">
@@ -187,7 +190,7 @@ function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<type
       </div>
       <p className="m-0 min-w-0 text-note leading-5 text-text">
         <span className="text-muted">Why: </span>
-        {row.reason}
+        <AresText inline text={row.reason} sources={sources} />
         <Cause row={row} />
       </p>
     </li>

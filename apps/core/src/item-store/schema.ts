@@ -430,3 +430,24 @@ export const agentSeen = sqliteTable(
   },
   (t) => [primaryKey({ columns: [t.job, t.itemId, t.fingerprint] })],
 );
+
+// Steering warnings (#69): the outside Items holding instructions aimed at Ares, which show the
+// warning mark. Found by the pattern check when the Item arrives (`pattern`) or named by a job's
+// steering flag (`ares`); each warning is also an injection-warning activity entry. A row goes when
+// the instructions do (for `ares`, when the Item's words change).
+export const injectionWarnings = sqliteTable('injection_warnings', {
+  itemId: text('item_id')
+    .primaryKey()
+    .references(() => items.id),
+  // When the Item was first marked.
+  at: integer('at').notNull(),
+  // Its latest injection-warning activity entry.
+  entryId: integer('entry_id')
+    .notNull()
+    .references(() => activity.id),
+  via: text('via').$type<'pattern' | 'ares'>().notNull(),
+  // What the patterns found, folded (empty for a flag alone).
+  found: text('found', { mode: 'json' }).$type<string[]>().notNull(),
+  // A fingerprint (SHA-256) of the Item's words when it was marked.
+  contentHash: text('content_hash').notNull(),
+});

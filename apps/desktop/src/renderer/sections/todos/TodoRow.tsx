@@ -2,6 +2,7 @@ import type { Item } from '@commander/domain';
 import { labelBlockLinks } from '@commander/domain';
 import { CheckIcon, cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
+import { ItemWarning } from '../../links/ItemWarning';
 import { ChipText } from '../../links/MentionedIn';
 import { useChipLabel } from '../../links/use-chip-label';
 import { originLabel } from './origin';
@@ -95,6 +96,7 @@ export function TodoRow({
       >
         <ChipText text={todo.title} label={label} />
       </span>
+      <ItemWarning item={todo} className="mt-[5px] ml-3" />
       <span className="mt-[5px] ml-3 inline-flex h-5 flex-none items-center border border-line bg-sheet px-[7px] font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted">
         {originLabel(todo, madeFrom, backing)}
       </span>

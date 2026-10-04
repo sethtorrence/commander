@@ -13,6 +13,7 @@ import { chatCompletion, type FakeOpenAIServer, startFakeOpenAIServer } from '@c
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAccessTokens } from '../access-tokens';
 import { type ItemStore, openItemStore } from '../item-store';
+import { createKnownSecrets } from '../safety/known-secrets';
 import { setUpModels } from '.';
 
 const KEY = 'zai-key-4f9a1c0e7b2d';
@@ -23,6 +24,7 @@ let server: FakeOpenAIServer;
 let savedKey: string | null;
 let tokenRequests: CoreAccessTokenRequest[];
 let models: ReturnType<typeof setUpModels>;
+let secrets: ReturnType<typeof createKnownSecrets>;
 const replies: CoreModelsReply[] = [];
 
 beforeEach(async () => {
@@ -37,16 +39,21 @@ beforeEach(async () => {
   tokenRequests = [];
   replies.length = 0;
   // Plays the main process: answers the Core's access token requests from "the keyring".
-  const accessTokens = createAccessTokens((request) => {
-    tokenRequests.push(request);
-    const response: CoreAccessTokenReply['response'] = savedKey
-      ? { ok: true, token: savedKey, kind: 'api-key' }
-      : { ok: false, reason: 'unknown-account', error: 'No Z.ai API key is saved.' };
-    queueMicrotask(() => accessTokens.settle({ type: 'access-token-reply', id: request.id, response }));
-  });
+  secrets = createKnownSecrets();
+  const accessTokens = createAccessTokens(
+    (request) => {
+      tokenRequests.push(request);
+      const response: CoreAccessTokenReply['response'] = savedKey
+        ? { ok: true, token: savedKey, kind: 'api-key' }
+        : { ok: false, reason: 'unknown-account', error: 'No Z.ai API key is saved.' };
+      queueMicrotask(() => accessTokens.settle({ type: 'access-token-reply', id: request.id, response }));
+    },
+    { secrets },
+  );
   models = setUpModels(store, {
     send: (message) => replies.push(coreModelsReply.parse(message)),
     accessTokens,
+    secrets,
   });
 });
 
@@ -79,6 +86,23 @@ async function pointAtFakeServer() {
     },
   });
 }
+
+describe('the model key and the messages', () => {
+  it('borrows the key first and refuses messages that carry it, even before it was ever borrowed', async () => {
+    await pointAtFakeServer();
+    server.reply({ json: chatCompletion('ok', { prompt: 1, completion: 1 }) });
+
+    await expect(
+      models.client.complete({
+        tier: 'quick',
+        job: 'suggest-todos',
+        messages: [{ role: 'user', content: `my key is ${KEY}, keep it safe` }],
+      }),
+    ).rejects.toThrow(/nothing was sent/);
+    expect(server.requests).toHaveLength(0);
+    expect(tokenRequests).toHaveLength(1);
+  });
+});
 
 describe('Settings → Ares, answered by the Core', () => {
   it('reads the defaults, then saves and reads back the tiers', async () => {

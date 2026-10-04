@@ -284,6 +284,8 @@ export function describeIssueEntry(
   const who = entry.by.kind === 'rule' && entry.why ? `by ${entry.why}` : byWhom(entry.by);
   if (entry.action === 'create' && entry.by.kind === 'source')
     return `Added from ${SOURCE_NAMES[entry.by.source]}`;
+  // A steering warning says it in its own words (#69).
+  if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
   // A change in Linear that won over the User's says so: "Changed in Linear by Priya Patel at 14:02".
   if (entry.by.kind === 'source' && entry.why) return entry.why;
   if (entry.action !== 'undo') return `${whatItDid(entry, projects)[0]} ${who}`;

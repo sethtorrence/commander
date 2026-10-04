@@ -1,5 +1,6 @@
 // Commander's Industrial design system. Styles: import '@commander/ui/styles.css' once.
 
+export { AresText, type AresTextProps, urlsIn } from './components/ares-text';
 export { Badge, type BadgeProps, badgeVariants } from './components/badge';
 export { Button, ButtonGroup, buttonVariants } from './components/button';
 export {
@@ -56,6 +57,7 @@ export { Switch } from './components/switch';
 export { ThemeToggle } from './components/theme-toggle';
 export { Toaster, ToastView, toast } from './components/toast';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/tooltip';
+export { WarningMark } from './components/warning-mark';
 export { cn } from './lib/cn';
 export {
   ACCENT_NAMES,

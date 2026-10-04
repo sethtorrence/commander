@@ -127,7 +127,9 @@ test('type, pause, a margin card, Add: the Todo is in Todos with origin Ares; Di
   // One Quick call at low thinking, in JSON mode, with the Blocks delimited as data.
   const call = server.requests.at(-1)?.body as { reasoning_effort: string; messages: { content: string }[] };
   expect(call.reasoning_effort).toBe('low');
-  expect(call.messages.at(-1)?.content).toMatch(/^<data label="Daily Note · .*" source="the User">/);
+  expect(call.messages.at(-1)?.content).toMatch(
+    /^<data-[0-9a-f]{16} label="Daily Note · .*" source="the User">/,
+  );
 
   // Add makes the Todo: the Block shows its checkbox. Dismiss takes the card away for good.
   await dana.getByRole('button', { name: 'Add' }).click();

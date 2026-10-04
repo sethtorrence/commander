@@ -1,12 +1,15 @@
 // The Core's way to borrow an Account's access token from the main process, which owns the
 // keyring and refreshes tokens. Tokens are held only for the call that needs them: the Core never
-// writes them to the database or logs them. Later Sources reuse this for their tokens and keys.
+// writes them to the database or logs them. Later Sources reuse this for their tokens and keys, as
+// do model API keys. Every token handed out is remembered by fingerprint (`secrets`), so the prompt
+// builder can refuse material that holds one (#69).
 import {
   type AccessTokenFailure,
   type CoreAccessTokenRequest,
   coreAccessTokenReply,
 } from '@commander/domain';
 import { z } from 'zod';
+import type { KnownSecrets } from './safety/known-secrets';
 
 export type AccessToken = { token: string; kind: 'oauth' | 'api-key' };
 
@@ -30,7 +33,7 @@ type Pending = {
 
 export function createAccessTokens(
   send: (message: CoreAccessTokenRequest) => void,
-  { timeoutMs = 60_000 }: { timeoutMs?: number } = {},
+  { timeoutMs = 60_000, secrets }: { timeoutMs?: number; secrets?: Pick<KnownSecrets, 'remember'> } = {},
 ) {
   let nextId = 1;
   const pending = new Map<number, Pending>();
@@ -63,8 +66,10 @@ export function createAccessTokens(
         return true;
       }
       const { response } = parsed.data;
-      if (response.ok) waiting.resolve({ token: response.token, kind: response.kind });
-      else waiting.reject(new AccessTokenUnavailable(response.reason, response.error));
+      if (response.ok) {
+        secrets?.remember(response.token);
+        waiting.resolve({ token: response.token, kind: response.kind });
+      } else waiting.reject(new AccessTokenUnavailable(response.reason, response.error));
       return true;
     },
   };

@@ -152,6 +152,10 @@ _Avoid_: Notification, alert, briefing, digest
 Something Ares has prepared and left on its Item for the User to accept or dismiss (what Ask means); nothing happens until it is accepted, and one suggested because of another Item says what caused it.
 _Avoid_: Recommendation, proposal (that's what Ares's jobs hand the gate), prompt, nudge
 
+**Warning mark**:
+The mark on an outside Item whose text tries to instruct Ares ("This issue contains instructions aimed at Ares. He ignored them."), shown wherever the Item is listed or opened and counted in the Update; it changes nothing Ares may do.
+_Avoid_: Alert, flag, quarantine, spam
+
 **Autonomy setting**:
 A User's choice, per Action kind and optionally per Section, of the Autonomy level the Agent works at.
 _Avoid_: Permission, mode, policy

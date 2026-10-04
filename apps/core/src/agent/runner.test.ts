@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ActionContext, AresStatus } from '@commander/domain';
+import type { ActionContext, AresStatus, Item } from '@commander/domain';
 import {
   createModelClient,
   ModelError,
@@ -111,7 +111,7 @@ function noteJob(
       data: [
         {
           label: 'Blocks',
-          trust: 'trusted',
+          from: input.items.map((item) => store.get(item.itemId)?.item as Item),
           text: input.items.map((item, i) => `B${i + 1}: ${blockText(item.itemId)}`).join('\n'),
         },
       ],

@@ -1,4 +1,5 @@
 import './margin-cards.css';
+import { AresText } from '@commander/ui';
 import { useLayoutEffect, useRef } from 'react';
 import type { MarginSuggestion } from './margin-suggestions';
 
@@ -85,10 +86,12 @@ export function MarginCards({
               <span className="bx" aria-hidden="true" />
               <span>
                 <span className="n-ac-kind">Todo: </span>
-                {suggestion.title}
+                <AresText inline text={suggestion.title} sources={[suggestion.source]} />
               </span>
             </div>
-            <div className="n-ac-why">{suggestion.reason}</div>
+            <div className="n-ac-why">
+              <AresText inline text={suggestion.reason} sources={[suggestion.source]} />
+            </div>
           </div>
           <div className="n-ac-actions">
             <button

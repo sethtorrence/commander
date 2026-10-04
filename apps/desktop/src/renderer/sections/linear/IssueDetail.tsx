@@ -2,6 +2,7 @@ import type { ActivityEntry, LinearIssueDetail } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useRef } from 'react';
 import { shortDate } from '../../frame/calendar';
+import { ItemWarning } from '../../links/ItemWarning';
 import { ItemBadge } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
 import { Eyebrow, PaneEmpty, PanePart } from '../todos/detail/parts';
@@ -299,6 +300,7 @@ export function IssueDetail({
               Opened {whenShort(detail.createdAt)}
               {detail.creator && ` by ${detail.creator.name}`} · updated {whenShort(detail.updatedAt)}
             </p>
+            <ItemWarning item={issue} variant="pane" className="mt-3" />
             <dl className="mt-3.5 mb-0 border-t border-line">
               {FIELDS.map((field) => {
                 const shown = fieldValue(field.key, detail, mine);

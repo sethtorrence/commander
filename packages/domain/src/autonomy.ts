@@ -142,6 +142,14 @@ export const proposedItemAction = z.discriminatedUnion('type', [
 ]);
 export type ProposedItemAction = z.input<typeof proposedItemAction>;
 
+// The existing Items a new Item would sit in or be backed by: a Block's Daily Note and parent, a
+// Todo's backing Item. A proposal that creates one touches them too.
+export function createdIn(detail: unknown): string[] {
+  if (!detail || typeof detail !== 'object') return [];
+  const { dailyNoteId, parentId, backedBy } = detail as Record<string, unknown>;
+  return [dailyNoteId, parentId, backedBy].filter((id): id is string => typeof id === 'string');
+}
+
 export const proposal = z.object({
   actionKind,
   // A registered action's id.

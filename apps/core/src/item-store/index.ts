@@ -78,6 +78,7 @@ import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
+import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
 import { linearSendIn } from './linear-send';
 import { linearTodosIn } from './linear-todos';
 import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-copy-folder';
@@ -107,6 +108,7 @@ import { editedState, queueChanges, undoneDetail, withQueuedOnTop } from './sync
 export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
+export type { InjectionWarningStore } from './injection-warnings';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
@@ -222,6 +224,9 @@ export type ItemStore = {
   autonomy: AutonomyStore;
   // Where Ares's jobs stand and what they have looked at, in the same database.
   agent: AgentStore;
+  // Steering warnings (injection-warnings.ts): outside Items checked as they are saved from their
+  // Source, and marked when they hold instructions aimed at Ares; a job's steering flag marks one too.
+  injectionWarnings: InjectionWarningStore;
   // Global search over the live Items, kept current by every write here.
   search: Search;
   // A Project as a Link (or a `[[` link token) shows it: the one it was merged into, if it was. Null
@@ -302,6 +307,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const template = dailyTemplateIn(db, now);
   const outgoing = openOutgoingQueue(db);
   const syncState = openSyncStateStore(db);
+  const warnings = injectionWarningsIn(db, {
+    now,
+    readItem: (itemId) => readItem(itemId),
+    record: ({ itemId, why, causedBy, after }, at) =>
+      log(
+        { by: { kind: 'ares' }, action: 'injection-warning', itemId, why, causedBy, before: null, after },
+        at,
+      ),
+    toEntry,
+  });
   // Project changes come only from the User (the window); a merge's Item moves are recorded as theirs.
   const byUser: Actor = { kind: 'user' };
   const projects = projectsIn(
@@ -489,7 +504,22 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         .all();
       for (const row of found) details.set(row.itemId, linearIssueDetailOf(row));
     }
-    return rows.map((row) => toItem(row, details.get(row.id) ?? null));
+    // The warning mark: an Item's own, or (for a Todo) the Item's behind it.
+    const backedBy = (id: string) => {
+      const detail = details.get(id);
+      return detail?.kind === 'todo' ? detail.backedBy : null;
+    };
+    const marked = warnings.marked(
+      rows.flatMap((row) => {
+        const behind = backedBy(row.id);
+        return behind ? [row.id, behind] : [row.id];
+      }),
+    );
+    return rows.map((row) => {
+      const item = toItem(row, details.get(row.id) ?? null);
+      const at = marked.get(row.id) ?? marked.get(backedBy(row.id) ?? '');
+      return at === undefined ? item : { ...item, injectionWarning: { at } };
+    });
   }
 
   // Checks the state about to be written for an Item, and returns it as stored: a Block's title is its text.
@@ -932,6 +962,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const { activity } = schema;
     const target = db.select().from(activity).where(eq(activity.id, entryId)).get();
     if (!target) throw new ItemStoreError('not-found', `No activity entry ${entryId}`);
+    if (target.action === 'injection-warning') {
+      throw new ItemStoreError('invalid', 'An injection warning records what Ares found; it can’t be undone');
+    }
     if (db.select().from(activity).where(eq(activity.undoes, entryId)).get()) {
       throw new ItemStoreError('already-undone', `Activity entry ${entryId} is already undone`);
     }
@@ -1366,12 +1399,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           result.unchanged.push(existing.id);
           // Still judged: who the User is may be newly known, or the issue's cycle may be over.
           follow(existing.id, before);
+          // And still checked, so an Item saved before the steering check gets its mark.
+          warnings.check(existing, at, null);
           continue;
         }
         writeState(existing, after, at);
         const logged = log({ by, why: batch.why, action: 'update', itemId: existing.id, before, after }, at);
         applyRules(existing.id, at);
         follow(existing.id, before, logged.id);
+        warnings.check(requireItem(existing.id), at, logged.id);
         result.updated.push(existing.id);
         continue;
       }
@@ -1396,6 +1432,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       );
       applyRules(id, at);
       follow(id, null, logged.id);
+      warnings.check(requireItem(id), at, logged.id);
       result.created.push(id);
     }
     for (const externalId of batch.deleted) {
@@ -1439,6 +1476,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     outgoing,
     autonomy: openAutonomyStore(db, now),
     agent: openAgentStore(db, now),
+    injectionWarnings: {
+      flag: sqlite.transaction((itemId: string) => warnings.flag(itemId)),
+      since: (after) => warnings.since(after),
+    },
     search: { query: (query) => search.query(query) },
 
     saveFromSource,

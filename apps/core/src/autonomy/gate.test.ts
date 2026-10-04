@@ -499,6 +499,77 @@ describe('chained proposals', () => {
   });
 });
 
+describe('proposals caused by outside content', () => {
+  it('are chained when they reach beyond the Item that caused them: always Ask, showing the cause', () => {
+    everythingAuto();
+    // A job forgot (or a steered reply led it) to mark it chained.
+    const outcome = gate.propose(moveHold({ chained: false }));
+    expect(outcome).toMatchObject({ decision: 'ask', suggestion: { chained: true } });
+    expect(titleOf(hold)).toBe('Hold: Q3 review 2pm');
+    expect(gate.activity({ itemId: hold })[0]?.cause).toMatchObject({ item: { id: email } });
+  });
+
+  it('follow the Autonomy settings when they act on the outside Item itself', () => {
+    everythingAuto();
+    expect(gate.propose(archiveEmail())).toMatchObject({ decision: 'auto', done: { chained: false } });
+    expect(statusOf(email)).toBe('archived');
+  });
+
+  it('are chained when a step on the outside Item also reaches another Item', () => {
+    everythingAuto();
+    const outcome = gate.propose(
+      archiveEmail({
+        itemActions: [
+          { type: 'update', itemId: email, changes: { status: 'archived' } },
+          { type: 'link', from: email, linkType: 'refers-to', to: block },
+        ],
+      }),
+    );
+    expect(outcome).toMatchObject({ decision: 'ask', suggestion: { chained: true } });
+  });
+
+  it('are chained when they would put something into another Item, a Daily Note say', () => {
+    everythingAuto();
+    const note = store.ensureDailyNote('2026-10-02', user).id;
+    const outcome = gate.propose(
+      archiveEmail({
+        action: 'archive-email',
+        itemActions: [
+          {
+            type: 'create',
+            item: {
+              kind: 'block',
+              title: 'From Dana',
+              detail: {
+                kind: 'block',
+                dailyNoteId: note,
+                parentId: null,
+                position: 'a0',
+                text: 'From Dana',
+                folded: false,
+              },
+            },
+          },
+        ],
+      }),
+    );
+    expect(outcome).toMatchObject({ decision: 'ask', suggestion: { chained: true } });
+  });
+
+  it('count a cause in an activity entry a Source made as outside content', () => {
+    everythingAuto();
+    const synced = store.activity({ itemId: email }).find((entry) => entry.by.kind === 'source');
+    const outcome = gate.propose(suggestTodo({ causedBy: { entryId: synced?.id as number } }));
+    expect(outcome).toMatchObject({ decision: 'ask', suggestion: { chained: true } });
+    expect(todos()).toEqual([]);
+  });
+
+  it('leave a proposal caused by the User’s own words as it is', () => {
+    everythingAuto();
+    expect(gate.propose(suggestTodo())).toMatchObject({ decision: 'auto', done: { chained: false } });
+  });
+});
+
 describe('Ares’s activity', () => {
   it('lists what Ares did and suggested, newest first, filtered by Action kind and Section', () => {
     gate.propose(suggestTodo());

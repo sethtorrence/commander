@@ -1,6 +1,7 @@
-import { type DashboardBand, dashboardBands, type FiledBy } from '@commander/domain';
-import { CheckIcon, cn, Kbd, Led } from '@commander/ui';
+import { type DashboardBand, dashboardBands, type FiledBy, type Item } from '@commander/domain';
+import { AresText, CheckIcon, cn, Kbd, Led } from '@commander/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
@@ -252,8 +253,10 @@ function Row({
             <b className="font-semibold text-ink">{tag.stamp}</b>
             {tag.text}
           </span>
+          <ItemWarning item={item} className="h-[19px]" />
+          {/* A reason may be Ares's words (once he ranks the Dashboard): shown as AresText. */}
           <span className="ml-1 text-note leading-[19px] text-muted" data-testid="row-reason">
-            {row.reason}
+            <AresText inline text={row.reason} sources={wordsOf(item)} />
           </span>
         </div>
       </div>
@@ -352,6 +355,13 @@ function RowBadge({ row, title }: { row: FeedRow; title: string }) {
 const barButton =
   'flex h-7 cursor-pointer items-center gap-2 border border-line bg-sheet px-2.5 font-mono text-label-lg leading-none font-semibold uppercase tracking-label whitespace-nowrap text-ink hover:bg-raise [&+&]:border-l-0 [&_kbd]:h-4 [&_kbd]:min-w-4 [&_kbd]:border-current [&_kbd]:text-label [&_kbd]:text-inherit [&_kbd]:opacity-80';
 
+// Everything an Item says, for what Ares writes about it to link to (AresText).
+function wordsOf(item: Item): string[] {
+  if (item.detail?.kind !== 'linear-issue') return [item.title];
+  const { description, comments } = item.detail;
+  return [item.title, description ?? '', ...comments.map((comment) => comment.body)];
+}
+
 // What can be done with the selected row (.bar): tick, open in its Section, clear; and its Project.
 function ActionBar({
   row,
@@ -375,6 +385,7 @@ function ActionBar({
   return (
     // biome-ignore lint/a11y/useSemanticElements: a fieldset would bring a legend and form semantics
     <div role="group" aria-label="Actions" className="col-[3/5] mt-2.5 flex flex-wrap items-center">
+      <ItemWarning item={row.item} variant="pane" className="mb-2.5 basis-full" />
       {row.item.kind === 'todo' && (
         <button type="button" className={barButton} onClick={stop(onTick)}>
           <Kbd>X</Kbd>

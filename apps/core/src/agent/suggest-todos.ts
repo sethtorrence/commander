@@ -6,7 +6,8 @@
 //   and on the idle catch-up (or a request) over today's note as well.
 // - Sends each Block that might hold something to do (written, not an image, not a Todo already, no
 //   suggestion of Ares's waiting on it, and not looked at before with the same text), with the
-//   Blocks above it as context. Blocks are the User's own words, so it reads no outside content.
+//   Blocks above it as context. Blocks are the User's own words, so it reads no outside content
+//   (the prompt builder marks them trusted by where they came from).
 // - Each reply entry becomes a proposal on its Block, Organise / "Suggest Todos": create a Todo
 //   (origin Ares, the Block's Project as inherited) with a made-from Link to the Block. The gate adds
 //   it or keeps it as a suggestion for the margin of the Daily Note.
@@ -40,7 +41,9 @@ export const OUTPUT = z.object({
 type Output = z.infer<typeof OUTPUT>;
 
 type Offered = { ref: string; item: Item; text: string };
-type Input = JobInput & { offered: Offered[]; notes: { title: string; lines: string[] }[] };
+// Each Daily Note as the prompt shows it: its outline lines, and the Blocks they are (the User's own
+// words, so the prompt builder marks them trusted).
+type Input = JobInput & { offered: Offered[]; notes: { title: string; lines: string[]; blocks: Item[] }[] };
 
 const INSTRUCTIONS = `You are Ares. You find the things the User needs to do in their own Daily Note.
 
@@ -137,6 +140,7 @@ export function suggestTodosJob(
         children.set(parentOf(block), [...siblings, block]);
       }
       const lines: string[] = [];
+      const blocks: Item[] = [];
       const walk = (parent: string | null, depth: number) => {
         const position = (block: Item) => (block.detail?.kind === 'block' ? block.detail.position : '');
         const kids = [...(children.get(parent) ?? [])].sort((a, b) => (position(a) < position(b) ? -1 : 1));
@@ -147,6 +151,7 @@ export function suggestTodosJob(
             offered.push({ ref, item: block, text: textOf(block).trim() });
             mark = `[${ref}] `;
           }
+          blocks.push(block);
           lines.push(
             `${'  '.repeat(depth)}- ${mark}${textOf(block)
               .replace(/\s*\n\s*/g, ' ')
@@ -156,7 +161,7 @@ export function suggestTodosJob(
         }
       };
       walk(null, 0);
-      rendered.push({ title: note.title, lines });
+      rendered.push({ title: note.title, lines, blocks });
     }
     return { offered, notes: rendered };
   }
@@ -205,7 +210,7 @@ export function suggestTodosJob(
       instructions: INSTRUCTIONS,
       data: input.notes.map((note) => ({
         label: `Daily Note · ${note.title}`,
-        trust: 'trusted',
+        from: note.blocks,
         text: note.lines.join('\n'),
       })),
     }),

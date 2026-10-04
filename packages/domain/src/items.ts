@@ -102,6 +102,9 @@ export const item = z.object({
   updatedAt: timestamp,
   // Set when the Item was deleted (at its Source, or in Commander). Its Links and history remain.
   deletedAt: timestamp.nullable(),
+  // Present when the Item (or, for a Todo, the Item behind it) holds instructions aimed at Ares: the
+  // warning mark, shown wherever the Item is (injectionWarningText). Absent otherwise.
+  injectionWarning: z.object({ at: timestamp }).optional(),
 });
 export type Item = z.infer<typeof item>;
 
@@ -267,7 +270,18 @@ export const itemChange = z.discriminatedUnion('field', [
 ]);
 export type ItemChange = z.infer<typeof itemChange>;
 
-export const activityAction = z.enum(['create', 'update', 'delete', 'tombstone', 'link', 'unlink', 'undo']);
+// `injection-warning`: Ares found instructions aimed at him in an outside Item and ignored them
+// (recorded by Ares, never undone; the Update counts them).
+export const activityAction = z.enum([
+  'create',
+  'update',
+  'delete',
+  'tombstone',
+  'link',
+  'unlink',
+  'undo',
+  'injection-warning',
+]);
 export type ActivityAction = z.infer<typeof activityAction>;
 
 export const activityEntry = z.object({

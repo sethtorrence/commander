@@ -151,6 +151,15 @@ describe('a Linear Todo in the Todos Section', () => {
     expect(row().textContent).toContain('Fix the login loop');
   });
 
+  it('carries its issue’s warning mark, on its row and in its detail pane', async () => {
+    store.injectionWarnings.flag(issue().id);
+    renderSheet();
+    const warning = 'This Todo’s issue contains instructions aimed at Ares. He ignored them.';
+    await waitFor(() => expect(within(row()).getByRole('note', { name: warning })).toBeTruthy());
+    await press('Enter');
+    expect(within(pane()).getByRole('note').textContent).toContain(warning);
+  });
+
   it('ticks through to the issue with x, and undo moves the issue back', async () => {
     renderSheet();
     await waitFor(() => expect(row().textContent).toContain('ENG-418'));

@@ -11,6 +11,7 @@ import {
   type AutonomySettings,
   type AutonomyTarget,
   autonomyTarget,
+  createdIn,
   decide,
   HARD_LIMITS,
   isAllowed,
@@ -24,6 +25,7 @@ import {
   type StepTarget,
 } from '@commander/domain';
 import type { ItemStore } from '../item-store';
+import { trustOf } from '../safety/trust';
 
 export type Gate = {
   // Jobs register each action they propose, with its Action kind, so the Settings grid can list it.
@@ -182,6 +184,31 @@ export function openGate({
     });
   }
 
+  // Whether a proposal was caused by outside content (an untrusted Item, or a change a Source made)
+  // and reaches beyond the Item that caused it: then it is chained, so it always asks and shows its
+  // cause, whatever the job said (#22, #69). Acting on the outside Item itself (filing it, a Todo
+  // from it) follows the Autonomy settings.
+  function reachesBeyondOutsideCause(parsed: ReturnType<typeof proposalSchema.parse>): boolean {
+    const cause = parsed.causedBy;
+    if (!cause) return false;
+    const entry = cause.entryId ? itemStore.entry(cause.entryId) : null;
+    const causeItemId = cause.itemId ?? entry?.itemId;
+    const causeItem = causeItemId ? itemStore.get(causeItemId)?.item : undefined;
+    const outside = (causeItem && trustOf(causeItem) === 'untrusted') || entry?.by.kind === 'source';
+    if (!outside) return false;
+    const touched = new Set([parsed.itemId]);
+    const touch = (target: StepTarget) => typeof target === 'string' && touched.add(target);
+    for (const step of parsed.itemActions) {
+      if ('itemId' in step) touch(step.itemId);
+      if ('from' in step) {
+        touch(step.from);
+        touch(step.to);
+      }
+      if (step.type === 'create') for (const target of createdIn(step.item.detail)) touch(target);
+    }
+    return [...touched].some((itemId) => itemId !== causeItemId);
+  }
+
   // Whether a proposal follows from something a chained suggestion did: then it is chained too, so
   // a chain never continues on its own.
   function followsAChain(entryId: number | undefined): boolean {
@@ -278,7 +305,7 @@ export function openGate({
       checkSteps(parsed);
       checkStepsFitKind(parsed, action);
       if (!itemStore.get(parsed.itemId)) throw new GateError('not-found', `No Item ${parsed.itemId}`);
-      if (followsAChain(parsed.causedBy?.entryId)) parsed.chained = true;
+      if (followsAChain(parsed.causedBy?.entryId) || reachesBeyondOutsideCause(parsed)) parsed.chained = true;
 
       const decision = decide(parsed, settings());
       if (decision === 'off') return { decision };

@@ -7,6 +7,7 @@ export * from './block-links';
 export * from './block-projects';
 export * from './core-messages';
 export * from './daily-template';
+export * from './injection-warnings';
 export * from './ipc';
 export * from './item-store-messages';
 export * from './items';
