@@ -1,0 +1,388 @@
+[
+  {
+    "request": {
+      "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+        "value": [
+          {
+            "id": "AAMkAGI2-cal-default=",
+            "name": "Calendar",
+            "color": "auto",
+            "hexColor": "",
+            "isDefaultCalendar": true,
+            "changeKey": "ck-Calendar",
+            "canShare": true,
+            "canViewPrivateItems": true,
+            "canEdit": true,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": true,
+            "isRemovable": false,
+            "owner": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          {
+            "id": "AAMkAGI2-cal-titanlink=",
+            "name": "Titanlink",
+            "color": "lightGreen",
+            "hexColor": "#33b679",
+            "isDefaultCalendar": false,
+            "changeKey": "ck-Titanlink",
+            "canShare": true,
+            "canViewPrivateItems": true,
+            "canEdit": true,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": true,
+            "isRemovable": true,
+            "owner": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          }
+        ],
+        "@odata.nextLink": "https://graph.test/v1.0/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50&$skiptoken=cal-page-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/calendars?$select=id,name,color,hexColor,isDefaultCalendar,canEdit,owner&$top=50&$skiptoken=cal-page-2"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/calendars(id,name,color,hexColor,isDefaultCalendar,canEdit,owner)",
+        "value": [
+          {
+            "id": "AAMkAGI2-cal-usholidays=",
+            "name": "United States holidays",
+            "color": "lightOrange",
+            "hexColor": "",
+            "isDefaultCalendar": false,
+            "changeKey": "ck-United States holidays",
+            "canShare": false,
+            "canViewPrivateItems": false,
+            "canEdit": false,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": false,
+            "isRemovable": true,
+            "owner": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          {
+            "id": "AAMkAGI2-cal-dana=",
+            "name": "Dana Ruiz",
+            "color": "lightBlue",
+            "hexColor": "#4F9EE8",
+            "isDefaultCalendar": false,
+            "changeKey": "ck-Dana Ruiz",
+            "canShare": false,
+            "canViewPrivateItems": false,
+            "canEdit": false,
+            "allowedOnlineMeetingProviders": ["teamsForBusiness"],
+            "defaultOnlineMeetingProvider": "teamsForBusiness",
+            "isTallyingResponses": false,
+            "isRemovable": true,
+            "owner": {
+              "name": "Dana Ruiz",
+              "address": "dana@titanlink.test"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/calendars/AAMkAGI2-cal-default=/calendarView/delta?$deltatoken=default-delta-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#Collection(event)",
+        "@odata.deltaLink": "https://graph.test/v1.0/me/calendars/AAMkAGI2-cal-default=/calendarView/delta?$deltatoken=default-delta-2",
+        "value": [
+          {
+            "@odata.type": "#microsoft.graph.event",
+            "@odata.etag": "W/\"DwAAABYAAABdentist\"",
+            "id": "AAMkAGI2-evt-dentist=",
+            "createdDateTime": "2026-09-20T10:00:00.0000000Z",
+            "lastModifiedDateTime": "2026-10-02T08:00:00.0000000Z",
+            "changeKey": "ck-dentist",
+            "categories": [],
+            "transactionId": null,
+            "originalStartTimeZone": "GMT Standard Time",
+            "originalEndTimeZone": "GMT Standard Time",
+            "iCalUId": "040000008200E00074C5B7101A82E008-dentist",
+            "uid": "040000008200E00074C5B7101A82E008-dentist",
+            "reminderMinutesBeforeStart": 15,
+            "isReminderOn": true,
+            "hasAttachments": false,
+            "subject": "Dentist",
+            "bodyPreview": "Bring the form.",
+            "importance": "normal",
+            "sensitivity": "private",
+            "isAllDay": false,
+            "isCancelled": false,
+            "isOrganizer": true,
+            "responseRequested": true,
+            "seriesMasterId": null,
+            "showAs": "busy",
+            "type": "singleInstance",
+            "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-dentist%3D&exvsurl=1&path=/calendar/item",
+            "onlineMeetingUrl": null,
+            "isOnlineMeeting": false,
+            "onlineMeetingProvider": "unknown",
+            "allowNewTimeProposals": true,
+            "isDraft": false,
+            "hideAttendees": false,
+            "responseStatus": {
+              "response": "organizer",
+              "time": "0001-01-01T00:00:00Z"
+            },
+            "body": {
+              "contentType": "text",
+              "content": "Bring the form.\r\n"
+            },
+            "location": {
+              "displayName": "",
+              "locationType": "default",
+              "uniqueIdType": "unknown",
+              "address": {},
+              "coordinates": {}
+            },
+            "locations": [],
+            "recurrence": null,
+            "attendees": [],
+            "organizer": {
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            "onlineMeeting": null,
+            "start": {
+              "dateTime": "2026-10-08T10:00:00.0000000",
+              "timeZone": "UTC"
+            },
+            "end": {
+              "dateTime": "2026-10-08T10:45:00.0000000",
+              "timeZone": "UTC"
+            }
+          },
+          {
+            "@odata.type": "#microsoft.graph.event",
+            "@odata.etag": "W/\"DwAAABYAAABlunchpriya\"",
+            "id": "AAMkAGI2-evt-lunchpriya=",
+            "createdDateTime": "2026-09-20T10:00:00.0000000Z",
+            "lastModifiedDateTime": "2026-09-21T09:00:00.0000000Z",
+            "changeKey": "ck-lunchpriya",
+            "categories": [],
+            "transactionId": null,
+            "originalStartTimeZone": "GMT Standard Time",
+            "originalEndTimeZone": "GMT Standard Time",
+            "iCalUId": "040000008200E00074C5B7101A82E008-lunchpriya",
+            "uid": "040000008200E00074C5B7101A82E008-lunchpriya",
+            "reminderMinutesBeforeStart": 15,
+            "isReminderOn": true,
+            "hasAttachments": false,
+            "subject": "Lunch with Priya",
+            "bodyPreview": "",
+            "importance": "normal",
+            "sensitivity": "normal",
+            "isAllDay": false,
+            "isCancelled": false,
+            "isOrganizer": false,
+            "responseRequested": true,
+            "seriesMasterId": null,
+            "showAs": "busy",
+            "type": "singleInstance",
+            "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-lunchpriya%3D&exvsurl=1&path=/calendar/item",
+            "onlineMeetingUrl": null,
+            "isOnlineMeeting": false,
+            "onlineMeetingProvider": "unknown",
+            "allowNewTimeProposals": true,
+            "isDraft": false,
+            "hideAttendees": false,
+            "responseStatus": {
+              "response": "accepted",
+              "time": "2026-10-01T09:00:00Z"
+            },
+            "body": {
+              "contentType": "text",
+              "content": ""
+            },
+            "location": {
+              "displayName": "Dishoom",
+              "locationType": "default"
+            },
+            "locations": [],
+            "recurrence": null,
+            "attendees": [
+              {
+                "type": "required",
+                "status": {
+                  "response": "none",
+                  "time": "2026-09-21T09:00:00Z"
+                },
+                "emailAddress": {
+                  "name": "Priya Patel",
+                  "address": "priya@contoso.test"
+                }
+              },
+              {
+                "type": "required",
+                "status": {
+                  "response": "accepted",
+                  "time": "2026-09-21T09:00:00Z"
+                },
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              }
+            ],
+            "organizer": {
+              "emailAddress": {
+                "name": "Priya Patel",
+                "address": "priya@contoso.test"
+              }
+            },
+            "onlineMeeting": null,
+            "start": {
+              "dateTime": "2026-10-09T12:00:00.0000000",
+              "timeZone": "UTC"
+            },
+            "end": {
+              "dateTime": "2026-10-09T13:00:00.0000000",
+              "timeZone": "UTC"
+            }
+          },
+          {
+            "@odata.type": "#microsoft.graph.event",
+            "id": "AAMkAGI2-evt-designreview=",
+            "@removed": {
+              "reason": "deleted"
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/calendars/AAMkAGI2-cal-titanlink=/calendarView/delta?$deltatoken=projects-delta-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#Collection(event)",
+        "@odata.deltaLink": "https://graph.test/v1.0/me/calendars/AAMkAGI2-cal-titanlink=/calendarView/delta?$deltatoken=projects-delta-2",
+        "value": [
+          {
+            "@odata.type": "#microsoft.graph.event",
+            "@odata.etag": "W/\"DwAAABYAAABstandup-20261006\"",
+            "id": "AAMkAGI2-evt-standup-20261006=",
+            "createdDateTime": "2026-09-20T10:00:00.0000000Z",
+            "lastModifiedDateTime": "2026-09-21T09:00:00.0000000Z",
+            "changeKey": "ck-standup-20261006",
+            "categories": [],
+            "transactionId": null,
+            "originalStartTimeZone": "Pacific Standard Time",
+            "originalEndTimeZone": "Pacific Standard Time",
+            "iCalUId": "040000008200E00074C5B7101A82E008-standup-20261006",
+            "uid": "040000008200E00074C5B7101A82E008-standup-20261006",
+            "reminderMinutesBeforeStart": 15,
+            "isReminderOn": true,
+            "hasAttachments": false,
+            "subject": "Canceled: TL standup",
+            "bodyPreview": "",
+            "importance": "normal",
+            "sensitivity": "normal",
+            "isAllDay": false,
+            "isCancelled": true,
+            "isOrganizer": true,
+            "responseRequested": true,
+            "seriesMasterId": "AAMkAGI2-evt-standup=",
+            "showAs": "busy",
+            "type": "occurrence",
+            "webLink": "https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-standup-20261006%3D&exvsurl=1&path=/calendar/item",
+            "onlineMeetingUrl": null,
+            "isOnlineMeeting": false,
+            "onlineMeetingProvider": "unknown",
+            "allowNewTimeProposals": true,
+            "isDraft": false,
+            "hideAttendees": false,
+            "responseStatus": {
+              "response": "organizer",
+              "time": "0001-01-01T00:00:00Z"
+            },
+            "body": {
+              "contentType": "text",
+              "content": ""
+            },
+            "location": {
+              "displayName": "",
+              "locationType": "default",
+              "uniqueIdType": "unknown",
+              "address": {},
+              "coordinates": {}
+            },
+            "locations": [],
+            "recurrence": null,
+            "attendees": [
+              {
+                "type": "required",
+                "status": {
+                  "response": "accepted",
+                  "time": "2026-09-21T09:00:00Z"
+                },
+                "emailAddress": {
+                  "name": "Leo Park",
+                  "address": "leo@titanlink.test"
+                }
+              }
+            ],
+            "organizer": {
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            },
+            "onlineMeeting": null,
+            "start": {
+              "dateTime": "2026-10-06T15:00:00.0000000",
+              "timeZone": "UTC"
+            },
+            "end": {
+              "dateTime": "2026-10-06T15:15:00.0000000",
+              "timeZone": "UTC"
+            }
+          }
+        ]
+      }
+    }
+  }
+]

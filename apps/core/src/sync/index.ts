@@ -15,11 +15,14 @@ import {
   type Source,
 } from '@commander/domain';
 import {
+  type CalendarChoices,
   createGoogleCalendarSource,
   createLinearSource,
+  createOutlookCalendarSource,
   createTeamsSource,
   type GoogleCalendarSourceOptions,
   type LinearSourceOptions,
+  type OutlookCalendarSourceOptions,
   type SourceAdapter,
   type TeamsSourceOptions,
 } from '@commander/sources';
@@ -47,11 +50,31 @@ export type SyncOptions = {
   teamsSource?: (options: TeamsSourceOptions) => SourceAdapter;
   // For tests: stands in for the Google Calendar adapter.
   googleCalendarSource?: (options: GoogleCalendarSourceOptions) => SourceAdapter;
+  // For tests: stands in for the Outlook Calendar adapter.
+  outlookCalendarSource?: (options: OutlookCalendarSourceOptions) => SourceAdapter;
   random?: () => number;
   log?: (message: string) => void;
   // The Accounts changed, or whether one needs reconnecting did.
   onAccountsChanged?: () => void;
 };
+
+// Each calendar Account's calendars and the User's switches live in the Item store.
+export function calendarChoicesIn(
+  store: Pick<ItemStore, 'calendars' | 'calendarEvents'>,
+  source: 'google-calendar' | 'outlook-calendar',
+): CalendarChoices {
+  return {
+    listed: (account, calendars) => store.calendars.listed(account, source, calendars),
+    held: (account, calendarId) =>
+      store.calendarEvents({ source, account }, calendarId).map((item) => ({
+        externalId: item.externalId ?? '',
+        title: item.title,
+        people: item.people,
+        status: item.status,
+        detail: item.detail,
+      })),
+  };
+}
 
 const isSyncMessage = z.object({ type: z.enum(['sync-accounts', 'sync-command', 'system-state']) });
 
@@ -63,6 +86,7 @@ export function setUpSync(
     linearSource = createLinearSource,
     teamsSource = createTeamsSource,
     googleCalendarSource = createGoogleCalendarSource,
+    outlookCalendarSource = createOutlookCalendarSource,
     random,
     log = (message) => console.warn(message),
     onAccountsChanged,
@@ -79,18 +103,12 @@ export function setUpSync(
       teamsSource({ graphUrl: () => graphUrl }),
       googleCalendarSource({
         apiUrl: () => googleCalendarUrl,
-        // Each Account's calendars and the User's switches live in the Item store.
-        calendars: {
-          listed: (account, calendars) => store.calendars.listed(account, 'google-calendar', calendars),
-          held: (account, calendarId) =>
-            store.calendarEvents({ source: 'google-calendar', account }, calendarId).map((item) => ({
-              externalId: item.externalId ?? '',
-              title: item.title,
-              people: item.people,
-              status: item.status,
-              detail: item.detail,
-            })),
-        },
+        calendars: calendarChoicesIn(store, 'google-calendar'),
+      }),
+      // Outlook Calendar reaches Graph where Teams does.
+      outlookCalendarSource({
+        graphUrl: () => graphUrl,
+        calendars: calendarChoicesIn(store, 'outlook-calendar'),
       }),
     ],
     accessTokens,

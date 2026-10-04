@@ -1,5 +1,4 @@
 import type { ActivityEntry, CalendarSummary, Item } from '@commander/domain';
-import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -14,6 +13,7 @@ import {
   stillToCome,
 } from './agenda';
 import {
+  type CalendarAccount,
   type CalendarAccountsClient,
   type CalendarEvents,
   calendarSyncOf,
@@ -48,7 +48,7 @@ function loadHidden(storage: Storage): Set<string> {
 }
 
 // What changes when an Account syncs, so the events are read again.
-const syncSignature = (accounts: readonly GoogleAccountSummary[]) =>
+const syncSignature = (accounts: readonly CalendarAccount[]) =>
   accounts
     .map((account) => {
       const sync = calendarSyncOf(account);
@@ -73,7 +73,7 @@ export function useCalendar({
   timeZone: string;
   storage?: Storage;
 }) {
-  const [known, setAccounts] = useState<GoogleAccountSummary[] | null>(null);
+  const [known, setAccounts] = useState<CalendarAccount[] | null>(null);
   const accounts = useMemo(() => known ?? [], [known]);
   const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
   const [items, setItems] = useState<CalendarEvent[] | null>(null);
@@ -108,7 +108,7 @@ export function useCalendar({
   const synced = useRef<string | null>(null);
   useEffect(() => {
     let current = true;
-    const take = (next: GoogleAccountSummary[]) => {
+    const take = (next: CalendarAccount[]) => {
       if (!current) return;
       setAccounts(next);
       const signature = syncSignature(next);
@@ -123,8 +123,8 @@ export function useCalendar({
     };
   }, [accountsClient, reload]);
 
-  // Every Account's Google Calendar (or just these Accounts'), synced at once: on opening the Section,
-  // and on coming back from Google Calendar. Asked for before the Accounts are read, it waits for them.
+  // Every Account's calendars (or just these Accounts'), synced at once: on opening the Section,
+  // and on coming back from Google Calendar or Outlook. Asked for before the Accounts are read, it waits.
   const [refreshWanted, setRefreshWanted] = useState(false);
   const refresh = useCallback(
     (only?: readonly string[]) => {
@@ -144,12 +144,12 @@ export function useCalendar({
     for (const account of known) accountsClient.refresh(account.id).catch(report);
   }, [refreshWanted, known, accountsClient]);
 
-  // Calendars of Accounts no longer connected (or with Google Calendar off) aren't listed.
+  // Calendars of Accounts no longer connected (or with their calendar Source off) aren't listed.
   const listed = useMemo(() => {
     const ids = new Set(accounts.map((account) => account.id));
     return calendars.filter((calendar) => calendar.on && ids.has(calendar.account));
   }, [calendars, accounts]);
-  // Events of Accounts no longer syncing Google Calendar (switched off in Settings) aren't shown.
+  // Events of Accounts no longer syncing their calendars (switched off in Settings) aren't shown.
   const all = useMemo(() => {
     const ids = new Set(accounts.map((account) => account.id));
     return (items ?? []).filter((event) => event.account !== null && ids.has(event.account));

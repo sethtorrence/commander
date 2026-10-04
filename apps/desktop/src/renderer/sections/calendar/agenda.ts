@@ -4,7 +4,7 @@ import type { EventDetail, EventResponse, Item } from '@commander/domain';
   The Agenda's arithmetic, kept free of React and of the machine's clock and time zone (both are
   passed in), so it can be tested in any zone: which local days an event falls on, the order of a
   day's events, how their times read, how many of today's are still to come, and the addresses that
-  hand an event (or a new one) to Google Calendar.
+  hand an event (or a new one) to Google Calendar or Outlook on the web.
 */
 
 export type CalendarEvent = Item & { detail: EventDetail };
@@ -240,10 +240,29 @@ export function newEventUrl(email: string | null): string {
   return withAccount('https://calendar.google.com/calendar/r/eventedit', email);
 }
 
-/** The event at Google Calendar, opened as the Account it came through. Null when it has no link. */
+/**
+ * Outlook on the web's new-event page, for the Outlook Account with this address: work and school
+ * accounts at outlook.office.com, personal ones at outlook.live.com.
+ */
+export function newOutlookEventUrl(address: string | null, personal: boolean): string {
+  const compose = personal
+    ? 'https://outlook.live.com/calendar/0/deeplink/compose'
+    : 'https://outlook.office.com/calendar/deeplink/compose';
+  return address ? `${compose}?login_hint=${encodeURIComponent(address)}` : compose;
+}
+
+/**
+ * The event at its Source (Google Calendar, or Outlook on the web), opened as the Account it came
+ * through. Outlook's web link is kept exactly as Graph gave it, with only a sign-in hint added. Null
+ * when it has no link.
+ */
 export function editUrl(event: CalendarEvent): string | null {
   const { webUrl, accountEmail } = event.detail;
   if (!webUrl) return null;
+  if (event.source === 'outlook-calendar') {
+    if (!accountEmail) return webUrl;
+    return `${webUrl}${webUrl.includes('?') ? '&' : '?'}login_hint=${encodeURIComponent(accountEmail)}`;
+  }
   try {
     return withAccount(webUrl, accountEmail);
   } catch {

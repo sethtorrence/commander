@@ -9,6 +9,7 @@ import {
   daysOf,
   editUrl,
   newEventUrl,
+  newOutlookEventUrl,
   stillToCome,
   whenText,
 } from './agenda';
@@ -156,5 +157,27 @@ describe('handing over to Google Calendar', () => {
     const event = timed('Review', '2026-10-05T14:00:00Z', '2026-10-05T15:00:00Z');
     expect(editUrl(event)).toBe(`${event.detail.webUrl}&authuser=alex%40gmail.test`);
     expect(editUrl({ ...event, detail: { ...event.detail, webUrl: null } })).toBeNull();
+  });
+});
+
+describe('handing over to Outlook on the web', () => {
+  it('opens a new event for a work or school Account at outlook.office.com, and a personal one at outlook.live.com', () => {
+    expect(newOutlookEventUrl('sam@contoso.test', false)).toBe(
+      'https://outlook.office.com/calendar/deeplink/compose?login_hint=sam%40contoso.test',
+    );
+    expect(newOutlookEventUrl('sam@outlook.test', true)).toBe(
+      'https://outlook.live.com/calendar/0/deeplink/compose?login_hint=sam%40outlook.test',
+    );
+    expect(newOutlookEventUrl(null, false)).toBe('https://outlook.office.com/calendar/deeplink/compose');
+  });
+
+  it('opens an Outlook event at its web link as is, hinting the Account to sign in as', () => {
+    const webUrl =
+      'https://outlook.office365.com/owa/?itemid=AAMkAGI2-evt-x%3D&exvsurl=1&path=/calendar/item';
+    const event = timed('Review', '2026-10-05T14:00:00Z', '2026-10-05T15:00:00Z', {
+      webUrl,
+      accountEmail: 'sam@contoso.test',
+    });
+    expect(editUrl({ ...event, source: 'outlook-calendar' })).toBe(`${webUrl}&login_hint=sam%40contoso.test`);
   });
 });

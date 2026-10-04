@@ -213,19 +213,26 @@ export const linearRuleFields: readonly RuleField[] = [
   },
 ];
 
+// Google Calendar's and Outlook Calendar's fields: the shared calendar readers (calendar.ts), which
+// read the events of both, so a calendar Rule files Google and Microsoft events alike.
+export const googleCalendarRuleFields: readonly RuleField[] = eventRuleFields('google-calendar');
+export const outlookCalendarRuleFields: readonly RuleField[] = eventRuleFields('outlook-calendar');
+
 // Every Source's fields, by id. A Source adds its fields here (email: sender, domain; GitHub: org,
 // repo); matching and describing need nothing more.
-// Google Calendar's fields: the shared calendar readers (calendar.ts), which Outlook Calendar registers too.
-export const googleCalendarRuleFields: readonly RuleField[] = eventRuleFields('google-calendar');
-
 export const RULE_FIELDS: ReadonlyMap<string, RuleField> = new Map(
-  [...linearRuleFields, ...googleCalendarRuleFields].map((field) => [field.id, field]),
+  [...linearRuleFields, ...googleCalendarRuleFields, ...outlookCalendarRuleFields].map((field) => [
+    field.id,
+    field,
+  ]),
 );
 
-// The Sources whose fields Rules can use, with their fields in the editor's order.
+// The Sources whose fields Rules can use, with their fields in the editor's order. The calendar
+// fields read every calendar's events, so the editor offers them once, as Calendar (under the ids
+// Rules already use).
 export const RULE_SOURCES: readonly { source: string; name: string; fields: readonly RuleField[] }[] = [
   { source: 'linear', name: 'Linear', fields: linearRuleFields },
-  { source: 'google-calendar', name: 'Google Calendar', fields: googleCalendarRuleFields },
+  { source: 'calendar', name: 'Calendar', fields: googleCalendarRuleFields },
 ];
 
 // ---------------------------------------------------------------------------------------------

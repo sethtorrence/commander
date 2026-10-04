@@ -123,6 +123,9 @@ export type OutlookAccountSummary = AccountSummaryBase & {
   userPrincipalName: string;
   // Outlook (mail) and Outlook Calendar.
   sources: CarriedSource[];
+  // A personal Microsoft account (outlook.com), whose Outlook on the web is outlook.live.com rather
+  // than a work or school account's outlook.office.com.
+  personal?: boolean;
 };
 export type AccountSummary =
   | LinearAccountSummary

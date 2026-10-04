@@ -10,7 +10,10 @@ import type { AddressInfo } from 'node:net';
 // administrator approved only some), `GET /me`, and the AADSTS errors of a tenant that needs admin
 // consent; and
 // for Teams sync, the User's Chats: `GET /me/chats?$expand=lastMessagePreview`, a Chat's members, and
-// its messages newest-modified first, filtered on `lastModifiedDateTime`, paged with nextLinks.
+// its messages newest-modified first, filtered on `lastModifiedDateTime`, paged with nextLinks; and
+// for Outlook Calendar, `GET /me/calendars` and each calendar's `calendarView/delta` over a window,
+// paged by `Prefer: odata.maxpagesize`, ending in a delta link that later returns only changes
+// (deleted events as `@removed`), 410 SyncStateNotFound once delta links expire, and throttling.
 // Nothing here talks to the real Microsoft.
 
 export type FakeMicrosoftUser = { id: string; displayName: string; userPrincipalName: string };
@@ -35,6 +38,28 @@ export type FakeChat = {
   // When it was renamed or its members changed.
   updatedAt: number;
   messages: FakeChatMessage[];
+};
+
+// An Outlook calendar the fake serves (as `GET /me/calendars` lists it), with its events: Graph event
+// objects as calendarView returns them (instances of recurring events each their own, with times in
+// UTC), at least an `id`, `start` and `end`.
+export type FakeOutlookEvent = {
+  id: string;
+  start: { dateTime: string; timeZone: string };
+  end: { dateTime: string; timeZone: string };
+  [field: string]: unknown;
+};
+export type FakeOutlookCalendar = {
+  calendar: {
+    id: string;
+    name: string;
+    color?: string;
+    hexColor?: string;
+    isDefaultCalendar?: boolean;
+    canEdit?: boolean;
+    owner?: { name: string; address: string };
+  };
+  events: FakeOutlookEvent[];
 };
 
 // Microsoft's answers when a tenant won't let the User consent on their own.
@@ -76,6 +101,16 @@ export type FakeMicrosoft = {
   ): string;
   // The next Graph requests are refused with this status and Retry-After (seconds), until switched back.
   throttleGraph(answer: { status: 429 | 503; retryAfter: number } | null): void;
+  // Outlook Calendar: a user's calendars and their events (replacing any before).
+  setCalendars(userId: string, calendars: FakeOutlookCalendar[]): void;
+  // Adds an event to a calendar, or changes it (the next delta returns it).
+  putEvent(userId: string, calendarId: string, event: FakeOutlookEvent): void;
+  // Deletes an event (the next delta returns it as @removed).
+  removeEvent(userId: string, calendarId: string, eventId: string): void;
+  // Every delta link handed out so far stops working (410 SyncStateNotFound).
+  expireDeltaLinks(): void;
+  // The Prefer header of every calendar request.
+  calendarPrefers: string[];
   // How many refreshes Microsoft accepted.
   refreshes: number;
   // The user the next browser sign-in approves.
@@ -158,6 +193,27 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
   let refreshDelay = 0;
   const chats: FakeChat[] = [];
   let throttled: { status: 429 | 503; retryAfter: number } | null = null;
+  // Outlook Calendar: each user's calendars, every change numbered (`version`), deleted events kept
+  // with the change that deleted them, and the delta and page tokens handed out.
+  type CalendarState = {
+    calendar: FakeOutlookCalendar['calendar'];
+    events: Map<string, { event: FakeOutlookEvent; version: number }>;
+    removed: Map<string, number>;
+  };
+  type Window = { min: number; max: number };
+  const calendarsByUser = new Map<string, CalendarState[]>();
+  let version = 0;
+  let deltaGeneration = 0;
+  const deltaTokens = new Map<
+    string,
+    { calendarId: string; since: number; window: Window; generation: number }
+  >();
+  const pageTokens = new Map<string, { calendarId: string; rest: unknown[]; upTo: number; window: Window }>();
+  const calendarOf = (userId: string, calendarId: string) => {
+    const found = calendarsByUser.get(userId)?.find((each) => each.calendar.id === calendarId);
+    if (!found) throw new Error(`No fake calendar ${calendarId} for ${userId}`);
+    return found;
+  };
 
   const fake: FakeMicrosoft = {
     loginUrl: '',
@@ -203,6 +259,30 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     throttleGraph: (answer) => {
       throttled = answer;
     },
+    setCalendars: (userId, calendars) => {
+      calendarsByUser.set(
+        userId,
+        calendars.map(({ calendar, events }) => ({
+          calendar,
+          events: new Map(events.map((event) => [event.id, { event, version: ++version }])),
+          removed: new Map(),
+        })),
+      );
+    },
+    putEvent: (userId, calendarId, event) => {
+      const calendar = calendarOf(userId, calendarId);
+      calendar.events.set(event.id, { event, version: ++version });
+      calendar.removed.delete(event.id);
+    },
+    removeEvent: (userId, calendarId, eventId) => {
+      const calendar = calendarOf(userId, calendarId);
+      calendar.events.delete(eventId);
+      calendar.removed.set(eventId, ++version);
+    },
+    expireDeltaLinks: () => {
+      deltaGeneration += 1;
+    },
+    calendarPrefers: [],
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 
@@ -421,6 +501,104 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     return paged(response, url, messages);
   }
 
+  // Graph writes calendarView times in UTC without an offset, to seven decimals.
+  const utc = (time: { dateTime: string }) => Date.parse(`${time.dateTime.slice(0, 19)}Z`);
+  const inWindow = (event: FakeOutlookEvent, window: Window) =>
+    utc(event.end) > window.min && utc(event.start) < window.max;
+
+  function calendarList(user: FakeMicrosoftUser, url: URL, response: ServerResponse) {
+    const calendars = (calendarsByUser.get(user.id) ?? []).map(({ calendar }) => ({
+      color: 'auto',
+      hexColor: '',
+      isDefaultCalendar: false,
+      canEdit: true,
+      owner: { name: user.displayName, address: user.userPrincipalName },
+      ...calendar,
+    }));
+    return paged(response, url, calendars);
+  }
+
+  // `/me/calendars/{id}/calendarView/delta`: a window read in full, a page of one, or the changes
+  // since a delta link, a page at a time (`Prefer: odata.maxpagesize`), ending in a new delta link.
+  function calendarView(
+    user: FakeMicrosoftUser,
+    request: IncomingMessage,
+    url: URL,
+    response: ServerResponse,
+  ) {
+    const match = /^\/v1\.0\/me\/calendars\/([^/]+)\/calendarView\/delta$/.exec(url.pathname);
+    const calendarId = decodeURIComponent(match?.[1] ?? '');
+    const calendar = calendarsByUser.get(user.id)?.find((each) => each.calendar.id === calendarId);
+    if (!match || !calendar) {
+      return json(response, 404, {
+        error: { code: 'ErrorItemNotFound', message: 'The specified object was not found in the store.' },
+      });
+    }
+    const prefer = String(request.headers.prefer ?? '');
+    fake.calendarPrefers.push(prefer);
+    const pageSize = Number(/odata\.maxpagesize=(\d+)/.exec(prefer)?.[1] ?? 10) || 10;
+    const asEvent = (event: FakeOutlookEvent) => ({ '@odata.type': '#microsoft.graph.event', ...event });
+    let all: unknown[];
+    let upTo = version;
+    let window: Window;
+    const skip = url.searchParams.get('$skiptoken');
+    const delta = url.searchParams.get('$deltatoken');
+    if (skip !== null) {
+      const page = pageTokens.get(skip);
+      if (!page || page.calendarId !== calendarId) {
+        return json(response, 410, {
+          error: { code: 'SyncStateNotFound', message: 'The sync state generation is not found.' },
+        });
+      }
+      pageTokens.delete(skip);
+      ({ rest: all, upTo, window } = page);
+    } else if (delta !== null) {
+      const mark = deltaTokens.get(delta);
+      if (!mark || mark.calendarId !== calendarId || mark.generation < deltaGeneration) {
+        return json(response, 410, {
+          error: { code: 'SyncStateNotFound', message: 'The sync state generation is not found.' },
+        });
+      }
+      window = mark.window;
+      all = [
+        ...[...calendar.events.values()]
+          .filter((each) => each.version > mark.since && inWindow(each.event, window))
+          .map((each) => asEvent(each.event)),
+        ...[...calendar.removed.entries()]
+          .filter(([, removedAt]) => removedAt > mark.since)
+          .map(([id]) => ({
+            '@odata.type': '#microsoft.graph.event',
+            id,
+            '@removed': { reason: 'deleted' },
+          })),
+      ];
+    } else {
+      window = {
+        min: Date.parse(url.searchParams.get('startDateTime') ?? ''),
+        max: Date.parse(url.searchParams.get('endDateTime') ?? ''),
+      };
+      if (!Number.isFinite(window.min) || !Number.isFinite(window.max)) {
+        return json(response, 400, {
+          error: { code: 'ErrorInvalidParameter', message: 'startDateTime and endDateTime are required.' },
+        });
+      }
+      all = [...calendar.events.values()]
+        .filter((each) => inWindow(each.event, window))
+        .map((each) => asEvent(each.event));
+    }
+    const link = `${fake.graphUrl}/me/calendars/${encodeURIComponent(calendarId)}/calendarView/delta`;
+    const value = all.slice(0, pageSize);
+    const rest = all.slice(pageSize);
+    if (rest.length) {
+      const next = token('skip');
+      pageTokens.set(next, { calendarId, rest, upTo, window });
+      return json(response, 200, { value, '@odata.nextLink': `${link}?$skiptoken=${next}` });
+    }
+    const next = token('delta');
+    deltaTokens.set(next, { calendarId, since: upTo, window, generation: deltaGeneration });
+    return json(response, 200, { value, '@odata.deltaLink': `${link}?$deltatoken=${next}` });
+  }
+
   function graph(request: IncomingMessage, url: URL, response: ServerResponse) {
     fake.graphRequests.push(decodeURIComponent(url.pathname + url.search));
     const authorization = request.headers.authorization ?? '';
@@ -443,6 +621,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     }
     if (url.pathname === '/v1.0/me/chats') return paged(response, url, chats.map(graphChat));
     if (url.pathname.startsWith('/v1.0/chats/')) return chatResource(url, response);
+    if (url.pathname === '/v1.0/me/calendars') return calendarList(user, url, response);
+    if (url.pathname.startsWith('/v1.0/me/calendars/')) return calendarView(user, request, url, response);
     if (url.pathname === '/v1.0/me') {
       return json(response, 200, {
         '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#users/$entity',

@@ -10,8 +10,10 @@ import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
 import { TodoGroup } from '../todos/TodoGroup';
-import { editUrl, newEventUrl } from './agenda';
+import { editUrl, newEventUrl, newOutlookEventUrl } from './agenda';
 import {
+  addressOf,
+  type CalendarAccount,
   type CalendarAccountsClient,
   type CalendarEvents,
   calendarSyncLine,
@@ -52,6 +54,15 @@ function Keys() {
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
+// Where New event opens for an Account: Google Calendar, or Outlook on the web.
+const newEventFor = (account: CalendarAccount) =>
+  account.source === 'google'
+    ? { url: newEventUrl(account.email), where: 'Google Calendar' }
+    : {
+        url: newOutlookEventUrl(account.userPrincipalName, account.personal === true),
+        where: 'Outlook on the web',
+      };
+
 const systemTimeZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 const openInBrowser = (url: string) => {
   window.open(url, '_blank', 'noopener,noreferrer');
@@ -60,9 +71,10 @@ const openInBrowser = (url: string) => {
 /**
  * The Calendar Section's sheet: the sheet header, the Project filter, the sync status line, then the
  * Agenda (today first, each day's events in time order, all-day ones at the top) and, once an event
- * is opened, its detail pane. A side column lists every calendar, to show or hide each in this view.
- * Opening the Section asks every Google Account to sync its calendars; Edit and New event open
- * Google Calendar in the browser, and the Account is synced again when the window regains focus.
+ * is opened, its detail pane. Google and Outlook Accounts' events show together. A side column lists
+ * every calendar, grouped by Account, to show or hide each in this view. Opening the Section asks
+ * every calendar Account to sync; Edit and New event open Google Calendar or Outlook on the web in
+ * the browser, and the Account is synced again when the window regains focus.
  */
 export function CalendarSheet({
   events,
@@ -143,8 +155,15 @@ export function CalendarSheet({
 
   const status = calendarSyncLine(state.accounts, now);
   const syncing = state.accounts.some((account) => calendarSyncOf(account)?.activity === 'syncing');
-  const emailOf = new Map(state.accounts.map((account) => [account.id, account.email]));
+  const emailOf = new Map(state.accounts.map((account) => [account.id, addressOf(account)]));
   const total = state.entries.length;
+  // The side column's calendars, grouped by Account in the Accounts' order.
+  const calendarGroups = state.accounts
+    .map((account) => ({
+      account,
+      calendars: state.calendars.filter((calendar) => calendar.account === account.id),
+    }))
+    .filter((group) => group.calendars.length > 0);
 
   return (
     <>
@@ -161,15 +180,19 @@ export function CalendarSheet({
           <div className="flex items-end gap-5">
             {state.accounts.length > 0 && (
               <ButtonGroup>
-                {state.accounts.map((account) => (
-                  <Button
-                    key={account.id}
-                    onClick={() => handOff(newEventUrl(account.email), account.id)}
-                    title={`New event in Google Calendar for ${account.email}`}
-                  >
-                    New event{several ? ` · ${account.email}` : ''} <span aria-hidden="true">↗</span>
-                  </Button>
-                ))}
+                {state.accounts.map((account) => {
+                  const { url, where } = newEventFor(account);
+                  const address = addressOf(account);
+                  return (
+                    <Button
+                      key={account.id}
+                      onClick={() => handOff(url, account.id)}
+                      title={`New event in ${where} for ${address}`}
+                    >
+                      New event{several ? ` · ${address}` : ''} <span aria-hidden="true">↗</span>
+                    </Button>
+                  );
+                })}
               </ButtonGroup>
             )}
             <Keys />
@@ -196,7 +219,7 @@ export function CalendarSheet({
         </div>
         {state.loaded && state.accounts.length === 0 && total === 0 ? (
           <EmptySheet>
-            No Google Calendar connected yet. Connect a Google Account in Settings → Accounts (,).
+            No calendar connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).
           </EmptySheet>
         ) : (
           <PickBadgeProvider value={badges.open}>
@@ -265,30 +288,44 @@ export function CalendarSheet({
           <SideCard label="Calendars" title="Calendars" note={pad(state.calendars.length)}>
             {state.calendars.length ? (
               <ul className="m-0 list-none p-0" data-testid="calendar-list">
-                {state.calendars.map((calendar) => {
-                  const shown = !state.hidden.has(keyOfCalendar(calendar));
-                  return (
-                    <li
-                      key={keyOfCalendar(calendar)}
-                      className="flex min-h-9 items-center gap-2.5 border-b border-line2 px-2.5 last:border-b-0"
-                    >
-                      <CalendarSwatch colour={calendar.colour} />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-note text-ink">{calendar.name}</span>
-                        {several && (
-                          <span className="block truncate text-label text-muted">
-                            {emailOf.get(calendar.account)}
-                          </span>
-                        )}
-                      </span>
-                      <Switch
-                        aria-label={`Show ${calendar.name}`}
-                        checked={shown}
-                        onCheckedChange={(on) => state.setCalendarShown(calendar, on)}
-                      />
-                    </li>
-                  );
-                })}
+                {calendarGroups.map(({ account, calendars }) => (
+                  <li
+                    key={account.id}
+                    data-testid="calendar-group"
+                    className="border-b border-line2 last:border-b-0"
+                  >
+                    {several && (
+                      <p className="m-0 truncate px-2.5 pt-2 font-mono text-label leading-tight uppercase tracking-label text-muted">
+                        {addressOf(account)}
+                        <span className="text-faint">
+                          {' · '}
+                          {account.source === 'google' ? 'Google' : 'Outlook'}
+                        </span>
+                      </p>
+                    )}
+                    <ul className="m-0 list-none p-0" aria-label={`Calendars of ${addressOf(account)}`}>
+                      {calendars.map((calendar) => {
+                        const shown = !state.hidden.has(keyOfCalendar(calendar));
+                        return (
+                          <li
+                            key={keyOfCalendar(calendar)}
+                            className="flex min-h-9 items-center gap-2.5 border-b border-line2 px-2.5 last:border-b-0"
+                          >
+                            <CalendarSwatch colour={calendar.colour} />
+                            <span className="min-w-0 flex-1 truncate text-note text-ink">
+                              {calendar.name}
+                            </span>
+                            <Switch
+                              aria-label={`Show ${calendar.name}`}
+                              checked={shown}
+                              onCheckedChange={(on) => state.setCalendarShown(calendar, on)}
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </li>
+                ))}
               </ul>
             ) : (
               <p className="m-0 px-2.5 py-2 text-note text-faint">

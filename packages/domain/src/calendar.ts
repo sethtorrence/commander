@@ -3,13 +3,17 @@ import type { Item, Source } from './items';
 import type { RuleField, RuleFieldValue } from './rules';
 
 // The `event` kind detail: what calendar sync keeps of each event, shared by Google Calendar and
-// (later) Outlook Calendar. Recurring events arrive as their instances, each its own Item, naming the
+// Outlook Calendar. Recurring events arrive as their instances, each its own Item, naming the
 // series it belongs to. The description is plain text converted from the Source's HTML: untrusted
 // Source content, kept as data only and shown through the window's safe text rendering. People are
 // the organiser's and attendees' addresses. A cancelled event becomes a tombstone.
 
 const id = z.string().min(1);
 const timestamp = z.number().int().nonnegative();
+
+// The Sources whose Items are events: each Account's calendars come from one of them.
+export const calendarSources = ['google-calendar', 'outlook-calendar'] as const;
+export type CalendarSource = (typeof calendarSources)[number];
 
 // How someone answered an invitation (Google's `needsAction` is `needs-action`).
 export const eventResponses = ['accepted', 'tentative', 'declined', 'needs-action'] as const;
@@ -61,7 +65,7 @@ export const eventDetail = z.object({
   kind: z.literal('event'),
   calendar: eventCalendar,
   // The address of the Account the event came through (its primary calendar), when known: who the
-  // User is in it, and which account Google Calendar opens for "Edit" and "New event".
+  // User is in it, and which account Google Calendar or Outlook on the web opens for "Edit".
   accountEmail: z.string().nullable(),
   start: eventTime,
   end: eventTime,
@@ -92,7 +96,7 @@ export type EventDetail = z.infer<typeof eventDetail>;
 // User switches them off, subscribed ones (holidays, a colleague's) off until switched on.
 export const calendarSummary = z.object({
   account: id,
-  source: z.enum(['google-calendar', 'outlook-calendar']),
+  source: z.enum(calendarSources),
   id,
   name: z.string(),
   colour: z.string(),
@@ -119,9 +123,15 @@ export const eventQuery = z.object({
 export type EventQuery = z.input<typeof eventQuery>;
 
 // ---------------------------------------------------------------------------------------------
-// Rule fields: one set of readers, registered under each calendar Source's name.
+// Rule fields: one set of readers, registered under each calendar Source's name. Each reads the events
+// of every calendar Source alike, so a calendar Rule written once files Google and Microsoft events
+// both: people and titles are the same wherever an event comes from, and calendar and Account ids are
+// each Source's own, so "calendar is Standups" still matches only that calendar's events.
 
 type Readable = Pick<Item, 'kind' | 'source' | 'account' | 'title' | 'detail'>;
+
+const isCalendarSource = (source: Source | null): source is CalendarSource =>
+  (calendarSources as readonly (Source | null)[]).includes(source);
 
 const choices = ['is', 'is-not'] as const;
 
@@ -130,12 +140,10 @@ const personValue = (person: EventPerson): RuleFieldValue => ({
   label: person.name?.trim() || person.email,
 });
 
-/** The Rule fields of a calendar Source's events (`google-calendar.calendar`, …). */
-export function eventRuleFields(
-  source: Extract<Source, 'google-calendar' | 'outlook-calendar'>,
-): RuleField[] {
+/** The Rule fields of a calendar Source (`google-calendar.calendar`, …), reading every calendar event. */
+export function eventRuleFields(source: CalendarSource): RuleField[] {
   const event = (item: Readable) =>
-    item.source === source && item.detail?.kind === 'event' ? item.detail : null;
+    isCalendarSource(item.source) && item.detail?.kind === 'event' ? item.detail : null;
   return [
     {
       id: `${source}.calendar`,

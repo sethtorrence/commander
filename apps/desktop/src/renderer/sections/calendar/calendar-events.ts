@@ -1,5 +1,10 @@
-import type { ActivityEntry, CalendarSummary } from '@commander/domain';
-import type { AccountSummary, AccountsState, GoogleAccountSummary } from '@commander/domain/ipc';
+import type { ActivityEntry, CalendarSource, CalendarSummary } from '@commander/domain';
+import type {
+  AccountSummary,
+  AccountsState,
+  GoogleAccountSummary,
+  OutlookAccountSummary,
+} from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import { syncLine } from '../linear/linear-issues';
 import type { TodoLink } from '../todos/todos';
@@ -65,50 +70,70 @@ export function calendarSwitchesIn(itemStore: ItemStoreClient) {
 }
 export type CalendarSwitches = ReturnType<typeof calendarSwitchesIn>;
 
-/** The Google Accounts with Google Calendar on, as Settings → Accounts has them. */
+/** An Account carrying a calendar Source: a Google Account (Google Calendar) or an Outlook Account. */
+export type CalendarAccount = GoogleAccountSummary | OutlookAccountSummary;
+
+const CALENDAR_SOURCES = { google: 'google-calendar', outlook: 'outlook-calendar' } as const;
+
+/** The calendar Source an Account carries. */
+export const calendarSourceOf = (account: CalendarAccount): CalendarSource =>
+  CALENDAR_SOURCES[account.source];
+
+/** The address an Account signed in with, which names it in the Section. */
+export const addressOf = (account: CalendarAccount): string =>
+  account.source === 'google' ? account.email : account.userPrincipalName;
+
+/** The Google and Outlook Accounts with their calendar Source on, as Settings → Accounts has them. */
 export interface CalendarAccountsClient {
-  list(): Promise<GoogleAccountSummary[]>;
-  /** Syncs the Account's calendars at once (the sync engine's refresh of Google Calendar only). */
+  list(): Promise<CalendarAccount[]>;
+  /** Syncs the Account's calendars at once (the sync engine's refresh of its calendar Source only). */
   refresh(accountId: string): Promise<void>;
   /** Called with the Accounts whenever they or their syncing change. Returns the unsubscribe. */
-  onChange(listener: (accounts: GoogleAccountSummary[]) => void): () => void;
+  onChange(listener: (accounts: CalendarAccount[]) => void): () => void;
 }
 
 type AccountsBridge = Pick<Window['commander'], 'accounts' | 'onAccountsChanged'>;
 
-/** Whether an Account carries Google Calendar, switched on. */
-export const syncsCalendar = (account: AccountSummary): account is GoogleAccountSummary =>
-  account.source === 'google' &&
-  account.sources.some((carried) => carried.source === 'google-calendar' && carried.enabled);
+/** Whether an Account carries Google Calendar or Outlook Calendar, switched on. */
+export const syncsCalendar = (account: AccountSummary): account is CalendarAccount =>
+  (account.source === 'google' || account.source === 'outlook') &&
+  account.sources.some((carried) => carried.source === CALENDAR_SOURCES[account.source] && carried.enabled);
 
 const calendarAccounts = (state: AccountsState) => state.accounts.filter(syncsCalendar);
 
 export function calendarAccountsIn(bridge: AccountsBridge): CalendarAccountsClient {
+  // Each Account's calendar Source, as last listed, so a refresh names it.
+  const sources = new Map<string, CalendarSource>();
+  const remember = (accounts: CalendarAccount[]) => {
+    for (const account of accounts) sources.set(account.id, calendarSourceOf(account));
+    return accounts;
+  };
+  const list = async () => remember(calendarAccounts((await bridge.accounts({ op: 'list' })).state));
   return {
-    async list() {
-      return calendarAccounts((await bridge.accounts({ op: 'list' })).state);
-    },
+    list,
     async refresh(accountId) {
-      await bridge.accounts({ op: 'sync-now', accountId, source: 'google-calendar' });
+      if (!sources.has(accountId)) await list();
+      const source = sources.get(accountId);
+      if (source) await bridge.accounts({ op: 'sync-now', accountId, source });
     },
     onChange(listener) {
-      return bridge.onAccountsChanged((state) => listener(calendarAccounts(state)));
+      return bridge.onAccountsChanged((state) => listener(remember(calendarAccounts(state))));
     },
   };
 }
 
-/** Google Calendar's own sync status of an Account (it may carry Gmail too). */
-export const calendarSyncOf = (account: GoogleAccountSummary) =>
-  account.sources.find((carried) => carried.source === 'google-calendar')?.sync ?? null;
+/** The sync status of an Account's calendar Source (it may carry mail too). */
+export const calendarSyncOf = (account: CalendarAccount) =>
+  account.sources.find((carried) => carried.source === calendarSourceOf(account))?.sync ?? null;
 
 /** The Section's thin status line: "Synced 14:02", "Syncing…", or the problem, each Account named when several. */
 export function calendarSyncLine(
-  accounts: readonly GoogleAccountSummary[],
+  accounts: readonly CalendarAccount[],
   now: Date,
 ): { text: string; problem: boolean } {
-  if (!accounts.length) return { text: 'No Google Calendar connected', problem: false };
+  if (!accounts.length) return { text: 'No calendar connected', problem: false };
   return syncLine(
-    accounts.map((account) => ({ ...account, name: account.email, sync: calendarSyncOf(account) })),
+    accounts.map((account) => ({ ...account, name: addressOf(account), sync: calendarSyncOf(account) })),
     now,
   );
 }
