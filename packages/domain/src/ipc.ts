@@ -30,6 +30,8 @@ export const ipc = {
   windowFrame: 'window-frame',
   windowControl: 'window-control',
   windowFrameChanged: 'window-frame-changed',
+  // Settings → Notes → Markdown copy folder; see markdown-copy-messages.ts for the validated contract.
+  markdownCopy: 'markdown-copy',
 } as const;
 
 // What the header's window controls ask for.

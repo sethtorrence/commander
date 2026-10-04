@@ -72,6 +72,7 @@ import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { linearTodosIn } from './linear-todos';
+import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-copy-folder';
 import { type ModelStore, openModelStore } from './models';
 import { type OutgoingStore, openOutgoingQueue } from './outgoing';
 import { projectsIn } from './projects';
@@ -202,6 +203,11 @@ export type ItemStore = {
   autonomy: AutonomyStore;
   // Global search over the live Items, kept current by every write here.
   search: Search;
+  // A Project as a Link (or a `[[` link token) shows it: the one it was merged into, if it was. Null
+  // for no such Project.
+  projectRef(projectId: string): ProjectRef | null;
+  // Settings → Notes → Markdown copy folder (markdown-copy-folder.ts), in the same database.
+  markdownCopyFolder: MarkdownCopyFolderStore;
   close(): void;
 };
 
@@ -1467,6 +1473,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     saveAttachment: (bytes) => attachments.save(bytes),
+
+    projectRef(projectId) {
+      try {
+        return projectRefOf(projectId);
+      } catch (error) {
+        if (error instanceof ItemStoreError && error.code === 'not-found') return null;
+        throw error;
+      }
+    },
+
+    markdownCopyFolder: markdownCopyFolderIn(db, now),
 
     close() {
       sqlite.close();

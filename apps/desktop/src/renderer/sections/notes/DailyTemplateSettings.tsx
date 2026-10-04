@@ -14,6 +14,7 @@ import { SettingRow, SettingsGroup } from '../../settings/parts';
 import { useOutlineLinks } from './BlockLinks';
 import { TEMPLATE_DAY, templateIn } from './daily-template';
 import { dayKey } from './days';
+import { MarkdownCopySetting } from './MarkdownCopySetting';
 import { createNotebook } from './notebook';
 import { focusText, OutlineContext, type OutlineControls, OutlineView } from './OutlineView';
 import type { Caret } from './outline';
@@ -83,6 +84,7 @@ export function DailyTemplateSettings({ no }: { no: string }) {
           </div>
         </OutlineContext.Provider>
       </SettingRow>
+      <MarkdownCopySetting />
     </SettingsGroup>
   );
 }

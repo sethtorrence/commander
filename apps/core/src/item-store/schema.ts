@@ -387,3 +387,11 @@ export const rules = sqliteTable('rules', {
   updatedAt: integer('updated_at').notNull(),
   deletedAt: integer('deleted_at'),
 });
+
+// Settings → Notes → Markdown copy folder (#53): where the read-only Markdown copy of the Daily Notes
+// is written, in a single row; no row, or a null folder, while the copy is off.
+export const markdownCopy = sqliteTable('markdown_copy', {
+  id: integer('id').primaryKey(),
+  folder: text('folder'),
+  updatedAt: integer('updated_at').notNull(),
+});

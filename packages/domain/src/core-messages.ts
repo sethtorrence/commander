@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { markdownCopyStatus } from './markdown-copy-messages';
 
 // Messages the Core sends to the window.
 // Every message crossing a process seam is validated against this contract.
@@ -17,7 +18,15 @@ const itemsChanged = z.object({
   itemIds: z.array(z.string().min(1)).min(1),
 });
 
-export const coreMessage = z.discriminatedUnion('type', [heartbeat, aresActivity, itemsChanged]);
+// How the Markdown copy of the Daily Notes stands changed (markdown-copy-messages.ts): Settings shows it.
+const markdownCopyChanged = z.object({ type: z.literal('markdown-copy-status'), status: markdownCopyStatus });
+
+export const coreMessage = z.discriminatedUnion('type', [
+  heartbeat,
+  aresActivity,
+  itemsChanged,
+  markdownCopyChanged,
+]);
 export type CoreMessage = z.infer<typeof coreMessage>;
 
 export type CoreMessageParseResult = { ok: true; message: CoreMessage } | { ok: false; error: string };

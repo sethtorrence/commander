@@ -6,6 +6,8 @@ import type {
   ItemStoreRequest,
   ItemStoreResponse,
   ItemStoreResults,
+  MarkdownCopyRequest,
+  MarkdownCopyResponse,
   ModelProvider,
   ModelsRequest,
   ModelsResponse,
@@ -66,6 +68,10 @@ const commander = {
     if (!response.ok) throw new Error(response.error);
     return response.result;
   },
+  // Settings → Notes → Markdown copy folder. The folder comes only from the system picker, which the
+  // main process shows; resolves with the refusal's reason, if any.
+  markdownCopy: (request: MarkdownCopyRequest): Promise<MarkdownCopyResponse> =>
+    ipcRenderer.invoke(ipc.markdownCopy, request),
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
   // Settings → Accounts. Answers carry Account summaries, never a token or key.
