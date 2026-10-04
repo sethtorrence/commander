@@ -4,12 +4,38 @@ import {
   type ActivityEntry,
   type ChatSettingChange,
   type CoreItemStoreReply,
+  decide,
   itemStoreRequest,
+  type SummaryWriterState,
+  WRITE_GITHUB_SUMMARY,
 } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from './item-store';
 
 const envelope = z.object({ type: z.literal('item-store-request'), id: z.number().int().positive() });
+
+// How Ares's GitHub summary writing stands (#121): his job's last run, and whether it may run at all.
+export function summaryWriter(store: ItemStore): SummaryWriterState {
+  const job = store.agent.job(WRITE_GITHUB_SUMMARY);
+  const off =
+    decide(
+      {
+        action: WRITE_GITHUB_SUMMARY,
+        actionKind: 'organise',
+        section: 'github',
+        confidence: 1,
+        chained: false,
+      },
+      store.autonomy.settings(),
+    ) === 'off';
+  return {
+    enabled: job.enabled,
+    off,
+    lastRunAt: job.lastRunAt,
+    lastOutcome: job.lastOutcome,
+    lastProblem: job.lastProblem,
+  };
+}
 
 function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] {
   const parsed = itemStoreRequest.safeParse(raw);
@@ -116,6 +142,19 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
             ...(request.projectId !== undefined && { projectId: request.projectId }),
           }),
         };
+      case 'github-summaries':
+        return {
+          ok: true,
+          result: {
+            summaries: store.githubSummaries.list({
+              ...(request.cadences && { cadences: request.cadences }),
+              ...(request.limit && { limit: request.limit }),
+            }),
+            writer: summaryWriter(store),
+          },
+        };
+      case 'github-summary-seen':
+        return { ok: true, result: store.githubSummaries.markSeen(request.itemId) };
       case 'github-oversight-settings':
         return { ok: true, result: store.githubOversight.settings() };
       case 'save-github-oversight-settings':

@@ -12,7 +12,8 @@ function GitHubSection() {
   const work = useMemo(() => githubWorkIn(window.commander.itemStore, window.commander), []);
   const accounts = useMemo(() => githubAccountsIn(window.commander), []);
   // The oversight summary at the top (#119), worked out by the Core.
-  const oversight = useMemo(() => oversightIn(window.commander.itemStore), []);
+  // Ares writes it (#121): asking him goes through the Updates channel, like his other Skills.
+  const oversight = useMemo(() => oversightIn(window.commander.itemStore, window.commander.updates), []);
   return <GitHubSheet work={work} accounts={accounts} changes={itemChangesFromCore} oversight={oversight} />;
 }
 

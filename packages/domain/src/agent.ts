@@ -61,6 +61,7 @@ export const AGENT_JOB_NAMES: Record<string, string> = {
   'suggest-todos-from-teams': 'Suggest Todos from Teams',
   'draft-reply': 'Draft a reply',
   'suggest-teams-replies': 'Suggest Teams replies',
+  'write-github-summary': 'Write the GitHub summary',
 };
 
 export const jobDisplayName = (job: string): string => AGENT_JOB_NAMES[job] ?? job;

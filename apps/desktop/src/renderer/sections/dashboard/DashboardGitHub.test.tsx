@@ -204,3 +204,71 @@ describe('GitHub on the Dashboard', () => {
     await waitFor(() => expect(titles('Today')).toEqual(['acme/api#20 Cache session lookups']));
   });
 });
+
+describe('Ares’s GitHub summary on the Dashboard (#121)', () => {
+  function summary(title: string, onFire: string[] = [], writtenAt = NOW - 2 * HOUR): string {
+    return store.record(
+      {
+        type: 'create',
+        item: {
+          kind: 'github-summary',
+          title,
+          detail: {
+            kind: 'github-summary',
+            cadence: 'daily',
+            day: '2026-10-03',
+            range: { from: NOW - DAY, to: writtenAt },
+            choice: null,
+            writtenAt,
+            sections: [],
+            onFire,
+            counts: { shipped: 3, started: 1, stuck: 1, onFire: onFire.length },
+            seenAt: null,
+          },
+        },
+      },
+      { by: { kind: 'ares' } },
+    ).itemId;
+  }
+
+  it('is one row for the latest, in FYI with its counts', async () => {
+    summary('GitHub summary · since Thu 1 Oct', [], NOW - DAY);
+    summary('GitHub summary · since yesterday');
+    renderSheet();
+    await waitFor(() => expect(titles('FYI')).toContain('GitHub summary · since yesterday'));
+    expect(titles('FYI')).not.toContain('GitHub summary · since Thu 1 Oct');
+    const shown = row('GitHub summary · since yesterday');
+    expect(within(shown).getByTestId('source-stamp').textContent).toBe('ARESGitHub summary');
+    expect(within(shown).getByTestId('row-reason').textContent).toBe('3 shipped · 1 started · 1 stuck');
+  });
+
+  it('sits in Today when something is on fire, and Enter opens it in the GitHub Section', async () => {
+    const id = summary('GitHub summary · since yesterday', ['Main is failing on acme/titanlink-api']);
+    renderSheet();
+    await waitFor(() => expect(titles('Today')).toContain('GitHub summary · since yesterday'));
+    expect(within(row('GitHub summary · since yesterday')).getByTestId('row-reason').textContent).toBe(
+      'Main is failing on acme/titanlink-api',
+    );
+    const heard: string[] = [];
+    const stop = onReveal('github', (itemId) => heard.push(itemId));
+    fireEvent.click(row('GitHub summary · since yesterday'));
+    await press('Enter');
+    expect(controls.openSection).toHaveBeenLastCalledWith('github');
+    expect(heard).toEqual([id]);
+    stop();
+  });
+
+  it('clears with e until the next one', async () => {
+    summary('GitHub summary · since yesterday');
+    renderSheet();
+    await waitFor(() => expect(titles('FYI')).toContain('GitHub summary · since yesterday'));
+    fireEvent.click(row('GitHub summary · since yesterday'));
+    await press('e');
+    await waitFor(() => expect(titles('FYI')).not.toContain('GitHub summary · since yesterday'));
+    summary('GitHub summary · since this morning', [], NOW - HOUR);
+    act(() => {
+      window.dispatchEvent(new Event('focus'));
+    });
+    await waitFor(() => expect(titles('FYI')).toContain('GitHub summary · since this morning'));
+  });
+});

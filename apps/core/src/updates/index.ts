@@ -29,6 +29,7 @@ import {
   DRAFT_REPLIES,
   DRAFT_SKILL,
   decide,
+  type GitHubSummaryAnswer,
   type GivenUpdate,
   HARD_LIMITS,
   isAllowed,
@@ -40,6 +41,7 @@ import {
   type SnoozeChoice,
   SUMMARISE_SKILL,
   type SummaryRange,
+  type SummaryRequest,
   UPDATE_SKILL,
   UPDATES_MESSAGES,
   type UpdateLine,
@@ -89,6 +91,10 @@ export type UpdatesOptions = {
   onState?: (state: UpdatesState) => void;
   // The User stopped being active: the Agent's catch-up work can run.
   onIdle?: () => void;
+  // The User came back to the machine: the daily GitHub summary may be due (#121).
+  onReturn?: () => void;
+  // Ask Ares to write the GitHub summary for a range and scope (#121).
+  summariseGitHub?: (request: SummaryRequest) => Promise<GitHubSummaryAnswer>;
   // Items the Update's steering flag marked.
   onItemsChanged?: (itemIds: string[]) => void;
   // Replies to the window's requests (through the main process).
@@ -156,7 +162,10 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     now,
     onChange: () => reportState(),
     // Back at the machine: the Update is put together now, so it is ready when asked for.
-    onReturn: () => void prepare(),
+    onReturn: () => {
+      options.onReturn?.();
+      void prepare();
+    },
     onLeave: () => options.onIdle?.(),
   });
 
@@ -204,7 +213,12 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
             injectionWarnings: itemStore.injectionWarnings,
             onItemsChanged: options.onItemsChanged,
             log,
-            apart: new Set(lines.filter((line) => line.about.kind === 'chat-summary').map((line) => line.id)),
+            // A busy Chat's line is worded alongside; a GitHub summary's is Ares's own words already.
+            apart: new Set(
+              lines
+                .filter((line) => line.about.kind === 'chat-summary' || line.about.kind === 'github-summary')
+                .map((line) => line.id),
+            ),
           }),
         ]).then(([written, composed]) => ({
           texts: new Map([...composed.texts, ...written]),
@@ -428,6 +442,9 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
           return { ok: true, result: await summarise(request.itemId, request.range) };
         case 'draft-reply':
           return { ok: true, result: await draft(request.itemId) };
+        case 'summarise-github':
+          if (!options.summariseGitHub) return { ok: false, error: 'Ares isn’t running' };
+          return { ok: true, result: await options.summariseGitHub(request.request) };
         case 'history':
           return { ok: true, result: history(request.limit) };
         case 'past':

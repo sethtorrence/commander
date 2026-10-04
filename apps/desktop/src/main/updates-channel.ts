@@ -19,6 +19,8 @@ const TIMEOUTS: Record<UpdatesOp, number> = {
   'run-skill': 90_000,
   'summarise-chat': 90_000,
   'draft-reply': 90_000,
+  // Ares writing a GitHub summary: the pull requests' detail fetched first, then a Deep call.
+  'summarise-github': 150_000,
   history: 10_000,
   past: 10_000,
   act: 10_000,

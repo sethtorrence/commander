@@ -100,6 +100,10 @@ function startCore(secrets: Secrets) {
     ...(testHooks && process.env.COMMANDER_TEST_ARES_PAUSE_MS
       ? [`--ares-typing-pause-ms=${process.env.COMMANDER_TEST_ARES_PAUSE_MS}`]
       : []),
+    // And the hour the daily GitHub summary is due from (05:00 otherwise).
+    ...(testHooks && process.env.COMMANDER_TEST_SUMMARY_HOUR
+      ? [`--github-summary-hour=${process.env.COMMANDER_TEST_SUMMARY_HOUR}`]
+      : []),
   ]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));

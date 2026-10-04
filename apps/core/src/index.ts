@@ -94,6 +94,8 @@ const githubOversight = setUpGitHubOversight(itemStore, {
 sync.engine.onSynced((event) => {
   void githubOversight.synced(event).then((itemIds) => {
     if (itemIds.length) port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
+    // Once the pull requests' detail is in, the daily GitHub summary may be due (#121).
+    if (event.source === 'github' && event.outcome === 'synced') void agent.githubSummaries.due();
   });
 });
 // The email reader (#134): each message's HTML sanitised for the sandboxed frame, its parts fetched
@@ -150,6 +152,10 @@ const gate = openGate({
 const typingPauseMs = Number(
   process.argv.find((arg) => arg.startsWith('--ares-typing-pause-ms='))?.split('=')[1] ?? Number.NaN,
 );
+// The end-to-end tests may have the daily GitHub summary due from another hour than 05:00.
+const summaryHour = Number(
+  process.argv.find((arg) => arg.startsWith('--github-summary-hour='))?.split('=')[1] ?? Number.NaN,
+);
 const agent = setUpAgent(itemStore, {
   gate,
   client: models.client,
@@ -162,6 +168,15 @@ const agent = setUpAgent(itemStore, {
   enqueue: (input) => updates?.queue.enqueue(input),
   // Who the User is in each Account: their Linear user, their Teams user.
   me: (account) => sync.me(account),
+  // The GitHub summary (#121): the pull requests' detail fetched first, and each one written is for
+  // the Update to mention.
+  prepareWriterDetails: (itemIds) => githubOversight.prepareWriterDetails(itemIds),
+  summaryHour: testHooks && Number.isFinite(summaryHour) ? summaryHour : undefined,
+  onSummaryWritten: () => {
+    updates?.sweep();
+    // The Dashboard reads its row again.
+    port.postMessage({ type: 'ares-activity', at: Date.now() } satisfies CoreMessage);
+  },
 });
 sync.engine.onSynced((event) => agent.synced(event));
 
@@ -186,6 +201,10 @@ updates = setUpUpdates({
   send: (message) => port.postMessage(message),
   onState: (state) => port.postMessage({ type: 'ares-updates', ...state } satisfies CoreMessage),
   onIdle: () => agent.idle(),
+  // Back at the machine: the daily GitHub summary may be due.
+  onReturn: () => agent.active(),
+  // Ask Ares to write the GitHub summary (#121).
+  summariseGitHub: (request) => agent.githubSummaries.ask(request),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
@@ -280,6 +299,9 @@ port.on('message', ({ data }) => {
   }
   // A snooze set or undone: the next one may be due sooner.
   if (changedIds.length) snooze.changed();
+  // A GitHub summary opened: its Update line goes.
+  if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'github-summary-seen')
+    updates?.sweep();
   // Today's Daily Note made (Notes opening, or the date passing midnight): its meeting chips go in.
   if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'daily-note')
     meetings.refresh();

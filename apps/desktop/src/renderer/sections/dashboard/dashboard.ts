@@ -19,8 +19,9 @@ import { type SuggestedTodo, suggestedTodoOf } from './suggested-todos';
 
 export interface DashboardClient {
   /**
-   * The open Items the Dashboard ranks: open Todos, Linear issues and Teams Chats, not deleted, and
-   * today's and tomorrow's events (its schedule; the next meeting is ranked into Now).
+   * The open Items the Dashboard ranks: open Todos, Linear issues and Teams Chats, not deleted,
+   * today's and tomorrow's events (its schedule; the next meeting is ranked into Now), GitHub's open
+   * work, and Ares's latest GitHub summary.
    */
   items(): Promise<Item[]>;
   /** The Chats the User muted or excluded (muted ones never reach the Dashboard). */
@@ -110,7 +111,7 @@ export function dashboardIn(
       const today = dayKey(clock(), timeZone);
       const from = dayStart(today, timeZone);
       const to = dayStart(addDays(today, 2), timeZone);
-      const [todos, issues, events, chats, invitations, work] = await Promise.all([
+      const [todos, issues, events, chats, invitations, work, summaries] = await Promise.all([
         itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
         itemStore({ op: 'events', query: { from, to, limit: MOST } }),
@@ -122,6 +123,8 @@ export function dashboardIn(
           op: 'query',
           query: { kinds: ['review-request', 'pull-request'], statuses: ['open'], limit: MOST },
         }),
+        // Ares's latest daily GitHub summary or Monday roll-up (#121): one row, FYI or Today.
+        itemStore({ op: 'github-summaries', cadences: ['daily', 'weekly'], limit: 1 }),
       ]);
       const shown = new Set(events.map((event) => event.id));
       return [
@@ -131,6 +134,7 @@ export function dashboardIn(
         ...chats,
         ...invitations.filter((item) => !shown.has(item.id)),
         ...work,
+        ...summaries.summaries,
       ];
     },
 

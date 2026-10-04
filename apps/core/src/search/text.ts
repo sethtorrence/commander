@@ -24,10 +24,10 @@ export type SearchText = { title: string; identifier: string; body: string };
 
 /**
  * The Item's searchable text, or null when it has none or shouldn't be found (a tombstone, or Ares's
- * meeting prep, shown with its meeting rather than on its own).
+ * meeting prep, shown with its meeting rather than on its own, or his GitHub summary, in the GitHub Section).
  */
 export function searchTextOf(item: SearchableItem): SearchText | null {
-  if (item.deletedAt !== null || item.kind === 'meeting-prep') return null;
+  if (item.deletedAt !== null || item.kind === 'meeting-prep' || item.kind === 'github-summary') return null;
   const detail = item.detail;
   let identifier = '';
   let body = '';

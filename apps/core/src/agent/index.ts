@@ -2,7 +2,8 @@
 // it when the User changes Items (typing in a Daily Note becomes a pause trigger once it stops, and a
 // change to Todos or Linear issues a Todos-changed one), when Ares did or suggested something, and
 // when a Source has synced; it works out for itself when the machine has been idle long enough for
-// catch-up work. The main process's idle and lock reports (Updates, #70) call `idle()` too.
+// catch-up work. The main process's idle and lock reports (Updates, #70) call `idle()` too, and the
+// User coming back calls `active()`: the daily GitHub summary may be due (#121).
 import { type CoreMessage, DRAFT_REPLIES, type Enqueue, SUGGEST_TEAMS_REPLIES } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import type { Gate } from '../autonomy/gate';
@@ -12,6 +13,7 @@ import type { SyncedEvent } from '../sync';
 import { blockTimeForTodosJob } from './block-time-for-todos';
 import { fileIntoProjectsJob } from './file-into-projects';
 import { createFiling, type Filing } from './filing';
+import { createGitHubSummaries, type GitHubSummaries } from './github-summaries';
 import { prepareMeetingsJob } from './prepare-meetings';
 import { proposeEventsJob } from './propose-events';
 import { rankDashboardJob } from './rank-dashboard';
@@ -23,6 +25,7 @@ import { suggestChatTodosJob } from './suggest-chat-todos';
 import { dismissAnsweredInvitations, suggestInvitationRepliesJob } from './suggest-invitation-replies';
 import { dismissSettledReplies, suggestTeamsRepliesJob } from './suggest-teams-replies';
 import { suggestTodosJob } from './suggest-todos';
+import { writeGitHubSummaryJob } from './write-github-summary';
 
 export type { JobRunner } from './runner';
 
@@ -43,6 +46,12 @@ export type AgentOptions = {
   enqueue?: (input: Enqueue) => unknown;
   // Who the User is in an Account (their Linear or Teams user id), from Source sync, when known.
   me?: (account: string) => string | null;
+  // The GitHub summary (#121): fetches the writer's detail of pull requests before Ares reads them,
+  // the hour the daily summary is due from (the end-to-end tests start it at midnight), and word of
+  // each one written.
+  prepareWriterDetails?: (itemIds: readonly string[]) => Promise<void>;
+  summaryHour?: number;
+  onSummaryWritten?: (itemId: string) => void;
   log?: (message: string) => void;
 };
 
@@ -57,6 +66,11 @@ export type Agent = {
   aresChanged(): void;
   // The machine is idle: catch-up work.
   idle(): void;
+  // The User is at the machine (back after being away, or Commander started): the daily GitHub
+  // summary may be due.
+  active(): void;
+  // Ares's GitHub summaries: what is due, and asking him for one (#121).
+  githubSummaries: GitHubSummaries;
   stop(): void;
 };
 
@@ -78,6 +92,13 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     dismissStale();
     runner.run(SUGGEST_TEAMS_REPLIES, itemIds);
   };
+  const summaryJob = writeGitHubSummaryJob(itemStore, {
+    now,
+    onWritten: (itemId) => {
+      options.onItemsChanged?.([itemId]);
+      options.onSummaryWritten?.(itemId);
+    },
+  });
   const runner: JobRunner = createJobRunner({
     jobs: [
       suggestTodosJob(itemStore, { now }),
@@ -95,6 +116,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       suggestTeamsRepliesJob(itemStore, { now, me: options.me }),
       blockTimeForTodosJob(itemStore, { now }),
       proposeEventsJob(itemStore, { now }),
+      summaryJob,
     ],
     client: options.client,
     gate: options.gate,
@@ -160,11 +182,24 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     Math.min(IDLE_CHECK_MS, idleAfterMs),
   );
 
+  const githubSummaries = createGitHubSummaries({
+    itemStore,
+    runner,
+    job: summaryJob,
+    prepareWriterDetails: options.prepareWriterDetails,
+    now,
+    hour: options.summaryHour,
+    log: options.log,
+  });
+  const summariesDue = () => void githubSummaries.due();
+
   // Anything the User wrote while Commander was closed (or before it last ran): once the pause is
   // up, the jobs that follow typing look at what changed since their last run.
   runner.trigger({ kind: 'typing', itemIds: [] });
   // The meetings ahead, for the jobs that run before them (meeting prep).
   runner.replan();
+  // Commander starting counts as the User being here: the daily GitHub summary may be due.
+  summariesDue();
 
   return {
     runner,
@@ -206,6 +241,8 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     },
 
     idle,
+    active: summariesDue,
+    githubSummaries,
 
     stop() {
       clearInterval(watch);
