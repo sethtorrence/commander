@@ -126,6 +126,16 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     count: z.number().int().positive(),
     since: timestamp,
   }),
+  // Ares's latest unseen GitHub summary (#121), daily or the Monday roll-up: its first lines (his
+  // words, shown with AresText), with Open. A newer one takes its place; opening it marks it seen and
+  // the line goes. `label` says what it covers ("GitHub summary · since yesterday").
+  z.object({
+    kind: z.literal('github-summary'),
+    summaryId: itemId,
+    label: z.string().min(1),
+    lead: z.string().min(1),
+    onFire: z.boolean(),
+  }),
   // "Always file Linear team OPS under TX?" (#71): the User's corrections and confirmations point one
   // Source field value at one Project often enough. Accepting opens the Rule, filled in, to go at the
   // top of the list; dismissing it stops it coming back.

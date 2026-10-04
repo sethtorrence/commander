@@ -26,6 +26,8 @@ const KINDS: Record<string, { tag: string; section: string | null }> = {
   'review-request': { tag: 'GH', section: 'github' },
   'github-issue': { tag: 'GH', section: 'github' },
   'github-release': { tag: 'GH', section: 'github' },
+  // Ares's GitHub summary (#121) opens at the top of the GitHub Section.
+  'github-summary': { tag: 'GH', section: 'github' },
   chat: { tag: 'TMS', section: 'teams' },
   'channel-post': { tag: 'TMS', section: null },
   todo: { tag: 'TDO', section: 'todos' },

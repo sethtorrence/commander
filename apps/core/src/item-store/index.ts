@@ -118,6 +118,7 @@ import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
 import { type FocusSettingsStore, focusSettingsIn } from './focus-settings';
 import { type GitHubDiscussionStore, githubDiscussionsIn } from './github-discussions';
 import { type GitHubOversightStore, githubOversightIn } from './github-oversight';
+import { type GitHubSummaryStore, githubSummariesIn } from './github-summaries';
 import { githubTodosIn } from './github-todos';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
@@ -173,6 +174,7 @@ export type { DashboardStore, StoredClear } from './dashboard';
 export type { FilingFeedbackStore } from './filing-feedback';
 export type { FocusSettingsStore } from './focus-settings';
 export type { GitHubOversightStore, OversightRequest, StaleWriterDetail } from './github-oversight';
+export type { GitHubSummaryStore } from './github-summaries';
 export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
 export type { MeetingChips, MeetingChipsChange } from './meeting-chips';
@@ -377,6 +379,9 @@ export type ItemStore = {
   // The oversight summary (#119, github-oversight.ts): its settings, the summary, the writer's detail
   // kept beside pull requests, and the lookups finishes Links are made from.
   githubOversight: GitHubOversightStore;
+  // Ares's GitHub summaries (#121, github-summaries.ts): each an Item of his, kept with its cadence and
+  // day (once a day each), listed newest first, and marked seen when the User opens one.
+  githubSummaries: GitHubSummaryStore;
   // People (people.ts): who the people behind Items' handles are, matched across Sources after every
   // save from one, and merged, split and renamed by the User (logged in the People log, for undo).
   people: PeopleStore;
@@ -527,6 +532,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   });
   // Emails (emails.ts): their detail, threading as they arrive, and their bodies beside them.
   const emails = emailsIn(db, { withDetails: (rows) => withDetails(rows), now, search: () => search });
+  // Ares's GitHub summaries (github-summaries.ts): their detail, and when the User first opened each.
+  const summaries = githubSummariesIn(db, { now, withDetails: (rows) => withDetails(rows) });
 
   // Undoes entries that filed Items (a merge, or only a Rule's when `byRule`), as the User, skipping
   // any already undone and any Item filed elsewhere since.
@@ -718,6 +725,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         .all();
       for (const row of found) details.set(row.itemId, meetingPrepDetailOf(row));
     }
+    const summaryIds = idsOf('github-summary');
+    if (summaryIds.length)
+      for (const [itemId, detail] of summaries.readDetails(summaryIds)) details.set(itemId, detail);
     // The warning mark: an Item's own, or (for a Todo) the Item's behind it.
     const backedBy = (id: string) => {
       const detail = details.get(id);
@@ -800,6 +810,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (detail?.kind !== 'linear-issue')
       db.delete(linearIssueDetails).where(eq(linearIssueDetails.itemId, id)).run();
     emails.writeDetail(id, detail?.kind === 'email' ? detail : null);
+    summaries.writeDetail(id, detail?.kind === 'github-summary' ? detail : null);
     if (detail?.kind !== 'meeting-prep')
       db.delete(schema.meetingPrepDetails).where(eq(schema.meetingPrepDetails.itemId, id)).run();
     if (isGitHubItemDetail(detail)) {
@@ -2390,6 +2401,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
     githubWatch,
     githubDiscussions: githubDiscussionsIn(db),
+    githubSummaries: {
+      list: (query) => summaries.list(query),
+      writtenFor: (cadence, day) => summaries.writtenFor(cadence, day),
+      lastDailyTo: () => summaries.lastDailyTo(),
+      markSeen: (itemId) => summaries.markSeen(itemId),
+    },
     githubOversight: githubOversightIn(db, {
       now,
       withDetails: (rows) => withDetails(rows),

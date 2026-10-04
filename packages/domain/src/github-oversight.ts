@@ -855,3 +855,24 @@ export function oversightRange(
   }
   return { from: Math.min(startOfDay(day, timeZone), now), to: now };
 }
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** An instant's calendar day (YYYY-MM-DD), hour and weekday (0 is Sunday) in a time zone. */
+export function oversightLocalTime(
+  at: number,
+  timeZone: string,
+): { day: string; hour: number; weekday: number } {
+  const local = new Date(wallClock(at, timeZone));
+  return {
+    day: `${local.getUTCFullYear()}-${pad2(local.getUTCMonth() + 1)}-${pad2(local.getUTCDate())}`,
+    hour: local.getUTCHours(),
+    weekday: local.getUTCDay(),
+  };
+}
+
+/** The instant a calendar day (YYYY-MM-DD) starts in a time zone, or `plusDays` days after it. */
+export function oversightDayStart(day: string, timeZone: string, plusDays = 0): number {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+  return startOfDay(Date.UTC(year, month - 1, date + plusDays), timeZone);
+}

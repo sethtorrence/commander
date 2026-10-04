@@ -16,6 +16,7 @@
 // - Teams (teams.ts): busy Chats, summarised when the Update is put together.
 // - Rule suggestions (rule-suggestions.ts): "Always file Linear team OPS under TX?", once the User's
 //   answers to Ares's filing point one Source field value at one Project often enough.
+// - GitHub (github.ts): Ares's latest unseen GitHub summary, daily or the Monday roll-up (#121).
 //
 // Later producers (meeting prep, the GitHub summary, missed send-later) call the queue's `enqueue`
 // themselves, as the "Spot stuck Linear issues" job does.
@@ -31,6 +32,7 @@ import {
 } from '@commander/domain';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
+import { createGitHubSummaryWatch } from './github';
 import { createLinearWatch, type WatchedAccount } from './linear';
 import type { UpdateQueue } from './queue';
 import { createRuleSuggestions } from './rule-suggestions';
@@ -255,6 +257,7 @@ export function createProducers({
 
   // "Always file Linear team OPS under TX?" (rule-suggestions.ts).
   const ruleSuggestions = createRuleSuggestions({ itemStore, queue });
+  const githubSummaries = createGitHubSummaryWatch({ itemStore, queue });
 
   return {
     sweep() {
@@ -266,6 +269,7 @@ export function createProducers({
       linear.sweep();
       teams.sweep();
       ruleSuggestions.sweep();
+      githubSummaries.sweep();
     },
   };
 }

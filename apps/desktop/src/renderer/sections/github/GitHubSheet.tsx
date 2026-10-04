@@ -1,6 +1,6 @@
-import { waitingOn } from '@commander/domain';
+import { type GitHubSummaryItem, waitingOn } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
-import { type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
@@ -126,7 +126,24 @@ export function GitHubSheet({
     { keys: 'Ctrl+z', label: 'Undo', run: () => state.undo() },
   ]);
   // From the palette (or a Link): open a pull request or issue, whatever the view and filters hid.
-  useReveal('github', (itemId) => state.reveal(itemId));
+  // Ares's GitHub summary (the Dashboard's row, the Update's Open) opens in the summary panel (#121).
+  const [revealed, setRevealed] = useState<{ summary: GitHubSummaryItem; n: number } | null>(null);
+  useReveal('github', (itemId) => {
+    if (!oversight?.find || state.allWork.some((work) => work.id === itemId)) return state.reveal(itemId);
+    void oversight.find(itemId).then(
+      (summary) =>
+        summary ? setRevealed((was) => ({ summary, n: (was?.n ?? 0) + 1 })) : state.reveal(itemId),
+      () => state.reveal(itemId),
+    );
+  });
+  // What an entry of Ares's may link to: what its pull requests and issues say.
+  const sourcesOf = useCallback(
+    (itemIds: readonly string[]) =>
+      state.allWork
+        .filter((work) => itemIds.includes(work.id))
+        .flatMap((work) => [work.title, work.detail.body]),
+    [state.allWork],
+  );
 
   const logins = state.accounts.map((account) => account.login);
   const status = syncLine(state.accounts, now, 'No GitHub Account connected');
@@ -154,6 +171,8 @@ export function GitHubSheet({
           client={oversight}
           accounts={accounts}
           changes={changes}
+          revealed={revealed}
+          sourcesOf={sourcesOf}
           onOpen={(line) => {
             const target = targetOf(line);
             if (target.kind === 'item') state.reveal(target.itemId);

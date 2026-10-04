@@ -33,6 +33,7 @@ import {
   oversightSettings,
   oversightSummarySchema,
 } from './github-oversight';
+import { summaryCadence, summaryWriterState } from './github-summary';
 import {
   type ActivityEntry,
   activityEntry,
@@ -93,6 +94,10 @@ import { type ChatSetting, chatSetting, chatSettingAction } from './teams';
 
 // What the window may ask of the Item store. It reaches the store only through these requests,
 // validated in the main process and again in the Core. Actions from the window are always the User's.
+// Ares's GitHub summaries (#121), newest first, and how his writing stands.
+export const githubSummaries = z.object({ summaries: z.array(item), writer: summaryWriterState });
+export type GitHubSummaries = z.infer<typeof githubSummaries>;
+
 export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('query'), query: itemQuery.default({}) }),
   z.object({ op: z.literal('get'), itemId: z.string().min(1) }),
@@ -200,6 +205,14 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('github-oversight-settings') }),
   z.object({ op: z.literal('save-github-oversight-settings'), settings: oversightSettings }),
+  // Ares's GitHub summaries (#121), newest first (of these cadences, when given), with how his writing
+  // stands; and one opened (on the Dashboard, in the Update or the GitHub Section): seen.
+  z.object({
+    op: z.literal('github-summaries'),
+    cadences: z.array(summaryCadence).optional(),
+    limit: z.number().int().positive().max(200).optional(),
+  }),
+  z.object({ op: z.literal('github-summary-seen'), itemId: z.string().min(1) }),
   // Settings → People (#117): everyone Commander knows, and the User's merges, splits, renames and
   // undos, each kept in the People log. People are not Items: not in the activity log.
   z.object({ op: z.literal('people') }),
@@ -283,6 +296,8 @@ export type ItemStoreResults = {
   'github-oversight': OversightSummary;
   'github-oversight-settings': OversightSettings;
   'save-github-oversight-settings': OversightSettings;
+  'github-summaries': GitHubSummaries;
+  'github-summary-seen': Item | null;
   people: Person[];
   'change-people': PeopleChange;
   invitations: Item[];
@@ -343,6 +358,8 @@ export const itemStoreResult = {
   'github-oversight': oversightSummarySchema,
   'github-oversight-settings': oversightSettings,
   'save-github-oversight-settings': oversightSettings,
+  'github-summaries': githubSummaries,
+  'github-summary-seen': item.nullable(),
   people: z.array(person),
   'change-people': peopleChange,
   invitations: z.array(item),

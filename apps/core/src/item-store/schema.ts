@@ -16,6 +16,7 @@ import type {
   GitHubDiscussion,
   GitHubItemDetail,
   GitHubRepoRef,
+  GitHubSummaryDetail,
   GitHubWatch,
   GitHubWriterDetail,
   ItemKind,
@@ -40,6 +41,7 @@ import type {
   SchedulingSettings,
   Source,
   SourceCatalog,
+  SummaryCadence,
   SyncOutcomeKind,
   SyncProblem,
   SyncTrigger,
@@ -924,3 +926,23 @@ export const schedulingSettings = sqliteTable('scheduling_settings', {
   settings: text('settings', { mode: 'json' }).$type<SchedulingSettings>().notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+// Kind-specific detail for Ares's GitHub summaries (#121): the cadence and the day it was written for
+// as columns (a daily summary and a roll-up once a day each, across restarts), when it was written,
+// when the User first opened it (kept apart from the detail, so marking it seen logs nothing), and
+// the rest of the detail.
+export const githubSummaryDetails = sqliteTable(
+  'github_summary_details',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => items.id),
+    cadence: text('cadence').$type<SummaryCadence>().notNull(),
+    day: text('day').notNull(),
+    writtenAt: integer('written_at').notNull(),
+    seenAt: integer('seen_at'),
+    data: text('data', { mode: 'json' })
+      .$type<Omit<GitHubSummaryDetail, 'kind' | 'cadence' | 'day' | 'writtenAt' | 'seenAt'>>()
+      .notNull(),
+  },
+  (t) => [index('github_summary_details_cadence_day').on(t.cadence, t.day)],
+);

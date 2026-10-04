@@ -1,4 +1,5 @@
 import { isReviewRequestItem, placeOpenWork } from './github-open-work';
+import { isGitHubSummary, summaryPlacement } from './github-summary';
 import { awaitingAnswer, invitationReason } from './invitations';
 import type { Item } from './items';
 import type { LinearIssueDetail } from './linear';
@@ -294,6 +295,8 @@ function placeInvitation(item: Item, now: number): Placed | null {
 }
 
 function place(item: Item, context: RankingContext, today: string): Placed | null {
+  // Ares's GitHub summary (#121): FYI, or Today when something is on fire.
+  if (isGitHubSummary(item)) return { item, ...summaryPlacement(item.detail), at: item.detail.writtenAt };
   if (item.kind === 'event') return placeMeeting(item, context.now) ?? placeInvitation(item, context.now);
   if (isChat(item)) return placeChat(item, context);
   if (item.source === 'github') {
@@ -377,6 +380,8 @@ export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<
  *   message mentioning the User, and one-to-one Chats the User hasn't answered (chatAttention), one
  *   row per Chat. Muted Chats never; busy group Chats only
  *   when they mention the User.
+ * - Ares's GitHub summary (#121, the latest daily or weekly one): in FYI with its counts, or in Today
+ *   when something is on fire ("Main is failing on acme/api").
  * - GitHub's open work (#116, placeOpenWork): reviews asked of the User directly and their pull
  *   requests failing checks or with changes requested in Today, their pull requests waiting on
  *   reviewers in Waiting on others, and reviews asked of their teams in FYI.

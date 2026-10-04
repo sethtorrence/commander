@@ -193,7 +193,7 @@ Everything Ares has queued to tell the User since they last asked, delivered onl
 _Avoid_: Notification, alert, briefing, digest
 
 **Oversight summary**:
-What Shipped, Started, is Stuck and is On fire in the watched GitHub repos over a range of days, grouped by Project then repo and ending "Nothing on fire" when that's true; shown at the top of the GitHub Section. Commander works out its facts from what it holds; Ares writes it from them.
+What Shipped, Started, is Stuck and is On fire in the watched GitHub repos over a range of days, grouped by Project then repo and ending "Nothing on fire" when that's true; shown at the top of the GitHub Section. Commander works out its facts from what it holds; Ares writes it from them each morning (the daily summary), on Mondays (the roll-up) and when asked, and keeps each one.
 _Avoid_: Report, changelog, commit list
 
 **Skill-managed issue**:

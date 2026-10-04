@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { eventDetail } from './calendar';
 import { emailBody, emailDetail } from './email';
 import { githubIssueDetail, githubReleaseDetail, pullRequestDetail, reviewRequestDetail } from './github';
+import { githubSummaryDetail } from './github-summary';
 import { linearIssueDetail } from './linear';
 import { fieldSummary } from './logged-fields';
 import { meetingPrepDetail } from './meeting-prep';
@@ -26,6 +27,8 @@ export const itemKinds = [
   'block',
   // Made by Ares: his preparation for a meeting (meeting-prep.ts).
   'meeting-prep',
+  // Made by Ares: his GitHub oversight summary (github-summary.ts).
+  'github-summary',
 ] as const;
 export const itemKind = z.enum(itemKinds);
 export type ItemKind = z.infer<typeof itemKind>;
@@ -115,6 +118,7 @@ export const itemDetail = z.discriminatedUnion('kind', [
   githubReleaseDetail,
   emailDetail,
   meetingPrepDetail,
+  githubSummaryDetail,
 ]);
 export type ItemDetail = z.infer<typeof itemDetail>;
 

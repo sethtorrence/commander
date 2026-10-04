@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { summaryRequest } from './github-summary';
+import { item } from './items';
 import { type ChatSummary, chatSummary, summaryRange } from './teams-ares';
 import { type ChatDraft, chatDraft } from './teams-work';
 import {
@@ -18,6 +20,10 @@ import {
 // sides. The window never enqueues: only the Core's producers do.
 const id = z.number().int().positive();
 
+// What asking Ares for a GitHub summary comes to: the summary (an Item of his), or why there is none.
+export const githubSummaryAnswer = z.object({ summary: item.nullable(), problem: z.string().nullable() });
+export type GitHubSummaryAnswer = z.infer<typeof githubSummaryAnswer>;
+
 export const updatesRequest = z.discriminatedUnion('op', [
   // The quiet count and whether the User is here, for the header, the tray and the Dashboard.
   z.object({ op: z.literal('state') }),
@@ -28,6 +34,9 @@ export const updatesRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('summarise-chat'), itemId: z.string().min(1), range: summaryRange }),
   // Draft (#110): Ares drafts a reply to a Chat, on request, for the User to edit and send.
   z.object({ op: z.literal('draft-reply'), itemId: z.string().min(1) }),
+  // Ask Ares to write the GitHub summary (#121) for a range and scope: the summary he wrote, or why
+  // he didn't (the plain summary shows then).
+  z.object({ op: z.literal('summarise-github'), request: summaryRequest }),
   // Past Updates, newest first, and one of them reopened.
   z.object({ op: z.literal('history'), limit: z.number().int().positive().max(200).optional() }),
   z.object({ op: z.literal('past'), id }),
@@ -47,6 +56,7 @@ export type UpdatesResults = {
   'run-skill': UpdateView | null;
   'summarise-chat': ChatSummary;
   'draft-reply': ChatDraft;
+  'summarise-github': GitHubSummaryAnswer;
   history: UpdateSummary[];
   past: UpdateView;
   act: QueuedLine;
@@ -57,6 +67,7 @@ export const updatesResult = {
   'run-skill': updateView.nullable(),
   'summarise-chat': chatSummary,
   'draft-reply': chatDraft,
+  'summarise-github': githubSummaryAnswer,
   history: z.array(updateSummary),
   past: updateView,
   act: queuedLine,

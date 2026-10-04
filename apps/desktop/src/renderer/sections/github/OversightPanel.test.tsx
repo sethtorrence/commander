@@ -1,5 +1,11 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
+import {
+  type GitHubSummaryDetail,
+  type GitHubSummaryEntry,
+  type OversightSectionKind,
+  WRITE_GITHUB_SUMMARY,
+} from '@commander/domain';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
@@ -11,7 +17,7 @@ import { FrameControlsProvider, SectionProvider } from '../section';
 import { github as definition } from '.';
 import { GitHubSheet } from './GitHubSheet';
 import { type GitHubAccountsClient, githubWorkIn } from './github-work';
-import { oversightIn } from './oversight';
+import { type OversightClient, oversightIn } from './oversight';
 import { API, GITHUB, issue, pull, WEB } from './test-work';
 
 // The oversight summary at the top of the GitHub Section (#119), in plain lines with
@@ -102,7 +108,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function renderSheet() {
+function renderSheet(oversight: OversightClient = oversightIn(client)) {
   return render(
     <ShortcutProvider>
       <ProjectsProvider client={projects} storage={localStorage}>
@@ -112,7 +118,7 @@ function renderSheet() {
               <GitHubSheet
                 work={githubWorkIn(client, { githubDiscussion: async () => ({ ok: false, error: 'none' }) })}
                 accounts={accounts}
-                oversight={oversightIn(client)}
+                oversight={oversight}
               />
             </ShortcutScope>
           </SectionProvider>
@@ -288,5 +294,203 @@ describe('skill-managed issues in the summary (#120)', () => {
     await waitFor(() =>
       expect(listed()).toEqual(['acme/api#2 Research', 'acme/api#1 v1 map', 'acme/api#3 Grill']),
     );
+  });
+});
+
+// Ares's summary (#121), kept in the Item store as the Core keeps it.
+const idOfTitle = (title: string) => store.query({ titleContains: title })[0]?.id ?? '';
+function writeSummary(
+  changes: Partial<GitHubSummaryDetail> = {},
+  entries: Partial<Record<OversightSectionKind, GitHubSummaryEntry[]>> = {
+    shipped: [
+      {
+        theme: 'Webhooks',
+        text: 'Webhook retries and session caching both landed.',
+        itemIds: [idOfTitle('Retry webhooks'), idOfTitle('Cache sessions')],
+        plain: false,
+      },
+    ],
+  },
+  title = 'GitHub summary · since yesterday',
+): string {
+  const detail: GitHubSummaryDetail = {
+    kind: 'github-summary',
+    cadence: 'daily',
+    day: '2026-10-04',
+    range: { from: NOW - DAY - 8 * HOUR, to: NOW - 8 * HOUR },
+    choice: null,
+    writtenAt: NOW - 8 * HOUR,
+    sections: Object.entries(entries).map(([kind, list]) => ({
+      kind: kind as OversightSectionKind,
+      groups: [{ project: null, repos: [{ repo: API, entries: list ?? [] }] }],
+    })),
+    onFire: [],
+    counts: { shipped: 2, started: 0, stuck: 0, onFire: 0 },
+    seenAt: null,
+    ...changes,
+  };
+  return store.record(
+    { type: 'create', item: { kind: 'github-summary', title, detail } },
+    { by: { kind: 'ares' } },
+  ).itemId;
+}
+const aresEntries = () =>
+  within(summary())
+    .queryAllByTestId('github-summary-entry')
+    .map((entry) => entry.textContent);
+
+describe('Ares’s summary', () => {
+  it('replaces the plain one when he wrote today’s, each entry opening its Items, and is marked seen', async () => {
+    const id = writeSummary();
+    renderSheet();
+    await waitFor(() =>
+      expect(within(summary()).getByTestId('github-summary-by').textContent).toBe(
+        'Written by Ares 07:00 · since yesterday',
+      ),
+    );
+    expect(lines()).toEqual([]);
+    expect(aresEntries()).toEqual(['Webhooks: Webhook retries and session caching both landed.Open 2']);
+    expect(within(summary()).getByTestId('github-summary-closing').textContent).toBe('Nothing on fire');
+    await waitFor(() => expect(store.get(id)?.item.detail).toMatchObject({ seenAt: NOW }));
+
+    fireEvent.click(within(summary()).getByRole('button', { name: /^Open: Webhooks/ }));
+    await waitFor(() =>
+      expect(listed()).toEqual(['acme/api#41 Retry webhooks', 'acme/api#42 Cache sessions']),
+    );
+  });
+
+  it('isn’t shown for another range, where the plain one is', async () => {
+    writeSummary();
+    renderSheet();
+    await waitFor(() => expect(aresEntries()).toHaveLength(1));
+    fireEvent.click(within(summary()).getByRole('button', { name: 'This week' }));
+    await waitFor(() => expect(lines()[0]).toBe('acme/api: 3 PRs merged'));
+    expect(aresEntries()).toEqual([]);
+  });
+
+  it('shows the plain summary, saying so, when the model failed', async () => {
+    store.agent.saveJob(WRITE_GITHUB_SUMMARY, {
+      lastRunAt: NOW - HOUR,
+      lastOutcome: 'failed',
+      lastProblem: 'Z.ai is down',
+    });
+    renderSheet();
+    await waitFor(() =>
+      expect(within(summary()).getByTestId('github-summary-note').textContent).toBe(
+        'Ares couldn’t write it: Z.ai is down These are the plain facts.',
+      ),
+    );
+    expect(lines()).toHaveLength(4);
+  });
+
+  it('writes one when asked, for the range and Project shown', async () => {
+    const asked: unknown[] = [];
+    const oversight: OversightClient = {
+      ...oversightIn(client),
+      async ask(range, scope, choice) {
+        asked.push({ scope, choice, to: range.to });
+        const id = writeSummary(
+          { cadence: 'on-demand', choice, range, writtenAt: NOW },
+          {
+            stuck: [
+              {
+                theme: null,
+                text: 'Dark mode waits on Omar.',
+                itemIds: [idOfTitle('Dark mode')],
+                plain: false,
+              },
+            ],
+          },
+          'GitHub summary · this week',
+        );
+        return { summary: store.get(id)?.item ?? null, problem: null };
+      },
+    };
+    renderSheet(oversight);
+    await waitFor(() => expect(lines()).toHaveLength(4));
+    fireEvent.click(within(summary()).getByRole('button', { name: 'This week' }));
+    fireEvent.click(within(summary()).getByRole('button', { name: 'Ask Ares to write it' }));
+    await waitFor(() => expect(aresEntries()).toEqual(['Dark mode waits on Omar.Open']));
+    expect(asked).toEqual([{ scope: 'everything', choice: { kind: 'this-week' }, to: NOW }]);
+    expect(within(summary()).getByTestId('github-summary-by').textContent).toBe(
+      'Written by Ares 15:00 · this week',
+    );
+  });
+
+  it('says why when asking comes to nothing, over the plain summary', async () => {
+    renderSheet({
+      ...oversightIn(client),
+      ask: async () => ({ summary: null, problem: 'Ares is over this month’s model spending cap.' }),
+    });
+    await waitFor(() => expect(lines()).toHaveLength(4));
+    fireEvent.click(within(summary()).getByRole('button', { name: 'Ask Ares to write it' }));
+    await waitFor(() =>
+      expect(within(summary()).getByTestId('github-summary-note').textContent).toBe(
+        'Ares is over this month’s model spending cap. These are the plain facts.',
+      ),
+    );
+  });
+
+  it('reopens earlier summaries from Past summaries', async () => {
+    writeSummary(
+      {
+        cadence: 'weekly',
+        day: '2026-09-28',
+        range: { from: NOW - 13 * DAY, to: NOW - 6 * DAY },
+        writtenAt: NOW - 6 * DAY,
+      },
+      {
+        shipped: [
+          { theme: null, text: 'Last week’s work.', itemIds: [idOfTitle('Older merge')], plain: false },
+        ],
+      },
+      'GitHub roll-up · week of 21 Sep',
+    );
+    writeSummary();
+    renderSheet();
+    await waitFor(() => expect(aresEntries()).toHaveLength(1));
+    fireEvent.click(within(summary()).getByRole('button', { name: 'Past summaries' }));
+    const history = within(summary()).getByRole('list', { name: 'Past summaries' });
+    expect(
+      within(history)
+        .getAllByRole('button')
+        .map((row) => row.textContent),
+    ).toEqual([
+      'GitHub summary · since yesterday07:00',
+      'GitHub roll-up · week of 21 Sep' + 'Mon 28 Sep 15:00',
+    ]);
+    fireEvent.click(within(history).getByRole('button', { name: /roll-up/ }));
+    await waitFor(() => expect(aresEntries()).toEqual(['Last week’s work.Open']));
+    expect(within(summary()).getByTestId('github-summary-by').textContent).toBe(
+      'Written by Ares Mon 28 Sep 15:00 · roll-up · week of 21 Sep',
+    );
+    fireEvent.click(within(summary()).getByRole('button', { name: 'Back to the pickers' }));
+    await waitFor(() =>
+      expect(aresEntries()).toEqual(['Webhooks: Webhook retries and session caching both landed.Open 2']),
+    );
+  });
+
+  it('opens at the summary the Dashboard or the Update asks for', async () => {
+    const id = writeSummary(
+      {
+        cadence: 'weekly',
+        day: '2026-09-28',
+        range: { from: NOW - 13 * DAY, to: NOW - 6 * DAY },
+        writtenAt: NOW - 6 * DAY,
+      },
+      {
+        shipped: [
+          { theme: null, text: 'Last week’s work.', itemIds: [idOfTitle('Older merge')], plain: false },
+        ],
+      },
+      'GitHub roll-up · week of 21 Sep',
+    );
+    localStorage.setItem('commander.github.summary.open', 'false');
+    renderSheet();
+    await act(async () => {});
+    const { requestReveal } = await import('../../frame/reveal');
+    act(() => requestReveal('github', id));
+    await waitFor(() => expect(aresEntries()).toEqual(['Last week’s work.Open']));
+    await waitFor(() => expect(store.get(id)?.item.detail).toMatchObject({ seenAt: NOW }));
   });
 });

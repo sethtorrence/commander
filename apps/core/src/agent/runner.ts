@@ -6,8 +6,8 @@
 // stands and what it has looked at) through the Item store.
 //
 // - Triggers: a pause in the User's typing (debounced per job), a Source sync, Items arriving, the
-//   machine idle (catch-up work), Todos changing (debounced per job), given times (`at`), and on
-//   request (about given Items, when named).
+//   machine idle (catch-up work), Todos changing (debounced per job), given times (`at`), one job's
+//   own schedule (`due`, the daily GitHub summary), and on request (about given Items, when named).
 // - Timed runs (`at`, #130): a job asks to run at given times (30 minutes before each meeting), each
 //   with a key and a time past which it no longer matters. The runner asks again on `replan` (after a
 //   calendar sync) and hourly, and looks for due times every 30 seconds, which also catches up after
@@ -69,7 +69,10 @@ export type Trigger =
   // A time the job asked to run at came (or was missed while the machine slept and still matters).
   | ({ kind: 'at' } & PlannedRun)
   // Asked for by the User, about these Items when given (Prepare now on one meeting).
-  | { kind: 'request'; itemIds?: string[] };
+  | { kind: 'request'; itemIds?: string[] }
+  // One job's own schedule says it has work due (the daily GitHub summary): only that job hears it,
+  // and it waits out earlier failures like any automatic trigger.
+  | { kind: 'due'; job: string };
 export type TriggerKind = Trigger['kind'];
 
 // One time a job asks to run at (`at`), as it plans them.
@@ -101,7 +104,8 @@ type Debounced = 'typing' | 'todos-changed';
 // What a run looks at: each Item with a fingerprint of how it is now (a Block's text). Once the run
 // is done they are remembered, with the proposal each led to, so they are never looked at again
 // as they are; `cursor` (an activity entry) is where the job carries on from next time.
-export type JobInput = { items: { itemId: string; fingerprint: string }[]; cursor?: number };
+// `run`: call the model even with no Items to remember (the GitHub summary keeps what it wrote instead).
+export type JobInput = { items: { itemId: string; fingerprint: string }[]; cursor?: number; run?: boolean };
 
 export type GatherContext = {
   // Every trigger since the job last ran, merged.
@@ -402,7 +406,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       cursor: state.cursor,
       seen: (itemId, fingerprint) => store.seen(job.job, itemId, fingerprint),
     });
-    if (!input?.items.length) {
+    if (!input?.items.length && !input?.run) {
       store.saveJob(job.job, {
         cursor: input?.cursor ?? state.cursor,
         lastRunAt: now(),
@@ -412,7 +416,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       return;
     }
 
-    const parts = job.batch?.(input).filter((part) => part.items.length) ?? [input];
+    const parts = job.batch?.(input).filter((part) => part.items.length || part.run) ?? [input];
     const answers: { output: unknown; input: JobInput; prompt: BuiltPrompt }[] = [];
     for (const part of parts) {
       const answer = await ask(job, part);
@@ -599,7 +603,9 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       if (stopped) return;
       for (const job of jobs.values()) {
         if (trigger.kind === 'request') enqueue(job.job, trigger);
-        else if (trigger.kind === 'typing') {
+        else if (trigger.kind === 'due') {
+          if (trigger.job === job.job) enqueue(job.job, trigger);
+        } else if (trigger.kind === 'typing') {
           const pause = job.triggers.typing;
           if (pause) debounced(job, 'typing', options.typingPauseMs ?? pause.pauseMs, trigger.itemIds);
         } else if (trigger.kind === 'todos-changed') {

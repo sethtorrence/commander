@@ -213,6 +213,8 @@ export function sourceTag(item: Item, suggested = false): { stamp: string; text:
   if (item.detail?.kind === 'review-request')
     return { stamp: 'GH', text: item.detail.direct ? 'Review requested' : 'Team review' };
   if (item.detail?.kind === 'pull-request') return { stamp: 'GH', text: 'Your pull request' };
+  if (item.detail?.kind === 'github-summary')
+    return { stamp: 'ARES', text: item.detail.cadence === 'weekly' ? 'GitHub roll-up' : 'GitHub summary' };
   const due = dueOf(item);
   const origin = originLabel(item);
   return { stamp: 'TODO', text: due ? `${origin} · due ${SHORT_DAYS[dateOf(due).getDay()]}` : origin };
@@ -238,6 +240,11 @@ export function rowMeta(row: FeedRow, now: number): [string, string] {
   }
   if (item.detail?.kind === 'review-request')
     return [shortAgo(item.detail.requestedAt ?? item.createdAt, now), item.detail.direct ? 'Review' : 'Team'];
+  if (item.detail?.kind === 'github-summary') {
+    const { detail } = item;
+    if (detail.onFire.length) return ['Fire', 'GitHub'];
+    return [shortAgo(detail.writtenAt, now), detail.seenAt === null ? 'New' : 'Written'];
+  }
   if (item.detail?.kind === 'pull-request') {
     const { detail } = item;
     if (checksFailing(detail)) return ['Fail', 'Checks'];

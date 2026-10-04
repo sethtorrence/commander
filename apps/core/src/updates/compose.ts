@@ -121,6 +121,9 @@ export function templateText(
     // The meeting's title is outside words: only when quoting.
     case 'meeting-prep':
       return prepReadyText(about, { quote });
+    // Ares's GitHub summary (#121): its first lines are his words already, kept as they are.
+    case 'github-summary':
+      return `${about.label}: ${about.lead}`;
     // A busy Chat's name only when quoting; Ares's summary replaces this when he can make one.
     case 'chat-summary': {
       const name = quote ? titleOf(about.itemId)?.replace(/\s+/g, ' ').trim() : null;
