@@ -37,6 +37,8 @@ export function answerRemoveAccountItems(
       { source, account },
       { by: { kind: 'user' }, why: `Removed the ${sourceNames[source]} Account ${name}` },
     );
+    // What a GitHub Account watched goes with it.
+    if (source === 'github') store.githubWatch.forget(account);
     return reply({ ok: true, removed: removed.length });
   } catch (error) {
     return reply({ ok: false, error: error instanceof Error ? error.message : String(error) });

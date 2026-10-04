@@ -8,6 +8,7 @@ import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
+import { setUpGitHubWatch } from './github-watch';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 import { setUpMarkdownCopy } from './markdown-copy';
@@ -53,6 +54,13 @@ const models = setUpModels(itemStore, {
 });
 // Source sync: every Account on its cadence, writing through the Item store.
 const sync = setUpSync(itemStore, { send: (message) => port.postMessage(message), accessTokens });
+// Settings → GitHub: what each GitHub Account can reach and watches, kept through the Item store.
+const githubWatch = setUpGitHubWatch(itemStore, {
+  send: (message) => port.postMessage(message),
+  accessTokens,
+  // The end-to-end tests may save GitHub Items as sync will.
+  testHooks: process.argv.includes('--test-hooks'),
+});
 // The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Notes.
 const markdownCopy = setUpMarkdownCopy({
   store: itemStore,
@@ -124,6 +132,7 @@ port.on('message', ({ data }) => {
   if (sync.handle(data)) return;
   if (markdownCopy.handle(data)) return;
   if (updates?.handle(data)) return;
+  if (githubWatch.handle(data)) return;
   let changed: CoreMessage | null = null;
   let changedIds: string[] = [];
   const reply =

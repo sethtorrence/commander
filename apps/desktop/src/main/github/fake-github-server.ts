@@ -6,8 +6,13 @@ import type { AddressInfo } from 'node:net';
 // Commander depends on it: a GitHub App's device flow (no client secret; the token endpoint answers
 // its errors with HTTP 200, as GitHub does; `slow_down` raising the interval), 8-hour user tokens
 // with rotating refresh tokens, classic personal access tokens and gh's OAuth token with their
-// scopes in X-OAuth-Scopes, `GET /user`, `GET /user/installations` (GitHub App tokens only) and a
-// sliver of GraphQL (`viewer`). Nothing here talks to the real GitHub.
+// scopes in X-OAuth-Scopes, `GET /user`, `GET /user/installations` (GitHub App tokens only), orgs and
+// repos (what Settings → GitHub lists, #113) and a sliver of GraphQL (`viewer`, and its
+// contributions by repository). Nothing here talks to the real GitHub.
+//
+// What a GitHub App's user token may see of orgs without an install is untested against GitHub: here
+// /user/memberships/orgs and /user/orgs refuse it ("Resource not accessible by integration"), the
+// most cautious reading, while anyone may read a user's public memberships.
 
 export type FakeGitHubUser = { id: number; login: string; name: string | null };
 
@@ -25,7 +30,27 @@ type DeviceCode = {
   expired: boolean;
 };
 
-export type FakeGitHubInstallation = { login: string; type: 'User' | 'Organization' };
+// Where Commander's GitHub App is installed: on all of the account's repos, or the named ones.
+export type FakeGitHubInstallation = {
+  login: string;
+  type: 'User' | 'Organization';
+  repositories?: string[];
+};
+
+// An organization: its members, and those who show their membership publicly.
+export type FakeGitHubOrg = { login: string; id: number; members: number[]; publicMembers?: number[] };
+
+// A repository, owned by a user or an org (by login). Members of its org, its owner and its
+// collaborators can reach it.
+export type FakeGitHubRepo = {
+  owner: string;
+  name: string;
+  private?: boolean;
+  archived?: boolean;
+  // ISO time of the last push; null for an empty repo.
+  pushedAt?: string | null;
+  collaborators?: number[];
+};
 
 export type FakeGitHubOptions = {
   clientId?: string;
@@ -76,6 +101,13 @@ export type FakeGitHub = {
   }): string;
   // Where Commander's GitHub App is installed.
   install(installation: FakeGitHubInstallation): void;
+  // Commander's GitHub App is uninstalled from an account.
+  uninstall(login: string): void;
+  addOrg(org: FakeGitHubOrg): void;
+  // Returns the repo's node id.
+  addRepo(repo: FakeGitHubRepo): string;
+  // The user pushed to, opened a pull request in or reviewed in a repo ("owner/name") lately.
+  contribute(userId: number, repo: string, kind?: 'commit' | 'pull-request' | 'review'): void;
   // Revokes every token of a user: refreshes with theirs now fail for good, and the API refuses them.
   revoke(userId: number): void;
   // Refreshes answer 503 until switched back.
@@ -142,6 +174,9 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
   const grants: Grant[] = [];
   const personal = new Map<string, Personal>();
   const installations: FakeGitHubInstallation[] = [];
+  const orgs: FakeGitHubOrg[] = [];
+  const repos: (FakeGitHubRepo & { id: number; nodeId: string })[] = [];
+  const contributions: { userId: number; repo: string; kind: 'commit' | 'pull-request' | 'review' }[] = [];
   const issued: string[] = [];
   let slowDowns = 0;
   let refreshFailing = false;
@@ -182,6 +217,21 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     },
     install: (installation) => {
       installations.push(installation);
+    },
+    uninstall: (login) => {
+      const index = installations.findIndex((each) => each.login === login);
+      if (index >= 0) installations.splice(index, 1);
+    },
+    addOrg: (org) => {
+      orgs.push(org);
+    },
+    addRepo: (repo) => {
+      const nodeId = `R_fake_${repo.owner}_${repo.name}`;
+      repos.push({ ...repo, id: 7000 + repos.length, nodeId });
+      return nodeId;
+    },
+    contribute: (userId, repo, kind = 'commit') => {
+      contributions.push({ userId, repo, kind });
     },
     revoke: (userId) => {
       for (let i = grants.length - 1; i >= 0; i--) if (grants[i]?.user.id === userId) grants.splice(i, 1);
@@ -286,6 +336,45 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
     return null;
   }
 
+  const orgOf = (login: string) => orgs.find((each) => each.login.toLowerCase() === login.toLowerCase());
+  const accountId = (login: string, user: FakeGitHubUser) =>
+    orgOf(login)?.id ?? (login === user.login ? user.id : 9000 + login.length);
+  const canReach = (user: FakeGitHubUser, repo: FakeGitHubRepo) =>
+    repo.owner === user.login ||
+    (orgOf(repo.owner)?.members.includes(user.id) ?? false) ||
+    (repo.collaborators ?? []).includes(user.id);
+  const ownerType = (login: string) => (orgOf(login) ? 'Organization' : 'User');
+  const repoJson = (repo: (typeof repos)[number]) => ({
+    id: repo.id,
+    node_id: repo.nodeId,
+    name: repo.name,
+    full_name: `${repo.owner}/${repo.name}`,
+    private: repo.private ?? true,
+    owner: {
+      login: repo.owner,
+      id: orgOf(repo.owner)?.id ?? 9000 + repo.owner.length,
+      type: ownerType(repo.owner),
+    },
+    archived: repo.archived ?? false,
+    visibility: (repo.private ?? true) ? 'private' : 'public',
+    pushed_at: repo.pushedAt === undefined ? '2026-10-01T12:00:00Z' : repo.pushedAt,
+  });
+  const orgJson = (org: FakeGitHubOrg) => ({ login: org.login, id: org.id, node_id: `O_${org.id}` });
+  const installedRepos = (installation: FakeGitHubInstallation) =>
+    repos.filter(
+      (repo) =>
+        repo.owner === installation.login &&
+        (installation.repositories === undefined || installation.repositories.includes(repo.name)),
+    );
+  // One page of a list, as GitHub pages them (per_page, page).
+  const paged = <T>(url: URL, list: T[]) => {
+    const perPage = Number(url.searchParams.get('per_page') ?? 30);
+    const page = Number(url.searchParams.get('page') ?? 1);
+    return list.slice((page - 1) * perPage, page * perPage);
+  };
+  const notForApps = (response: ServerResponse) =>
+    json(response, 403, { message: 'Resource not accessible by integration', status: '403' });
+
   async function api(request: IncomingMessage, url: URL, response: ServerResponse) {
     const path = url.pathname.slice('/api'.length) || '/';
     fake.apiRequests.push(`${request.method} ${path}`);
@@ -313,16 +402,96 @@ export async function startFakeGitHub(options: FakeGitHubOptions = {}): Promise<
       const listed = installations.slice((page - 1) * perPage, page * perPage);
       return json(response, 200, {
         total_count: installations.length,
-        installations: listed.map((each, index) => ({
-          id: 1000 + (page - 1) * perPage + index,
+        installations: listed.map((each) => ({
+          id: 1000 + installations.indexOf(each),
           app_slug: appSlug,
-          account: { login: each.login, type: each.type },
+          account: { login: each.login, id: accountId(each.login, who.user), type: each.type },
           target_type: each.type,
+          repository_selection: each.repositories ? 'selected' : 'all',
         })),
       });
     }
+    const installationRepos = /^\/user\/installations\/(\d+)\/repositories$/.exec(path);
+    if (request.method === 'GET' && installationRepos) {
+      if (who.kind !== 'app') return json(response, 403, { message: 'Must authenticate with a GitHub App' });
+      const installation = installations[Number(installationRepos[1]) - 1000];
+      if (!installation) return json(response, 404, { message: 'Not Found' });
+      const reachable = installedRepos(installation).filter((repo) => canReach(who.user, repo));
+      return json(response, 200, {
+        total_count: reachable.length,
+        repository_selection: installation.repositories ? 'selected' : 'all',
+        repositories: paged(url, reachable).map(repoJson),
+      });
+    }
+    if (request.method === 'GET' && path === '/user/memberships/orgs') {
+      if (who.kind === 'app') return notForApps(response);
+      const mine = orgs.filter((org) => org.members.includes(who.user.id));
+      return json(
+        response,
+        200,
+        paged(url, mine).map((org) => ({ state: 'active', role: 'member', organization: orgJson(org) })),
+        headers,
+      );
+    }
+    if (request.method === 'GET' && path === '/user/orgs') {
+      if (who.kind === 'app') return notForApps(response);
+      const mine = orgs.filter((org) => org.members.includes(who.user.id));
+      return json(response, 200, paged(url, mine).map(orgJson), headers);
+    }
+    const publicOrgs = /^\/users\/([^/]+)\/orgs$/.exec(path);
+    if (request.method === 'GET' && publicOrgs) {
+      const login = decodeURIComponent(publicOrgs[1] ?? '');
+      const users = [...grants.map((each) => each.user), ...[...personal.values()].map((each) => each.user)];
+      const user = users.find((each) => each.login === login);
+      const theirs = user ? orgs.filter((org) => (org.publicMembers ?? []).includes(user.id)) : [];
+      return json(response, 200, paged(url, theirs).map(orgJson), headers);
+    }
+    const orgRepos = /^\/orgs\/([^/]+)\/repos$/.exec(path);
+    if (request.method === 'GET' && orgRepos) {
+      const org = orgOf(decodeURIComponent(orgRepos[1] ?? ''));
+      if (!org) return json(response, 404, { message: 'Not Found' });
+      const installation = installations.find((each) => each.login === org.login);
+      const visible = repos.filter((repo) => {
+        if (repo.owner !== org.login) return false;
+        if (repo.private === false) return true;
+        if (who.kind === 'app') return installation ? installedRepos(installation).includes(repo) : false;
+        return canReach(who.user, repo);
+      });
+      return json(response, 200, paged(url, visible).map(repoJson), headers);
+    }
+    const orgPath = /^\/orgs\/([^/]+)$/.exec(path);
+    if (request.method === 'GET' && orgPath) {
+      const org = orgOf(decodeURIComponent(orgPath[1] ?? ''));
+      if (!org) return json(response, 404, { message: 'Not Found' });
+      return json(response, 200, { ...orgJson(org), type: 'Organization' }, headers);
+    }
+    if (request.method === 'GET' && path === '/user/repos') {
+      const reachable = repos.filter((repo) => canReach(who.user, repo));
+      return json(response, 200, paged(url, reachable).map(repoJson), headers);
+    }
     if (request.method === 'POST' && path === '/graphql') {
       const { query } = JSON.parse(await body(request)) as { query?: string };
+      if (query?.includes('contributionsCollection')) {
+        const byKind = (kind: 'commit' | 'pull-request' | 'review') =>
+          contributions
+            .filter((each) => each.userId === who.user.id && each.kind === kind)
+            .flatMap((each) => repos.filter((repo) => `${repo.owner}/${repo.name}` === each.repo))
+            .map((repo) => ({
+              repository: { id: repo.nodeId, nameWithOwner: `${repo.owner}/${repo.name}` },
+            }));
+        return json(response, 200, {
+          data: {
+            viewer: {
+              login: who.user.login,
+              contributionsCollection: {
+                commitContributionsByRepository: byKind('commit'),
+                pullRequestContributionsByRepository: byKind('pull-request'),
+                pullRequestReviewContributionsByRepository: byKind('review'),
+              },
+            },
+          },
+        });
+      }
       if (query?.includes('viewer'))
         return json(response, 200, { data: { viewer: { login: who.user.login, databaseId: who.user.id } } });
       return json(response, 200, { errors: [{ message: 'Not in the fake.' }] });

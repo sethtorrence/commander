@@ -16,6 +16,7 @@ import { AccountsPanel } from './AccountsPanel';
 import { AutonomyPanel } from './AutonomyPanel';
 import { AresSettings } from './ares/AresSettings';
 import { Diagnostics } from './Diagnostics';
+import { GitHubWatchPanel } from './github/GitHubWatchPanel';
 import { SettingRow, SettingsGroup } from './parts';
 import { SecurityPanel } from './SecurityPanel';
 import { StartAtLogin } from './StartAtLogin';
@@ -93,6 +94,7 @@ export function SettingsScreen({ open = true }: { open?: boolean }) {
       <AutonomyPanel no="10" shown={open} />
       <DailyTemplateSettings no="11" />
       <RulesSettings no="12" shown={open} />
+      <GitHubWatchPanel no="13" />
     </Sheet>
   );
 }

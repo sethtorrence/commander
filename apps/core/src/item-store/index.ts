@@ -81,6 +81,7 @@ import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
+import { type GitHubWatchStore, githubWatchIn } from './github-watch';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
 import { linearSendIn } from './linear-send';
 import { linearTodosIn } from './linear-todos';
@@ -114,6 +115,7 @@ export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
 export type { DashboardStore, StoredClear } from './dashboard';
+export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { Snapshot } from './snapshots';
@@ -248,6 +250,8 @@ export type ItemStore = {
   markdownCopyFolder: MarkdownCopyFolderStore;
   // Ares's queue for the Update, the Updates he gave, and where the producers stand (updates.ts).
   updates: UpdateStore;
+  // Settings → GitHub: what each GitHub Account watches (github-watch.ts), in the same database.
+  githubWatch: GitHubWatchStore;
   close(): void;
 };
 
@@ -1507,28 +1511,41 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return result;
   });
 
+  // Deletes Items as one change: they stay as tombstones, so Links to them show them as gone.
+  function removeItems(found: Item[], context: ActionContext): string[] {
+    return found.map((item) => {
+      const at = now();
+      const before = stateOf(item);
+      const after: ItemState = { ...before, deletedAt: at };
+      writeState(item, after, at);
+      log({ ...context, action: 'delete', itemId: item.id, before, after }, at);
+      return item.id;
+    });
+  }
+
+  const liveSourceItems = (source: Source, account: string) => {
+    const { items } = schema;
+    const rows = db
+      .select()
+      .from(items)
+      .where(and(eq(items.source, source), eq(items.account, account), isNull(items.deletedAt)))
+      .all();
+    return withDetails(rows);
+  };
+
   const removeAccountItems = sqlite.transaction(
-    ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] => {
-      const context = actionContext.parse(rawContext);
-      const { items } = schema;
-      const rows = db
-        .select()
-        .from(items)
-        .where(and(eq(items.source, source), eq(items.account, account), isNull(items.deletedAt)))
-        .all();
-      return withDetails(rows).map((item) => {
-        const at = now();
-        const before = stateOf(item);
-        const after: ItemState = { ...before, deletedAt: at };
-        writeState(item, after, at);
-        log({ ...context, action: 'delete', itemId: item.id, before, after }, at);
-        return item.id;
-      });
-    },
+    ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] =>
+      removeItems(liveSourceItems(source, account), actionContext.parse(rawContext)),
   );
 
   const autonomy = openAutonomyStore(db, now);
   const agent = openAgentStore(db, now);
+  const githubWatch = githubWatchIn(db, {
+    now,
+    transaction: (fn) => sqlite.transaction(fn)(),
+    liveItems: (account) => liveSourceItems('github', account),
+    removeItems: (found, why) => removeItems(found, { by: { kind: 'user' }, why }),
+  });
 
   return {
     models: openModelStore(db, now),
@@ -1743,6 +1760,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     markdownCopyFolder: markdownCopyFolderIn(db, now),
+
+    githubWatch,
 
     close() {
       sqlite.close();

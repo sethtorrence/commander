@@ -118,7 +118,11 @@ function startCore(secrets: Secrets) {
   core.on('exit', stopPresence);
   if (testHooks) {
     Object.assign(globalThis, {
-      commanderTestHooks: { autonomy: autonomy.test.request, setOnline: accounts.setOnline },
+      commanderTestHooks: {
+        autonomy: autonomy.test.request,
+        setOnline: accounts.setOnline,
+        saveGitHubItems: accounts.saveGitHubItems,
+      },
     });
   }
   core.on('message', (raw: unknown) => {

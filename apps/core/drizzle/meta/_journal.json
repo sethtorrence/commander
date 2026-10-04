@@ -141,6 +141,13 @@
       "when": 1791087391090,
       "tag": "0019_updates",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1791087970810,
+      "tag": "0020_github_watch",
+      "breakpoints": true
     }
   ]
 }

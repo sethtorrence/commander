@@ -36,6 +36,8 @@ export const ipc = {
   // the tray's "Ask for an update" was chosen (askForUpdate), and the window runs the Update Skill.
   updates: 'updates',
   askForUpdate: 'ask-for-update',
+  // Settings → GitHub: what each GitHub Account watches; see github-watch-messages.ts.
+  githubWatch: 'github-watch',
 } as const;
 
 // What the header's window controls ask for.
