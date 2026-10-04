@@ -102,6 +102,9 @@ function fakeAccounts(initial: AccountSummary[]) {
 
 const launchMention = message(PRIYA, 'Can you sign off on the launch?', 78 * MINUTE, { mentions: [SAM] });
 const danaAsks = message(DANA, 'Got a minute for the Q3 numbers?', 40 * MINUTE);
+const socialChatter = Array.from({ length: 12 }, (_, i) =>
+  message(i % 2 ? LEE : PRIYA, i ? 'lol' : 'Sam, coming to lunch?', (i + 1) * MINUTE),
+);
 
 // A Teams sync: a mention in a group Chat, an unanswered one-to-one Chat, an answered one, a busy
 // group Chat that doesn't mention the User, and a muted Chat that does.
@@ -139,7 +142,7 @@ function syncTeams(extra: { id: string; messages: ReturnType<typeof message>[] }
         chatType: 'group',
         topic: 'Social',
         members: members(PRIYA, LEE),
-        messages: Array.from({ length: 12 }, (_, i) => message(i % 2 ? LEE : PRIYA, 'lol', (i + 1) * MINUTE)),
+        messages: [...socialChatter, ...(more.get('19:social') ?? [])],
       }),
       chat({
         id: '19:alerts',
@@ -287,6 +290,36 @@ describe('Teams on the Dashboard', () => {
     expect(within(row('Dana Whitfield')).getByTestId('row-reason').textContent).toBe(
       'Dana messaged you 1 min ago',
     );
+  });
+
+  it('shows a Chat Ares flagged as waiting on the User in Today with his reason, opening at the message (#109)', async () => {
+    // The busy group Chat: nothing mentions the User, but Priya asked them something.
+    const social = chatId('19:social');
+    const detail = store.get(social)?.item.detail;
+    const asked = detail?.kind === 'chat' ? (detail.messages[0]?.id as string) : '';
+    store.chatWaiting.flag(
+      social,
+      { messageId: asked, reason: 'Priya asked if you’re coming to lunch' },
+      NOW,
+    );
+    renderSheet();
+    await waitFor(() => expect(titles('Today')).toHaveLength(3));
+    expect(within(row('Social')).getByTestId('row-reason').textContent).toBe(
+      'Priya asked if you’re coming to lunch',
+    );
+
+    const heard: [string, string | undefined][] = [];
+    const stop = onReveal('teams', (itemId, focus) => heard.push([itemId, focus]));
+    fireEvent.click(row('Social'));
+    await press('Enter');
+    expect(heard).toEqual([[social, asked]]);
+    stop();
+
+    // The User answers: the row goes.
+    clock = NOW + 5 * MINUTE;
+    syncTeams([{ id: '19:social', messages: [message(SAM, 'Coming!', -4 * MINUTE)] }]);
+    accounts.change([linearAccount, teamsAccount(TEAMS, 'connected', clock)]);
+    await waitFor(() => expect(titles('Today')).toEqual(['Dana Whitfield', 'Launch crew']));
   });
 
   it('leaves an unanswered one-to-one Chat once the User replies', async () => {

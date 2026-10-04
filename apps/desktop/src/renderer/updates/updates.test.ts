@@ -107,6 +107,19 @@ describe('where Open goes', () => {
     ).toEqual({ kind: 'settings' });
   });
 
+  it('to the Chat a busy-Chat summary is about, in the Teams Section (#109)', () => {
+    expect(
+      openTarget(
+        line({
+          group: 'fyi',
+          about: { kind: 'chat-summary', itemId: 'chat-1', count: 46, since: 1 },
+          itemIds: ['chat-1'],
+          section: 'teams',
+        }),
+      ),
+    ).toEqual({ kind: 'item', sectionId: 'teams', itemId: 'chat-1' });
+  });
+
   it('to the Section of several warned Items', () => {
     expect(
       openTarget(

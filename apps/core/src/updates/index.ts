@@ -4,19 +4,23 @@
 // - Producers (producers.ts) look for what's new whenever the gate does something, after a sync and
 //   every minute: suggestions Ares wasn't sure about, chained suggestions, injection warnings, the
 //   80% cost-cap warning, "want me to just do these?" Autonomy changes, and from Linear (linear.ts)
-//   issues taken off the User's list, stuck issues that changed, and Accounts needing reconnecting.
+//   issues taken off the User's list, stuck issues that changed, and Accounts needing reconnecting,
+//   and from Teams (teams.ts) busy Chats, which Ares summarises when the Update is put together.
 // - Presence (presence.ts) follows what the main process reports of powerMonitor: it drives only
 //   "You're here / away" and having the Update ready on return (put together in the background
 //   when the User comes back), and tells the Agent the machine is idle for its catch-up work.
 // - The Update Skill gives an Update: the queued lines in order, in Ares's words (compose.ts), with
 //   the smaller things folded after more than 8 hours away (never after a busy day). Every Update
-//   given is kept, so the last one, or any earlier one, can be reopened.
+//   given is kept, so the last one, or any earlier one, can be reopened. Asking for one first runs a
+//   light sync of every Teams Account, waiting up to 5 seconds before going on with what's there.
+// - The Summarise Skill (#109) summarises a Chat on request, over a range of its messages.
 // - Acting on a line: Done and Dismiss take it out of the queue (Dismiss also dismisses the
 //   suggestions it is about), Snooze hides it until later, and Accept takes a suggestion in place,
 //   through the gate, or raises an action's Autonomy level one step (never past its hard limit).
 import {
   type AutonomyLevel,
   autonomyLevels,
+  type ChatSummary,
   chosenLevel,
   createSkillRegistry,
   type GivenUpdate,
@@ -28,6 +32,8 @@ import {
   type QueuedLine,
   type SkillRegistry,
   type SnoozeChoice,
+  SUMMARISE_SKILL,
+  type SummaryRange,
   UPDATE_SKILL,
   UPDATES_MESSAGES,
   type UpdateLine,
@@ -38,6 +44,7 @@ import {
 } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import { z } from 'zod';
+import { summariseChat } from '../agent/summarise-chat';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
@@ -46,6 +53,7 @@ import type { WatchedAccount } from './linear';
 import { AWAY_AFTER_MS, createPresence, type PresenceModel } from './presence';
 import { createProducers } from './producers';
 import { createUpdateQueue, type UpdateQueue } from './queue';
+import { summaries } from './teams';
 
 export type { WatchedAccount } from './linear';
 export type { UpdateQueue } from './queue';
@@ -53,6 +61,8 @@ export type { UpdateQueue } from './queue';
 // After more than 8 hours away, the five most important things lead and the rest fold.
 const LEAD = 5;
 const SWEEP_EVERY_MS = 60_000;
+// How long asking for an Update waits on the light Teams sync before going on with what's there.
+const REFRESH_WAIT_MS = 5_000;
 
 export type UpdatesOptions = {
   itemStore: ItemStore;
@@ -62,6 +72,12 @@ export type UpdatesOptions = {
   now?: () => number;
   // Every Account and whether it needs reconnecting (from Source sync), for Reconnect lines.
   accounts?: () => readonly WatchedAccount[];
+  // Who the User is in a Teams Account (their Microsoft user id), from Source sync, when known.
+  me?: (account: string) => string | null;
+  // A light sync of every Teams Account, run when the User asks for an Update (#109).
+  refreshTeams?: () => Promise<unknown>;
+  // How long asking waits on it before going on (5 seconds; tests shorten it).
+  refreshWaitMs?: number;
   // The quiet count or the User's presence changed.
   onState?: (state: UpdatesState) => void;
   // The User stopped being active: the Agent's catch-up work can run.
@@ -84,6 +100,8 @@ export type Updates = {
   state(): UpdatesState;
   // The Update Skill: gives (and keeps) an Update, or null when nothing is queued.
   give(): Promise<UpdateView | null>;
+  // The Summarise Skill: Ares summarises a Chat over a range of its messages.
+  summarise(itemId: string, range: SummaryRange): Promise<ChatSummary>;
   history(limit?: number): UpdateSummary[];
   past(id: number): UpdateView;
   act(queuedId: number, action: QueuedAction, snooze?: SnoozeChoice): QueuedLine;
@@ -116,7 +134,14 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
   }
 
   const queue = createUpdateQueue({ store, now, onChange: () => reportState() });
-  const producers = createProducers({ itemStore, gate, queue, now, accounts: options.accounts });
+  const producers = createProducers({
+    itemStore,
+    gate,
+    queue,
+    now,
+    accounts: options.accounts,
+    me: options.me,
+  });
   const presence = createPresence({
     store,
     now,
@@ -152,14 +177,30 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     if (prepared?.key !== key) {
       prepared = {
         key,
-        texts: compose(lines, {
-          client: options.client,
-          item,
-          secrets: options.secrets,
-          injectionWarnings: itemStore.injectionWarnings,
-          onItemsChanged: options.onItemsChanged,
-          log,
-        }),
+        // Busy Chats are summarised now, as the Update is put together, alongside the rest's words.
+        texts: Promise.all([
+          summaries(lines, {
+            itemStore,
+            client: options.client,
+            now,
+            me: options.me,
+            secrets: options.secrets,
+            onItemsChanged: options.onItemsChanged,
+            log,
+          }),
+          compose(lines, {
+            client: options.client,
+            item,
+            secrets: options.secrets,
+            injectionWarnings: itemStore.injectionWarnings,
+            onItemsChanged: options.onItemsChanged,
+            log,
+            apart: new Set(lines.filter((line) => line.about.kind === 'chat-summary').map((line) => line.id)),
+          }),
+        ]).then(([written, composed]) => ({
+          texts: new Map([...composed.texts, ...written]),
+          voice: written.size ? ('ares' as const) : composed.voice,
+        })),
       };
     }
     return prepared.texts;
@@ -177,6 +218,19 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
   async function prepare() {
     const { worded } = plan();
     if (worded.length) await texts(worded);
+  }
+
+  // What a line's text may link to (AresText): its Items' titles, and a busy Chat's messages.
+  function sourcesOf(line: QueuedLine): string[] {
+    const titles = line.itemIds.map((itemId) => item(itemId)?.title ?? '');
+    if (line.about.kind !== 'chat-summary') return titles;
+    const chat = item(line.about.itemId);
+    const since = line.about.since;
+    const said =
+      chat?.detail?.kind === 'chat'
+        ? chat.detail.messages.filter((message) => message.createdAt > since).map((message) => message.text)
+        : [];
+    return [...titles, ...said];
   }
 
   function view(update: GivenUpdate): UpdateView {
@@ -205,7 +259,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       text: composed.texts.get(line.id) ?? templateText(line, titleOf),
       itemIds: line.itemIds,
       section: line.section,
-      sources: line.itemIds.map((itemId) => item(itemId)?.title ?? ''),
+      sources: sourcesOf(line),
       folded: folded && !lead.has(line.id),
       fresh: lastGivenAt === null || line.updatedAt > lastGivenAt,
     }));
@@ -294,8 +348,41 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     return view(update);
   }
 
+  // Asking for an Update: a light sync of every Teams Account first, waited on for up to 5 seconds.
+  async function asked(): Promise<UpdateView | null> {
+    if (options.refreshTeams) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const waited = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, options.refreshWaitMs ?? REFRESH_WAIT_MS);
+      });
+      const refreshed = options.refreshTeams().catch((error) => {
+        log(`Couldn’t check Teams before the Update: ${error instanceof Error ? error.message : error}`);
+      });
+      await Promise.race([refreshed, waited]);
+      clearTimeout(timer);
+    }
+    return give();
+  }
+
+  function summarise(itemId: string, range: SummaryRange): Promise<ChatSummary> {
+    const found = item(itemId);
+    if (!found || found.deletedAt !== null) throw new Error('That Chat is no longer in Commander');
+    return summariseChat(found, range, {
+      client: options.client,
+      now,
+      me: options.me,
+      secrets: options.secrets,
+      injectionWarnings: itemStore.injectionWarnings,
+      onItemsChanged: options.onItemsChanged,
+    });
+  }
+
   const skills = createSkillRegistry();
-  skills.register({ ...UPDATE_SKILL, run: () => give() });
+  skills.register({ ...UPDATE_SKILL, run: () => asked() });
+  skills.register<{ itemId: string; range: SummaryRange }, ChatSummary>({
+    ...SUMMARISE_SKILL,
+    run: ({ itemId, range }) => summarise(itemId, range),
+  });
 
   async function answer(raw: unknown): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
     const parsed = updatesRequest.safeParse(raw);
@@ -308,6 +395,8 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
           return { ok: true, result: state() };
         case 'run-skill':
           return { ok: true, result: await skills.run(request.skill, undefined) };
+        case 'summarise-chat':
+          return { ok: true, result: await summarise(request.itemId, request.range) };
         case 'history':
           return { ok: true, result: history(request.limit) };
         case 'past':
@@ -330,6 +419,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     sweep,
     state,
     give,
+    summarise,
     history,
     past,
     act,

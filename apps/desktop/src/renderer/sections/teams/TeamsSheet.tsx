@@ -22,9 +22,11 @@ import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
+import { SummariseButton, SummaryPanel, WaitingNote } from './ChatAres';
 import { ChatFilterBar } from './ChatFilterBar';
 import { ChatRow } from './ChatRow';
 import { ChatView } from './ChatView';
+import { type ChatSummariser, useChatSummary } from './chat-summary';
 import type { Chat } from './chats';
 import { inReplyBox, ReplyBox } from './ReplyBox';
 import { type ChatLink, checkLine, type TeamsAccountsClient, type TeamsChats } from './teams-chats';
@@ -107,10 +109,13 @@ export function TeamsSheet({
   chats: client,
   accounts,
   changes,
+  summariser,
 }: {
   chats: TeamsChats;
   accounts: TeamsAccountsClient;
   changes?: ItemChanges;
+  /** Ares's Summarise (#109); without it, the Chat view offers none. */
+  summariser?: ChatSummariser;
 }) {
   const { filter, include } = useProjectFilter();
   const { projects, openPage } = useProjects();
@@ -124,6 +129,16 @@ export function TeamsSheet({
   // Each Chat's unsent reply, kept while moving between Chats.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const several = state.accounts.length > 1;
+  const summary = useChatSummary(summariser, open ? (selected?.id ?? null) : null);
+
+  // "Not waiting on you": a correction, undone from the toast or with Ctrl+Z.
+  const notWaiting = async (chat: Chat) => {
+    const entry = await state.apply(() => client.clearWaiting(chat.id));
+    if (entry)
+      toast(`Not waiting on you: ${chat.title}`, {
+        action: { label: 'Undo', onClick: () => void state.undo(entry.id) },
+      });
+  };
 
   useTabCount(state.loaded ? state.unreadCount : null);
   useRefreshWhenOpened(state.refresh, state.reload);
@@ -292,6 +307,15 @@ export function TeamsSheet({
                       onDraft={(text) => setDraft(selected.id, text)}
                       onSend={() => void sendReply()}
                     />
+                  )
+                }
+                actions={summariser && <SummariseButton state={summary} />}
+                ares={
+                  selected && (
+                    <>
+                      <WaitingNote chat={selected} onNotWaiting={() => void notWaiting(selected)} />
+                      <SummaryPanel state={summary} />
+                    </>
                   )
                 }
               />

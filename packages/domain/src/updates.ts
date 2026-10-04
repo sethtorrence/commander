@@ -117,6 +117,15 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     title: z.string(),
     startsAt: timestamp,
   }),
+  // A busy Chat (#109): an unmuted Chat with many messages from others since the last Update, merged
+  // per Chat. Ares summarises it when the Update is put together, never ahead of time. `since` is
+  // where its messages start; `count` how many from others there were when last looked.
+  z.object({
+    kind: z.literal('chat-summary'),
+    itemId,
+    count: z.number().int().positive(),
+    since: timestamp,
+  }),
   // "Always file Linear team OPS under TX?" (#71): the User's corrections and confirmations point one
   // Source field value at one Project often enough. Accepting opens the Rule, filled in, to go at the
   // top of the list; dismissing it stops it coming back.

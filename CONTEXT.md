@@ -104,6 +104,10 @@ _Avoid_: Chat, conversation, thread
 A Chat the User keeps and syncs but takes out of unread ordering and counts, the Dashboard and Ares's unprompted summaries; a Commander setting, nothing changes in Teams.
 _Avoid_: Snoozed, silenced, archived
 
+**Waiting on you**:
+Ares's judgement that someone in a Chat is waiting on the User (a question, a request, a decision), with the message and his one-sentence reason; it puts the Chat on the Dashboard and goes once the User replies, Ares judges it settled, or the User says it isn't (a correction).
+_Avoid_: Needs reply (that's a Bucket), mention, unanswered (that's a one-to-one Chat whose latest message isn't the User's)
+
 **Excluded Chat**:
 A Chat the User removed from Commander: its Item is deleted (Links show it as gone) and sync skips it until the User includes it again; nothing changes in Teams.
 _Avoid_: Hidden (that's Teams' own flag), blocked, left

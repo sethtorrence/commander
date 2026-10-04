@@ -16,6 +16,7 @@ import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
 import { createSeriesFiling } from './series-filing';
 import { spotStuckLinearJob } from './spot-stuck-linear';
+import { clearAnswered, spotWaitingJob } from './spot-waiting';
 import { suggestTodosJob } from './suggest-todos';
 
 export type { JobRunner } from './runner';
@@ -35,7 +36,7 @@ export type AgentOptions = {
   onItemsChanged?: (itemIds: string[]) => void;
   // Ares's queue for the Update: where the stuck Linear issues he spots go.
   enqueue?: (input: Enqueue) => unknown;
-  // Who the User is in a Linear Account (their Linear user id), from Source sync, when known.
+  // Who the User is in an Account (their Linear or Teams user id), from Source sync, when known.
   me?: (account: string) => string | null;
   log?: (message: string) => void;
 };
@@ -64,11 +65,17 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   const now = options.now ?? Date.now;
   const idleAfterMs = options.idleAfterMs ?? IDLE_AFTER_MS;
   let wasRanking = false;
-  const runner = createJobRunner({
+  // Ares set or cleared a Chat's waiting flag: open views catch up, and the Dashboard is ranked again.
+  const flagsChanged = (itemIds: string[]) => {
+    options.onItemsChanged?.(itemIds);
+    runner.trigger({ kind: 'todos-changed', itemIds });
+  };
+  const runner: JobRunner = createJobRunner({
     jobs: [
       suggestTodosJob(itemStore, { now }),
       rankDashboardJob(itemStore, { now }),
       spotStuckLinearJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}), me: options.me }),
+      spotWaitingJob(itemStore, { now, me: options.me, onChanged: flagsChanged }),
       fileIntoProjectsJob(itemStore, { now }),
       prepareMeetingsJob(itemStore, {
         now,
@@ -154,6 +161,15 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
 
     synced({ source, account, itemIds }) {
       dismissStale();
+      // The User replied in a Chat Ares flagged: the flag goes at once, with no call.
+      if (source === 'teams') {
+        try {
+          const cleared = clearAnswered(itemStore, options.me ?? (() => null), now);
+          if (cleared.length) flagsChanged(cleared);
+        } catch (error) {
+          options.log?.(`Couldn’t clear answered Chats: ${error}`);
+        }
+      }
       runner.trigger({ kind: 'source-sync', source, account });
       // A calendar sync may have moved, added or cancelled meetings: the times before them follow.
       if (source === 'google-calendar' || source === 'outlook-calendar') runner.replan();

@@ -134,9 +134,13 @@ export const item = z.object({
   // Present while Ares has suggested a Project for the Item (or, for a Todo, the Item behind it) and
   // is waiting for the User: the dashed Badge, with Confirm and Change (#71). Absent otherwise.
   filingSuggestion: z.object({ proposalId: z.number().int().positive(), projectId: id }).optional(),
+  // Present while Ares judges that someone in a Chat is waiting on the User (#109): the message, and
+  // his reason in one short sentence (shown through AresText). Absent otherwise.
+  waiting: z.object({ messageId: id, reason: z.string().min(1).max(300), at: timestamp }).optional(),
 });
 export type Item = z.infer<typeof item>;
 export type FilingSuggestion = NonNullable<Item['filingSuggestion']>;
+export type ChatWaiting = NonNullable<Item['waiting']>;
 
 // The part of an Item that changes, and that the activity log records before and after each change.
 export const itemState = item.pick({
@@ -307,7 +311,9 @@ export type ItemChange = z.infer<typeof itemChange>;
 // (recorded by Ares, never undone; the Update counts them).
 // `correction` and `confirmation`: the User answered Ares's filing (#71), changing it or keeping it;
 // before is his suggestion and after the User's choice, both as `{ filing }`. Never undone: they are
-// what he learns from.
+// what he learns from. A `correction` is also the User's "Not waiting on you" on a Chat Ares flagged
+// (#109): before is his flag as `{ waiting }`, after is null; that one can be undone (the flag comes
+// back), and an undone one isn't an example for Memory.
 export const activityAction = z.enum([
   'create',
   'update',

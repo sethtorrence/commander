@@ -211,6 +211,13 @@
       "when": 1791107167119,
       "tag": "0029_github_discussion",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "6",
+      "when": 1791107854615,
+      "tag": "0030_chat_waiting",
+      "breakpoints": true
     }
   ]
 }

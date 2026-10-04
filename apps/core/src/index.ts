@@ -125,6 +125,7 @@ const agent = setUpAgent(itemStore, {
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
   // Stuck Linear issues go in Ares's queue, for the next Update.
   enqueue: (input) => updates?.queue.enqueue(input),
+  // Who the User is in each Account: their Linear user, their Teams user.
   me: (account) => sync.me(account),
 });
 sync.engine.onSynced((event) => agent.synced(event));
@@ -138,6 +139,15 @@ updates = setUpUpdates({
   client: models.client,
   secrets,
   accounts: () => sync.accounts(),
+  me: (account) => sync.me(account),
+  // Asking for an Update checks every Teams Account first (a light sync), for up to 5 seconds.
+  refreshTeams: () =>
+    Promise.all(
+      sync
+        .accounts()
+        .filter((account) => account.sources.includes('teams') && !account.needsReconnect)
+        .map((account) => sync.engine.refresh(account.account, 'teams')),
+    ),
   send: (message) => port.postMessage(message),
   onState: (state) => port.postMessage({ type: 'ares-updates', ...state } satisfies CoreMessage),
   onIdle: () => agent.idle(),

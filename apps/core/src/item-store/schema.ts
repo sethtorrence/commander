@@ -756,3 +756,22 @@ export const meetingPrepDetails = sqliteTable(
   },
   (t) => [index('meeting_prep_details_event').on(t.eventId)],
 );
+
+// Ares's view of each Teams Chat (#109), one row per Chat he has looked at: how far his "Spot what's
+// waiting on you" job has read (the newest message it judged), and his flag while someone in it is
+// waiting on the User (the message, his one-sentence reason, when). A flag that goes keeps its row,
+// with when, why (`reply`: the User answered; `ares`: he judged it no longer waiting; `user`: cleared
+// by hand, with the correction's activity entry, so undo can bring it back), and the message, so a
+// hand-cleared message is never flagged again.
+export const chatWaiting = sqliteTable('chat_waiting', {
+  itemId: text('item_id')
+    .primaryKey()
+    .references(() => items.id),
+  judgedThrough: integer('judged_through'),
+  messageId: text('message_id'),
+  reason: text('reason'),
+  flaggedAt: integer('flagged_at'),
+  clearedAt: integer('cleared_at'),
+  clearedBy: text('cleared_by').$type<'reply' | 'ares' | 'user'>(),
+  clearEntryId: integer('clear_entry_id').references(() => activity.id),
+});

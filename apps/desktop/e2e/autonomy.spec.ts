@@ -118,17 +118,20 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
   await choose(window, 'Act for you · Everywhere', 'Ask');
 
   // The registered actions, each with a level of its own; ranking the Dashboard, spotting stuck
-  // Linear issues and preparing for meetings say Ask works as Auto.
+  // Linear issues, spotting what's waiting on the User and preparing for meetings say Ask works as
+  // Auto.
   await expect(grid.getByTestId('registered-action')).toHaveText([
     /Suggest Todos/,
     /Rank the Dashboard/,
     /Spot stuck Linear issues/,
+    /Spot what’s waiting on you/,
     /File into Projects/,
     /Prepare for meetings/,
   ]);
   await expect(grid.getByTestId('registered-action').nth(1)).toContainText('Ask works as Auto here');
   await expect(grid.getByTestId('registered-action').nth(2)).toContainText('Ask works as Auto here');
-  await expect(grid.getByTestId('registered-action').nth(4)).toContainText('Ask works as Auto here');
+  await expect(grid.getByTestId('registered-action').nth(3)).toContainText('Ask works as Auto here');
+  await expect(grid.getByTestId('registered-action').nth(5)).toContainText('Ask works as Auto here');
   await choose(window, 'Suggest Todos', 'Ask');
   await choose(window, 'Delete · Everywhere', 'Ask');
   await choose(window, 'Tidy your Sources · Email', 'Auto');

@@ -11,11 +11,13 @@ import { z } from 'zod';
 
 type Pending = { op: UpdatesOp; resolve: (response: UpdatesResponse) => void; timer: NodeJS.Timeout };
 
-// Giving an Update may wait on a Deep model call (the Core falls back to plain sentences after 45
-// seconds); everything else is a quick database read.
+// Giving an Update may wait on a light Teams sync (5 seconds at most) and Deep model calls (the Core
+// falls back to plain sentences after 45 seconds), and so may summarising a Chat; everything else
+// is a quick database read.
 const TIMEOUTS: Record<UpdatesOp, number> = {
   state: 10_000,
   'run-skill': 90_000,
+  'summarise-chat': 90_000,
   history: 10_000,
   past: 10_000,
   act: 10_000,

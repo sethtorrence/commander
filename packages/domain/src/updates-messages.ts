@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type ChatSummary, chatSummary, summaryRange } from './teams-ares';
 import {
   type QueuedLine,
   queuedAction,
@@ -22,6 +23,8 @@ export const updatesRequest = z.discriminatedUnion('op', [
   // Runs one of Ares's Skills. The Update is the only one so far: it gives (and keeps) an Update,
   // or null when nothing is queued.
   z.object({ op: z.literal('run-skill'), skill: z.literal('update') }),
+  // Summarise (#109): Ares summarises a Chat over a range of its messages, on request.
+  z.object({ op: z.literal('summarise-chat'), itemId: z.string().min(1), range: summaryRange }),
   // Past Updates, newest first, and one of them reopened.
   z.object({ op: z.literal('history'), limit: z.number().int().positive().max(200).optional() }),
   z.object({ op: z.literal('past'), id }),
@@ -39,6 +42,7 @@ export type UpdatesOp = UpdatesRequest['op'];
 export type UpdatesResults = {
   state: UpdatesState;
   'run-skill': UpdateView | null;
+  'summarise-chat': ChatSummary;
   history: UpdateSummary[];
   past: UpdateView;
   act: QueuedLine;
@@ -47,6 +51,7 @@ export type UpdatesResults = {
 export const updatesResult = {
   state: updatesState,
   'run-skill': updateView.nullable(),
+  'summarise-chat': chatSummary,
   history: z.array(updateSummary),
   past: updateView,
   act: queuedLine,

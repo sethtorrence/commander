@@ -775,6 +775,44 @@ describe('Teams Chats (#107)', () => {
       expect(rows.map((row) => row.itemId)).not.toContain(chatId(left));
   });
 
+  it('sends a Chat he flagged as waiting on the User with his reason, and the rules give it his words (#109)', async () => {
+    syncTeams();
+    // An old quiet Chat the rules would leave out: someone in it is waiting on the User.
+    store.saveFromSource({
+      source: 'teams',
+      account: TEAMS,
+      me: SAM.userId,
+      items: [
+        chat(
+          '19:ops',
+          'Ops',
+          'group',
+          [PRIYA, LEE],
+          [message(PRIYA, NOW - 2 * HOUR, 'Can Sam approve the rota?')],
+          NOW,
+        ),
+      ],
+      deleted: [],
+    });
+    const ops = chatId('19:ops');
+    const asked = store.get(ops)?.item.detail;
+    const messageId = asked?.kind === 'chat' ? (asked.messages[0]?.id as string) : '';
+    store.chatWaiting.flag(ops, { messageId, reason: 'Priya asked whether you can approve the rota' }, NOW);
+    replies.push(() => ({ ranking: [] }));
+    await rank();
+    const prompt = calls[0]?.messages.at(-1)?.content ?? '';
+    expect(prompt).toMatch(
+      /┆ Title: Ops\n┆ A Teams group chat with Priya Patel, Lee Chen and the User\n┆ Ares judged that someone is waiting on the User: Priya asked whether you can approve the rota\n/,
+    );
+    expect(shownWithChats()).toContainEqual(
+      expect.objectContaining({
+        itemId: ops,
+        band: 'today',
+        reason: 'Priya asked whether you can approve the rota',
+      }),
+    );
+  });
+
   it('leaves the band rules to place the Chats he left out', async () => {
     syncTeams();
     replies.push(() => ({ ranking: [] }));

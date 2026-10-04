@@ -1,4 +1,6 @@
 import {
+  BUSY_CHAT_MESSAGES,
+  busyChatThreshold,
   jobName,
   type ModelSettings,
   type ModelTestResult,
@@ -282,10 +284,11 @@ function JobOverrides({
   );
 }
 
-// The tiers, per-job overrides and the cap, saved together.
+// The tiers, per-job overrides, the cap and when a Chat is busy, saved together.
 function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
   const [draft, setDraft] = useState<ModelSettings | null>(null);
   const [capText, setCapText] = useState('');
+  const [busyText, setBusyText] = useState(String(BUSY_CHAT_MESSAGES));
   const [state, setState] = useState<{ saved: boolean; problem: string | null }>({
     saved: false,
     problem: null,
@@ -296,6 +299,7 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
       if (!response.ok) return setState({ saved: false, problem: response.error });
       setDraft(response.result);
       setCapText(response.result.monthlyCapUsd === null ? '' : String(response.result.monthlyCapUsd));
+      setBusyText(String(busyChatThreshold(response.result)));
     });
   }, []);
 
@@ -309,7 +313,8 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
   async function save() {
     if (!draft) return;
     const cap = capText.trim() === '' ? null : Number(capText);
-    const parsed = modelSettings.safeParse({ ...draft, monthlyCapUsd: cap });
+    const busy = busyText.trim() === '' ? undefined : Number(busyText);
+    const parsed = modelSettings.safeParse({ ...draft, monthlyCapUsd: cap, busyChatMessages: busy });
     if (!parsed.success) {
       setState({
         saved: false,
@@ -395,6 +400,22 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
             />
           )}
         </div>
+      </SettingRow>
+      <SettingRow
+        label="Busy Chats"
+        description="A Teams Chat with at least this many messages from others since your last Update gets a short summary in it."
+      >
+        <Input
+          data-testid="busy-chat-messages"
+          aria-label="Messages that make a Chat busy"
+          inputMode="numeric"
+          className="max-w-24"
+          value={busyText}
+          onChange={(event) => {
+            setBusyText(event.target.value);
+            setState({ saved: false, problem: null });
+          }}
+        />
       </SettingRow>
       <SettingRow label="Save" description="Tiers, thinking and the cap take effect from the next call.">
         <div className="flex items-center gap-3">

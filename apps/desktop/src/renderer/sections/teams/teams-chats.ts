@@ -56,6 +56,8 @@ export interface TeamsChats {
   outgoing(): Promise<OutgoingChange[]>;
   /** Sends a Chat's changes that couldn't sync again. */
   retry(itemId: string): Promise<void>;
+  /** "Not waiting on you": clears Ares's waiting flag by hand, a correction that can be undone (#109). */
+  clearWaiting(itemId: string): Promise<ActivityEntry>;
 }
 
 // The Item store answers at most 1000 Items a query.
@@ -105,6 +107,9 @@ export function teamsChatsIn(itemStore: ItemStoreClient): TeamsChats {
     },
     async retry(itemId) {
       await itemStore({ op: 'retry-outgoing', itemId });
+    },
+    clearWaiting(itemId) {
+      return itemStore({ op: 'clear-chat-waiting', itemId });
     },
   };
 }
@@ -164,6 +169,8 @@ function whatItDid(entry: ActivityEntry, projects: readonly Project[]): [string,
       return entry.why === EXCLUDED_WHY ? ['Excluded from Commander', 'Exclusion'] : ['Deleted', 'Delete'];
     case 'tombstone':
       return ['Left or deleted', 'Delete'];
+    case 'correction':
+      return ['Marked not waiting on you', 'Not waiting'];
     case 'link':
       return ['Linked', 'Link'];
     case 'unlink':
@@ -244,8 +251,9 @@ export function describeChatEntry(
 ): string {
   const who = entry.by.kind === 'rule' && entry.why ? `by ${entry.why}` : byWhom(entry.by);
   if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
-  // The User's answer to Ares's filing (#108).
-  if (entry.action === 'correction' || entry.action === 'confirmation')
+  // The User's answer to Ares's filing (#108); a correction with no filing is "Not waiting on you" (#109).
+  const filingAnswer = entry.changes.some((change) => change.field === 'filing');
+  if ((entry.action === 'correction' || entry.action === 'confirmation') && filingAnswer)
     return describeFilingAnswer(entry, projects);
   if (entry.action === 'create' && entry.by.kind === 'source')
     return `Added from ${SOURCE_NAMES[entry.by.source]}`;

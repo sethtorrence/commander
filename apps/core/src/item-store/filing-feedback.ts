@@ -148,7 +148,10 @@ export function filingFeedbackIn(
             .select({ source: items.source, n: sql<number>`count(*)` })
             .from(activity)
             .innerJoin(items, eq(items.id, activity.itemId))
-            .where(eq(activity.action, action))
+            // Answers to his filing only: a "Not waiting on you" correction (#109) holds no filing.
+            .where(
+              and(eq(activity.action, action), sql`json_extract(${activity.before}, '$.filing') IS NOT NULL`),
+            )
             .groupBy(items.source)
             .all(),
         );

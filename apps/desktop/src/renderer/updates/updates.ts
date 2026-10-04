@@ -43,7 +43,7 @@ export type OpenTarget =
   // `part`: where in Settings (Accounts, for an Account to reconnect).
   | { kind: 'settings'; part?: 'accounts' };
 
-// Sections with a tab of their own; Teams follows in its milestone.
+// Sections with a tab of their own.
 const OPENABLE: readonly UpdateSection[] = [
   'notes',
   'todos',
@@ -51,6 +51,7 @@ const OPENABLE: readonly UpdateSection[] = [
   'email',
   'calendar',
   'github',
+  'teams',
   'ares',
 ];
 const sectionOf = (section: UpdateSection) => (OPENABLE.includes(section) ? section : 'ares');
