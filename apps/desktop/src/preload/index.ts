@@ -3,6 +3,8 @@ import type {
   AutonomyResponse,
   AutonomyResults,
   CoreMessage,
+  GitHubDiscussionRequest,
+  GitHubDiscussionResponse,
   GitHubWatchRequest,
   GitHubWatchResponse,
   ItemStoreRequest,
@@ -105,6 +107,10 @@ const commander = {
   // failures included (with the last listing, when there is one).
   githubWatch: (request: GitHubWatchRequest): Promise<GitHubWatchResponse> =>
     ipcRenderer.invoke(ipc.githubWatch, request),
+  // The GitHub Section: a pull request's or issue's discussion, fetched (or kept) by the Core.
+  // Resolves with the response, failures included.
+  githubDiscussion: (request: GitHubDiscussionRequest): Promise<GitHubDiscussionResponse> =>
+    ipcRenderer.invoke(ipc.githubDiscussion, request),
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
   // Settings → Accounts. Answers carry Account summaries, never a token or key.

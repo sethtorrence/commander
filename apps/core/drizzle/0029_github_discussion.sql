@@ -1,0 +1,1 @@
+ALTER TABLE `github_details` ADD `discussion` text;

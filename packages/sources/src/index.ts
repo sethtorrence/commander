@@ -1,5 +1,10 @@
 export { type GitHubApiOptions, readGitHubAccess, readGitHubOrg, readWorkedRepos } from './github/access';
 export {
+  type DiscussionTarget,
+  type ReadDiscussion,
+  readGitHubDiscussion,
+} from './github/discussion';
+export {
   createGitHubSource,
   GITHUB_CADENCE,
   GITHUB_HOURLY_LIMITS,

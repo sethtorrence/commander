@@ -95,6 +95,7 @@ import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
 import { emailsIn } from './emails';
 import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
+import { type GitHubDiscussionStore, githubDiscussionsIn } from './github-discussions';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
 import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
 import { linearSendIn } from './linear-send';
@@ -313,6 +314,8 @@ export type ItemStore = {
   updates: UpdateStore;
   // Settings → GitHub: what each GitHub Account watches (github-watch.ts), in the same database.
   githubWatch: GitHubWatchStore;
+  // The GitHub Section's discussions, fetched on demand and kept beside the detail (github-discussions.ts).
+  githubDiscussions: GitHubDiscussionStore;
   // Teams Chats the User muted or excluded (chat-settings.ts), in the same database. Excluding one
   // deletes its Item; the sync engine passes an Account's excluded Chats to its sync, to skip.
   chatSettings: ChatSettingsStore;
@@ -2098,6 +2101,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     githubWatch,
+    githubDiscussions: githubDiscussionsIn(db),
 
     close() {
       sqlite.close();

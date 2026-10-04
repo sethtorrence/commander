@@ -8,6 +8,7 @@ import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
+import { setUpGitHubDiscussion } from './github-discussion';
 import { setUpGitHubWatch } from './github-watch';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
@@ -61,6 +62,11 @@ const githubWatch = setUpGitHubWatch(itemStore, {
   accessTokens,
   // The end-to-end tests may save GitHub Items as sync will.
   testHooks: process.argv.includes('--test-hooks'),
+});
+// The GitHub Section: a pull request's or issue's discussion, fetched when it is opened.
+const githubDiscussion = setUpGitHubDiscussion(itemStore, {
+  send: (message) => port.postMessage(message),
+  accessTokens,
 });
 // Source sync: every Account on its cadence, writing through the Item store. GitHub sync reads what
 // each Account watches. An Account needing reconnecting (or reconnected) is Ares's to mention in the
@@ -163,6 +169,7 @@ port.on('message', ({ data }) => {
   if (markdownCopy.handle(data)) return;
   if (updates?.handle(data)) return;
   if (githubWatch.handle(data)) return;
+  if (githubDiscussion.handle(data)) return;
   let changed: CoreMessage | null = null;
   let changedIds: string[] = [];
   const reply =

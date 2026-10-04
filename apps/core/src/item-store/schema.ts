@@ -12,6 +12,7 @@ import type {
   FieldSummary,
   FiledBy,
   GitHubAccess,
+  GitHubDiscussion,
   GitHubItemDetail,
   GitHubRepoRef,
   GitHubWatch,
@@ -285,6 +286,10 @@ export const githubDetails = sqliteTable('github_details', {
   identifier: text('identifier'),
   // The rest of the detail, with its `kind`.
   data: text('data', { mode: 'json' }).$type<GitHubItemDetail>().notNull(),
+  // A pull request's or issue's discussion (and a pull request's checks), fetched when the GitHub
+  // Section opens it (#115): kept for the detail's `updatedAt` it was fetched for, and fetched again
+  // once the Item changes. Not part of the Item: never in the activity log.
+  discussion: text('discussion', { mode: 'json' }).$type<GitHubDiscussion>(),
 });
 
 // Kind-specific detail for emails, one row per message (see EmailDetail), with what the Email

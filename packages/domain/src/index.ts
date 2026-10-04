@@ -14,6 +14,7 @@ export * from './email';
 export * from './email-threads';
 export * from './filing';
 export * from './github';
+export * from './github-discussion';
 export * from './github-watch';
 export * from './github-watch-messages';
 export * from './injection-warnings';
