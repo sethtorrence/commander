@@ -1,11 +1,14 @@
 import { DrawingGrid, RulerX, RulerY } from '@commander/ui';
-import { type ComponentProps, useCallback, useMemo, useRef, useState } from 'react';
+import { type ComponentProps, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
 import { PaletteHost } from '../palette/PaletteHost';
 import { ProjectsProvider, useProjects } from '../projects/context';
 import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
 import { ProjectPageTab } from '../projects/page/ProjectPageTab';
-import { projectsIn } from '../projects/projects';
+import { type ProjectsClient, projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
+import { DashboardProvider, useDashboard } from '../sections/dashboard/context';
+import { type DashboardClient, dashboardIn } from '../sections/dashboard/dashboard';
+import { linearAccountsIn } from '../sections/linear/linear-issues';
 import { FrameControlsProvider, HeaderSlotProvider, SectionProvider } from '../sections/section';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { ShortcutScope, useActiveScopes, useShortcuts } from '../shortcuts/react';
@@ -42,11 +45,51 @@ function SectionView({
   );
 }
 
-/** The header, naming the open Project page's Project when one is shown. */
-function FrameHeader({ page, ...props }: ComponentProps<typeof Header> & { page: string | null }) {
+/**
+ * What the whole window shares: the Projects with the one Project filter, and the Dashboard's ranked
+ * list (read by the Dashboard, the header's band meter and the Project pages).
+ */
+function FrameProviders({
+  projects,
+  onOpenPage,
+  dashboard,
+  open,
+  children,
+}: {
+  projects: ProjectsClient;
+  onOpenPage: (projectId: string) => void;
+  dashboard: DashboardClient;
+  open: string;
+  children: ReactNode;
+}) {
+  return (
+    <ProjectsProvider client={projects} onOpenPage={onOpenPage}>
+      <DashboardProvider client={dashboard} open={open}>
+        {children}
+      </DashboardProvider>
+    </ProjectsProvider>
+  );
+}
+
+/**
+ * The header, naming the open Project page's Project when one is shown, with the Dashboard's band
+ * counts on its meter. A band opens the Dashboard at that band.
+ */
+function FrameHeader({ page, onBand, ...props }: ComponentProps<typeof Header> & { page: string | null }) {
   const project = useProjects().projectById(page ?? '');
+  const { counts, jumpToBand } = useDashboard();
   const shown = project && { eyebrow: `Project / ${project.code}`, title: project.name };
-  return <Header {...props} {...shown} />;
+  return (
+    <Header
+      {...props}
+      {...shown}
+      bands={counts}
+      onBand={(band) => {
+        onBand?.(band);
+        if (band === 'now' || band === 'today' || band === 'waiting' || band === 'fyi') jumpToBand(band);
+      }}
+    />
+  );
 }
 
 /**
@@ -61,6 +104,10 @@ export function Frame() {
   const [lastSection, setLastSection] = useState(open);
   const [cheatSheet, setCheatSheet] = useState(false);
   const projects = useMemo(() => projectsIn(window.commander.itemStore), []);
+  const dashboard = useMemo(
+    () => dashboardIn(window.commander.itemStore, linearAccountsIn(window.commander)),
+    [],
+  );
   const [headerSlot, setHeaderSlot] = useState<HTMLDivElement | null>(null);
   // The open Project page (a temporary tab), and where Esc or × on it goes back to.
   const [page, setPage] = useState<string | null>(null);
@@ -138,7 +185,12 @@ export function Frame() {
     : { eyebrow: 'Commander / Settings', title: 'Settings' };
 
   return (
-    <ProjectsProvider client={projects} onOpenPage={openPage}>
+    <FrameProviders
+      projects={projects}
+      onOpenPage={openPage}
+      dashboard={dashboard}
+      open={open === PROJECT_PAGE_SCOPE ? `${open}:${page}` : open}
+    >
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
       <FrameHeader
         {...header}
@@ -204,6 +256,6 @@ export function Frame() {
         onOpenSettings={openSettings}
         onToggleShortcuts={() => setCheatSheet((shown) => !shown)}
       />
-    </ProjectsProvider>
+    </FrameProviders>
   );
 }

@@ -8,6 +8,10 @@ A personal command center that gathers work from outside services (Linear, email
 The main screen, merging items from every Section into one at-a-glance view.
 _Avoid_: Home, overview, feed
 
+**Band**:
+One of the Dashboard's four groups of what needs the User (Now, Today, Waiting on others, FYI); each Item on the Dashboard sits in one band with a short reason, placed by band rules until Ares ranks it.
+_Avoid_: Bucket (that's for email), priority, Rule (that files Items into Projects)
+
 **Section**:
 A notebook-style tab dedicated to one kind of work (Notes, Todos, Linear, Email, Calendar, GitHub, Teams, Ares), holding that work's full view.
 _Avoid_: Tab, module, page, app
