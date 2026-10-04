@@ -17,7 +17,8 @@ export function originOf(todo: Item): TodoOrigin {
 }
 
 /**
- * "Manual"; for a Todo made from a Block, its Daily Note's day: "Daily Note · 3 Oct"; for a Linear
+ * "Manual"; for a Todo made from a Block, its Daily Note's day: "Daily Note · 3 Oct"; for one Ares
+ * made from a Teams Chat, the Chat: "Ares · from Teams, Priya Patel"; for a Linear
  * Todo, its issue's identifier: "Linear · ENG-418"; for a GitHub Todo, its pull request's or issue's:
  * "GitHub · acme/api#12".
  */
@@ -27,6 +28,7 @@ export function originLabel(todo: Item, madeFrom?: MadeFrom, backing?: Item): st
   if (backing?.detail?.kind === 'review-request' || backing?.detail?.kind === 'github-issue')
     return `${label} · ${githubIdentifier(backing.detail.repo, backing.detail.number)}`;
   if (!madeFrom) return label;
+  if ('chatId' in madeFrom) return `${label} · from Teams, ${madeFrom.chatName}`;
   const [, month, date] = madeFrom.day.split('-').map(Number) as [number, number, number];
   return `${label} · ${date} ${MONTHS[month - 1]}`;
 }

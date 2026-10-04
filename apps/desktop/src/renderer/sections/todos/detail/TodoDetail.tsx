@@ -112,7 +112,7 @@ export function TodoDetail({
               </Fact>
             </dl>
             <TodoLinks links={links} onOpen={onOpenLink} />
-            <TodoActivity entries={history} />
+            <TodoActivity entries={history} from={madeFrom && 'chatId' in madeFrom ? 'Teams' : undefined} />
           </div>
         ) : (
           <p className="m-0 px-[22px] py-[18px] text-note text-faint">No Todo selected.</p>

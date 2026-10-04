@@ -14,7 +14,7 @@ import { longDate, notePartNumber, weekday } from '../notes/days';
 import { SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { useDashboard } from './context';
 import { type FeedRow, tabCount } from './feed';
-import { openIn, RankedList, revealId, titleOf, useFeedSelection } from './RankedList';
+import { openIn, RankedList, revealFocus, revealId, titleOf, useFeedSelection } from './RankedList';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -84,7 +84,7 @@ export function DashboardSheet() {
     const section = openIn(row);
     if (!section) return;
     openSection(section[0]);
-    requestReveal(section[0], revealId(row), row.focus?.messageId);
+    requestReveal(section[0], revealId(row), revealFocus(row));
   };
   const settle = (row: FeedRow, op: 'accept' | 'dismiss') => void dashboard.settleSuggestion(row, op);
   useShortcuts([

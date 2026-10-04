@@ -94,6 +94,8 @@ export const todoDetails = sqliteTable('todo_details', {
   origin: text('origin').$type<TodoOrigin>().notNull().default('manual'),
   dueOn: text('due_on'),
   backedBy: text('backed_by').references(() => items.id),
+  // For a Todo Ares made from a Teams Chat (#110): the Chat and the message it opens at.
+  fromMessage: text('from_message', { mode: 'json' }).$type<{ itemId: string; messageId: string }>(),
 });
 
 // Kind-specific detail for Daily Notes: one per calendar day (YYYY-MM-DD, local).

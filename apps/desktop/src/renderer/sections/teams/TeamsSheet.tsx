@@ -26,7 +26,9 @@ import { SummariseButton, SummaryPanel, WaitingNote } from './ChatAres';
 import { ChatFilterBar } from './ChatFilterBar';
 import { ChatRow } from './ChatRow';
 import { ChatView } from './ChatView';
+import { ReplySuggestionCard, TodoSuggestionCard } from './ChatWork';
 import { type ChatSummariser, useChatSummary } from './chat-summary';
+import { type ChatWorkClient, useChatWork } from './chat-work';
 import type { Chat } from './chats';
 import { inReplyBox, ReplyBox } from './ReplyBox';
 import { type ChatLink, checkLine, type TeamsAccountsClient, type TeamsChats } from './teams-chats';
@@ -110,12 +112,15 @@ export function TeamsSheet({
   accounts,
   changes,
   summariser,
+  work,
 }: {
   chats: TeamsChats;
   accounts: TeamsAccountsClient;
   changes?: ItemChanges;
   /** Ares's Summarise (#109); without it, the Chat view offers none. */
   summariser?: ChatSummariser;
+  /** Ares's suggested Todos and replies, and Draft (#110); without it, the Chat view shows none. */
+  work?: ChatWorkClient;
 }) {
   const { filter, include } = useProjectFilter();
   const { projects, openPage } = useProjects();
@@ -130,6 +135,7 @@ export function TeamsSheet({
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const several = state.accounts.length > 1;
   const summary = useChatSummary(summariser, open ? (selected?.id ?? null) : null);
+  const chatWork = useChatWork(work, open ? (selected?.id ?? null) : null);
 
   // "Not waiting on you": a correction, undone from the toast or with Ctrl+Z.
   const notWaiting = async (chat: Chat) => {
@@ -168,6 +174,36 @@ export function TeamsSheet({
     const text = draftOf(chat).trim();
     if (!chat || !text) return;
     if (await state.reply(chat, text)) setDraft(chat.id, '');
+  };
+
+  // Ares's work (#110). Everything the Chat says: what his words about it may link to.
+  const sourcesOf = (chat: Chat) => [chat.title, ...chat.detail.messages.map((message) => message.text)];
+
+  const addTodo = async (proposalId: number, title: string) => {
+    if (await chatWork.accept(proposalId)) toast(`Todo added: ${title}`);
+  };
+
+  // Send: the suggested reply goes as the User's, through the outgoing queue.
+  const sendSuggestedReply = async (chat: Chat, proposalId: number) => {
+    if (await chatWork.accept(proposalId)) toast(`Reply on its way to ${chat.title}`);
+  };
+
+  // Edit: the draft goes in the reply box, for the User to change and send as any reply.
+  const editSuggestedReply = (chat: Chat, proposalId: number, text: string) => {
+    setDraft(chat.id, text);
+    void chatWork.dismiss(proposalId);
+  };
+
+  // Draft: Ares's draft fills the reply box; what was in it comes back with Undo.
+  const askForDraft = async () => {
+    const drafted = await chatWork.draft();
+    if (!drafted) return;
+    const before = drafts[drafted.chatId] ?? '';
+    setDraft(drafted.chatId, drafted.text);
+    if (before.trim())
+      toast('Ares’s draft replaced what you had written', {
+        action: { label: 'Undo', onClick: () => setDraft(drafted.chatId, before) },
+      });
   };
 
   // Mark as unread (or read again, while it is unread), undoable from the toast or with Ctrl+Z.
@@ -301,13 +337,45 @@ export function TeamsSheet({
                 onToggleRead={canToggleRead(selected) ? () => void toggleRead() : null}
                 reply={
                   selected && (
-                    <ReplyBox
-                      to={selected.title}
-                      draft={draftOf(selected)}
-                      onDraft={(text) => setDraft(selected.id, text)}
-                      onSend={() => void sendReply()}
-                    />
+                    <>
+                      {chatWork.reply && (
+                        <ReplySuggestionCard
+                          suggestion={chatWork.reply}
+                          sources={sourcesOf(selected)}
+                          onSend={() =>
+                            chatWork.reply && void sendSuggestedReply(selected, chatWork.reply.proposalId)
+                          }
+                          onEdit={() =>
+                            chatWork.reply &&
+                            editSuggestedReply(selected, chatWork.reply.proposalId, chatWork.reply.reply.text)
+                          }
+                          onDismiss={() => chatWork.reply && void chatWork.dismiss(chatWork.reply.proposalId)}
+                        />
+                      )}
+                      <ReplyBox
+                        to={selected.title}
+                        draft={draftOf(selected)}
+                        onDraft={(text) => setDraft(selected.id, text)}
+                        onSend={() => void sendReply()}
+                        onAskAres={work ? () => void askForDraft() : undefined}
+                        drafting={chatWork.drafting}
+                      />
+                    </>
                   )
+                }
+                afterMessage={(message) =>
+                  selected &&
+                  chatWork.todosByMessage
+                    .get(message.id)
+                    ?.map((suggestion) => (
+                      <TodoSuggestionCard
+                        key={suggestion.proposalId}
+                        suggestion={suggestion}
+                        sources={sourcesOf(selected)}
+                        onAdd={() => void addTodo(suggestion.proposalId, suggestion.title)}
+                        onDismiss={() => void chatWork.dismiss(suggestion.proposalId)}
+                      />
+                    ))
                 }
                 actions={summariser && <SummariseButton state={summary} />}
                 ares={

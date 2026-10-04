@@ -75,11 +75,16 @@ export function dashboardIn(
 
     async suggestions() {
       if (!ares) return [];
-      const pending = await ares.autonomy({
-        op: 'activity',
-        query: { section: 'notes', statuses: ['pending'], limit: 500 },
-      });
-      return pending.flatMap((row) => suggestedTodoOf(row) ?? []).reverse();
+      // From Daily Notes and from Teams Chats (#110), oldest first.
+      const found = await Promise.all(
+        (['notes', 'teams'] as const).map((section) =>
+          ares.autonomy({ op: 'activity', query: { section, statuses: ['pending'], limit: 500 } }),
+        ),
+      );
+      return found
+        .flat()
+        .sort((a, b) => a.id - b.id)
+        .flatMap((row) => suggestedTodoOf(row) ?? []);
     },
 
     async settle(proposalId, op) {

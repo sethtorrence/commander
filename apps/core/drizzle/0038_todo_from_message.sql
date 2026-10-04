@@ -1,0 +1,1 @@
+ALTER TABLE `todo_details` ADD `from_message` text;

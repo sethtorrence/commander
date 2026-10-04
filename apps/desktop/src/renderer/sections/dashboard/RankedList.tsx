@@ -42,6 +42,9 @@ const SECTION_LABELS: Record<string, string> = {
   github: 'GitHub',
 };
 
+/** Where in it to show: the message that put a Chat on the Dashboard, or a Teams suggestion's message. */
+export const revealFocus = (row: FeedRow) => row.focus?.messageId ?? row.suggestion?.fromMessage?.messageId;
+
 /** The Item to show when a row is opened in its Section: a suggestion's Block, else the row's Item. */
 export const revealId = (row: FeedRow) =>
   row.suggestion?.blockId ??
@@ -70,9 +73,12 @@ function identifierOf(item: Item): string | null {
   return null;
 }
 
-/** Which Section an Item opens in, by its id, with its name: ["todos", "Todos"]. A suggestion opens its Block. */
+/**
+ * Which Section an Item opens in, by its id, with its name: ["todos", "Todos"]. A suggestion opens its
+ * Block, or its Chat for one from Teams.
+ */
 export function openIn(row: FeedRow): [string, string] | null {
-  if (row.suggestion) return ['notes', 'Notes'];
+  if (row.suggestion) return row.suggestion.fromMessage ? ['teams', 'Teams'] : ['notes', 'Notes'];
   const section = sectionFor(row.item.kind);
   return section ? [section, SECTION_LABELS[section] ?? section] : null;
 }

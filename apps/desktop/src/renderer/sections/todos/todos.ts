@@ -1,16 +1,17 @@
-import type {
-  ActivityEntry,
-  Actor,
-  Filing,
-  Item,
-  ItemAction,
-  ItemChange,
-  LinearIssueDetail,
-  LinearIssueDraft,
-  LinkEnd,
-  LinkType,
-  Project,
-  Source,
+import {
+  type ActivityEntry,
+  type Actor,
+  type Filing,
+  fromMessageOf,
+  type Item,
+  type ItemAction,
+  type ItemChange,
+  type LinearIssueDetail,
+  type LinearIssueDraft,
+  type LinkEnd,
+  type LinkType,
+  type Project,
+  type Source,
 } from '@commander/domain';
 import type { ItemStoreClient } from '../../item-store/client';
 import { describeFiling, describeFilingAnswer } from '../../projects/projects';
@@ -76,19 +77,19 @@ export interface Todos {
 export type LinearState = LinearIssueDetail['state'];
 
 /**
- * Where a Todo made from a Block was made (origin Daily Note, or Ares suggesting it from one): its
- * Block, and the day of that Block's Daily Note.
+ * Where a Todo was made: for one made from a Block (origin Daily Note, or Ares suggesting it from
+ * one), its Block and the day of that Block's Daily Note; for one Ares made from a Teams Chat (#110),
+ * the Chat, its name and the message it came from.
  */
-export interface MadeFrom {
-  blockId: string;
-  day: string;
-}
+export type MadeFrom =
+  | { blockId: string; day: string }
+  | { chatId: string; chatName: string; messageId: string };
 
 const originIs = (todo: Item, origins: readonly string[]) =>
   todo.detail?.kind === 'todo' && origins.includes(todo.detail.origin);
 // A Todo the User made from a Block (`[]`) is that Block's text; one Ares suggested from a Block has
 // a title of its own.
-const fromBlock = (todo: Item) => originIs(todo, ['daily-note', 'ares']);
+const fromBlock = (todo: Item) => originIs(todo, ['daily-note', 'ares']) && !fromMessageOf(todo);
 const backedBy = (todo: Item) => (todo.detail?.kind === 'todo' ? todo.detail.backedBy : null);
 
 /** The issue behind a Linear Todo, if the Item is one (the Todos Section reads them with `backing`). */
@@ -198,10 +199,30 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
 
     async madeFrom(todos) {
       const todoIds = todos.filter(fromBlock).map((todo) => todo.id);
-      const made = await Promise.all(
-        pages(todoIds).map((page) => itemStore({ op: 'block-todos', query: { todoIds: page } })),
+      // Ares's Todos from Teams: their Chats, for the Chats' names.
+      const fromChats = todos.flatMap((todo) => {
+        const from = fromMessageOf(todo);
+        return from ? [{ todo, from }] : [];
+      });
+      const chatIds = [...new Set(fromChats.map(({ from }) => from.itemId))];
+      const [made, chats] = await Promise.all([
+        Promise.all(pages(todoIds).map((page) => itemStore({ op: 'block-todos', query: { todoIds: page } }))),
+        Promise.all(
+          pages(chatIds).map((page) =>
+            itemStore({ op: 'query', query: { ids: page, includeDeleted: true, limit: 1000 } }),
+          ),
+        ),
+      ]);
+      const chatNames = new Map(chats.flat().map((chat) => [chat.id, chat.title]));
+      const found = new Map<string, MadeFrom>(
+        made.flat().map(({ todo, block, day }) => [todo.id, { blockId: block.id, day }]),
       );
-      return new Map(made.flat().map(({ todo, block, day }) => [todo.id, { blockId: block.id, day }]));
+      for (const { todo, from } of fromChats) {
+        const chatName = chatNames.get(from.itemId);
+        if (chatName !== undefined)
+          found.set(todo.id, { chatId: from.itemId, chatName, messageId: from.messageId });
+      }
+      return found;
     },
 
     async backing(todos) {
@@ -299,14 +320,16 @@ function whatChanged(changes: ItemChange[], projects: readonly Project[]): [stri
 /**
  * One line of a Todo's history: "Added by you", "Ticked by you", "Tick undone by you". `history`
  * is the rest of the log, to name what an undo reversed; `projects` names Projects by their code
- * ("Filed under LT by you").
+ * ("Filed under LT by you"); `from` names where Ares added it from ("Added by Ares from Teams").
  */
 export function describeEntry(
   entry: ActivityEntry,
   history: readonly ActivityEntry[],
   projects: readonly Project[] = [],
+  from?: string,
 ): string {
   const who = byWhom(entry.by);
+  if (from && entry.action === 'create' && entry.by.kind === 'ares') return `Added by Ares from ${from}`;
   // A steering warning says it in its own words (#69).
   if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
   // The User's answer to Ares's filing (#71).

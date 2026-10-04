@@ -827,7 +827,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         return;
       }
       case 'todo': {
-        const values = { origin: detail.origin, dueOn: detail.dueOn, backedBy: detail.backedBy };
+        const values = {
+          origin: detail.origin,
+          dueOn: detail.dueOn,
+          backedBy: detail.backedBy,
+          fromMessage: detail.fromMessage ?? null,
+        };
         db.insert(todoDetails)
           .values({ itemId: id, ...values })
           .onConflictDoUpdate({ target: todoDetails.itemId, set: values })

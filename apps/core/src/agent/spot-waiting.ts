@@ -20,7 +20,8 @@
 //   flagged again.
 // - The result changes no Item and writes nothing to Teams: the runner `apply`s it without the gate
 //   (ADR 0004's amendment), at any level above Off. Ask works as Auto here, as there is nothing to
-//   approve. Drafting replies, which Teams will see, is Act for you and comes with the next ticket.
+//   approve. A suggested reply to a flagged Chat, which Teams would see, is Act for you
+//   (suggest-teams-replies.ts, #110).
 import {
   type ChatDetail,
   type ChatMessage,
@@ -72,7 +73,7 @@ type Candidate = {
 };
 type Input = JobInput & { candidates: Candidate[] };
 
-type Chat = Item & { detail: ChatDetail };
+export type Chat = Item & { detail: ChatDetail };
 const isChat = (item: Item): item is Chat => item.kind === 'chat' && item.detail?.kind === 'chat';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -137,7 +138,7 @@ function cleanReason(reason: string): string {
 }
 
 /** Who the User is in each Teams Account, failing `me`: the sender of a Chat's latest message where it is theirs. */
-function usersFromChats(chats: readonly Chat[]): Record<string, string> {
+export function usersFromChats(chats: readonly Chat[]): Record<string, string> {
   const users: Record<string, string> = {};
   for (const chat of chats) {
     if (!chat.account || !chat.detail.latestFromMe) continue;
@@ -147,7 +148,8 @@ function usersFromChats(chats: readonly Chat[]): Record<string, string> {
   return users;
 }
 
-function liveChats(itemStore: ItemStore): Chat[] {
+/** Every live Chat Commander holds (excluded ones are deleted, so never among them). */
+export function liveChats(itemStore: ItemStore): Chat[] {
   return itemStore
     .query({ kinds: ['chat'], statuses: ['open'], limit: 1000 })
     .filter((item): item is Chat => isChat(item) && item.deletedAt === null);

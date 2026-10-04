@@ -551,7 +551,7 @@ describe('giving an Update', () => {
     suggest('need to send Dana the Q3 numbers', 'Send Dana the Q3 numbers');
     const update = (await updates.skills.run('update', undefined)) as { lines: unknown[] };
     expect(update.lines).toHaveLength(1);
-    expect(updates.skills.list().map((skill) => skill.name)).toEqual(['update', 'summarise']);
+    expect(updates.skills.list().map((skill) => skill.name)).toEqual(['update', 'summarise', 'draft']);
   });
 });
 

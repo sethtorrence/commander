@@ -18,6 +18,7 @@ const TIMEOUTS: Record<UpdatesOp, number> = {
   state: 10_000,
   'run-skill': 90_000,
   'summarise-chat': 90_000,
+  'draft-reply': 90_000,
   history: 10_000,
   past: 10_000,
   act: 10_000,
