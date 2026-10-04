@@ -69,6 +69,20 @@ describe('removing an Account’s Items at the main process’s request', () => 
     expect(order).toEqual(['stop linear:org-acme', 'items left: 1']);
   });
 
+  it('forgets what a removed GitHub Account watched', () => {
+    store.githubWatch.save('github:583231', { orgs: [{ login: 'acme', except: [] }], repos: [] });
+
+    answerRemoveAccountItems(store, {
+      type: 'remove-account-items',
+      id: 10,
+      source: 'github',
+      account: 'github:583231',
+      name: 'octocat',
+    });
+
+    expect(store.githubWatch.read('github:583231').watch).toBeNull();
+  });
+
   it('answers a malformed request with the reason', () => {
     const reply = answerRemoveAccountItems(store, { type: 'remove-account-items', id: 8, source: 'myspace' });
 

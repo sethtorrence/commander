@@ -1,0 +1,260 @@
+{
+  "GET /user": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-remaining": "4990",
+      "x-oauth-scopes": "repo, read:org"
+    },
+    "body": {
+      "login": "octocat",
+      "id": 583231,
+      "node_id": "MDQ6VXNlcjU4MzIzMQ==",
+      "type": "User",
+      "name": "The Octocat"
+    }
+  },
+  "GET /user/orgs?per_page=100&page=1": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-remaining": "4990"
+    },
+    "body": [
+      {
+        "login": "acme",
+        "id": 501,
+        "node_id": "O_kgDOacme",
+        "url": "https://api.github.com/orgs/acme",
+        "description": null
+      },
+      {
+        "login": "initech",
+        "id": 502,
+        "node_id": "O_kgDOinitech",
+        "url": "https://api.github.com/orgs/initech",
+        "description": null
+      }
+    ]
+  },
+  "GET /user/repos?affiliation=owner%2Ccollaborator%2Corganization_member&sort=pushed&per_page=100&page=1": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-remaining": "4990"
+    },
+    "body": [
+      {
+        "id": 1296269,
+        "node_id": "R_kgDOAcmeApi",
+        "name": "api",
+        "full_name": "acme/api",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "id": 9004,
+          "node_id": "O_acme",
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/acme/api",
+        "archived": false,
+        "disabled": false,
+        "visibility": "private",
+        "pushed_at": "2026-10-02T16:20:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2026-10-02T16:20:00Z",
+        "default_branch": "main"
+      },
+      {
+        "id": 1296272,
+        "node_id": "R_kgDOOctoDotfiles",
+        "name": "dotfiles",
+        "full_name": "octocat/dotfiles",
+        "private": false,
+        "owner": {
+          "login": "octocat",
+          "id": 9007,
+          "node_id": "O_octocat",
+          "type": "User"
+        },
+        "html_url": "https://github.com/octocat/dotfiles",
+        "archived": false,
+        "disabled": false,
+        "visibility": "public",
+        "pushed_at": "2026-09-30T20:00:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2026-09-30T20:00:00Z",
+        "default_branch": "main"
+      },
+      {
+        "id": 1296275,
+        "node_id": "R_kgDOHooliContrib",
+        "name": "contrib",
+        "full_name": "hooli/contrib",
+        "private": false,
+        "owner": {
+          "login": "hooli",
+          "id": 9005,
+          "node_id": "O_hooli",
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/hooli/contrib",
+        "archived": false,
+        "disabled": false,
+        "visibility": "public",
+        "pushed_at": "2026-09-02T08:00:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2026-09-02T08:00:00Z",
+        "default_branch": "main"
+      },
+      {
+        "id": 1296276,
+        "node_id": "R_kgDOOctoArchived",
+        "name": "2019-talk",
+        "full_name": "octocat/2019-talk",
+        "private": false,
+        "owner": {
+          "login": "octocat",
+          "id": 9007,
+          "node_id": "O_octocat",
+          "type": "User"
+        },
+        "html_url": "https://github.com/octocat/2019-talk",
+        "archived": true,
+        "disabled": false,
+        "visibility": "public",
+        "pushed_at": "2019-05-01T08:00:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2019-05-01T08:00:00Z",
+        "default_branch": "main"
+      },
+      {
+        "id": 1296274,
+        "node_id": "R_kgDOOctoEmpty",
+        "name": "empty",
+        "full_name": "octocat/empty",
+        "private": true,
+        "owner": {
+          "login": "octocat",
+          "id": 9007,
+          "node_id": "O_octocat",
+          "type": "User"
+        },
+        "html_url": "https://github.com/octocat/empty",
+        "archived": false,
+        "disabled": false,
+        "visibility": "private",
+        "pushed_at": null,
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2024-02-01T10:00:00Z",
+        "default_branch": "main"
+      }
+    ]
+  },
+  "GET /orgs/acme/repos?type=all&sort=pushed&per_page=100&page=1": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-remaining": "4990"
+    },
+    "body": [
+      {
+        "id": 1296269,
+        "node_id": "R_kgDOAcmeApi",
+        "name": "api",
+        "full_name": "acme/api",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "id": 9004,
+          "node_id": "O_acme",
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/acme/api",
+        "archived": false,
+        "disabled": false,
+        "visibility": "private",
+        "pushed_at": "2026-10-02T16:20:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2026-10-02T16:20:00Z",
+        "default_branch": "main"
+      },
+      {
+        "id": 1296270,
+        "node_id": "R_kgDOAcmeWeb",
+        "name": "web",
+        "full_name": "acme/web",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "id": 9004,
+          "node_id": "O_acme",
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/acme/web",
+        "archived": false,
+        "disabled": false,
+        "visibility": "private",
+        "pushed_at": "2026-09-21T09:00:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2026-09-21T09:00:00Z",
+        "default_branch": "main"
+      },
+      {
+        "id": 1296273,
+        "node_id": "R_kgDOAcmeHandbook",
+        "name": "handbook",
+        "full_name": "acme/handbook",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "id": 9004,
+          "node_id": "O_acme",
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/acme/handbook",
+        "archived": false,
+        "disabled": false,
+        "visibility": "internal",
+        "pushed_at": "2026-08-11T09:00:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2026-08-11T09:00:00Z",
+        "default_branch": "main"
+      },
+      {
+        "id": 1296271,
+        "node_id": "R_kgDOAcmeOld",
+        "name": "old-site",
+        "full_name": "acme/old-site",
+        "private": true,
+        "owner": {
+          "login": "acme",
+          "id": 9004,
+          "node_id": "O_acme",
+          "type": "Organization"
+        },
+        "html_url": "https://github.com/acme/old-site",
+        "archived": true,
+        "disabled": false,
+        "visibility": "private",
+        "pushed_at": "2023-01-05T12:00:00Z",
+        "created_at": "2024-02-01T10:00:00Z",
+        "updated_at": "2023-01-05T12:00:00Z",
+        "default_branch": "main"
+      }
+    ]
+  },
+  "GET /orgs/initech/repos?type=all&sort=pushed&per_page=100&page=1": {
+    "status": 403,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-remaining": "4980",
+      "x-github-sso": "required; url=https://github.com/orgs/initech/sso?authorization_request=AZZZ"
+    },
+    "body": {
+      "message": "Resource protected by organization SAML enforcement. You must grant your Personal Access token access to this organization.",
+      "documentation_url": "https://docs.github.com/articles/authenticating-to-a-github-organization-with-saml-single-sign-on/",
+      "status": "403"
+    }
+  }
+}

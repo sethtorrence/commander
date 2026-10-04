@@ -1,0 +1,75 @@
+{
+  "request": {
+    "operationName": "CommanderWorkedIn",
+    "variables": {
+      "from": "2026-07-05T12:00:00.000Z"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json; charset=utf-8",
+      "x-ratelimit-remaining": "4990"
+    },
+    "body": {
+      "data": {
+        "viewer": {
+          "login": "octocat",
+          "contributionsCollection": {
+            "commitContributionsByRepository": [
+              {
+                "repository": {
+                  "id": "R_kgDOAcmeApi",
+                  "nameWithOwner": "acme/api"
+                },
+                "contributions": {
+                  "totalCount": 41
+                }
+              },
+              {
+                "repository": {
+                  "id": "R_kgDOOctoDotfiles",
+                  "nameWithOwner": "octocat/dotfiles"
+                },
+                "contributions": {
+                  "totalCount": 3
+                }
+              }
+            ],
+            "pullRequestContributionsByRepository": [
+              {
+                "repository": {
+                  "id": "R_kgDOAcmeApi",
+                  "nameWithOwner": "acme/api"
+                },
+                "contributions": {
+                  "totalCount": 6
+                }
+              },
+              {
+                "repository": {
+                  "id": "R_kgDOHooliContrib",
+                  "nameWithOwner": "hooli/contrib"
+                },
+                "contributions": {
+                  "totalCount": 1
+                }
+              }
+            ],
+            "pullRequestReviewContributionsByRepository": [
+              {
+                "repository": {
+                  "id": "R_kgDOAcmeWeb",
+                  "nameWithOwner": "acme/web"
+                },
+                "contributions": {
+                  "totalCount": 12
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

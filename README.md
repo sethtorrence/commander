@@ -123,6 +123,17 @@ The end-to-end tests never contact Microsoft: they point sign-in and Graph at a 
 
 The tests never contact GitHub: they point sign-in and the API at a fake GitHub on this machine (device flow, REST and a sliver of GraphQL) through `COMMANDER_TEST_GITHUB`, which only accepts loopback URLs, and put a stand-in `gh` first on the `PATH`.
 
+### Choosing what to watch (Settings → GitHub)
+
+**Settings → GitHub** lists, for each GitHub Account, the orgs and repos it can reach, and which of them Commander watches. GitHub sync reads this list.
+
+- **What's offered.** With the GitHub App: each installation's repos (`GET /user/installations` and each one's repositories), so only repos the install covers and you can access appear. Orgs you belong to without the app show as **Commander isn't installed here**, with **Install or request…** (the app's install page for that org, where owners install it and members can request it). With a classic token or gh's sign-in: your orgs (`GET /user/orgs`), your repos (`GET /user/repos`) and each org's repos. Archived repos never appear. **Add an org by name** covers an org GitHub didn't list.
+- **The first time**, Commander checks the repos you pushed to, opened pull requests in or reviewed in the last 90 days (one GraphQL query over your contributions). They show as ordinary checked repos.
+- **Choosing.** Each org has **Watch whole org**, which also covers repos made there later; unchecking a repo inside it leaves just that one out. Other repos, and your **Personal repos**, have a checkbox each. A search box narrows the list, and a summary line says what is watched ("Watching 23 repos in 3 orgs."). Changes save at once.
+- **Unwatching** a repo or an org that has Items in Commander asks first, saying how many Items go. Your notes and Todos stay, and their Links show those Items as gone.
+- **Losing access.** A watched repo Commander can no longer reach (the app was uninstalled, your access ended, the repo was archived) stays watched and is listed under **Watched, but out of reach**, with **Unwatch**. Its Items stay until you unwatch it.
+- **Where it's kept.** The Core lists what each Account can reach, with a token it borrows from the main process for each request. It keeps the choice through the Item store, in `commander.db` (`github_watch`): whole orgs (with any repos left out) and single repos, by node id. It keeps the rules rather than a list of repos, so new repos in a watched org are picked up. GitHub Items are keyed `<repo node id>:<…>` (`githubExternalId` in `packages/domain`), so unwatching a repo finds its Items.
+
 ### Connecting Google
 
 **Connect Google** in Settings → Accounts signs in once for both Google Sources, **Gmail** and **Google Calendar**. Each Google account is its own Account, shown as "Google · <address>" and keyed by Google's account ID (the ID token's `sub`), so connecting the same account again updates it, and you can connect several. Nothing syncs yet: Google Calendar sync (M5) and Gmail sync (M6) plug into this Account.
@@ -246,7 +257,7 @@ The end-to-end tests' input never reaches the system, so they stand in for `powe
 
 ## Moving around
 
-Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares, usage and autonomy), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
+Sections sit on numbered notebook tabs: `1`–`8` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares, usage, autonomy and what to watch on GitHub), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
 
 `Ctrl+K` opens the palette from anywhere, even while typing in a note. It finds as you type, over everything Commander holds on this machine: Todos, Daily Notes and their Blocks, Linear issues (by identifier such as `ENG-418`, title, description or comments), Teams Chats (by title or recent messages) and Projects, grouped by kind with their Badges. It also jumps to a Section, a Project's page or today's Daily Note, and runs commands (New Todo, Send Todo to Linear, New Linear issue, Switch theme, Open Settings, Sync Linear now). `↑`/`↓` move, `Enter` opens the Item where it lives (a Todo in its detail pane, a Block in Notes with the caret in it, an issue in the Linear detail pane) and `Esc` closes. Narrow a search with chips typed among the words, or picked from the filter row: `#LT` (a Project, or `#unfiled`), `in:notes`, `in:todos` or `in:linear`, `@Acme` (an Account) and `after:2026-09-01` / `before:2026-10-01` (when it last changed; `today` and `yesterday` work too). `/` opens the palette on the open Section and the Project filter. Every word must match, and the last one matches as you type it; an exact identifier or title comes first. When a Linear Account is connected and few things match, the last row opens Linear's own search for that workspace in your browser. Search is local and never waits on Ares.
 

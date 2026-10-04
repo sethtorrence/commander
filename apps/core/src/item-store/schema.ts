@@ -9,6 +9,9 @@ import type {
   DashboardBand,
   FieldSummary,
   FiledBy,
+  GitHubAccess,
+  GitHubRepoRef,
+  GitHubWatch,
   ItemKind,
   ItemStatus,
   JobOutcome,
@@ -553,4 +556,20 @@ export const updateState = sqliteTable('update_state', {
   lastInputAt: integer('last_input_at'),
   longestGapMs: integer('longest_gap_ms').notNull().default(0),
   lastGivenAt: integer('last_given_at'),
+});
+
+// Settings → GitHub (#113): what each GitHub Account watches (whole orgs, with repos left out, and
+// single repos), what GitHub last listed it can reach, every repo it has listed, and orgs the User
+// added by name. GitHub sync (#114) reads the selection from here.
+export const githubWatch = sqliteTable('github_watch', {
+  account: text('account').primaryKey(),
+  // null until the first selection (the repos worked in lately) is made.
+  watch: text('watch', { mode: 'json' }).$type<GitHubWatch>(),
+  // The selection is still the one Commander started with.
+  fromDefault: integer('from_default', { mode: 'boolean' }).notNull().default(false),
+  access: text('access', { mode: 'json' }).$type<GitHubAccess>(),
+  // Every repo the Account has listed, so unwatching a whole org finds the Items of repos gone since.
+  seen: text('seen', { mode: 'json' }).$type<GitHubRepoRef[]>().notNull().default(sql`'[]'`),
+  addedOrgs: text('added_orgs', { mode: 'json' }).$type<string[]>().notNull().default(sql`'[]'`),
+  updatedAt: integer('updated_at').notNull(),
 });

@@ -3,6 +3,8 @@ import type {
   AutonomyResponse,
   AutonomyResults,
   CoreMessage,
+  GitHubWatchRequest,
+  GitHubWatchResponse,
   ItemStoreRequest,
   ItemStoreResponse,
   ItemStoreResults,
@@ -90,6 +92,10 @@ const commander = {
   // main process shows; resolves with the refusal's reason, if any.
   markdownCopy: (request: MarkdownCopyRequest): Promise<MarkdownCopyResponse> =>
     ipcRenderer.invoke(ipc.markdownCopy, request),
+  // Settings → GitHub: what each GitHub Account can reach and watches. Resolves with the response,
+  // failures included (with the last listing, when there is one).
+  githubWatch: (request: GitHubWatchRequest): Promise<GitHubWatchResponse> =>
+    ipcRenderer.invoke(ipc.githubWatch, request),
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),
   // Settings → Accounts. Answers carry Account summaries, never a token or key.
