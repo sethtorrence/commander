@@ -1,10 +1,10 @@
-import type { BlockLinkTarget, Project } from '@commander/domain';
+import { type BlockLinkTarget, clockOf, type Item, isEvent, localDay, type Project } from '@commander/domain';
 import { addDays, dateOf, dayKey } from '../sections/notes/days';
 
 /*
-  What the `[[` picker offers: the things a Block can link to, each from a provider. In M1 that is
-  Daily Notes (days) and Projects; Linear issues, emails, PRs and calendar events join as providers
-  when their Sources arrive, each turning what the User typed into candidates.
+  What the `[[` picker offers: the things a Block can link to, each from a provider: Daily Notes (days),
+  Projects and calendar events (#128); Linear issues, emails and PRs join as providers when their
+  Sources arrive, each turning what the User typed into candidates.
 */
 
 /** One thing the picker offers. */
@@ -165,6 +165,45 @@ export function projectTargets(projects: readonly Project[]): LinkTargetProvider
         label: project.name,
         ...(project.archived ? { hint: 'Archived' } : {}),
         project,
+      }));
+    },
+  };
+}
+
+// ---- calendar events ----
+
+/**
+ * Calendar events by title: today's and upcoming ones first (soonest first), then earlier ones (latest
+ * first). Before anything is typed, today's and upcoming ones. Cancelled events aren't offered.
+ */
+export function eventTargets(events: readonly Item[], today: string): LinkTargetProvider {
+  const live = events.filter(isEvent).filter((event) => event.deletedAt === null);
+  const dayName = (at: number) => {
+    const day = localDay(at);
+    return day === today ? 'Today' : shortDay(day, today);
+  };
+  return {
+    id: 'events',
+    label: 'Events',
+    search(query) {
+      const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const matching = live.filter((event) => {
+        const title = event.title.toLowerCase();
+        return words.every((word) => title.includes(word));
+      });
+      const coming = matching
+        .filter((event) => localDay(event.detail.start.at) >= today)
+        .sort((a, b) => a.detail.start.at - b.detail.start.at);
+      const earlier = words.length
+        ? matching
+            .filter((event) => localDay(event.detail.start.at) < today)
+            .sort((a, b) => b.detail.start.at - a.detail.start.at)
+        : [];
+      return [...coming, ...earlier].map((event) => ({
+        key: `event:${event.id}`,
+        target: { type: 'event', eventId: event.id },
+        label: event.title,
+        hint: `${dayName(event.detail.start.at)} ${event.detail.allDay ? '· All day' : clockOf(event.detail.start.at)}`,
       }));
     },
   };

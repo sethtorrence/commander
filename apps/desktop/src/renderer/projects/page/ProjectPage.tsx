@@ -9,6 +9,7 @@ import { chipLabel, type LabelChip } from '../../links/block-text';
 import { MentionRows } from '../../links/MentionedIn';
 import { useProjectMentions } from '../../links/use-mentions';
 import { MappingRules } from '../../rules/MappingRules';
+import { ProjectSchedule } from '../../sections/calendar/ProjectSchedule';
 import { ProjectRankedList } from '../../sections/dashboard/ProjectRankedList';
 import { dayKey } from '../../sections/notes/days';
 import { TodoGroup } from '../../sections/todos/TodoGroup';
@@ -47,8 +48,7 @@ export interface ProjectPageProps {
  * A Project's page, opened as a temporary tab: the sheet header with its Badge, per-Section counts,
  * the Dashboard's ranked list scoped to the Project, the Project's open Todos (which behave as in the
  * Todos Section: `j`/`k`, `x`, `b`), and in the side column how its Items were filed, its mapping
- * Rules, and the controls to rename, recolour, archive and merge it. Its schedule joins it with the
- * Calendar milestone.
+ * Rules, its schedule for the next 7 days, and the controls to rename, recolour, archive and merge it.
  */
 export function ProjectPage({
   projectId,
@@ -250,6 +250,12 @@ export function ProjectPage({
       <aside className="relative col-span-2 min-w-0" aria-label={`${project.name}: filing and management`}>
         <div className="sticky top-(--body) mr-4 ml-3.5 flex max-h-[calc(100vh-var(--body))] flex-col gap-3.5 overflow-auto pt-3.5 pb-6 [scrollbar-width:none]">
           <FiledCard project={project} items={items.own} />
+          <ProjectSchedule
+            project={project}
+            itemStore={itemStore}
+            active={active}
+            onOpenSection={onOpenSection}
+          />
           <MappingRules project={project} itemStore={itemStore} active={active} onChanged={refresh} />
           <ProjectNotes
             project={project}

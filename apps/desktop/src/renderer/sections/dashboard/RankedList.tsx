@@ -5,6 +5,7 @@ import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
+import { CalendarSwatch } from '../calendar/EventRow';
 import { StateIcon } from '../linear/glyphs';
 import { sectionFor } from '../todos/links';
 import { type FeedRow, rowMeta, sourceTag } from './feed';
@@ -24,7 +25,7 @@ export const BANDS: Record<DashboardBand, { no: string; name: string; subtitle: 
   fyi: { no: 'B4', name: 'FYI', subtitle: 'Worth knowing. Nothing to do.' },
 };
 
-const SECTION_LABELS: Record<string, string> = { todos: 'Todos', linear: 'Linear' };
+const SECTION_LABELS: Record<string, string> = { todos: 'Todos', linear: 'Linear', calendar: 'Calendar' };
 
 /** The Item to show when a row is opened in its Section: a suggestion's Block, else the row's Item. */
 export const revealId = (row: FeedRow) => row.suggestion?.blockId ?? row.item.id;
@@ -325,9 +326,16 @@ function Row({
   );
 }
 
-// A Todo's tick box (a button: it ticks), a Linear issue's workflow state, or a suggestion's dashed box.
+// A Todo's tick box (a button: it ticks), a Linear issue's workflow state, a meeting's calendar
+// colour, or a suggestion's dashed box.
 function Marker({ row, onTick }: { row: FeedRow; onTick: () => void }) {
   const { item, done } = row;
+  if (item.detail?.kind === 'event')
+    return (
+      <span className="grid h-[22px] place-items-center" title={item.detail.calendar.name}>
+        <CalendarSwatch colour={item.detail.calendar.colour} />
+      </span>
+    );
   if (row.suggestion)
     return (
       <span className="grid h-[22px] place-items-center" title="Suggested by Ares">

@@ -162,6 +162,13 @@
       "when": 1791089660500,
       "tag": "0022_google_calendar",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1791091056282,
+      "tag": "0023_meeting_chips",
+      "breakpoints": true
     }
   ]
 }

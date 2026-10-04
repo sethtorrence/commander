@@ -511,3 +511,18 @@ describe('the Dashboard from the window', () => {
     ).toMatchObject({ response: { ok: false } });
   });
 });
+
+describe('Settings → Calendar from the window', () => {
+  it('reads the heads-up as off until the User turns it on, saves it, and refuses a malformed one', () => {
+    expect(ask(1, { op: 'calendar-settings' })).toMatchObject({
+      response: { ok: true, result: { headsUp: false } },
+    });
+    expect(ask(2, { op: 'save-calendar-settings', settings: { headsUp: true } })).toMatchObject({
+      response: { ok: true, result: { headsUp: true } },
+    });
+    expect(store.calendarSettings.read()).toEqual({ headsUp: true });
+    expect(ask(3, { op: 'save-calendar-settings', settings: { headsUp: 'yes' } })).toMatchObject({
+      response: { ok: false },
+    });
+  });
+});

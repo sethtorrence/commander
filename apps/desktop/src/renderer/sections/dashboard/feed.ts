@@ -1,5 +1,6 @@
 import {
   type ClearMark,
+  clockOf,
   type DashboardBand,
   type DashboardClears,
   dashboardBands,
@@ -7,6 +8,7 @@ import {
   type Item,
   inReview,
   localDay,
+  meetingTimes,
   type Ranking,
 } from '@commander/domain';
 import { dateOf } from '../notes/days';
@@ -114,9 +116,14 @@ const dueOf = (item: Item) =>
       ? item.detail.dueDate
       : null;
 
-/** The row's Source stamp and what follows it: `TODO` Manual · due Fri, `LIN` In Progress, `ARES` Suggested Todo. */
+/**
+ * The row's Source stamp and what follows it: `TODO` Manual · due Fri, `LIN` In Progress, `ARES`
+ * Suggested Todo, `CAL` Titanlink · 10:00–10:30.
+ */
 export function sourceTag(item: Item, suggested = false): { stamp: string; text: string } {
   if (suggested) return { stamp: 'ARES', text: 'Suggested Todo' };
+  if (item.detail?.kind === 'event')
+    return { stamp: 'CAL', text: `${item.detail.calendar.name} · ${meetingTimes(item.detail)}` };
   if (item.detail?.kind === 'linear-issue') return { stamp: 'LIN', text: item.detail.state.name };
   const due = dueOf(item);
   const origin = originLabel(item);
@@ -127,6 +134,11 @@ export function sourceTag(item: Item, suggested = false): { stamp: string; text:
 export function rowMeta(row: FeedRow, now: number): [string, string] {
   const { item, band } = row;
   if (row.suggestion) return ['New', 'Suggested'];
+  if (item.detail?.kind === 'event') {
+    const { start, end } = item.detail;
+    if (now < start.at) return [`${Math.ceil((start.at - now) / 60_000)}M`, 'Starts'];
+    return ['Now', `Ends ${clockOf(end.at)}`];
+  }
   const today = localDay(now);
   const due = dueOf(item);
   if (due && due < today) return [`${daysBetween(due, today)}D`, 'Overdue'];

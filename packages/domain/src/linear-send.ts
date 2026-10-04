@@ -142,18 +142,22 @@ export function sentWhy(detail: LinearIssueDetail, me: string | null, now: numbe
 
 /**
  * The issue title a Block's text suggests: its words without `#LT` codes and Markdown marks, with each
- * `[[` link named (a day as it is, a Project by name). An image Block suggests nothing.
+ * `[[` link named (a day as it is, a Project or a calendar event by name). An image Block suggests
+ * nothing.
  */
 export function issueTitleFrom(
   text: string,
   projects: readonly Pick<Project, 'id' | 'code' | 'name' | 'archived'>[],
+  eventTitle: (eventId: string) => string | undefined = () => undefined,
 ): string {
   let plain = text;
   for (const tag of blockTags(text, projects).reverse())
     plain = plain.slice(0, tag.start) + plain.slice(tag.end);
-  plain = labelBlockLinks(plain, (target) =>
-    target.type === 'day' ? target.day : (projects.find((p) => p.id === target.projectId)?.name ?? ''),
-  );
+  plain = labelBlockLinks(plain, (target) => {
+    if (target.type === 'day') return target.day;
+    if (target.type === 'event') return eventTitle(target.eventId) ?? '';
+    return projects.find((p) => p.id === target.projectId)?.name ?? '';
+  });
   return plain
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')

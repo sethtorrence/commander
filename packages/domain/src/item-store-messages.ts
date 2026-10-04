@@ -1,7 +1,13 @@
 import { z } from 'zod';
 import { type DashboardClears, type DashboardState, dashboardClears, dashboardState } from './ares-ranking';
 import { attachmentMaxBytes, attachmentNamePattern } from './attachments';
-import { type CalendarSummary, calendarSummary, eventQuery } from './calendar';
+import {
+  type CalendarSettings,
+  type CalendarSummary,
+  calendarSettings,
+  calendarSummary,
+  eventQuery,
+} from './calendar';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import {
   type ActivityEntry,
@@ -137,6 +143,9 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
     calendarId: z.string().min(1),
     on: z.boolean(),
   }),
+  // Settings → Calendar: the opt-in heads-up 2 minutes before each meeting (off by default).
+  z.object({ op: z.literal('calendar-settings') }),
+  z.object({ op: z.literal('save-calendar-settings'), settings: calendarSettings }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -187,6 +196,8 @@ export type ItemStoreResults = {
   events: Item[];
   calendars: CalendarSummary[];
   'set-calendar-enabled': CalendarSummary[];
+  'calendar-settings': CalendarSettings;
+  'save-calendar-settings': CalendarSettings;
 };
 
 export const itemStoreResult = {
@@ -226,6 +237,8 @@ export const itemStoreResult = {
   events: z.array(item),
   calendars: z.array(calendarSummary),
   'set-calendar-enabled': z.array(calendarSummary),
+  'calendar-settings': calendarSettings,
+  'save-calendar-settings': calendarSettings,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

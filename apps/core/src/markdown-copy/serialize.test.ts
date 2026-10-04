@@ -168,6 +168,30 @@ describe('the Markdown copy of a Daily Note', () => {
     );
   });
 
+  it('writes a meeting chip as its times and title, with the notes under it', () => {
+    const meetings: CopyProjects = {
+      ...projects,
+      meeting: (id) =>
+        ({ sync: '10:00–10:30 Weekly sync with Priya', gone: '~~09:00–09:15 Standup~~ (Cancelled)' })[id],
+    };
+    const blocks = [
+      block('m', 'Meetings'),
+      block('c', '[[event:sync]]', { parentId: 'm' }),
+      block('n', 'Priya owns the launch checklist', { parentId: 'c' }),
+      block('x', '[[event:gone]]', { parentId: 'm' }),
+      block('p', 'Prep for [[event:sync]] and [[event:unknown]]'),
+    ];
+    expect(dailyNoteMarkdown(blocks, meetings)).toBe(
+      file(
+        '- Meetings',
+        '\t- 10:00–10:30 Weekly sync with Priya',
+        '\t\t- Priya owns the launch checklist',
+        '\t- ~~09:00–09:15 Standup~~ (Cancelled)',
+        '- Prep for 10:00–10:30 Weekly sync with Priya and a meeting',
+      ),
+    );
+  });
+
   it('keeps a Project name from breaking the [[ link', () => {
     const odd: CopyProjects = { code: () => 'OD', name: () => 'Q3 [draft] | #1 ^x' };
     expect(dailyNoteMarkdown([block('a', 'On [[project:od]]')], odd)).toBe(file('- On [[Q3 draft 1 x]]'));

@@ -24,6 +24,7 @@ import {
   coreMarkdownCopyRequest,
   isOwnFiling,
   type MarkdownCopyStatus,
+  meetingLine,
 } from '@commander/domain';
 import type { ItemStore } from '../item-store';
 import { type CopyBlock, type CopyProjects, dailyNoteMarkdown } from './serialize';
@@ -184,6 +185,13 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     return null;
   }
 
+  // The days whose meeting chips (or other `[[` links) show an event that changed.
+  function meetingDaysOf(itemId: string): string[] {
+    const item = store.get(itemId)?.item;
+    if (item?.kind !== 'event') return [];
+    return store.mentions({ targets: [{ targetType: 'item', id: itemId }] }).map((found) => found.day);
+  }
+
   // ---- writing ----
 
   async function writeImages(into: string, blocks: CopyBlock[]) {
@@ -221,7 +229,9 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     });
     // A day gets a file once something is written in it; one with a file keeps it up to date.
     if (!existing && !blocks.some((block) => block.text.trim() !== '')) return false;
-    const text = dailyNoteMarkdown(blocks, projects);
+    // A meeting chip reads as its meeting, as it stands for this day (cancelled, moved).
+    const meeting = (eventId: string) => meetingLine(store.get(eventId)?.item, day);
+    const text = dailyNoteMarkdown(blocks, { ...projects, meeting });
     await writeImages(into, blocks);
     if (existing?.isFile() && existing.size <= COMPARE_UP_TO) {
       if ((await readFile(path, 'utf8')) === text) return false;
@@ -249,6 +259,7 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     for (const id of all ? [] : pendingItems) {
       const day = dayOf(id);
       if (day) pendingDays.add(day);
+      for (const mentioned of meetingDaysOf(id)) pendingDays.add(mentioned);
     }
     const days = [...pendingDays];
     pendingAll = false;

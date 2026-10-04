@@ -1,6 +1,7 @@
 import type { Item } from './items';
 import type { LinearIssueDetail } from './linear';
 import { isLinearTodo } from './linear-todos';
+import { clockOf, isChipWorthy } from './meetings';
 
 /*
   Ranking the Dashboard: which open Items need the User, in which band, why, and in what order.
@@ -147,7 +148,28 @@ function placeLinearTodo(issue: Issue, today: string, now: number): Placed | nul
   return null;
 }
 
+/** How long before a meeting starts it enters Now. */
+export const MEETING_LEAD_MS = 15 * 60_000;
+
+// "12 minutes", "1 minute"
+const minutes = (n: number) => `${n} minute${n === 1 ? '' : 's'}`;
+
+// The User's next meeting (one that gets a meeting chip): in Now from 15 minutes before it starts until
+// it ends. Other meetings stay in the schedule.
+function placeMeeting(item: Item, now: number): Placed | null {
+  if (!isChipWorthy(item)) return null;
+  const { start, end } = item.detail;
+  if (now < start.at - MEETING_LEAD_MS || now >= end.at) return null;
+  if (now < start.at)
+    return { item, band: 'now', reason: `Starts in ${minutes(Math.ceil((start.at - now) / 60_000))}` };
+  const since = Math.floor((now - start.at) / 60_000);
+  const started =
+    since < 1 ? 'just now' : since < 60 ? `${minutes(since)} ago` : `${Math.floor(since / 60)}h ago`;
+  return { item, band: 'now', reason: `Started ${started} · ends ${clockOf(end.at)}` };
+}
+
 function place(item: Item, context: RankingContext, today: string): Placed | null {
+  if (item.kind === 'event') return placeMeeting(item, context.now);
   if (!isIssue(item)) return item.kind === 'todo' ? byDueDate(item, today) : null;
   const me = item.account ? context.users[item.account] : undefined;
   if (!me) return null;
@@ -161,13 +183,18 @@ function place(item: Item, context: RankingContext, today: string): Placed | nul
   return null;
 }
 
-// Within a band: priority (Urgent first, none last), then due date (soonest first, none last), then
-// the most recent change.
+// Within a band: meetings first, soonest first (one is about to start); then priority (Urgent first,
+// none last), then due date (soonest first, none last), then the most recent change.
+const startOf = (item: Item) =>
+  item.detail?.kind === 'event' ? item.detail.start.at : Number.POSITIVE_INFINITY;
 const priorityOf = (item: Item) => (isIssue(item) && item.detail.priority > 0 ? item.detail.priority : 5);
 const changedAt = (item: Item) => (isIssue(item) ? item.detail.updatedAt : item.updatedAt);
 function inBandOrder(a: Placed, b: Placed): number {
   const dueA = dueOn(a.item) ?? '9999-12-31';
   const dueB = dueOn(b.item) ?? '9999-12-31';
+  const startA = startOf(a.item);
+  const startB = startOf(b.item);
+  if (startA !== startB) return startA < startB ? -1 : 1;
   return (
     priorityOf(a.item) - priorityOf(b.item) ||
     (dueA < dueB ? -1 : dueA > dueB ? 1 : 0) ||
@@ -191,7 +218,8 @@ export function dashboardCandidates(items: readonly Item[]): Item[] {
 /**
  * The M2 band rules.
  *
- * - **Now:** overdue Todos, and Linear Todos with Urgent priority.
+ * - **Now:** the User's next meeting, from 15 minutes before it starts until it ends (first, as it can't
+ *   wait), overdue Todos, and Linear Todos with Urgent priority.
  * - **Waiting on others:** Linear Todos in a review state.
  * - **Today:** Todos due today, and Linear Todos in progress or in their team's current cycle.
  * - **FYI:** Linear issues the User created, assigned to someone else, that changed in the last day.

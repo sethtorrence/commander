@@ -9,6 +9,7 @@ import { useProjectFilter, useProjects } from '../../projects/context';
 import { SideCard } from '../../projects/page/SideCard';
 import { useShortcuts } from '../../shortcuts/react';
 import { AresQueueCard } from '../../updates/AresQueueCard';
+import { localTimeZone, ScheduleCard, scheduleDays } from '../calendar/ScheduleCard';
 import { longDate, notePartNumber, weekday } from '../notes/days';
 import { SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { useDashboard } from './context';
@@ -32,7 +33,8 @@ export function useEmptyBandText(): string {
 /**
  * The Dashboard Section's sheet, after the prototype's FEED: "What needs you", the Project filter,
  * then the ranked list in bands (Now, Today, Waiting on others, FYI), driven from the keyboard, with
- * the side column holding Ares's queue, today's Daily Note and the open Todos.
+ * the side column holding Ares's queue, today's and tomorrow's schedule, today's Daily Note and the
+ * open Todos.
  */
 export function DashboardSheet() {
   const dashboard = useDashboard();
@@ -132,7 +134,7 @@ export function DashboardSheet() {
               : `Ranked by rules · ${clockTime(now).slice(0, 5)}`}
           </SheetStripCell>
         }
-        meta={<SheetStripCell>Todos and Linear merged</SheetStripCell>}
+        meta={<SheetStripCell>Todos, Linear and meetings merged</SheetStripCell>}
         subtitle={
           <>
             {weekday(today)} {longDate(today)} ·{' '}
@@ -167,10 +169,18 @@ export function DashboardSheet() {
       </SectionSheet>
       <aside
         className="relative col-span-2 min-w-0"
-        aria-label="Ares’s queue, today’s Daily Note and your Todos"
+        aria-label="Ares’s queue, your schedule, today’s Daily Note and your Todos"
       >
         <div className="sticky top-(--body) mr-4 ml-3.5 flex max-h-[calc(100vh-var(--body))] flex-col gap-3.5 overflow-auto pt-3.5 pb-6 [scrollbar-width:none]">
           <AresQueueCard />
+          <ScheduleCard
+            label="Schedule"
+            title="Schedule · today and tomorrow"
+            days={scheduleDays(dashboard.events, { today, days: 2, timeZone: localTimeZone() })}
+            dayName={(_, index) => (index === 0 ? 'Today' : 'Tomorrow')}
+            empty="No meetings."
+            onOpenSection={openSection}
+          />
           <DailyNoteCard day={today} active={active} openTodos={dashboard.openTodos} />
         </div>
       </aside>

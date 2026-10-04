@@ -82,6 +82,7 @@ import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
+import { type CalendarSettingsStore, calendarSettingsIn } from './calendar-settings';
 import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRows } from './calendars';
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
@@ -92,6 +93,7 @@ import { type InjectionWarningStore, injectionWarningsIn } from './injection-war
 import { linearSendIn } from './linear-send';
 import { linearTodosIn } from './linear-todos';
 import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-copy-folder';
+import { type MeetingChips, meetingChipsIn } from './meeting-chips';
 import { type ModelStore, openModelStore } from './models';
 import { type OutgoingStore, openOutgoingQueue } from './outgoing';
 import { projectsIn } from './projects';
@@ -121,12 +123,14 @@ import { openUpdateStore, type UpdateStore } from './updates';
 export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
+export type { CalendarSettingsStore } from './calendar-settings';
 export type { CalendarStore, ListedCalendar } from './calendars';
 export type { ChatSettingsStore } from './chat-settings';
 export type { DashboardStore, StoredClear } from './dashboard';
 export type { FilingFeedbackStore } from './filing-feedback';
 export type { GitHubWatchRecord, GitHubWatchStore } from './github-watch';
 export type { InjectionWarningStore } from './injection-warnings';
+export type { MeetingChips, MeetingChipsChange } from './meeting-chips';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
@@ -237,6 +241,11 @@ export type ItemStore = {
   events(query: EventQuery): Item[];
   // Each calendar Account's calendars and the User's switch for each, in the same database.
   calendars: CalendarStore;
+  // Today's meeting chips (meeting-chips.ts): one per meeting under today's Meetings Block, made and
+  // kept in step with the calendar by `fill`, never twice and never on past days.
+  meetingChips: MeetingChips;
+  // Settings → Calendar (calendar-settings.ts): the opt-in heads-up before each meeting.
+  calendarSettings: CalendarSettingsStore;
   // The Account's live events on one calendar.
   calendarEvents(account: { source: Source; account: string }, calendarId: string): Item[];
   // Switches a calendar on or off, as the User. Off hides its events at once (they stay as
@@ -452,10 +461,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const before = stateOf(item);
     const after = writeState(item, { ...before, filing }, at);
     const why = `Rule: ${describeRule(rule.when)}`;
-    return log(
+    const logged = log(
       { by: { kind: 'rule', ruleId: rule.id }, action: 'update', itemId: item.id, why, before, after },
       at,
     );
+    // An event's meeting chips follow it.
+    blockFiling.afterUpdate({ ...item, ...after }, before, logged, at);
+    return logged;
   }
 
   // The existing Items a change to the list moves: those whose first matching Rule (or its Project)
@@ -866,8 +878,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   /*
-    Keeps a Block's `[[` links in step with its text (ADR 0002): a refers-to Link for each day or
-    Project token in it, and none for a token no longer there. A day's token makes that day's Daily
+    Keeps a Block's `[[` links in step with its text (ADR 0002): a refers-to Link for each day, Project
+    or calendar event token in it, and none for a token no longer there. A day's token makes that day's Daily
     Note if it has none yet. It runs whenever a Block's text is written, by anyone, so undo, redo and
     moves need nothing of their own. Other refers-to Links from the Block (to other kinds of Item) are
     left alone.
@@ -892,6 +904,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         });
         continue;
       }
+      if (target.type === 'event') {
+        // A link to a calendar event Commander holds (a tombstone too: the card says it was cancelled).
+        if (readItem(target.eventId)?.kind !== 'event') continue;
+        wanted.set(`item:${target.eventId}`, { from: blockId, linkType: 'refers-to', to: target.eventId });
+        continue;
+      }
       const note = ensureDailyNote(target.day, {
         by: entry.by,
         why: 'Linked from a Block',
@@ -907,7 +925,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         and(
           eq(links.fromItemId, blockId),
           eq(links.type, 'refers-to'),
-          or(eq(links.targetType, 'project'), eq(items.kind, 'daily-note')),
+          or(eq(links.targetType, 'project'), inArray(items.kind, ['daily-note', 'event'])),
         ),
       )
       .all();
@@ -1629,6 +1647,30 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     removeItems: (found, why) => removeItems(found, { by: { kind: 'user' }, why }),
   });
 
+  const meetingChips = meetingChipsIn({
+    db,
+    now,
+    readItem,
+    withDetails,
+    findDailyNote,
+    create(id, state, entry) {
+      const at = now();
+      const identity = { kind: 'block' as const, source: null, account: null, externalId: null };
+      const { state: stored } = insertItem(identity, state, at, id);
+      log({ ...entry, action: 'create', itemId: id, before: null, after: stored }, at);
+      afterWrite(id, stored, entry, at);
+    },
+    update: (item, changes, entry) => update(item, changes, entry, now()),
+    remove(item, entry) {
+      const at = now();
+      const before = stateOf(item);
+      const after: ItemState = { ...before, deletedAt: before.deletedAt ?? at };
+      writeState(item, after, at);
+      log({ ...entry, action: 'delete', itemId: item.id, before, after }, at);
+    },
+    transaction: (fn) => sqlite.transaction(fn)(),
+  });
+
   return {
     models: openModelStore(db, now),
     syncState,
@@ -1739,6 +1781,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     events: (query) => withDetails(eventRows(db, query)),
 
     calendars,
+    meetingChips,
+    calendarSettings: calendarSettingsIn(db, now),
 
     calendarEvents: (account, calendarId) => withDetails(calendarEventRows(db, { ...account, calendarId })),
 

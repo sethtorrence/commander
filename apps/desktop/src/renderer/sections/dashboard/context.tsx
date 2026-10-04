@@ -62,6 +62,8 @@ export interface DashboardApi {
   cleared: number;
   /** Open Commander Todos under the Project filter: the side column's link. */
   openTodos: number;
+  /** Today's and tomorrow's events, for the side column's schedule. */
+  events: readonly Item[];
   /** Ticks a Todo, or unticks one ticked here; a ticked row stays, struck through, until the Dashboard is left. */
   tick(row: FeedRow): Promise<void>;
   /** Clears a row from the Dashboard: it stays in its Section, and comes back if its band changes. */
@@ -244,6 +246,7 @@ export function DashboardProvider({
     () => (items ?? []).filter((item) => item.kind === 'todo' && include(item)).length,
     [items, include],
   );
+  const events = useMemo(() => (items ?? []).filter((item) => item.kind === 'event'), [items]);
 
   const clearsNow = useRef(clears);
   clearsNow.current = clears;
@@ -288,6 +291,10 @@ export function DashboardProvider({
       const { item } = row;
       if (row.suggestion) {
         toast(`Ares only suggested this: Add it (A) to make it a Todo`);
+        return;
+      }
+      if (item.kind === 'event') {
+        toast(`${item.title} is a meeting: open it (Enter) or clear it (E)`);
         return;
       }
       // A Linear row is a Linear Todo's issue: ticking ticks that Todo, which moves the issue.
@@ -411,6 +418,7 @@ export function DashboardProvider({
       counts,
       cleared: hidden.length,
       openTodos,
+      events,
       tick,
       clear,
       bringBack,
@@ -435,6 +443,7 @@ export function DashboardProvider({
       counts,
       hidden,
       openTodos,
+      events,
       tick,
       clear,
       bringBack,

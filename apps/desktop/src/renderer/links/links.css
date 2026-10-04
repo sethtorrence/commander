@@ -47,6 +47,85 @@
     text-decoration-style: dashed;
   }
 
+  /*
+    A meeting chip (#128): the event's compact live card, all of it drawn from empty parts so the
+    chip's text stays its token: the calendar colour, the Badge, the times and title, Join, and what
+    happened to the meeting.
+  */
+  .n-chip.n-meet {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    max-width: 100%;
+    margin: 0 2px 0 0;
+    padding: 1px 8px 1px 0;
+    vertical-align: 1px;
+    border: 1px solid var(--line);
+    background: var(--sheet);
+    font-weight: 600;
+    text-decoration: none;
+    line-height: 22px;
+  }
+  .n-chip.n-meet:hover {
+    background: var(--raise);
+    border-color: var(--ink);
+  }
+  .n-chip.n-meet::after,
+  .n-chip.n-meet::before {
+    content: none;
+  }
+  .n-meet-cal {
+    align-self: stretch;
+    width: 4px;
+    margin: -1px 0 -1px -1px;
+    background: var(--cal);
+  }
+  .n-meet-badge::before {
+    content: attr(data-code);
+    display: inline-block;
+    padding: 3px 4px 2px;
+    background: var(--accent);
+    color: var(--on-chip, var(--on-accent));
+    font: 700 9px / 1 var(--mono);
+    letter-spacing: 0.06em;
+  }
+  .n-meet-label {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .n-meet-label::before {
+    content: attr(data-label);
+  }
+  .n-meet-join::before {
+    content: "Join ↗";
+    font: 600 10px / 1 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .n-meet-join:hover::before {
+    color: var(--ink);
+  }
+  .n-meet-note::before {
+    content: attr(data-note);
+    font: 600 10px / 1 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .n-chip.n-meet[data-state="struck"] .n-meet-label {
+    color: var(--faint);
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+  }
+  .n-chip.n-meet[data-state="struck"] .n-meet-cal {
+    opacity: 0.4;
+  }
+
   /* The picker (.acpop). */
   .n-acpop {
     position: fixed;

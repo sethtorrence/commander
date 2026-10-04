@@ -30,6 +30,25 @@ const itemsChanged = z.object({
   itemIds: z.array(z.string().min(1)).min(1),
 });
 
+// The Core changed today's meeting chips itself (#128): a Notes view showing that Daily Note reads it
+// again (not while the User is writing in it).
+const meetingChipsChanged = z.object({
+  type: z.literal('meeting-chips'),
+  dailyNoteId: z.string().min(1),
+});
+
+// A meeting starts in 2 minutes and the User asked to hear about it (Settings → Calendar): the main
+// process shows a system notification with the meeting's title and time, which opens the event.
+// The one interruption Commander makes (decision #23); it says nothing beyond the meeting itself.
+const meetingHeadsUp = z.object({
+  type: z.literal('meeting-heads-up'),
+  itemId: z.string().min(1),
+  title: z.string(),
+  // "10:00–10:30"
+  times: z.string(),
+  startsAt: z.number().int().nonnegative(),
+});
+
 // How the Markdown copy of the Daily Notes stands changed (markdown-copy-messages.ts): Settings shows it.
 const markdownCopyChanged = z.object({ type: z.literal('markdown-copy-status'), status: markdownCopyStatus });
 
@@ -41,6 +60,8 @@ export const coreMessage = z.discriminatedUnion('type', [
   aresUpdates,
   itemsChanged,
   markdownCopyChanged,
+  meetingChipsChanged,
+  meetingHeadsUp,
 ]);
 export type CoreMessage = z.infer<typeof coreMessage>;
 

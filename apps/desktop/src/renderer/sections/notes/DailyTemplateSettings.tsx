@@ -1,5 +1,6 @@
 import './notes.css';
 import './formatting.css';
+import { isMeetingsBlockText } from '@commander/domain';
 import { toast } from '@commander/ui';
 import {
   useCallback,
@@ -66,6 +67,9 @@ export function DailyTemplateSettings({ no }: { no: string }) {
   );
 
   const outline = state.days[0]?.outline;
+  // Meeting chips go under a top-level "Meetings" Block (#128): say so, and whether the template has one.
+  const hasMeetings =
+    !outline || [...outline.values()].some((block) => !block.parentId && isMeetingsBlockText(block.text));
   return (
     <SettingsGroup
       no={no}
@@ -83,6 +87,16 @@ export function DailyTemplateSettings({ no }: { no: string }) {
             )}
           </div>
         </OutlineContext.Provider>
+      </SettingRow>
+      <SettingRow
+        label="Meeting chips"
+        description="Today’s meetings go under a top-level “Meetings” Block in today’s Daily Note, one chip each, in time order, ready for notes underneath. A day without that Block gets no chips."
+      >
+        <p className="m-0 text-note leading-[19px] text-muted" data-testid="meeting-chips-setting">
+          {hasMeetings
+            ? 'The daily template has a “Meetings” Block, so each new day gets its meetings.'
+            : 'The daily template has no top-level “Meetings” Block, so new days get no meeting chips. Add one above to bring them back.'}
+        </p>
       </SettingRow>
       <MarkdownCopySetting />
     </SettingsGroup>

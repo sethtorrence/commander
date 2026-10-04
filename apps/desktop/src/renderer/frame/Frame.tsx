@@ -1,5 +1,13 @@
 import { DrawingGrid, RulerX, RulerY } from '@commander/ui';
-import { type ComponentProps, type ReactNode, useCallback, useMemo, useRef, useState } from 'react';
+import {
+  type ComponentProps,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { itemChangesFromCore } from '../item-store/changes';
 import { PaletteHost } from '../palette/PaletteHost';
 import { ProjectsProvider, useProjects } from '../projects/context';
@@ -184,6 +192,15 @@ export function Frame() {
       if (target.kind === 'item') requestReveal(target.sectionId, target.itemId);
     },
     [openSettings, openSection],
+  );
+  // A meeting's heads-up was clicked (the main process shows the window): its event, in Calendar.
+  useEffect(
+    () =>
+      window.commander.onOpenItem?.(({ sectionId, itemId }) => {
+        openSection(sectionId);
+        requestReveal(sectionId, itemId);
+      }),
+    [openSection],
   );
   const back = useMemo(
     () => ({
