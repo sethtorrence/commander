@@ -8,6 +8,8 @@ import {
   type RuleDraft,
   type RulePreview,
   type RuleTarget,
+  type RuleValues,
+  type RuleWhen,
 } from '@commander/domain';
 import {
   Badge,
@@ -59,6 +61,9 @@ export type Editing = {
   // A new Rule sorting into this Bucket to start with (#137).
   bucketId?: string;
   draft?: RuleDraft;
+  // A new Rule starting from these conditions, with its Project for the User to choose (Settings →
+  // GitHub's Map to Project…, #118).
+  when?: RuleWhen;
   position?: number;
   onSaved?: () => void;
 };
@@ -130,15 +135,18 @@ function EditorBody({
   const [projectId, setProjectId] = useState(
     (started?.kind === 'project' ? started.projectId : undefined) ??
       editing.projectId ??
-      projects[0]?.id ??
+      (editing.when ? '' : projects[0]?.id) ??
       '',
   );
   const [bucketId, setBucketId] = useState(
     (started?.kind === 'bucket' ? started.bucketId : undefined) ?? editing.bucketId ?? '',
   );
   const [buckets, setBuckets] = useState<Bucket[]>([]);
-  const [when, setWhen] = useState<WhenDraft>(() => whenDraftOf(rule?.when ?? editing.draft?.when, kind));
+  const [when, setWhen] = useState<WhenDraft>(() =>
+    whenDraftOf(rule?.when ?? editing.draft?.when ?? editing.when, kind),
+  );
   const [items, setItems] = useState<Item[]>([]);
+  const [values, setValues] = useState<RuleValues>({});
   const [preview, setPreview] = useState<RulePreview | null>(null);
   const [placing, setPlacing] = useState<Placement[] | null>(null);
   const [position, setPosition] = useState<number | null>(null);
@@ -157,6 +165,10 @@ function EditorBody({
     let current = true;
     client.items().then(
       (found) => current && setItems(found),
+      () => {},
+    );
+    client.values().then(
+      (found) => current && setValues(found),
       () => {},
     );
     client.buckets().then(
@@ -370,7 +382,14 @@ function EditorBody({
             </select>
           </div>
         </div>
-        <Terms when={when} onChange={setWhen} items={items} accountNames={accountNames} kind={kind} />
+        <Terms
+          when={when}
+          onChange={setWhen}
+          items={items}
+          values={values}
+          accountNames={accountNames}
+          kind={kind}
+        />
         <MatchPreview preview={draft ? preview : null} projects={everyProject} buckets={buckets} />
         {error && <ErrorLine id={ids.error}>{error}</ErrorLine>}
       </DialogBody>
@@ -396,12 +415,14 @@ function Terms({
   when,
   onChange,
   items,
+  values,
   accountNames,
   kind,
 }: {
   when: WhenDraft;
   onChange: (when: WhenDraft) => void;
   items: readonly Item[];
+  values: RuleValues;
   accountNames?: ReadonlyMap<string, string>;
   kind: RuleTarget['kind'];
 }) {
@@ -462,6 +483,7 @@ function Terms({
                         condition={condition}
                         onChange={setInner}
                         items={items}
+                        values={values}
                         accountNames={accountNames}
                         kind={kind}
                       />
@@ -490,6 +512,7 @@ function Terms({
                   condition={term}
                   onChange={(next) => setTerm(index, next)}
                   items={items}
+                  values={values}
                   accountNames={accountNames}
                   kind={kind}
                 />
@@ -518,6 +541,7 @@ function ConditionRow({
   condition,
   onChange,
   items,
+  values,
   accountNames,
   kind,
 }: {
@@ -525,6 +549,7 @@ function ConditionRow({
   condition: ConditionDraft;
   onChange: (condition: ConditionDraft | null) => void;
   items: readonly Item[];
+  values: RuleValues;
   accountNames?: ReadonlyMap<string, string>;
   kind: RuleTarget['kind'];
 }) {
@@ -533,8 +558,8 @@ function ConditionRow({
     kind === 'bucket' ? RULE_SOURCES.filter((source) => source.source === 'email') : RULE_SOURCES;
   const field = RULE_FIELDS.get(condition.field);
   const choices = useMemo(
-    () => fieldChoices(items, condition.field, accountNames),
-    [items, condition.field, accountNames],
+    () => fieldChoices(items, condition.field, accountNames, values[condition.field]),
+    [items, condition.field, accountNames, values],
   );
   // A value no held Item has any more (from an older Rule) is still offered, as the Rule has it.
   const offered =

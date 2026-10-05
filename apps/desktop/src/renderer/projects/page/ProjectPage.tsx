@@ -127,6 +127,7 @@ export function ProjectPage({
     ['todos', 'Todos', 'open', counts.todos],
     ['notes', 'Notes', 'blocks', counts.notes],
     ['teams', 'Teams', 'chats', counts.teams],
+    ['github', 'GitHub', 'open', counts.github],
   ];
   const showIn = (sectionId: string) => {
     if (!project.archived) setFilter(project.id);

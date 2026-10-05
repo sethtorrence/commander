@@ -8,6 +8,7 @@ import type { ItemStoreClient } from '../item-store/client';
 import { openTestItemStore } from '../item-store/test-item-store';
 import { ProjectsProvider } from '../projects/context';
 import { projectsIn } from '../projects/projects';
+import { API, GITHUB, pull, WEB } from '../sections/github/test-work';
 import { ACME, issue, OPS } from '../sections/linear/test-issues';
 import { chat, TEAMS } from '../sections/teams/test-chats';
 import { ShortcutProvider } from '../shortcuts/react';
@@ -171,6 +172,43 @@ describe('Settings → Rules', () => {
     fireEvent.click(within(offer).getByRole('button', { name: 'Re-file 1 item' }));
     await waitFor(() => expect(filingOf('TL eng')).toEqual({ projectId: tl.id, filedBy: 'rule' }));
     expect(store.query({ kinds: ['chat'], titleContains: 'Priya' })[0]?.filing).toBeNull();
+  });
+
+  it('offers GitHub fields: repos from synced Items and from the watch list, by owner/name', async () => {
+    store.saveFromSource({
+      source: 'github',
+      account: GITHUB,
+      items: [
+        pull({ number: 12, title: 'Retry the relay' }),
+        pull({ number: 3, title: 'New page', repo: WEB }),
+      ],
+    });
+    // The handbook is watched, with nothing synced from it yet.
+    const handbook = { nodeId: 'R_handbook', owner: 'acme', name: 'handbook' };
+    store.githubWatch.save(GITHUB, { orgs: [], repos: [API, WEB, handbook] });
+    renderSettings();
+    const dialog = await openEditor();
+
+    await choose(dialog, 'Files into', 'TL · Titanlink');
+    const field = within(dialog).getByRole('combobox', { name: 'Field 1' });
+    expect(within(field).getByRole('group', { name: 'GitHub' })).toBeTruthy();
+    fireEvent.change(field, { target: { value: 'github.repo' } });
+    const value = within(dialog).getByRole('combobox', { name: 'Value 1' });
+    await within(value).findByRole('option', { name: 'acme/handbook' });
+    expect(
+      within(value)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Choose…', 'acme/api', 'acme/handbook', 'acme/web']);
+    await choose(dialog, 'Value 1', 'acme/handbook');
+    const matching = within(dialog).getByRole('region', { name: 'Matching Items' });
+    expect(await within(matching).findByText('Matches 0 Items')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save Rule' }));
+
+    await waitFor(() => expect(ruleRows()).toEqual([expect.stringContaining('repo is acme/handbook')]));
+    expect(store.rules()[0]?.when.terms).toEqual([
+      { field: 'github.repo', op: 'is', value: 'R_handbook', label: 'acme/handbook' },
+    ]);
   });
 
   it('builds AND, OR and a group of conditions', async () => {

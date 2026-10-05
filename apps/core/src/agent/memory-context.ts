@@ -3,7 +3,7 @@
 //
 // - `aboutItem`: how an example names an Item (its Source facts, the kind of thing a Rule matches:
 //   a Linear issue's identifier, team, Linear project and labels; a Chat's people; an event's
-//   organiser and calendar), the words it is found by (those, its title and its people), and its
+//   organiser and calendar; a GitHub Item's repo, labels and author, #118), the words it is found by (those, its title and its people), and its
 //   people's handles. An example's words never carry the Item's free text, so they can go in the
 //   User's own block.
 // - `recall`: looks up the memories about what a job is working on and hands them over as at most
@@ -76,6 +76,21 @@ export function aboutItem(item: Item): AboutItem {
       detail.calendar.name,
       ...people.flatMap((person) => (person ? [person.name ?? '', person.email] : [])),
     );
+  } else if (
+    detail?.kind === 'pull-request' ||
+    detail?.kind === 'github-issue' ||
+    detail?.kind === 'github-release'
+  ) {
+    // A GitHub Item by what a Rule matches (#118): its repo, labels and author, never its body.
+    const repo = `${detail.repo.owner}/${detail.repo.name}`;
+    const labels = detail.kind === 'github-release' ? [] : detail.labels.map((label) => label.name);
+    const facts = [`repo ${repo}`, ...labels, ...(detail.author ? [`by ${detail.author}`] : [])];
+    const name =
+      detail.kind === 'github-release'
+        ? `GitHub release ${repo} ${detail.tag}`
+        : `GitHub ${detail.kind === 'pull-request' ? 'pull request' : 'issue'} ${repo}#${detail.number}`;
+    subject = `${name} (${facts.join(' · ')})`;
+    words.push(repo, detail.repo.owner, detail.repo.name, ...labels, detail.author ?? '');
   } else if (detail?.kind === 'block') {
     subject = `“${cut(detail.text, MAX_TITLE)}”`;
   }

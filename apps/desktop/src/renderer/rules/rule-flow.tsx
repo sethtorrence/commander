@@ -30,6 +30,10 @@ import { type RulesClient, ruleText } from './rules';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
+// Told to every Rule list in the window after one of them changes the Rules, so Settings → Rules,
+// Settings → GitHub's Projects column and a Project page's Mapping Rules all read the one list again.
+const RULES_CHANGED = 'commander:rules-changed';
+
 /** Workspace names by Account, from Settings → Accounts, when the window can ask for them. */
 function useAccountNames(): ReadonlyMap<string, string> {
   const [names, setNames] = useState<ReadonlyMap<string, string>>(new Map());
@@ -62,7 +66,7 @@ export interface RuleFlow {
   edit: (
     rule: Rule | null,
     projectId?: string,
-    start?: Pick<Editing, 'draft' | 'position' | 'onSaved' | 'bucketId'>,
+    start?: Pick<Editing, 'draft' | 'position' | 'onSaved' | 'bucketId' | 'when'>,
   ) => void;
   /** Moves a Rule to a place in the list, then offers to re-file what that moves. */
   move: (rule: Rule, position: number) => Promise<void>;
@@ -105,6 +109,9 @@ export function useRuleFlow(client: RulesClient, onChanged?: () => void): RuleFl
   );
   useEffect(() => {
     reload();
+    const again = () => void reload();
+    window.addEventListener(RULES_CHANGED, again);
+    return () => window.removeEventListener(RULES_CHANGED, again);
   }, [reload]);
 
   // Makes a change, reloads, and offers to re-file what it moves. Resolves with the change, or with
@@ -117,6 +124,7 @@ export function useRuleFlow(client: RulesClient, onChanged?: () => void): RuleFl
       return errorText(reason);
     }
     await reload();
+    window.dispatchEvent(new Event(RULES_CHANGED));
     if (change.refile.length) setOffer(change.refile);
     if (change.resort.length) setResortOffer(change.resort);
     return change;

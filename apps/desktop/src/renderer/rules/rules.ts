@@ -15,6 +15,7 @@ import {
   type RuleFieldValue,
   type RulePreview,
   type RuleTerm,
+  type RuleValues,
   type RuleWhen,
 } from '@commander/domain';
 import type { ItemStoreClient } from '../item-store/client';
@@ -44,10 +45,12 @@ export interface RulesClient {
   /** The Buckets a Rule can sort into. */
   buckets(): Promise<Bucket[]>;
   /**
-   * The Items whose values the editor offers (every Linear issue, calendar event and Chat held, and
-   * recent email).
+   * The Items whose values the editor offers (every Linear issue, calendar event, Chat and GitHub
+   * pull request, issue and release held, and recent email).
    */
   items(): Promise<Item[]>;
+  /** Values the editor offers that held Items may not have yet: watched GitHub repos (#118). */
+  values(): Promise<RuleValues>;
 }
 
 export function rulesIn(itemStore: ItemStoreClient): RulesClient {
@@ -61,12 +64,17 @@ export function rulesIn(itemStore: ItemStoreClient): RulesClient {
     undoResort: (entryIds) => itemStore({ op: 'undo-resort', entryIds }),
     buckets: () => itemStore({ op: 'buckets' }),
     async items() {
-      const [others, emails] = await Promise.all([
+      const [others, github, emails] = await Promise.all([
         itemStore({ op: 'query', query: { kinds: ['linear-issue', 'event', 'chat'], limit: 1000 } }),
+        itemStore({
+          op: 'query',
+          query: { kinds: ['pull-request', 'github-issue', 'github-release'], limit: 1000 },
+        }),
         itemStore({ op: 'query', query: { kinds: ['email'], limit: 1000 } }),
       ]);
-      return [...others, ...emails];
+      return [...others, ...github, ...emails];
     },
+    values: () => itemStore({ op: 'rule-values' }),
   };
 }
 
@@ -91,21 +99,20 @@ export function ruleText(
 
 /**
  * The values held Items have for a field, for the editor's choices: each once, sorted by how they
- * read. `names` renames values the Items only know by id (a workspace's Account).
+ * read. `names` renames values the Items only know by id (a workspace's Account); `more` are values
+ * no held Item may have yet (a watched repo with nothing synced).
  */
 export function fieldChoices(
   items: readonly Item[],
   fieldId: string,
   names: ReadonlyMap<string, string> = new Map(),
+  more: readonly RuleFieldValue[] = [],
 ): RuleFieldValue[] {
   const field = RULE_FIELDS.get(fieldId);
   if (!field) return [];
   const seen = new Map<string, RuleFieldValue>();
-  for (const item of items) {
-    for (const each of field.read(item)) {
-      if (!seen.has(each.value))
-        seen.set(each.value, { ...each, label: names.get(each.value) ?? each.label });
-    }
+  for (const each of [...items.flatMap((item) => field.read(item)), ...more]) {
+    if (!seen.has(each.value)) seen.set(each.value, { ...each, label: names.get(each.value) ?? each.label });
   }
   return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label));
 }

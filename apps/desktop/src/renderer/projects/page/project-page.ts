@@ -6,21 +6,27 @@ import { dayOfYear } from '../../frame/calendar';
   Notes' Blocks; the Sections that come later (Email, Linear, Calendar, GitHub) add their own counts.
 */
 
-/** Per-Section counts: open Todos, Blocks in the Notes, and Teams Chats. */
+/**
+ * Per-Section counts: open Todos, Blocks in the Notes, Teams Chats, and open GitHub pull requests and
+ * issues (#118; a review request is its pull request's shadow, so it isn't counted again).
+ */
 export function sectionCounts(items: readonly Pick<Item, 'kind' | 'status'>[]): {
   todos: number;
   notes: number;
   teams: number;
+  github: number;
 } {
   let todos = 0;
   let notes = 0;
   let teams = 0;
+  let github = 0;
   for (const { kind, status } of items) {
     if (kind === 'todo' && status === 'open') todos += 1;
     if (kind === 'block') notes += 1;
     if (kind === 'chat') teams += 1;
+    if ((kind === 'pull-request' || kind === 'github-issue') && status === 'open') github += 1;
   }
-  return { todos, notes, teams };
+  return { todos, notes, teams, github };
 }
 
 /** How the Items were filed: by a Rule, by Ares, by the User, or inherited from their source. */

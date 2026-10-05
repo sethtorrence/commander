@@ -47,6 +47,7 @@ import {
   type Filing,
   firstMatchFor,
   githubIdentifier,
+  githubWatchRuleValues,
   type Item,
   type ItemAction,
   type ItemDetail,
@@ -81,6 +82,7 @@ import {
   type Rule,
   type RuleAction,
   type RuleChange,
+  type RuleFieldValue,
   type RulePreview,
   type RulePreviewRequest,
   ruleMatches,
@@ -263,6 +265,9 @@ export type ItemStore = {
   changeRule(action: RuleAction): RuleChange;
   // How many Items a Rule as drafted matches, a sample of them, and the Rules it overlaps.
   previewRule(request: RulePreviewRequest): RulePreview;
+  // Values the Rule editor offers that synced Items may not have yet, by field: each repo Settings →
+  // GitHub watches, its org, and each GitHub Account by its login (#118).
+  ruleValues(): Record<string, RuleFieldValue[]>;
   // Re-files these Items by the Rules, as one change: one activity entry each, with the Rule that
   // matched as the actor. Skips any the Rules no longer move (filed by hand since, say).
   refile(itemIds: string[]): ActivityEntry[];
@@ -817,19 +822,41 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         return behind ? [row.id, behind] : [row.id];
       }),
     );
-    // Ares's filing suggestion waiting: the Item's own, or (for a Todo) the Item's behind it.
-    const suggested = filing.suggestions(
-      rows.flatMap((row) => {
-        const behind = backedBy(row.id);
-        return behind ? [row.id, behind] : [row.id];
-      }),
-    );
+    // Ares's filing suggestion waiting: the Item's own, or (for a Todo) the Item's behind it, or (for
+    // a review request, or a Todo backed by one) its pull request's (#118): filing a review request
+    // files its pull request, so his suggestion on the pull request is answered from either.
+    const requestsBehind = new Map<string, string>();
+    const unread = rows.flatMap((row) => {
+      const behind = backedBy(row.id);
+      return behind && !details.has(behind) ? [behind] : [];
+    });
+    if (unread.length) {
+      const { githubDetails } = schema;
+      const found = db
+        .select({ itemId: githubDetails.itemId, data: githubDetails.data })
+        .from(githubDetails)
+        .where(inArray(githubDetails.itemId, unread))
+        .all();
+      for (const { itemId, data } of found)
+        if (data.kind === 'review-request' && data.pullRequestId)
+          requestsBehind.set(itemId, data.pullRequestId);
+    }
+    const pullOf = (id: string | null) => {
+      if (!id) return null;
+      const detail = details.get(id);
+      return detail?.kind === 'review-request' ? detail.pullRequestId : (requestsBehind.get(id) ?? null);
+    };
+    const answeredFrom = (id: string) =>
+      [id, backedBy(id), pullOf(id), pullOf(backedBy(id))].filter((each): each is string => !!each);
+    const suggested = filing.suggestions(rows.flatMap((row) => answeredFrom(row.id)));
     // Ares's waiting flag on a Chat.
     const flags = waiting.standing(rows.filter((row) => row.kind === 'chat').map((row) => row.id));
     return rows.map((row) => {
       const item = toItem(row, details.get(row.id) ?? null);
       const at = marked.get(row.id) ?? marked.get(backedBy(row.id) ?? '');
-      const suggestion = suggested.get(row.id) ?? suggested.get(backedBy(row.id) ?? '');
+      const suggestion = answeredFrom(row.id)
+        .map((id) => suggested.get(id))
+        .find((each) => each !== undefined);
       const flag = flags.get(row.id);
       return {
         ...item,
@@ -2398,6 +2425,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         resort: leavesItems ? [] : sorting.resortCandidates(change),
       };
     }),
+
+    ruleValues: () => githubWatchRuleValues(githubWatch.list()),
 
     previewRule(input) {
       const request = rulePreviewRequest.parse(input);

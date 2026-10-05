@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { emailBucket } from './buckets';
 import { eventRuleFields } from './calendar';
 import { emailRuleFields } from './email-rules';
+import { githubRuleFields } from './github-rules';
 import { filing, type Item, itemRef } from './items';
 import { teamsRuleFields } from './teams-rules';
 
@@ -146,6 +147,14 @@ export type RulePreview = z.infer<typeof rulePreview>;
 // One value an Item has for a field: its stable id and how it reads.
 export type RuleFieldValue = { value: string; label: string };
 
+// Values the editor offers beside those of held Items, by field: a repo Settings → GitHub watches
+// with nothing synced from it yet (#118).
+export const ruleValues = z.record(
+  z.string(),
+  z.array(z.object({ value: z.string().min(1), label: z.string().min(1) })),
+);
+export type RuleValues = Record<string, RuleFieldValue[]>;
+
 export type RuleField = {
   // `linear.team`: the Source, then the field.
   id: string;
@@ -249,8 +258,8 @@ export const outlookCalendarRuleFields: readonly RuleField[] = eventRuleFields('
 export const gmailRuleFields: readonly RuleField[] = emailRuleFields('gmail');
 export const outlookRuleFields: readonly RuleField[] = emailRuleFields('outlook');
 
-// Every Source's fields, by id. A Source adds its fields here (GitHub: org, repo); matching and
-// describing need nothing more.
+// Every Source's fields, by id. A Source adds its fields here; matching and describing need nothing
+// more.
 export const RULE_FIELDS: ReadonlyMap<string, RuleField> = new Map(
   [
     ...linearRuleFields,
@@ -259,6 +268,7 @@ export const RULE_FIELDS: ReadonlyMap<string, RuleField> = new Map(
     ...teamsRuleFields,
     ...gmailRuleFields,
     ...outlookRuleFields,
+    ...githubRuleFields,
   ].map((field) => [field.id, field]),
 );
 
@@ -270,6 +280,7 @@ export const RULE_SOURCES: readonly { source: string; name: string; fields: read
   { source: 'calendar', name: 'Calendar', fields: googleCalendarRuleFields },
   { source: 'teams', name: 'Teams', fields: teamsRuleFields },
   { source: 'email', name: 'Email', fields: gmailRuleFields },
+  { source: 'github', name: 'GitHub', fields: githubRuleFields },
 ];
 
 // ---------------------------------------------------------------------------------------------
