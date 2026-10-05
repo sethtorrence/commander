@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { summaryRequest } from './github-summary';
+import { oversightRangeSpan } from './github-oversight';
+import { personParagraph, summaryRequest } from './github-summary';
 import { item } from './items';
 import { type ChatSummary, chatSummary, summaryRange } from './teams-ares';
 import { type ChatDraft, chatDraft } from './teams-work';
@@ -24,6 +25,16 @@ const id = z.number().int().positive();
 export const githubSummaryAnswer = z.object({ summary: item.nullable(), problem: z.string().nullable() });
 export type GitHubSummaryAnswer = z.infer<typeof githubSummaryAnswer>;
 
+// Refresh on a People card (#122): Ares writes one Person's paragraph again, over a range.
+export const personParagraphRequest = z.object({ personId: z.string().min(1), range: oversightRangeSpan });
+export type PersonParagraphRequest = z.infer<typeof personParagraphRequest>;
+// What it comes to: the paragraph he wrote (kept in his latest summary), or why there is none.
+export const personParagraphAnswer = z.object({
+  paragraph: personParagraph.nullable(),
+  problem: z.string().nullable(),
+});
+export type PersonParagraphAnswer = z.infer<typeof personParagraphAnswer>;
+
 export const updatesRequest = z.discriminatedUnion('op', [
   // The quiet count and whether the User is here, for the header, the tray and the Dashboard.
   z.object({ op: z.literal('state') }),
@@ -37,6 +48,8 @@ export const updatesRequest = z.discriminatedUnion('op', [
   // Ask Ares to write the GitHub summary (#121) for a range and scope: the summary he wrote, or why
   // he didn't (the plain summary shows then).
   z.object({ op: z.literal('summarise-github'), request: summaryRequest }),
+  // Refresh one Person's paragraph on the People view (#122).
+  z.object({ op: z.literal('refresh-person-paragraph'), request: personParagraphRequest }),
   // Past Updates, newest first, and one of them reopened.
   z.object({ op: z.literal('history'), limit: z.number().int().positive().max(200).optional() }),
   z.object({ op: z.literal('past'), id }),
@@ -57,6 +70,7 @@ export type UpdatesResults = {
   'summarise-chat': ChatSummary;
   'draft-reply': ChatDraft;
   'summarise-github': GitHubSummaryAnswer;
+  'refresh-person-paragraph': PersonParagraphAnswer;
   history: UpdateSummary[];
   past: UpdateView;
   act: QueuedLine;
@@ -68,6 +82,7 @@ export const updatesResult = {
   'summarise-chat': chatSummary,
   'draft-reply': chatDraft,
   'summarise-github': githubSummaryAnswer,
+  'refresh-person-paragraph': personParagraphAnswer,
   history: z.array(updateSummary),
   past: updateView,
   act: queuedLine,

@@ -21,6 +21,8 @@ const TIMEOUTS: Record<UpdatesOp, number> = {
   'draft-reply': 90_000,
   // Ares writing a GitHub summary: the pull requests' detail fetched first, then a Deep call.
   'summarise-github': 150_000,
+  // A Person's paragraph (#122): their pull requests' detail, then a Deep call.
+  'refresh-person-paragraph': 150_000,
   history: 10_000,
   past: 10_000,
   act: 10_000,

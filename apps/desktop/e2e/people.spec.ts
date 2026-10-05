@@ -12,9 +12,9 @@ import { pickOption } from './pick-option';
 
 // People end to end (#117), against a fake Linear and a fake GitHub on this machine (never the real
 // ones): Linear's Priya Patel and GitHub's @priya share an address, so they are one Person, shown by
-// name in the Linear and GitHub Sections and found with Ctrl+K, which opens Settings → People at
-// her. There the User renames her (the name wins everywhere) and splits a handle off, then undoes it.
-// The User is one Person across their Linear and GitHub Accounts. Tokens are stored in the real
+// name in the Linear and GitHub Sections and found with Ctrl+K, which opens her page (#122) and from
+// there Settings → People at her. There the User renames her (the name wins everywhere) and splits a
+// handle off, then undoes it. The User is one Person across their Linear and GitHub Accounts. Tokens are stored in the real
 // keyring, so these need the author's Linux Wayland session.
 const onLinuxWayland = process.platform === 'linux' && !!process.env.WAYLAND_DISPLAY;
 const API_KEY = 'lin_api_e2e_people_key';
@@ -156,13 +156,18 @@ test('one Person across Linear and GitHub: shown by name, found with Ctrl+K, ren
   const githubRows = window.getByTestId('section-github').getByTestId('github-work');
   await expect(githubRows.filter({ hasText: 'Retry webhooks with back-off' })).toContainText('Priya P.');
 
-  // Ctrl+K lists People as their own group; choosing her opens Settings → People at her.
+  // Ctrl+K lists People as their own group; choosing her opens her page (#122), whose Settings →
+  // People opens Settings at her.
   await window.keyboard.press('Control+k');
   const palette = window.getByTestId('palette');
   await palette.getByRole('combobox', { name: 'Search Commander' }).fill('priya');
   const group = palette.getByRole('group', { name: 'People' });
   await expect(group.getByRole('option')).toHaveText([/Priya P\./]);
   await group.getByRole('option').first().click();
+  await expect(
+    window.getByTestId('person-page').getByRole('heading', { name: 'Priya P.', level: 1 }),
+  ).toBeVisible();
+  await window.getByTestId('person-manage').click();
   await expect(window.getByTestId('settings')).toBeVisible();
   const renamed = personRow(people, 'Priya P.');
   await expect(renamed).toHaveAttribute('aria-current', 'true');

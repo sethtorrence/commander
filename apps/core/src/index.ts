@@ -208,6 +208,8 @@ updates = setUpUpdates({
   onReturn: () => agent.active(),
   // Ask Ares to write the GitHub summary (#121).
   summariseGitHub: (request) => agent.githubSummaries.ask(request),
+  // Refresh on a People card (#122).
+  refreshPersonParagraph: (request) => agent.githubSummaries.refreshPerson(request),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.

@@ -103,6 +103,8 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       options.onItemsChanged?.([itemId]);
       options.onSummaryWritten?.(itemId);
     },
+    // A Person's paragraph written again on a Refresh (#122): the People view reads it again.
+    onParagraph: (summaryId) => options.onItemsChanged?.([summaryId]),
   });
   const runner: JobRunner = createJobRunner({
     jobs: [

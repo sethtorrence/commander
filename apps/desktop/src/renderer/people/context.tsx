@@ -17,6 +17,8 @@ export interface PeopleApi extends PeopleLookup {
   /** Merges, splits, renames or undoes, then reloads. Rejects with the reason when refused. */
   change(action: PeopleAction): Promise<PeopleChange>;
   loaded: boolean;
+  /** Opens a Person's page (#122) as a temporary tab; undefined where there are no pages. */
+  openPerson?: (personId: string) => void;
 }
 
 const PeopleContext = createContext<PeopleApi | null>(null);
@@ -34,10 +36,13 @@ const RELOAD_DELAY_MS = 400;
 export function PeopleProvider({
   client,
   changes,
+  onOpenPerson,
   children,
 }: {
   client: PeopleClient;
   changes?: ItemChanges;
+  /** Shows a Person's page; the frame passes it. */
+  onOpenPerson?: (personId: string) => void;
   children: ReactNode;
 }) {
   const [all, setAll] = useState<Person[] | null>(null);
@@ -78,8 +83,9 @@ export function PeopleProvider({
         }
       },
       loaded: all !== null,
+      ...(onOpenPerson && { openPerson: onOpenPerson }),
     };
-  }, [all, client, reload]);
+  }, [all, client, reload, onOpenPerson]);
 
   return <PeopleContext.Provider value={api}>{children}</PeopleContext.Provider>;
 }

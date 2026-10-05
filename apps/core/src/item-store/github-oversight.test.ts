@@ -305,3 +305,67 @@ describe('the writer’s detail', () => {
     expect(store.githubOversight.staleWriterDetails(['no-such-item'])).toEqual([]);
   });
 });
+
+describe('People (#122)', () => {
+  const linearIssue = (identifier: string, assignee: { id: string; email: string; name: string }) => ({
+    externalId: identifier,
+    kind: 'linear-issue' as const,
+    title: `Linear ${identifier}`,
+    detail: {
+      kind: 'linear-issue' as const,
+      identifier,
+      url: `https://linear.app/acme/issue/${identifier}`,
+      team: { id: 'team-eng', key: 'ENG', name: 'Engineering' },
+      state: { id: 's', name: 'In Progress', type: 'started', color: '#f2c94c' },
+      priority: 2,
+      assignee: { ...assignee, displayName: assignee.name },
+      creator: null,
+      labels: [],
+      linearProject: null,
+      cycle: null,
+      dueDate: null,
+      estimate: null,
+      description: null,
+      comments: [],
+      createdAt: 0,
+      updatedAt: 0,
+      startedAt: null,
+      completedAt: null,
+      canceledAt: null,
+    },
+  });
+
+  it('gives each active Person’s week, their GitHub and Linear work as one Person, by name', () => {
+    store.saveFromSource({
+      source: 'github',
+      account: GITHUB,
+      items: [
+        {
+          ...pullRequest(1, { state: 'merged', mergedAt: NOW - DAY, closedAt: NOW - DAY }),
+          identities: [{ handle: 'github:priya', email: 'priya@acme.dev', name: 'Priya Raman' }],
+        },
+        pullRequest(2, {
+          author: 'sam',
+          requestedReviewers: [{ kind: 'user', login: 'priya', requestedAt: NOW - 3 * DAY }],
+        }),
+      ],
+    });
+    store.saveFromSource({
+      source: 'linear',
+      account: 'linear:1',
+      items: [linearIssue('ENG-412', { id: 'u-priya', email: 'priya@acme.dev', name: 'Priya Raman' })],
+    });
+
+    const range = { from: NOW - 7 * DAY, to: NOW };
+    const weeks = store.githubOversight.people({ range });
+    expect(
+      weeks.map((week) => [week.name, week.merged.length, week.waiting.length, week.linear.length]),
+    ).toEqual([
+      ['Priya Raman', 1, 1, 1],
+      ['sam', 0, 0, 0],
+    ]);
+    const priya = store.people.list().find((each) => each.name === 'Priya Raman');
+    expect(weeks[0]?.personId).toBe(priya?.id);
+    expect(store.githubOversight.people({ range, personId: priya?.id })).toEqual([weeks[0]]);
+  });
+});

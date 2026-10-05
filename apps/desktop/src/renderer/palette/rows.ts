@@ -19,7 +19,7 @@ import type { PaletteQuery } from './query';
   (a tag, the label, a hint on the right):
 
   - Jump: Sections and today's Daily Note; then Projects (their pages); then People (#117), which
-    open Settings → People at the Person until the People view gives them a page
+    open their pages (#122)
   - search results grouped by kind, the group holding the best hit first; then Memory (#74): what
     Ares knows that matches, each opening What Ares knows at the memory
   - Commands

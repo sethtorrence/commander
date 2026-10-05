@@ -249,8 +249,8 @@ export function isBot(login: string | null, bots: readonly string[]): boolean {
 
 const failing = (checks: string | null) => checks === 'failure' || checks === 'error';
 
-// Why an open pull request is Stuck at `now`; empty when it isn't.
-function stuckReasons(
+// Why an open pull request is Stuck at `now`; empty when it isn't (the People view marks them too).
+export function stuckReasons(
   pull: PullRequestDetail,
   now: number,
   settings: OversightSettings,

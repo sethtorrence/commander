@@ -8,6 +8,7 @@ import {
   type GitHubRepoHealth,
   type GitHubWriterDetail,
   githubCatalog,
+  githubPeople,
   githubWriterDetail,
   type IssueRef,
   type Item,
@@ -19,6 +20,7 @@ import {
   oversightSettings,
   oversightSummary,
   type Person,
+  type PersonWeek,
   type Project,
 } from '@commander/domain';
 import { and, eq, getTableColumns, inArray, isNull, sql } from 'drizzle-orm';
@@ -40,6 +42,9 @@ export type GitHubOversightStore = {
   saveSettings(settings: OversightSettingsInput): OversightSettings;
   // The summary for a range, over everything, one Project (its id) or Unfiled (null).
   summary(request: OversightRequest): OversightSummary;
+  // The People view (#122): each active Person's week for a range and scope, by name; or one
+  // Person's, whatever they did.
+  people(request: OversightRequest & { personId?: string }): PersonWeek[];
   // The writer's detail last kept for a live pull request; null when there is none.
   writerDetail(itemId: string): GitHubWriterDetail | null;
   // Keeps a live pull request's writer's detail (anything else is ignored).
@@ -169,6 +174,25 @@ export function githubOversightIn(
         items: liveOfKinds(OVERSIGHT_KINDS),
         repos: repoHealth(),
         projects: projects().map(({ id, name, code, accent }) => ({ id, name, code, accent })),
+        settings: settings(),
+      });
+    },
+
+    people({ range, projectId, personId }) {
+      // Their open Linear issues come through their Linear handles.
+      const linear = withDetails(
+        db
+          .select()
+          .from(items)
+          .where(and(eq(items.kind, 'linear-issue'), eq(items.status, 'open'), isNull(items.deletedAt)))
+          .all(),
+      );
+      return githubPeople({
+        range,
+        ...(projectId !== undefined && { projectId }),
+        ...(personId !== undefined && { personId }),
+        items: [...liveOfKinds(['pull-request']), ...linear],
+        people: people(),
         settings: settings(),
       });
     },

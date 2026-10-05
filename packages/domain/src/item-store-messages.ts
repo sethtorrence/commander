@@ -34,6 +34,7 @@ import {
   oversightSettings,
   oversightSummarySchema,
 } from './github-oversight';
+import { type GitHubPeopleView, githubPeopleView } from './github-people';
 import { summaryCadence, summaryWriterState } from './github-summary';
 import {
   type ActivityEntry,
@@ -231,6 +232,14 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
     limit: z.number().int().positive().max(200).optional(),
   }),
   z.object({ op: z.literal('github-summary-seen'), itemId: z.string().min(1) }),
+  // The People view (#122): each active Person's week for a range, over everything, one Project or
+  // Unfiled (null), by name, with Ares's latest paragraph; or one Person's (their page).
+  z.object({
+    op: z.literal('github-people'),
+    range: oversightRangeSpan,
+    projectId: z.string().min(1).nullable().optional(),
+    personId: z.string().min(1).optional(),
+  }),
   // Settings → People (#117): everyone Commander knows, and the User's merges, splits, renames and
   // undos, each kept in the People log. People are not Items: not in the activity log.
   z.object({ op: z.literal('people') }),
@@ -326,6 +335,7 @@ export type ItemStoreResults = {
   'save-github-oversight-settings': OversightSettings;
   'github-summaries': GitHubSummaries;
   'github-summary-seen': Item | null;
+  'github-people': GitHubPeopleView;
   people: Person[];
   'change-people': PeopleChange;
   invitations: Item[];
@@ -395,6 +405,7 @@ export const itemStoreResult = {
   'save-github-oversight-settings': oversightSettings,
   'github-summaries': githubSummaries,
   'github-summary-seen': item.nullable(),
+  'github-people': githubPeopleView,
   people: z.array(person),
   'change-people': peopleChange,
   invitations: z.array(item),

@@ -70,6 +70,22 @@ export const githubSummarySection = z.object({
 });
 export type GitHubSummarySection = z.infer<typeof githubSummarySection>;
 
+// Ares's paragraph about one Person's week (#122): one or two sentences, every one resting on the
+// Items it names (checked in code before it is kept), saved with the summary that wrote it. A Refresh
+// on the People view writes one Person's again, into the latest summary.
+export const personParagraph = z.object({
+  personId: id,
+  // The name they went by when it was written.
+  name: z.string(),
+  text: z.string().min(1),
+  // The Items it is about: its sentences' refs, which the job's own code handed out.
+  itemIds: z.array(id),
+  // The week it is about: this week for the daily summary, the roll-up's week for the roll-up.
+  range: oversightRangeSpan,
+  writtenAt: timestamp,
+});
+export type PersonParagraph = z.infer<typeof personParagraph>;
+
 export const summaryCounts = z.object({
   shipped: z.number().int().nonnegative(),
   started: z.number().int().nonnegative(),
@@ -93,6 +109,8 @@ export const githubSummaryDetail = z.object({
   // What is on fire, in plain words from the facts ("Main is failing on acme/api"); empty: nothing.
   onFire: z.array(z.string()),
   counts: summaryCounts,
+  // Ares's paragraph about each active Person's week (#122); none on summaries from before them.
+  people: z.array(personParagraph).optional(),
   // When the User first opened it (on the Dashboard, in the Update or in the GitHub Section).
   seenAt: timestamp.nullable(),
 });

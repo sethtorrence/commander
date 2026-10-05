@@ -3,7 +3,7 @@
 // summary and a roll-up are each written once a day whatever restarts in between. When the User first
 // opened one is kept beside it, not in the detail, so marking it seen records nothing in the activity
 // log (it changes nothing the User wrote: it only stops the Update mentioning it).
-import type { GitHubSummaryDetail, Item, SummaryCadence } from '@commander/domain';
+import type { GitHubSummaryDetail, Item, PersonParagraph, SummaryCadence } from '@commander/domain';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { ItemRow } from './rows';
@@ -20,10 +20,15 @@ export type GitHubSummaryStore = {
   lastDailyTo(): number | null;
   // The User opened it: seen from now (the first time only). The summary, or null when it isn't one.
   markSeen(itemId: string): Item | null;
+  // Ares's latest paragraph about each Person (#122), by Person id, from the recent summaries: the
+  // one written last, whichever summary holds it (a Refresh goes into the latest summary).
+  paragraphs(): Map<string, PersonParagraph>;
 };
 
 const CHUNK = 500;
 const DEFAULT_LIMIT = 50;
+// How many recent summaries People paragraphs are looked for in: two months of daily ones.
+const PARAGRAPH_SUMMARIES = 60;
 
 export function githubSummariesIn(
   db: Db,
@@ -39,6 +44,8 @@ export function githubSummariesIn(
         details.set(row.itemId, {
           kind: 'github-summary',
           ...row.data,
+          // Summaries written before People paragraphs (#122) have none.
+          people: row.data.people ?? [],
           cadence: row.cadence,
           day: row.day,
           writtenAt: row.writtenAt,
@@ -104,6 +111,17 @@ export function githubSummariesIn(
       if (row.seenAt === null) db.update(table).set({ seenAt: now() }).where(eq(table.itemId, itemId)).run();
       const [item] = withDetails(db.select().from(items).where(eq(items.id, itemId)).all());
       return item ?? null;
+    },
+
+    paragraphs() {
+      const latest = new Map<string, PersonParagraph>();
+      for (const summary of store.list({ limit: PARAGRAPH_SUMMARIES }))
+        if (summary.detail?.kind === 'github-summary')
+          for (const paragraph of summary.detail.people ?? []) {
+            const known = latest.get(paragraph.personId);
+            if (!known || known.writtenAt < paragraph.writtenAt) latest.set(paragraph.personId, paragraph);
+          }
+      return latest;
     },
   };
 

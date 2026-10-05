@@ -12,8 +12,8 @@ import { handleLabel, handleSourceName, personMatches } from './people';
   Commander matches People across Sources by email address; where it got someone wrong, the User
   merges two People (choosing the name kept) or splits handles out to a Person of their own, and can
   rename anyone (their name wins over every Source's). Each change has Undo in its toast, through the
-  People log. Ctrl+K opens it at a Person (`requestReveal(PEOPLE_SETTINGS, personId)`) until the
-  People view (#122) gives People a page of their own.
+  People log. A Person's page (#122) opens it at them (`requestReveal(PEOPLE_SETTINGS, personId)`)
+  to merge or split.
 */
 
 /** The reveal channel (frame/reveal.ts) that opens Settings → People at a Person. */

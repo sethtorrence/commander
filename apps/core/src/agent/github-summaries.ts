@@ -14,6 +14,8 @@ import {
   factsEmpty,
   type GitHubSummaryAnswer,
   oversightLocalTime,
+  type PersonParagraphAnswer,
+  type PersonParagraphRequest,
   type SummaryRequest,
   WRITE_GITHUB_SUMMARY,
   writerProblem,
@@ -26,7 +28,7 @@ import type { SummaryWant, WriteGitHubSummaryJob } from './write-github-summary'
 export type GitHubSummariesOptions = {
   itemStore: ItemStore;
   runner: Pick<JobRunner, 'trigger' | 'run' | 'settled'>;
-  job: Pick<WriteGitHubSummaryJob, 'want' | 'ask' | 'settle'>;
+  job: Pick<WriteGitHubSummaryJob, 'want' | 'ask' | 'settle' | 'askPerson' | 'settlePerson'>;
   // Fetches the writer's detail of these pull requests where it is missing or out of date.
   prepareWriterDetails?: (itemIds: readonly string[]) => Promise<void>;
   now?: () => number;
@@ -43,6 +45,8 @@ export type GitHubSummaries = {
   due(): Promise<void>;
   // Ask Ares to write it: the summary he wrote, or why there is none.
   ask(request: SummaryRequest): Promise<GitHubSummaryAnswer>;
+  // Refresh on a People card (#122): one Person's paragraph written again, or why there is none.
+  refreshPerson(request: PersonParagraphRequest): Promise<PersonParagraphAnswer>;
 };
 
 export function createGitHubSummaries({
@@ -133,6 +137,27 @@ export function createGitHubSummaries({
           outcome.problem ??
           writerProblem(summaryWriter(itemStore)) ??
           'Ares couldn’t write the summary just now.',
+      };
+    },
+
+    async refreshPerson({ personId, range }) {
+      asking += 1;
+      const key = `refresh:${now()}:${asking}`;
+      // Their pull requests' detail first, as for a summary.
+      const [week] = itemStore.githubOversight.people({ range, personId });
+      const pulls = week
+        ? [...week.merged, ...week.reviewed, ...week.opened, ...week.open, ...week.waiting]
+        : [];
+      await prepare([...new Set(pulls.map((pull) => pull.itemId))]);
+      job.askPerson({ key, personId, range });
+      runner.run(WRITE_GITHUB_SUMMARY);
+      await runner.settled();
+      const outcome = job.settlePerson(key);
+      if (outcome.paragraph) return { paragraph: outcome.paragraph, problem: null };
+      return {
+        paragraph: null,
+        problem:
+          outcome.problem ?? writerProblem(summaryWriter(itemStore)) ?? 'Ares couldn’t write it just now.',
       };
     },
   };
