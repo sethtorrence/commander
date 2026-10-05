@@ -1,7 +1,9 @@
-import type { EmailLabel, EmailThreadSummary, ThreadAction } from '@commander/domain';
+import type { BucketSortedBy, EmailLabel, EmailThreadSummary, ThreadAction } from '@commander/domain';
 import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { cn, Kbd, Led, toast } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import { BucketChip } from '../../buckets/BucketChip';
+import { bucketName } from '../../buckets/buckets';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
@@ -11,6 +13,7 @@ import { ItemBadge, SectionProjectFilter, useAccentBar } from '../../projects/ba
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
+import { BucketPicker, BucketStrip } from './EmailBuckets';
 import {
   GmailSearchLinks,
   LabelPicker,
@@ -31,6 +34,13 @@ const onPressable = () => !!document.activeElement?.closest('button, a[href], su
 
 const pad = (n: number, width = 2) => String(n).padStart(width, '0');
 
+// How a thread came to be in its Bucket (#137), as the thread's Bucket button says it.
+const SORTED_BY: Record<BucketSortedBy, string> = {
+  rule: 'Sorted by a Rule',
+  ares: 'Sorted by Ares',
+  user: 'Sorted by you',
+};
+
 const KEYS: [ReactNode, string][] = [
   [
     <>
@@ -42,6 +52,7 @@ const KEYS: [ReactNode, string][] = [
   [<Kbd key="enter">↵</Kbd>, 'Open'],
   [<Kbd key="e">E</Kbd>, 'Archive'],
   [<Kbd key="z">Z</Kbd>, 'Snooze'],
+  [<Kbd key="v">V</Kbd>, 'Bucket'],
   [<Kbd key="slash">/</Kbd>, 'Search'],
   [<Kbd key="b">B</Kbd>, 'Project'],
   [<Kbd key="esc">Esc</Kbd>, 'Close'],
@@ -172,6 +183,7 @@ function ThreadRow({
   number,
   selected,
   account,
+  bucket,
   onOpen,
   onFile,
 }: {
@@ -180,6 +192,8 @@ function ThreadRow({
   selected: boolean;
   /** The Account's address, when threads of several Accounts are listed. */
   account: string | null;
+  /** Its Bucket's name, or null while Unsorted (#137). */
+  bucket: string | null;
   onOpen: () => void;
   onFile: (anchor: HTMLElement) => void;
 }) {
@@ -264,6 +278,7 @@ function ThreadRow({
       </div>
       <div className="mt-1 flex min-w-0 items-center gap-2">
         <ItemWarning item={thread.latest} />
+        <BucketChip faint={bucket === null}>{bucket ?? 'Unsorted'}</BucketChip>
         {account && (
           <span className="inline-flex h-5 max-w-[180px] flex-none items-center border border-line bg-sheet px-[7px] font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted">
             <span className="truncate normal-case">{account}</span>
@@ -304,6 +319,7 @@ export function EmailSheet({
   const [organising, setOrganising] = useState<
     | { kind: 'labels'; thread: EmailThreadSummary; labels: EmailLabel[] }
     | { kind: 'snooze'; thread: EmailThreadSummary }
+    | { kind: 'bucket'; thread: EmailThreadSummary }
     | null
   >(null);
   const [typed, setTyped] = useState('');
@@ -314,8 +330,12 @@ export function EmailSheet({
     [state.accounts],
   );
 
-  // The inbox's unread threads; no count at all until there is an email Account.
-  useTabCount(state.loaded && state.accounts.length > 0 ? (state.unread.get('all') ?? 0) : null);
+  // Unread threads in Needs reply (#137); no count at all until there is an email Account.
+  useTabCount(state.loaded && state.accounts.length > 0 ? state.needsReply : null);
+  const nameOf = useCallback(
+    (bucketId: string | null | undefined) => (bucketId ? bucketName(state.buckets, bucketId) : null),
+    [state.buckets],
+  );
   useRefreshWhenOpened(state.refresh, state.reload);
   useReveal('email', (itemId) => void state.reveal(itemId));
 
@@ -349,9 +369,12 @@ export function EmailSheet({
     try {
       const entries = await state.act(action, thread);
       if (!entries.length) return;
-      toast(actionToast(action, thread.subject, Date.now()), {
-        action: { label: 'Undo', onClick: () => void state.undo(entries) },
-      });
+      toast(
+        actionToast(action, thread.subject, Date.now(), (bucketId) => nameOf(bucketId) ?? 'Unsorted'),
+        {
+          action: { label: 'Undo', onClick: () => void state.undo(entries) },
+        },
+      );
     } catch (error) {
       toast(error instanceof Error ? error.message : String(error));
     }
@@ -362,6 +385,9 @@ export function EmailSheet({
   };
   const openSnooze = (thread = selected) => {
     if (thread) setOrganising({ kind: 'snooze', thread });
+  };
+  const openBuckets = (thread = selected) => {
+    if (thread) setOrganising({ kind: 'bucket', thread });
   };
   // The thread the picker is on, as it now is (its labels change while the picker is open).
   const organised = organising
@@ -414,6 +440,7 @@ export function EmailSheet({
     },
     { keys: 'l', label: 'Labels', when: () => !!selected, run: () => void openLabels() },
     { keys: 'z', label: 'Snooze', when: () => !!selected, run: () => openSnooze() },
+    { keys: 'v', label: 'Move to a Bucket', when: () => !!selected, run: () => openBuckets() },
     {
       keys: '/',
       label: 'Search mail (from: to: subject: has:attachment is:unread in:)',
@@ -443,6 +470,12 @@ export function EmailSheet({
       aside={<Keys />}
       className="flex flex-col"
     >
+      <BucketStrip
+        buckets={state.buckets}
+        counts={state.bucketCounts}
+        bucket={state.bucket}
+        onBucket={state.setBucket}
+      />
       <AccountBar
         accounts={state.accounts}
         account={state.account}
@@ -486,6 +519,7 @@ export function EmailSheet({
                     number={index + 1}
                     selected={threadId(thread) === state.selectedId}
                     account={several ? accountName(thread.account) : null}
+                    bucket={nameOf(thread.bucket?.bucketId)}
                     onOpen={() => {
                       state.select(threadId(thread));
                       setOpen(true);
@@ -507,7 +541,9 @@ export function EmailSheet({
                     ? 'No mail Commander holds matches.'
                     : state.total
                       ? 'No threads in this Project.'
-                      : `${viewName === 'Inbox' ? 'The inbox' : viewName} is empty.`}
+                      : state.bucket
+                        ? `No threads in ${nameOf(state.bucket) ?? 'Unsorted'}.`
+                        : `${viewName === 'Inbox' ? 'The inbox' : viewName} is empty.`}
                 </p>
               )
             )}
@@ -531,6 +567,11 @@ export function EmailSheet({
                     onLabels={() => void openLabels()}
                     onSnooze={() => openSnooze()}
                     onRetry={() => void state.retry()}
+                    bucket={{
+                      name: nameOf(selected.bucket?.bucketId) ?? 'Unsorted',
+                      how: selected.bucket ? SORTED_BY[selected.bucket.sortedBy] : null,
+                    }}
+                    onBucket={() => openBuckets()}
                   />
                 )
               }
@@ -559,6 +600,17 @@ export function EmailSheet({
           onUnsnooze={() => {
             setOrganising(null);
             void act({ type: 'unsnooze' }, organised);
+          }}
+          onClose={() => setOrganising(null)}
+        />
+      )}
+      {organising?.kind === 'bucket' && organised && (
+        <BucketPicker
+          thread={organised}
+          buckets={state.buckets}
+          onPick={(bucketId) => {
+            setOrganising(null);
+            void act({ type: 'bucket', bucketId }, organised);
           }}
           onClose={() => setOrganising(null)}
         />

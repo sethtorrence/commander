@@ -1,10 +1,12 @@
-// The Item store's Rules: one list the User orders, each filing the Items it matches into a Project.
+// The Item store's Rules: one list the User orders, each filing the Items it matches into a Project,
+// or sorting the emails it matches into a Bucket (#137).
 // They live in the same database, written only through the Item store, but they are not Items: a
 // change to the list isn't in the activity log. The Items a Rule files are, with the Rule as actor.
 // Matching and wording come from @commander/domain (its per-Source field registry); this module keeps
 // the list, its order, and what a merge does to it.
 import { randomUUID } from 'node:crypto';
 import {
+  isEmailRuleField,
   isGroup,
   RULE_FIELDS,
   type Rule,
@@ -51,6 +53,8 @@ export function rulesIn(
   invalid: (message: string) => Error,
   // Throws unless the Project exists (archived or not).
   checkProject: (projectId: string) => void,
+  // Throws unless the Bucket exists (not removed).
+  checkBucket: (bucketId: string) => void,
 ): Rules {
   const { rules } = schema;
 
@@ -78,12 +82,18 @@ export function rulesIn(
     }
   }
 
+  function checkTarget(target: RuleDraft['target']) {
+    if (target.kind === 'project') checkProject(target.projectId);
+    else checkBucket(target.bucketId);
+  }
+
   function check(draft: RuleDraft) {
-    checkProject(draft.target.projectId);
-    for (const term of draft.when.terms) {
-      if (isGroup(term)) term.conditions.forEach(checkCondition);
-      else checkCondition(term);
-    }
+    checkTarget(draft.target);
+    const conditions = draft.when.terms.flatMap((term) => (isGroup(term) ? term.conditions : [term]));
+    conditions.forEach(checkCondition);
+    // A Bucket sorts email only, so its Rules read only what email says.
+    if (draft.target.kind === 'bucket' && !conditions.every((each) => isEmailRuleField(each.field)))
+      throw invalid('A Bucket Rule can only use email fields (from, domain, subject…)');
   }
 
   // Writes the live Rules' positions in this order: 0, 1, 2…
@@ -140,7 +150,7 @@ export function rulesIn(
         const row = rowById(action.ruleId);
         if (!row) throw invalid(`No Rule ${action.ruleId}`);
         if (row.deletedAt === null) throw invalid('That Rule isn’t deleted');
-        checkProject(row.target.projectId);
+        checkTarget(row.target);
         db.update(rules).set({ deletedAt: null, updatedAt: at }).where(eq(rules.id, row.id)).run();
         renumber(placed(row.id, row.position));
         return row.id;
@@ -165,7 +175,7 @@ export function rulesIn(
     retarget(from, into) {
       const moves: RuleMove[] = [];
       for (const row of db.select().from(rules).all()) {
-        if (row.target.projectId !== from) continue;
+        if (row.target.kind !== 'project' || row.target.projectId !== from) continue;
         db.update(rules)
           .set({ target: { ...row.target, projectId: into } })
           .where(eq(rules.id, row.id))
@@ -179,7 +189,7 @@ export function rulesIn(
       const reversed: RuleMove[] = [];
       for (const move of moves) {
         const row = rowById(move.ruleId);
-        if (!row || row.target.projectId !== move.to) continue;
+        if (row?.target.kind !== 'project' || row.target.projectId !== move.to) continue;
         db.update(rules)
           .set({ target: { ...row.target, projectId: move.from } })
           .where(eq(rules.id, row.id))

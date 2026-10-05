@@ -32,7 +32,9 @@ export function MappingRules({
     if (active && !wasActive.current) reload();
     wasActive.current = active;
   }, [active, reload]);
-  const own = flow.rules.filter((rule) => rule.target.projectId === project.id);
+  const own = flow.rules.filter(
+    (rule) => rule.target.kind === 'project' && rule.target.projectId === project.id,
+  );
 
   return (
     <SideCard

@@ -1,3 +1,5 @@
+import { NEEDS_REPLY, WAITING_ON_OTHERS } from './buckets';
+import { addressName, type EmailAddress } from './email';
 import { isReviewRequestItem, placeOpenWork } from './github-open-work';
 import { isGitHubSummary, summaryPlacement } from './github-summary';
 import { awaitingAnswer, invitationReason } from './invitations';
@@ -294,9 +296,42 @@ function placeInvitation(item: Item, now: number): Placed | null {
     : null;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Email
+
+/** How long a thread in Waiting on others waits for an answer before it reaches the Dashboard. */
+export const NO_REPLY_FOR_MS = 3 * DAY;
+
+// How a person reads in a reason: their first name, or the address when there is no name.
+const firstNameOf = (who: EmailAddress | null | undefined) =>
+  who?.name?.trim() ? firstName(who.name) : addressName(who ?? null).split('@')[0] || 'Someone';
+
+// A thread (by its latest message, the one the Dashboard is given) in Needs reply goes to Today; in
+// Waiting on others with no answer for 3 days, to Waiting on others. Other Buckets, Unsorted mail,
+// and snoozed or Trashed threads stay in the Email Section.
+function placeEmail(item: Item, now: number): Placed | null {
+  if (item.detail?.kind !== 'email') return null;
+  const { detail } = item;
+  // (A snooze still waiting, as email-actions.ts's activeSnooze reads it.)
+  const snoozed = !!detail.snooze && !detail.snooze.returned && detail.snooze.until > now;
+  if (detail.inTrash || snoozed) return null;
+  const at = detail.sentAt;
+  if (detail.bucket?.bucketId === NEEDS_REPLY) {
+    const reason = `${firstNameOf(detail.from)}’s waiting on your reply since ${sentAt(at, now)}`;
+    return { item, band: 'today', reason, at };
+  }
+  if (detail.bucket?.bucketId === WAITING_ON_OTHERS && now - at >= NO_REPLY_FOR_MS) {
+    const days = Math.floor((now - at) / DAY);
+    const who = firstNameOf(detail.sentByMe ? (detail.to[0] ?? detail.cc[0]) : detail.from);
+    return { item, band: 'waiting', reason: `No reply from ${who} for ${days} days`, at };
+  }
+  return null;
+}
+
 function place(item: Item, context: RankingContext, today: string): Placed | null {
   // Ares's GitHub summary (#121): FYI, or Today when something is on fire.
   if (isGitHubSummary(item)) return { item, ...summaryPlacement(item.detail), at: item.detail.writtenAt };
+  if (item.kind === 'email') return placeEmail(item, context.now);
   if (item.kind === 'event') return placeMeeting(item, context.now) ?? placeInvitation(item, context.now);
   if (isChat(item)) return placeChat(item, context);
   if (item.source === 'github') {
@@ -385,6 +420,9 @@ export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<
  * - GitHub's open work (#116, placeOpenWork): reviews asked of the User directly and their pull
  *   requests failing checks or with changes requested in Today, their pull requests waiting on
  *   reviewers in Waiting on others, and reviews asked of their teams in FYI.
+ * - Email threads (#137, by their latest message): in the Needs reply Bucket, Today ("Dana's waiting
+ *   on your reply since Tuesday"); in Waiting on others with no answer for 3 days, Waiting on others
+ *   ("No reply from Leo for 4 days"). Other Buckets and Unsorted mail stay out.
  *
  * A Linear Todo is an open Linear issue assigned to the User in a Todo state (unstarted or started, or
  * backlog or triage in its team's current cycle), as in linear-todos.ts. The first band that matches wins, in

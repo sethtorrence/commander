@@ -119,7 +119,8 @@ test('connect Google → first sync → threads listed → open a thread → new
   await expect(conversation.getByTestId('thread-count')).toHaveText('2');
   await expect(conversation).toHaveAttribute('data-unread', 'true');
   await expect(section.getByTestId('email-sync-status')).toHaveText(/^Synced \d\d:\d\d$/);
-  await expect(tab(window, 'Email')).toContainText('01');
+  // The Email tab counts unread threads in Needs reply (#137): nothing is sorted there yet.
+  await expect(tab(window, 'Email')).toContainText('00');
 
   // The Account switcher narrows to the one Account.
   const switcher = section.getByRole('tablist', { name: 'Account' });
@@ -155,7 +156,7 @@ test('connect Google → first sync → threads listed → open a thread → new
     'Re: Q4 offsite dates',
   ]);
   // Opening Dana's thread marked it read (#135), so only the new mail is unread.
-  await expect(tab(window, 'Email')).toContainText('01');
+  await expect(section.getByRole('tab', { name: 'All Accounts' })).toContainText('1 unread');
 
   // Ctrl+K finds it by what it says, and opens its thread in the Email Section.
   await window.keyboard.press('Control+k');

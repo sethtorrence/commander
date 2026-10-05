@@ -14,6 +14,9 @@ import {
   type BlockIssue,
   type BlockTodo,
   type BlockTodoQuery,
+  type Bucket,
+  type BucketAction,
+  type BucketChange,
   blockLinksIn,
   blockTodoQuery,
   type CalendarSummary,
@@ -42,7 +45,7 @@ import {
   type EventQuery,
   type FieldSummary,
   type Filing,
-  firstMatch,
+  firstMatchFor,
   githubIdentifier,
   type Item,
   type ItemAction,
@@ -82,6 +85,7 @@ import {
   type RulePreviewRequest,
   ruleMatches,
   rulePreviewRequest,
+  rulesFor,
   type SaveResult,
   type Source,
   type SourceBatch,
@@ -100,6 +104,8 @@ import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
+import { bucketSortingIn } from './bucket-sorting';
+import { bucketsIn } from './buckets';
 import { type CalendarSettingsStore, calendarSettingsIn } from './calendar-settings';
 import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRows } from './calendars';
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
@@ -260,6 +266,16 @@ export type ItemStore = {
   refile(itemIds: string[]): ActivityEntry[];
   // Undoes a re-filing, all at once, by the User. Skips Items filed elsewhere since.
   undoRefile(entryIds: number[]): ActivityEntry[];
+  // Re-sorts these emails into Buckets by the Bucket Rules (#137), as one change: one activity entry
+  // each, with the Rule as actor. Skips any the Rules no longer move (sorted by hand since, say).
+  resort(itemIds: string[]): ActivityEntry[];
+  // Undoes a re-sorting, all at once, by the User. Skips emails sorted elsewhere since.
+  undoResort(entryIds: number[]): ActivityEntry[];
+  // Settings → Buckets (#137): the User's Buckets in their order (the starter set on a fresh install),
+  // and renaming, describing, adding, removing (its emails become Unsorted, its Rules go) and
+  // reordering them, or restoring a removed one (Undo).
+  buckets(): Bucket[];
+  changeBucket(action: BucketAction): BucketChange;
   // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet. With
   // `fromTemplate` (the day is being made as today), a new one starts with copies of the daily
   // template's Blocks, made in the same transaction. One that already exists does only if it has
@@ -517,12 +533,29 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
     { retarget: (from, into) => rules.retarget(from, into), reverse: (moves) => rules.reverse(moves) },
   );
+  // The User's Buckets (#137); a fresh install gets the starter set here.
+  const buckets = bucketsIn(db, now, (message) => new ItemStoreError('invalid', message));
   const rules = rulesIn(
     db,
     now,
     (message) => new ItemStoreError('invalid', message),
     (projectId) => projects.checkFiling({ projectId, filedBy: 'rule' }),
+    (bucketId) => {
+      if (!buckets.get(bucketId)) throw new ItemStoreError('invalid', `No Bucket ${bucketId}`);
+    },
   );
+  // Sorting email into Buckets (bucket-sorting.ts): Bucket Rules on save, re-sorting, removing a Bucket.
+  const sorting = bucketSortingIn({
+    db,
+    now,
+    invalid: (message) => new ItemStoreError('invalid', message),
+    buckets,
+    rules,
+    readItem: (itemId) => readItem(itemId),
+    sourceItems: () => sourceItems(),
+    editFields: (item, fields, entry, at) => editFields(item, fields, entry, at),
+    undo: (entryId, entry, at) => undo(entryId, entry, at),
+  });
   // Ares's filing suggestions on Items, and the User's answers to his filing.
   const filing = filingFeedbackIn(db, (entry, at) => log({ ...entry, why: null }, at));
   const attachments = attachmentFolder({
@@ -568,7 +601,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   // filed by hand, and not when no Rule matches.
   function ruleFiling(item: Item, list: readonly Rule[]): { rule: Rule; filing: Filing } | null {
     if (item.filing?.filedBy === 'user') return null;
-    const rule = firstMatch(list, item);
+    const rule = firstMatchFor(list, 'project', item);
     if (!rule) return null;
     const filing: Filing = { projectId: rule.target.projectId, filedBy: 'rule' };
     // An Item already in the Rule's Project by inheritance (an issue sent to Linear takes its item's
@@ -592,13 +625,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
   // The existing Items a change to the list moves: those whose first matching Rule (or its Project)
   // differs from before, and which it files somewhere other than where they are.
-  function refileCandidates({ before, after }: Pick<ListChange, 'before' | 'after'>): RefileCandidate[] {
+  function refileCandidates(change: Pick<ListChange, 'before' | 'after'>): RefileCandidate[] {
+    const before = rulesFor(change.before, 'project');
+    const after = rulesFor(change.after, 'project');
+    if (!before.length && !after.length) return [];
     const candidates: RefileCandidate[] = [];
     for (const item of sourceItems()) {
       if (item.filing?.filedBy === 'user') continue;
-      const match = firstMatch(after, item);
+      const match = firstMatchFor(after, 'project', item);
       if (!match || item.filing?.projectId === match.target.projectId) continue;
-      const was = firstMatch(before, item);
+      const was = firstMatchFor(before, 'project', item);
       if (was?.id === match.id && was.target.projectId === match.target.projectId) continue;
       candidates.push({
         item: refOf(item),
@@ -1227,7 +1263,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     at: number,
   ): ActivityEntry {
     const before = stateOf(item);
-    const edited = editedState(item, fields, (message) => new ItemStoreError('invalid', message));
+    const edited = editedState(
+      item,
+      sorting.normalise(item, fields, entry.by),
+      (message) => new ItemStoreError('invalid', message),
+    );
     const after = writeState(item, edited, at);
     const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
     afterChange(item, before, after, logged);
@@ -1843,6 +1883,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const item = requireItem(itemId);
       const filed = ruleFiling(item, active);
       if (filed) fileByRule(item, filed, at);
+      // An email goes to its first matching Bucket Rule's Bucket too (#137).
+      sorting.applyOnSave(requireItem(itemId), active, at);
     };
     // The Item's Todo (a Linear or GitHub Todo) follows it, once it is filed.
     const follow = (itemId: string, before: ItemState | null, entryId?: number) => {
@@ -2302,17 +2344,23 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const change = rules.change(action);
       // Deleting a Rule leaves Items where they are, and so does bringing it back.
       const leavesItems = action.type === 'delete' || action.type === 'restore';
-      return { rule: change.rule, refile: leavesItems ? [] : refileCandidates(change) };
+      return {
+        rule: change.rule,
+        refile: leavesItems ? [] : refileCandidates(change),
+        resort: leavesItems ? [] : sorting.resortCandidates(change),
+      };
     }),
 
     previewRule(input) {
       const request = rulePreviewRequest.parse(input);
-      const matching = sourceItems().filter((item) => ruleMatches(request.rule.when, item));
-      const overlaps = rules
-        .list()
-        .filter(
-          (rule) => rule.id !== request.ruleId && matching.some((item) => ruleMatches(rule.when, item)),
-        );
+      const { kind } = request.rule.target;
+      // A Bucket Rule sorts email only; and only Rules of the same kind of target decide between them.
+      const matching = sourceItems().filter(
+        (item) => (kind !== 'bucket' || item.kind === 'email') && ruleMatches(request.rule.when, item),
+      );
+      const overlaps = rulesFor(rules.list(), kind).filter(
+        (rule) => rule.id !== request.ruleId && matching.some((item) => ruleMatches(rule.when, item)),
+      );
       return {
         count: matching.length,
         sample: matching.slice(0, request.sampleSize ?? 8).map(refOf),
@@ -2341,6 +2389,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       }
       return entries;
     }),
+
+    resort: sqlite.transaction((itemIds: string[]): ActivityEntry[] => sorting.resort(itemIds)),
+
+    undoResort: sqlite.transaction((entryIds: number[]): ActivityEntry[] => sorting.undoResort(entryIds)),
+
+    buckets: () => buckets.list(),
+
+    changeBucket: sqlite.transaction((action: BucketAction): BucketChange => sorting.change(action)),
 
     undoRefile: sqlite.transaction((entryIds: number[]): ActivityEntry[] =>
       undoFilings(entryIds, 'Undid re-filing by Rules', true),

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { emailBucket } from './buckets';
 
 // The `email` kind detail, shared by Gmail and Outlook: one Item per message (decision #28: an email
 // is an Item with its thread as its detail). What it keeps is what lists, threads, search and Rules
@@ -74,6 +75,8 @@ export const emailDetail = z.object({
   sourceVersion: z.string().nullable().optional(),
   // Snoozed in Commander (see emailSnooze); absent or null when not.
   snooze: emailSnooze.nullable().optional(),
+  // Its Bucket (#137), Commander's own like a snooze: absent or null while Unsorted (buckets.ts).
+  bucket: emailBucket.nullable().optional(),
   // Sent from this Account (Gmail's SENT label).
   sentByMe: z.boolean(),
   // The Source's labels (Gmail, system ones included) or folder (Outlook).

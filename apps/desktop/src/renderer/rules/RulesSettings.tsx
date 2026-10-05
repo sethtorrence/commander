@@ -1,6 +1,8 @@
 import { describeRule, type Rule } from '@commander/domain';
 import { Badge, Button, cn } from '@commander/ui';
 import { type DragEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { BucketChip } from '../buckets/BucketChip';
+import { bucketName } from '../buckets/buckets';
 import type { ItemStoreClient } from '../item-store/client';
 import { useProjects } from '../projects/context';
 import { SettingRow, SettingsGroup } from '../settings/parts';
@@ -10,7 +12,8 @@ import { rulesIn } from './rules';
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
- * Settings → Rules: the one list of Rules, checked from the top (the first match files the Item), with
+ * Settings → Rules: the one list of Rules, checked from the top (the first match files the Item, or
+ * sorts the email into a Bucket: the first match per kind of target wins), with
  * drag (or the arrows) to reorder, edit and delete, and New Rule. `shown` while Settings is on screen:
  * the list is read again each time it comes back, for Rules changed on a Project page meanwhile.
  */
@@ -45,7 +48,7 @@ export function RulesSettings({
       )}
       <SettingRow
         label="New Rule"
-        description="Conditions on what a Source says about an Item (a Linear team, label or title) and the Project they file it into."
+        description="Conditions on what a Source says about an Item (a Linear team, an email’s sender) and the Project they file it into, or the Bucket they sort an email into."
       >
         <Button variant="primary" onClick={() => flow.edit(null)}>
           New Rule
@@ -84,7 +87,7 @@ function RuleList({ flow }: { flow: RuleFlow }) {
   return (
     <ol aria-label="Rules" className="m-0 list-none p-0">
       {rules.map((rule, index) => {
-        const project = projectById(rule.target.projectId);
+        const project = rule.target.kind === 'project' ? projectById(rule.target.projectId) : undefined;
         const text = describeRule(rule.when);
         return (
           <li
@@ -122,7 +125,9 @@ function RuleList({ flow }: { flow: RuleFlow }) {
               <span aria-hidden="true" className="text-muted">
                 →
               </span>
-              {project ? (
+              {rule.target.kind === 'bucket' ? (
+                <BucketChip>{bucketName(flow.buckets, rule.target.bucketId)}</BucketChip>
+              ) : project ? (
                 <Badge code={project.code} accent={project.accent} project={project.name} />
               ) : (
                 <Badge kind="unfiled" />

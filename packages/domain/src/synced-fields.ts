@@ -1,3 +1,4 @@
+import { BUCKET_FIELD, type EmailBucket } from './buckets';
 import type { EventDetail, EventResponse } from './calendar';
 import { type EmailDetail, type EmailLabel, type EmailSnooze, emailStatus } from './email';
 import { canAnswer } from './invitations';
@@ -28,8 +29,8 @@ import { type ChatDetail, type ChatReply, latestFromOthers } from './teams';
 // Emails (#135), one Item per message: `inbox`, `read`, `starred`, `trash` and one `label:<id>` per
 // label beside those (the label, or null once removed), kept in step with the Source's labels (Gmail's
 // INBOX, UNREAD, STARRED and TRASH; the ones Commander can't change, like SENT, stay as they are).
-// `snooze` is Commander's own (a local field): edited, logged and undone like the others, kept through
-// syncs, but never queued for the Source.
+// `snooze` and `bucket` (#137) are Commander's own (local fields): edited, logged and undone like the
+// others, kept through syncs, but never queued for the Source.
 
 export type SyncedFields = Record<string, unknown>;
 
@@ -143,7 +144,10 @@ const INBOX_FIELD = 'inbox';
 const STARRED_FIELD = 'starred';
 const TRASH_FIELD = 'trash';
 export const SNOOZE_FIELD = 'snooze';
-const EMAIL_FLAGS = [INBOX_FIELD, READ_FIELD, STARRED_FIELD, TRASH_FIELD, SNOOZE_FIELD];
+const EMAIL_FLAGS = [INBOX_FIELD, READ_FIELD, STARRED_FIELD, TRASH_FIELD, SNOOZE_FIELD, BUCKET_FIELD];
+// Commander's own email fields: never queued for the Source. (Mirroring Buckets to Gmail labels and
+// Outlook categories, #142, is a switch that is off by default.)
+const LOCAL_EMAIL_FIELDS = new Set([SNOOZE_FIELD, BUCKET_FIELD]);
 // The Source labels behind the flags, with the names Gmail gives them.
 const FLAG_LABELS: Record<string, string> = {
   INBOX: 'Inbox',
@@ -164,6 +168,7 @@ function emailFields(detail: EmailDetail): SyncedFields {
     [STARRED_FIELD]: detail.starred,
     [TRASH_FIELD]: detail.inTrash ?? false,
     [SNOOZE_FIELD]: detail.snooze ?? null,
+    [BUCKET_FIELD]: detail.bucket ?? null,
   };
   for (const label of detail.labels)
     if (isEmailLabelField(label.id)) fields[`${LABEL_FIELD}${label.id}`] = { id: label.id, name: label.name };
@@ -203,6 +208,9 @@ function withEmailFields(detail: EmailDetail, fields: SyncedFields): EmailDetail
   if (flags.TRASH) next.inTrash = true;
   const snooze = fields[SNOOZE_FIELD] as EmailSnooze | null | undefined;
   if (snooze) next.snooze = snooze;
+  delete next.bucket;
+  const bucket = fields[BUCKET_FIELD] as EmailBucket | null | undefined;
+  if (bucket) next.bucket = bucket;
   return next;
 }
 
@@ -231,11 +239,11 @@ export function isUnrecallableField(kind: ItemKind, field: string): boolean {
 }
 
 /**
- * Whether a synced field is Commander's own (an email's snooze): changed, logged and undone field by
+ * Whether a synced field is Commander's own (an email's snooze or Bucket): changed, logged and undone field by
  * field like the others, kept through syncs, but never queued for the Source.
  */
 export function isLocalField(kind: ItemKind, field: string): boolean {
-  return kind === 'email' && field === SNOOZE_FIELD;
+  return kind === 'email' && LOCAL_EMAIL_FIELDS.has(field);
 }
 
 /** The detail's own (local) fields among its synced fields, as syncedFieldsOf gives them. */

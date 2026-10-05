@@ -318,6 +318,10 @@ export function DashboardProvider({
         toast('A Chat has nothing to tick: open it (Enter) to answer, or clear it (E)');
         return;
       }
+      if (item.kind === 'email') {
+        toast('An email has nothing to tick: open it (Enter) to answer, or clear it (E)');
+        return;
+      }
       // A Linear row is a Linear Todo's issue: ticking ticks that Todo, which moves the issue.
       const todoId =
         item.kind === 'todo'

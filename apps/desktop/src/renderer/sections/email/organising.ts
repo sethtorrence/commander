@@ -58,8 +58,16 @@ export function snoozeTime(at: number, now: number): string {
   return `${date.getDate()} ${MONTHS[date.getMonth()]} ${clock}`;
 }
 
-/** What a toast says once an action is done to the thread called `subject`. */
-export function actionToast(action: ThreadAction, subject: string, now: number): string {
+/**
+ * What a toast says once an action is done to the thread called `subject`. `bucketName` names the
+ * Bucket a thread was moved to (#137): Unsorted for none.
+ */
+export function actionToast(
+  action: ThreadAction,
+  subject: string,
+  now: number,
+  bucketName: (bucketId: string | null) => string = (bucketId) => bucketId ?? 'Unsorted',
+): string {
   const said = subject || '(no subject)';
   switch (action.type) {
     case 'archive':
@@ -84,6 +92,8 @@ export function actionToast(action: ThreadAction, subject: string, now: number):
       return `Snoozed until ${snoozeTime(action.until, now)}: ${said}`;
     case 'unsnooze':
       return `Unsnoozed: ${said}`;
+    case 'bucket':
+      return `Moved to ${bucketName(action.bucketId)}: ${said}`;
   }
 }
 

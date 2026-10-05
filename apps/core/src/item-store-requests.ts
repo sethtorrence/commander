@@ -89,6 +89,14 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.previewRule(request.request) };
       case 'refile':
         return { ok: true, result: store.refile(request.itemIds) };
+      case 'buckets':
+        return { ok: true, result: store.buckets() };
+      case 'change-bucket':
+        return { ok: true, result: store.changeBucket(request.action) };
+      case 'resort':
+        return { ok: true, result: store.resort(request.itemIds) };
+      case 'undo-resort':
+        return { ok: true, result: store.undoResort(request.entryIds) };
       case 'undo-refile':
         return { ok: true, result: store.undoRefile(request.entryIds) };
       case 'search':
@@ -210,7 +218,10 @@ function changedItems(store: ItemStore, response: CoreItemStoreReply['response']
   if (!response.ok) return [];
   const result = response.result;
   if (isChatSettingChange(result)) return result.itemId ? [result.itemId] : [];
-  const entries = (Array.isArray(result) ? result : [result]) as ActivityEntry[];
+  // A change that isn't an entry (removing a Bucket) is told by the entries it logged alongside.
+  const entries = ((Array.isArray(result) ? result : [result]) as ActivityEntry[]).filter(
+    (entry) => typeof entry?.itemId === 'string',
+  );
   const alongside = store.activity({ after: since, limit: 1000 }).reverse();
   return [
     ...new Set(
@@ -225,7 +236,8 @@ const isChatSettingChange = (result: unknown): result is ChatSettingChange =>
   typeof result === 'object' && result !== null && 'setting' in result && 'itemId' in result;
 
 // The requests that change Items, after which `onChanged` hears which.
-// Re-filing by Rules changes Items too: views catch up, and Ares's overruled suggestions go.
+// Re-filing by Rules changes Items too: views catch up, and Ares's overruled suggestions go. So do
+// re-sorting by Rules and removing a Bucket (its emails become Unsorted).
 const CHANGES = new Set([
   'record',
   'record-all',
@@ -235,6 +247,9 @@ const CHANGES = new Set([
   'clear-chat-waiting',
   'refile',
   'undo-refile',
+  'resort',
+  'undo-resort',
+  'change-bucket',
 ]);
 
 /**

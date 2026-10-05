@@ -1,4 +1,5 @@
 import {
+  type Bucket,
   type Item,
   type Project,
   RULE_FIELDS,
@@ -6,6 +7,7 @@ import {
   type Rule,
   type RuleDraft,
   type RulePreview,
+  type RuleTarget,
 } from '@commander/domain';
 import {
   Badge,
@@ -23,7 +25,9 @@ import { type ReactNode, useEffect, useId, useMemo, useState } from 'react';
 import { useProjects } from '../projects/context';
 import {
   type ConditionDraft,
+  draftFor,
   fieldChoices,
+  firstField,
   isGroupDraft,
   newCondition,
   newGroup,
@@ -52,15 +56,18 @@ const JOIN_NAMES = { and: 'all of', or: 'any of' } as const;
 export type Editing = {
   rule: Rule | null;
   projectId?: string;
+  // A new Rule sorting into this Bucket to start with (#137).
+  bucketId?: string;
   draft?: RuleDraft;
   position?: number;
   onSaved?: () => void;
 };
 
 /**
- * The Rule editor, in a dialog: which Project the Rule files into, and its conditions (AND or OR, with
- * one level of grouping), with a live count and sample of the Items they match. Saving a Rule that
- * matches Items another Rule matches too asks where it goes (above or below that Rule) first.
+ * The Rule editor, in a dialog: which Project the Rule files into, or which Bucket it sorts email into
+ * (#137), and its conditions (AND or OR, with one level of grouping; a Bucket Rule's read email only),
+ * with a live count and sample of the Items they match. Saving a Rule that matches Items another Rule
+ * of its kind matches too asks where it goes (above or below that Rule) first.
  */
 export function RuleEditor({
   editing,
@@ -116,17 +123,35 @@ function EditorBody({
   const { projects, archived } = useProjects();
   const everyProject = useMemo(() => [...projects, ...archived], [projects, archived]);
   const { rule } = editing;
-  const [projectId, setProjectId] = useState(
-    rule?.target.projectId ?? editing.draft?.target.projectId ?? editing.projectId ?? projects[0]?.id ?? '',
+  const started: RuleTarget | undefined = rule?.target ?? editing.draft?.target;
+  const [kind, setKind] = useState<RuleTarget['kind']>(
+    started?.kind ?? (editing.bucketId && !editing.projectId ? 'bucket' : 'project'),
   );
-  const [when, setWhen] = useState<WhenDraft>(() => whenDraftOf(rule?.when ?? editing.draft?.when));
+  const [projectId, setProjectId] = useState(
+    (started?.kind === 'project' ? started.projectId : undefined) ??
+      editing.projectId ??
+      projects[0]?.id ??
+      '',
+  );
+  const [bucketId, setBucketId] = useState(
+    (started?.kind === 'bucket' ? started.bucketId : undefined) ?? editing.bucketId ?? '',
+  );
+  const [buckets, setBuckets] = useState<Bucket[]>([]);
+  const [when, setWhen] = useState<WhenDraft>(() => whenDraftOf(rule?.when ?? editing.draft?.when, kind));
   const [items, setItems] = useState<Item[]>([]);
   const [preview, setPreview] = useState<RulePreview | null>(null);
   const [placing, setPlacing] = useState<Placement[] | null>(null);
   const [position, setPosition] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const ids = { project: useId(), join: useId(), error: useId(), place: useId() };
+  const ids = {
+    kind: useId(),
+    project: useId(),
+    bucket: useId(),
+    join: useId(),
+    error: useId(),
+    place: useId(),
+  };
 
   useEffect(() => {
     let current = true;
@@ -134,14 +159,34 @@ function EditorBody({
       (found) => current && setItems(found),
       () => {},
     );
+    client.buckets().then(
+      (found) => {
+        if (!current) return;
+        setBuckets(found);
+        setBucketId((chosen) => chosen || (found[0]?.id ?? ''));
+      },
+      () => {},
+    );
     return () => {
       current = false;
     };
   }, [client]);
 
+  const chooseKind = (next: RuleTarget['kind']) => {
+    setKind(next);
+    setWhen((drafted) => draftFor(drafted, next));
+  };
+
   const finished = whenOf(when);
-  const draft: RuleDraft | null =
-    finished && projectId ? { target: { kind: 'project', projectId }, when: finished } : null;
+  const target: RuleTarget | null =
+    kind === 'bucket'
+      ? bucketId
+        ? { kind: 'bucket', bucketId }
+        : null
+      : projectId
+        ? { kind: 'project', projectId }
+        : null;
+  const draft: RuleDraft | null = finished && target ? { target, when: finished } : null;
   const draftKey = draft ? JSON.stringify(draft) : null;
 
   // The live count and sample, a moment after the conditions stop changing.
@@ -183,7 +228,7 @@ function EditorBody({
     if (!latest) return;
     setPreview(latest);
     if (latest.overlaps.length) {
-      const offered = placements(rules, latest.overlaps, everyProject, rule?.id);
+      const offered = placements(rules, latest.overlaps, everyProject, rule?.id, buckets);
       setPlacing(offered);
       setPosition(
         offered.some((each) => each.position === editing.position) ? (editing.position ?? null) : null,
@@ -193,7 +238,7 @@ function EditorBody({
     await save(editing.position);
   };
 
-  const target = everyProject.find((p) => p.id === projectId);
+  const project = everyProject.find((p) => p.id === projectId);
 
   if (placing) {
     return (
@@ -203,7 +248,8 @@ function EditorBody({
         </DialogHeader>
         <DialogBody className="flex flex-col gap-3.5">
           <p className="m-0 text-row leading-[1.55] text-text">
-            <b className="text-ink">{draft && ruleText(draft, everyProject)}</b> matches Items that{' '}
+            <b className="text-ink">{draft && ruleText(draft, everyProject, buckets)}</b> matches{' '}
+            {kind === 'bucket' ? 'emails' : 'Items'} that{' '}
             {preview?.overlaps.length === 1 ? 'another Rule matches' : 'other Rules match'} too. The first
             match from the top wins, so choose its place.
           </p>
@@ -251,30 +297,67 @@ function EditorBody({
       <DialogBody className="flex max-h-[min(70vh,640px)] flex-col gap-4 overflow-auto">
         <div className="flex flex-wrap items-end gap-3">
           <div>
-            <label htmlFor={ids.project} className={labelClass}>
-              Files into
+            <label htmlFor={ids.kind} className={labelClass}>
+              Target
             </label>
             <select
-              id={ids.project}
-              value={projectId}
-              onChange={(event) => setProjectId(event.target.value)}
-              className={cn(selectClass, 'w-56')}
+              id={ids.kind}
+              value={kind}
+              onChange={(event) => chooseKind(event.target.value as RuleTarget['kind'])}
+              className={cn(selectClass, 'w-40')}
             >
-              {!target && <option value="">Choose a Project…</option>}
-              {(target?.archived ? [...projects, target] : projects).map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.code} · {option.name}
-                  {option.archived ? ' (archived)' : ''}
-                </option>
-              ))}
+              <option value="project">A Project</option>
+              <option value="bucket">A Bucket (email)</option>
             </select>
           </div>
-          <div className="flex h-7.5 items-center" aria-hidden="true">
-            {target ? <Badge code={target.code} accent={target.accent} /> : <Badge kind="unfiled" />}
-          </div>
+          {kind === 'project' ? (
+            <>
+              <div>
+                <label htmlFor={ids.project} className={labelClass}>
+                  Files into
+                </label>
+                <select
+                  id={ids.project}
+                  value={projectId}
+                  onChange={(event) => setProjectId(event.target.value)}
+                  className={cn(selectClass, 'w-56')}
+                >
+                  {!project && <option value="">Choose a Project…</option>}
+                  {(project?.archived ? [...projects, project] : projects).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.code} · {option.name}
+                      {option.archived ? ' (archived)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex h-7.5 items-center" aria-hidden="true">
+                {project ? <Badge code={project.code} accent={project.accent} /> : <Badge kind="unfiled" />}
+              </div>
+            </>
+          ) : (
+            <div>
+              <label htmlFor={ids.bucket} className={labelClass}>
+                Sorts into
+              </label>
+              <select
+                id={ids.bucket}
+                value={bucketId}
+                onChange={(event) => setBucketId(event.target.value)}
+                className={cn(selectClass, 'w-56')}
+              >
+                {!buckets.some((each) => each.id === bucketId) && <option value="">Choose a Bucket…</option>}
+                {buckets.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label htmlFor={ids.join} className={labelClass}>
-              When an Item matches
+              {kind === 'bucket' ? 'When an email matches' : 'When an Item matches'}
             </label>
             <select
               id={ids.join}
@@ -287,8 +370,8 @@ function EditorBody({
             </select>
           </div>
         </div>
-        <Terms when={when} onChange={setWhen} items={items} accountNames={accountNames} />
-        <MatchPreview preview={draft ? preview : null} projects={everyProject} />
+        <Terms when={when} onChange={setWhen} items={items} accountNames={accountNames} kind={kind} />
+        <MatchPreview preview={draft ? preview : null} projects={everyProject} buckets={buckets} />
         {error && <ErrorLine id={ids.error}>{error}</ErrorLine>}
       </DialogBody>
       <DialogFooter>
@@ -314,11 +397,13 @@ function Terms({
   onChange,
   items,
   accountNames,
+  kind,
 }: {
   when: WhenDraft;
   onChange: (when: WhenDraft) => void;
   items: readonly Item[];
   accountNames?: ReadonlyMap<string, string>;
+  kind: RuleTarget['kind'];
 }) {
   const setTerm = (index: number, term: TermDraft | null) => {
     const terms = when.terms.flatMap((each, i) => (i !== index ? [each] : term ? [term] : []));
@@ -378,6 +463,7 @@ function Terms({
                         onChange={setInner}
                         items={items}
                         accountNames={accountNames}
+                        kind={kind}
                       />
                     );
                   })}
@@ -387,7 +473,10 @@ function Terms({
                       onClick={() =>
                         setTerm(index, {
                           ...term,
-                          conditions: [...term.conditions, newCondition('linear.label')],
+                          conditions: [
+                            ...term.conditions,
+                            newCondition(kind === 'bucket' ? 'gmail.domain' : 'linear.label'),
+                          ],
                         })
                       }
                     >
@@ -402,6 +491,7 @@ function Terms({
                   onChange={(next) => setTerm(index, next)}
                   items={items}
                   accountNames={accountNames}
+                  kind={kind}
                 />
               )}
             </li>
@@ -409,10 +499,13 @@ function Terms({
         })}
       </ol>
       <div className="flex gap-2">
-        <Button size="sm" onClick={() => onChange({ ...when, terms: [...when.terms, newCondition()] })}>
+        <Button
+          size="sm"
+          onClick={() => onChange({ ...when, terms: [...when.terms, newCondition(firstField(kind))] })}
+        >
           Add condition
         </Button>
-        <Button size="sm" onClick={() => onChange({ ...when, terms: [...when.terms, newGroup()] })}>
+        <Button size="sm" onClick={() => onChange({ ...when, terms: [...when.terms, newGroup(kind)] })}>
           Add group
         </Button>
       </div>
@@ -426,13 +519,18 @@ function ConditionRow({
   onChange,
   items,
   accountNames,
+  kind,
 }: {
   no: string;
   condition: ConditionDraft;
   onChange: (condition: ConditionDraft | null) => void;
   items: readonly Item[];
   accountNames?: ReadonlyMap<string, string>;
+  kind: RuleTarget['kind'];
 }) {
+  // A Bucket sorts email only, so its Rules offer only email's fields.
+  const sources =
+    kind === 'bucket' ? RULE_SOURCES.filter((source) => source.source === 'email') : RULE_SOURCES;
   const field = RULE_FIELDS.get(condition.field);
   const choices = useMemo(
     () => fieldChoices(items, condition.field, accountNames),
@@ -451,7 +549,7 @@ function ConditionRow({
         onChange={(event) => onChange(newCondition(event.target.value))}
         className={cn(selectClass, 'w-40')}
       >
-        {RULE_SOURCES.map((source) => (
+        {sources.map((source) => (
           <optgroup key={source.source} label={source.name}>
             {source.fields.map((each) => (
               <option key={each.id} value={each.id}>
@@ -509,7 +607,15 @@ function ConditionRow({
   );
 }
 
-function MatchPreview({ preview, projects }: { preview: RulePreview | null; projects: readonly Project[] }) {
+function MatchPreview({
+  preview,
+  projects,
+  buckets,
+}: {
+  preview: RulePreview | null;
+  projects: readonly Project[];
+  buckets: readonly Bucket[];
+}) {
   return (
     <section aria-label="Matching Items" className="border border-line">
       <h3 className="m-0 flex h-7 items-center justify-between border-b border-line2 px-2.5 font-mono text-label leading-none font-semibold uppercase tracking-label text-ink">
@@ -533,8 +639,8 @@ function MatchPreview({ preview, projects }: { preview: RulePreview | null; proj
       )}
       {preview && preview.overlaps.length > 0 && (
         <p className="m-0 border-t border-line2 px-2.5 py-1.5 text-note leading-[18px] text-muted">
-          Also matched by {preview.overlaps.map((other) => ruleText(other, projects)).join('; ')}: you’ll
-          choose its place when you save.
+          Also matched by {preview.overlaps.map((other) => ruleText(other, projects, buckets)).join('; ')}:
+          you’ll choose its place when you save.
         </p>
       )}
     </section>

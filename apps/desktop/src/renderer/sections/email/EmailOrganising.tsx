@@ -175,12 +175,23 @@ export function ThreadMarks({ thread, now }: { thread: EmailThreadSummary; now: 
   );
 }
 
-function ActionButton({ label, keys, onClick }: { label: string; keys: string; onClick: () => void }) {
+function ActionButton({
+  label,
+  keys,
+  onClick,
+  title,
+}: {
+  label: string;
+  keys: string;
+  onClick: () => void;
+  title?: string;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-keyshortcuts={keys}
+      title={title}
       className={cn(
         'flex flex-none cursor-pointer items-center gap-1.5 border-0 border-r border-line2 bg-transparent px-2.5 text-ink hover:bg-raise',
         caps,
@@ -204,10 +215,15 @@ export function ThreadActions({
   onLabels,
   onSnooze,
   onRetry,
+  bucket,
+  onBucket,
 }: {
   thread: EmailThreadSummary;
   view: EmailListView;
   sync: IssueSync;
+  /** The thread's Bucket as it reads, and how it got there (#137): `v` moves it. */
+  bucket?: { name: string; how: string | null };
+  onBucket?: () => void;
   /** The note when a change made in Gmail won over the User's. */
   superseded?: string | null;
   onAct: (action: ThreadAction) => void;
@@ -247,6 +263,14 @@ export function ThreadActions({
       )}
       <ActionButton label="Labels" keys="l" onClick={onLabels} />
       <ActionButton label={thread.snoozedUntil ? 'Snoozed' : 'Snooze'} keys="z" onClick={onSnooze} />
+      {bucket && onBucket && (
+        <ActionButton
+          label={bucket.name}
+          keys="v"
+          onClick={onBucket}
+          title={bucket.how ? `${bucket.how} · move to another Bucket` : 'Move to a Bucket'}
+        />
+      )}
       <span role="status" className="ml-auto flex flex-none items-center gap-2 px-3.5 text-note">
         {sync.kind === 'synced' && superseded && <span className="text-muted">{superseded}</span>}
         {sync.kind === 'sending' && <span className="text-faint">Sending to Gmail…</span>}

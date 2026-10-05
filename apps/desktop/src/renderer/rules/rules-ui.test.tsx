@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
-import type { Project, RuleWhen } from '@commander/domain';
+import type { EmailDetail, Project, Rule, RuleWhen, SourceItem } from '@commander/domain';
 import { Toaster } from '@commander/ui';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -51,6 +51,8 @@ function create(name: string, code: string, accent: string) {
   return store.changeProject({ type: 'create', project: { name, code, accent } }).project as Project;
 }
 
+const projectOf = (rule: Rule | undefined) =>
+  rule?.target.kind === 'project' ? rule.target.projectId : null;
 const idOf = (title: string) => store.query({ titleContains: title })[0]?.id ?? '';
 const filingOf = (title: string) => store.get(idOf(title))?.item.filing ?? null;
 const teamIs = (key: string, id: string): RuleWhen => ({
@@ -234,7 +236,7 @@ describe('Settings → Rules', () => {
     fireEvent.click(within(choices).getByRole('radio', { name: 'Above team is ENG → TL' }));
     fireEvent.click(within(place).getByRole('button', { name: 'Save here' }));
 
-    await waitFor(() => expect(store.rules().map((rule) => rule.target.projectId)).toEqual([tx.id, tl.id]));
+    await waitFor(() => expect(store.rules().map(projectOf)).toEqual([tx.id, tl.id]));
   });
 
   it('reorders, edits and deletes Rules, and Undo brings a deleted one back', async () => {
@@ -257,7 +259,7 @@ describe('Settings → Rules', () => {
     await choose(dialog, 'Files into', 'LT · Longtail');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Save Rule' }));
     await screen.findByRole('dialog', { name: 'Re-file existing items' });
-    expect(store.rules()[1]?.target.projectId).toBe(lt.id);
+    expect(projectOf(store.rules()[1])).toBe(lt.id);
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
 
     fireEvent.click(screen.getByRole('button', { name: 'Delete team is OPS' }));
@@ -266,5 +268,86 @@ describe('Settings → Rules', () => {
     fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
     await waitFor(() => expect(ruleRows()).toHaveLength(2));
     expect(ruleRows()[0]).toContain('team is OPS');
+  });
+});
+
+describe('Bucket Rules', () => {
+  const receipt = (id: string, address = 'receipts@stripe.com'): SourceItem => ({
+    externalId: id,
+    kind: 'email',
+    title: `Receipt ${id}`,
+    detail: {
+      kind: 'email',
+      messageId: `<${id}@mail.test>`,
+      inReplyTo: null,
+      references: [],
+      threadKey: `mid:<${id}@mail.test>`,
+      sourceThreadId: null,
+      from: { name: 'Stripe', address },
+      to: [],
+      cc: [],
+      bcc: [],
+      replyTo: [],
+      subject: `Receipt ${id}`,
+      sentAt: 1,
+      snippet: '',
+      read: true,
+      starred: false,
+      inInbox: true,
+      sentByMe: false,
+      labels: [{ id: 'INBOX', name: 'Inbox' }],
+      attachments: [],
+      hasInvitation: false,
+      listUnsubscribe: null,
+      listId: null,
+    },
+  });
+  const bucketOf = (title: string) =>
+    (store.get(idOf(title))?.item.detail as EmailDetail | undefined)?.bucket ?? null;
+
+  it('sorts into a Bucket by email fields, offers re-sorting with a preview, and one Undo reverts it', async () => {
+    store.saveFromSource({
+      source: 'gmail',
+      account: 'google:alex',
+      items: [receipt('r1'), receipt('r2'), receipt('x1', 'dana@northwind.test')],
+    });
+    renderSettings();
+    const dialog = await openEditor();
+
+    await choose(dialog, 'Target', 'A Bucket (email)');
+    await choose(dialog, 'Sorts into', 'Receipts');
+    // Only email fields sort into a Bucket.
+    const field = within(dialog).getByRole('combobox', { name: 'Field 1' });
+    expect(
+      within(field)
+        .getAllByRole('group')
+        .map((group) => group.getAttribute('label')),
+    ).toEqual(['Email']);
+    expect((field as HTMLSelectElement).value).toBe('gmail.domain');
+    await choose(dialog, 'Value 1', 'stripe.com');
+    const matching = within(dialog).getByRole('region', { name: 'Matching Items' });
+    expect(await within(matching).findByText('Matches 2 Items')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save Rule' }));
+
+    const offer = await screen.findByRole('dialog', { name: 'Re-sort existing emails' });
+    expect(within(offer).getByText('Also re-sort 2 existing emails?')).toBeTruthy();
+    const preview = within(offer).getByRole('list', { name: 'Re-sort preview' });
+    expect(
+      within(preview)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent)
+        .sort(),
+    ).toEqual(['Receipt r1Unsorted→Receipts', 'Receipt r2Unsorted→Receipts']);
+    expect(ruleRows()).toEqual([expect.stringContaining('from domain is stripe.com→Receipts')]);
+    expect(bucketOf('Receipt r1')).toBeNull();
+
+    fireEvent.click(within(offer).getByRole('button', { name: 'Re-sort 2 emails' }));
+    await waitFor(() => expect(bucketOf('Receipt r1')).toEqual({ bucketId: 'receipts', sortedBy: 'rule' }));
+    expect(bucketOf('Receipt x1')).toBeNull();
+
+    const toast = (await screen.findByText('Re-sorted 2 emails')).closest('li') as HTMLElement;
+    fireEvent.click(within(toast).getByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(bucketOf('Receipt r1')).toBeNull());
+    expect(bucketOf('Receipt r2')).toBeNull();
   });
 });

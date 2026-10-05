@@ -198,6 +198,9 @@ test('hostile email: no script runs, the window is untouched, nothing leaves unt
   await expect(reader(window).getByTestId('email-link-target')).toHaveText(
     '→ https://example.com/real-destination',
   );
+  // Playwright's own scrolling can leave the link at the bottom, under the sticky line that shows its
+  // destination: the frame is scrolled to the middle of the window first.
+  await frame.evaluate((element) => globalThis.scrollBy(0, element.getBoundingClientRect().top - 300));
   await link.click();
   await expect.poll(() => openedInBrowser(app)).toEqual(['https://example.com/real-destination']);
   const frames = () => window.frames().map((each) => each.url());

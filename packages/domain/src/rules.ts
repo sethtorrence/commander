@@ -1,10 +1,13 @@
 import { z } from 'zod';
+import { emailBucket } from './buckets';
 import { eventRuleFields } from './calendar';
+import { emailRuleFields } from './email-rules';
 import { filing, type Item, itemRef } from './items';
 import { teamsRuleFields } from './teams-rules';
 
-// Rules: conditions the User sets that file matching Items into a Project. They sit in one list the
-// User orders, and the first match from the top wins. A Rule's conditions name fields from a
+// Rules: conditions the User sets that file matching Items into a Project, or sort emails into a
+// Bucket (#137). They sit in one list the User orders, and the first match from the top wins (per
+// kind of target: a Project Rule and a Bucket Rule can both match one email). A Rule's conditions name fields from a
 // per-Source registry (below), so a new Source registers its own fields without changing how Rules
 // are stored, matched or described.
 
@@ -49,10 +52,17 @@ export const ruleWhen = z.object({
 });
 export type RuleWhen = z.infer<typeof ruleWhen>;
 
-// What a Rule files matching Items into. Only Projects for now; Bucket Rules for email (M6) add a
-// `bucket` target, matched in the same list (the first match per kind of target wins).
-export const ruleTarget = z.object({ kind: z.literal('project'), projectId: id });
+// What a Rule files matching Items into: a Project, or (emails only) a Bucket. Both kinds sit in the
+// same list; the first match per kind of target wins.
+export const ruleTargetKinds = ['project', 'bucket'] as const;
+export type RuleTargetKind = (typeof ruleTargetKinds)[number];
+export const ruleTarget = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('project'), projectId: id }),
+  z.object({ kind: z.literal('bucket'), bucketId: id }),
+]);
 export type RuleTarget = z.infer<typeof ruleTarget>;
+export type ProjectTarget = Extract<RuleTarget, { kind: 'project' }>;
+export type BucketTarget = Extract<RuleTarget, { kind: 'bucket' }>;
 
 export const rule = z.object({
   id,
@@ -92,12 +102,24 @@ export const refileCandidate = z.object({
 });
 export type RefileCandidate = z.infer<typeof refileCandidate>;
 
+// An email a Bucket Rule change would move: its Bucket now (null: Unsorted) and the one the Rules
+// sort it into.
+export const resortCandidate = z.object({
+  item: itemRef,
+  from: emailBucket.nullable(),
+  to: z.object({ bucketId: id, sortedBy: z.literal('rule') }),
+  ruleId: id,
+});
+export type ResortCandidate = z.infer<typeof resortCandidate>;
+
 // What a Rule change did: the Rule as it is now (null once deleted), and the existing Items the
-// changed list now files elsewhere, for "Also re-file 42 existing items?". Hand-filed Items never
-// appear there.
+// changed list now files elsewhere, for "Also re-file 42 existing items?", or the emails it now sorts
+// into another Bucket, for "Also re-sort 42 existing emails?". Items the User filed or sorted by hand
+// never appear there.
 export const ruleChange = z.object({
   rule: rule.nullable(),
   refile: z.array(refileCandidate),
+  resort: z.array(resortCandidate).default([]),
 });
 export type RuleChange = z.infer<typeof ruleChange>;
 
@@ -222,21 +244,32 @@ export const linearRuleFields: readonly RuleField[] = [
 export const googleCalendarRuleFields: readonly RuleField[] = eventRuleFields('google-calendar');
 export const outlookCalendarRuleFields: readonly RuleField[] = eventRuleFields('outlook-calendar');
 
-// Every Source's fields, by id. A Source adds its fields here (email: sender, domain; GitHub: org,
-// repo); matching and describing need nothing more.
+// Gmail's and Outlook's fields (#137): the shared email readers (email-rules.ts), which read the mail
+// of both, so an email Rule sorts Gmail and Outlook mail alike.
+export const gmailRuleFields: readonly RuleField[] = emailRuleFields('gmail');
+export const outlookRuleFields: readonly RuleField[] = emailRuleFields('outlook');
+
+// Every Source's fields, by id. A Source adds its fields here (GitHub: org, repo); matching and
+// describing need nothing more.
 export const RULE_FIELDS: ReadonlyMap<string, RuleField> = new Map(
-  [...linearRuleFields, ...googleCalendarRuleFields, ...outlookCalendarRuleFields, ...teamsRuleFields].map(
-    (field) => [field.id, field],
-  ),
+  [
+    ...linearRuleFields,
+    ...googleCalendarRuleFields,
+    ...outlookCalendarRuleFields,
+    ...teamsRuleFields,
+    ...gmailRuleFields,
+    ...outlookRuleFields,
+  ].map((field) => [field.id, field]),
 );
 
-// The Sources whose fields Rules can use, with their fields in the editor's order. The calendar
-// fields read every calendar's events, so the editor offers them once, as Calendar (under the ids
-// Rules already use).
+// The Sources whose fields Rules can use, with their fields in the editor's order. The calendar and
+// email fields read every calendar's events and every Account's mail, so the editor offers them once,
+// as Calendar and Email (under the Google ids).
 export const RULE_SOURCES: readonly { source: string; name: string; fields: readonly RuleField[] }[] = [
   { source: 'linear', name: 'Linear', fields: linearRuleFields },
   { source: 'calendar', name: 'Calendar', fields: googleCalendarRuleFields },
   { source: 'teams', name: 'Teams', fields: teamsRuleFields },
+  { source: 'email', name: 'Email', fields: gmailRuleFields },
 ];
 
 // ---------------------------------------------------------------------------------------------
@@ -282,6 +315,21 @@ export function firstMatch<R extends Pick<Rule, 'when'>>(
   target: Matchable,
 ): R | undefined {
   return rules.find((each) => ruleMatches(each.when, target));
+}
+
+type RuleOf<K extends RuleTargetKind> = Rule & { target: Extract<RuleTarget, { kind: K }> };
+
+/** A list's Rules of one kind of target, in order. */
+export const rulesFor = <K extends RuleTargetKind>(rules: readonly Rule[], kind: K): RuleOf<K>[] =>
+  rules.filter((each): each is RuleOf<K> => each.target.kind === kind);
+
+/** The first Rule of one kind of target that the Item meets: the one that files it, or sorts it. */
+export function firstMatchFor<K extends RuleTargetKind>(
+  rules: readonly Rule[],
+  kind: K,
+  target: Matchable,
+): RuleOf<K> | undefined {
+  return firstMatch(rulesFor(rules, kind), target);
 }
 
 // ---------------------------------------------------------------------------------------------

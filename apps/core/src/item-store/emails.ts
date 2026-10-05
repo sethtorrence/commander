@@ -9,6 +9,7 @@ import {
   type EmailSearchQuery,
   type EmailSearchResult,
   type EmailThread,
+  type EmailThreadFacet,
   type EmailThreadList,
   type EmailThreadQuery,
   type EmailThreadSummary,
@@ -21,11 +22,13 @@ import {
   flagsInView,
   gmailCatalog,
   type Item,
+  inBucket,
   isPickableLabel,
   parseEmailSearch,
   type sourceItem,
   type ThreadFlags,
   type ThreadingMessage,
+  threadBucketOf,
   threadFlagsOf,
   threadingOf,
   threadMessages,
@@ -43,7 +46,7 @@ import * as schema from './schema';
 // Item (never in its detail or the activity log), and the Email Section's reads (a view's threads,
 // each view's counts, Section search, the labels to pick from, and one thread with its bodies), and
 // the snoozes due (#135). Which view a thread is in is the domain's rule (flagsInView), over flags
-// aggregated here per thread. Threading runs as mail is saved: whatever order mail
+// aggregated here per thread; so is its Bucket and Project (#137), its latest message's. Threading runs as mail is saved: whatever order mail
 // comes in (the first sync downloads newest first, so replies before their parents), each email is
 // threaded among the Account's live mail it is connected to, and mail already held that a new
 // message joins to another thread moves to it (domain threadMessages).
@@ -88,6 +91,15 @@ type ThreadRow = ThreadFlags & {
   unread: number;
   // Its latest message, or when it came back from a snooze if later: the inbox sorts by this.
   sortAt: number;
+  // Its latest message's Bucket (null: Unsorted) and Project (null: Unfiled).
+  bucketId: string | null;
+  projectId: string | null;
+};
+
+// The value of an aggregate keyed by the latest message (see latestOf), or null when it has none.
+const afterKey = (keyed: string | null) => {
+  const value = keyed?.slice(keyed.indexOf(SEPARATOR) + 1) ?? '';
+  return value === '' ? null : value;
 };
 
 export function emailsIn(
@@ -332,6 +344,7 @@ export function emailsIn(
     }
     const last = detailOfItem(latest);
     const details = ordered.map(detailOfItem);
+    const bucketId = threadBucketOf(details);
     const live = details.filter((detail) => !detail.inTrash);
     const labels = new Map<string, EmailLabel>();
     for (const detail of live)
@@ -356,6 +369,7 @@ export function emailsIn(
       inTrash: live.length < details.length,
       snoozedUntil: threadSnoozedUntil(details, now()),
       returnedFrom: returned.length ? Math.max(...returned) : null,
+      bucket: bucketId === null ? null : (last.bucket ?? null),
     };
   }
 
@@ -363,6 +377,12 @@ export function emailsIn(
   function threadRows(account: string | undefined): ThreadRow[] {
     const at = now();
     const notTrashed = sql`not ${emailDetails.inTrash}`;
+    // A value of the thread's latest message (by when it was sent, then its id, as summaryOf orders
+    // them): the largest "sentAt, id, separator, value" key, the value read back after the separator.
+    const latestOf = (value: SQL) =>
+      sql<
+        string | null
+      >`max(printf('%015d', ${emailDetails.sentAt}) || ${items.id} || ${SEPARATOR} || coalesce(${value}, ''))`;
     const rows = db
       .select({
         account: items.account,
@@ -378,6 +398,8 @@ export function emailsIn(
         labels: sql<
           string | null
         >`group_concat(case when ${emailDetails.inTrash} then null else (select group_concat(json_extract(label.value, '$.id'), ${SEPARATOR}) from json_each(${emailDetails.data}, '$.labels') label) end, ${SEPARATOR})`,
+        bucket: latestOf(sql`json_extract(${emailDetails.data}, '$.bucket.bucketId')`),
+        project: latestOf(sql`${items.projectId}`),
       })
       .from(emailDetails)
       .innerJoin(items, eq(items.id, emailDetails.itemId))
@@ -404,6 +426,8 @@ export function emailsIn(
               live: !!row.live,
               snoozedUntil: Number(row.snoozed) > at ? Number(row.snoozed) : null,
               labels: new Set(row.labels ? row.labels.split(SEPARATOR) : []),
+              bucketId: afterKey(row.bucket),
+              projectId: afterKey(row.project),
             },
           ]
         : [],
@@ -426,17 +450,36 @@ export function emailsIn(
     );
   }
 
-  /** A view's threads (the Inbox unless asked), newest first, with how many have unread mail. */
+  /**
+   * A view's threads (the Inbox unless asked), in one Bucket when asked, newest first, with how many
+   * have unread mail; and the view's threads counted by Bucket and Project, whatever the Bucket.
+   */
   function threads(input: EmailThreadQuery = {}): EmailThreadList {
     const query = emailThreadQuery.parse(input);
     const view: EmailListView = query.view ?? 'inbox';
-    const rows = threadRows(query.account)
-      .filter((row) => flagsInView(row, view))
-      .sort(newestFirst);
+    const inView = threadRows(query.account).filter((row) => flagsInView(row, view));
+    const facets = new Map<string, EmailThreadFacet>();
+    for (const row of inView) {
+      const key = `${row.bucketId ?? ''}${SEPARATOR}${row.projectId ?? ''}`;
+      const facet = facets.get(key) ?? {
+        bucketId: row.bucketId,
+        projectId: row.projectId,
+        threads: 0,
+        unread: 0,
+      };
+      facet.threads += 1;
+      if (row.unread > 0) facet.unread += 1;
+      facets.set(key, facet);
+    }
+    const { bucket } = query;
+    const rows = (
+      bucket === undefined ? inView : inView.filter((row) => inBucket(row.bucketId, bucket))
+    ).sort(newestFirst);
     return {
       threads: summaries(rows.slice(0, query.limit ?? THREADS_MAX)),
       unreadThreads: rows.filter((row) => row.unread > 0).length,
       total: rows.length,
+      facets: [...facets.values()],
     };
   }
 

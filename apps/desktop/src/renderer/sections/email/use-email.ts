@@ -1,13 +1,18 @@
 import {
+  type Bucket,
   type EmailDetail,
   type EmailListView,
   type EmailThread,
+  type EmailThreadFacet,
   type EmailThreadSummary,
   type EmailViewCount,
   type Item,
+  inBucket,
+  NEEDS_REPLY,
   type OutgoingChange,
   type ThreadAction,
   threadActionFields,
+  UNSORTED,
 } from '@commander/domain';
 import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -22,6 +27,21 @@ export const ACCOUNT_STORAGE_KEY = 'commander.email.account';
 export const threadId = (thread: { account: string; threadKey: string }) =>
   `${thread.account}\u0000${thread.threadKey}`;
 
+/** The view's threads counted by Bucket and Project, from thread summaries (search results). */
+export function facetsOf(threads: readonly EmailThreadSummary[]): EmailThreadFacet[] {
+  const found = new Map<string, EmailThreadFacet>();
+  for (const thread of threads) {
+    const bucketId = thread.bucket?.bucketId ?? null;
+    const projectId = thread.latest.filing?.projectId ?? null;
+    const key = `${bucketId ?? ''}\u0000${projectId ?? ''}`;
+    const facet = found.get(key) ?? { bucketId, projectId, threads: 0, unread: 0 };
+    facet.threads += 1;
+    if (thread.unreadCount > 0) facet.unread += 1;
+    found.set(key, facet);
+  }
+  return [...found.values()];
+}
+
 export interface EmailState {
   /** The email Accounts (Google Accounts with Gmail on), each with how it is syncing. */
   accounts: GoogleAccountSummary[];
@@ -32,6 +52,18 @@ export interface EmailState {
   setAccount(account: string): void;
   /** Unread threads in the inbox: for all Accounts ('all') and for each, by id. */
   unread: ReadonlyMap<string, number>;
+  /** Unread inbox threads in Needs reply, every Account's (#137): the Email tab's count. */
+  needsReply: number;
+  /** The User's Buckets, in their order (#137). */
+  buckets: Bucket[];
+  /** The Bucket strip's choice: a Bucket's id, Unsorted (`unsorted`), or null for all. */
+  bucket: string | null;
+  setBucket(bucket: string | null): void;
+  /**
+   * The listed view's threads by Bucket (a Bucket's id, `unsorted`, and `all`), under the Project
+   * filter: the Bucket strip's counts.
+   */
+  bucketCounts: ReadonlyMap<string, number>;
   /** The listed threads (the Account switcher's and the Project filter's), newest first. */
   threads: EmailThreadSummary[];
   /** Every thread of the chosen Account(s), for the Project filter's counts (its latest message). */
@@ -115,6 +147,10 @@ export function useEmail({
   include: (item: Pick<Item, 'filing'>) => boolean;
   storage?: Storage;
 }): EmailState {
+  const [buckets, setBuckets] = useState<Bucket[]>([]);
+  const [bucket, setBucketState] = useState<string | null>(null);
+  const [facets, setFacets] = useState<EmailThreadFacet[]>([]);
+  const [needsReply, setNeedsReply] = useState(0);
   const [knownAccounts, setAccounts] = useState<GoogleAccountSummary[] | null>(null);
   const accounts = useMemo(() => knownAccounts ?? [], [knownAccounts]);
   const [chosen, setChosen] = useState(() => loadAccount(storage));
@@ -163,19 +199,28 @@ export function useEmail({
     const ids = accountIds ? accountIds.split('|') : [];
     const one = account === 'all' ? undefined : account;
     void (async () => {
-      const [shown, counts, all, ...each] = await Promise.all([
+      const [shown, counts, all, needs, sorted, ...each] = await Promise.all([
         search !== null
-          ? client
-              .search(search, one)
-              .then((found) => ({ threads: found.threads, total: found.threads.length }))
-          : client.threads({ ...(one ? { account: one } : {}), view }),
+          ? client.search(search, one).then((found) => {
+              // Search is narrowed by Bucket here; its counts are of what it found.
+              const threads = bucket
+                ? found.threads.filter((thread) => inBucket(thread.bucket?.bucketId ?? null, bucket))
+                : found.threads;
+              return { threads, total: threads.length, facets: facetsOf(found.threads) };
+            })
+          : client.threads({ ...(one ? { account: one } : {}), view, ...(bucket ? { bucket } : {}) }),
         client.views(one),
         client.threads({ limit: 1 }),
+        client.threads({ view: 'inbox', bucket: NEEDS_REPLY, limit: 1 }),
+        client.buckets(),
         ...ids.map((id) => client.threads({ account: id, limit: 1 })),
       ]);
       if (!live) return;
       setList(shown.threads);
       setTotal(shown.total);
+      setFacets(shown.facets ?? []);
+      setNeedsReply(needs.unreadThreads);
+      setBuckets(sorted);
       setViews(counts.views);
       setUnread(
         new Map([
@@ -187,10 +232,23 @@ export function useEmail({
     return () => {
       live = false;
     };
-  }, [client, account, accountIds, signature, version, knownAccounts, view, search]);
+  }, [client, account, accountIds, signature, version, knownAccounts, view, search, bucket]);
 
   const threads = useMemo(() => (list ?? []).filter((each) => include(each.latest)), [list, include]);
   const forProjectFilter = useMemo(() => (list ?? []).map((each) => each.latest), [list]);
+
+  // The strip's counts: the view's threads (whatever the Bucket) the Project filter lets through.
+  const bucketCounts = useMemo(() => {
+    const counted = new Map<string, number>([['all', 0]]);
+    for (const facet of facets) {
+      const filing = facet.projectId ? { projectId: facet.projectId, filedBy: 'user' as const } : null;
+      if (!include({ filing })) continue;
+      const key = facet.bucketId ?? UNSORTED;
+      counted.set(key, (counted.get(key) ?? 0) + facet.threads);
+      counted.set('all', (counted.get('all') ?? 0) + facet.threads);
+    }
+    return counted;
+  }, [facets, include]);
 
   const listedSelection = threads.find((each) => threadId(each) === selectedId) ?? null;
   const selected =
@@ -258,6 +316,11 @@ export function useEmail({
     setSearchState(null);
     setSelectedId(null);
     setOpen(false);
+  }, []);
+
+  const setBucket = useCallback((next: string | null) => {
+    setBucketState(next);
+    setSelectedId(null);
   }, []);
 
   const setSearch = useCallback((text: string | null) => {
@@ -397,6 +460,11 @@ export function useEmail({
     account,
     setAccount,
     unread,
+    needsReply,
+    buckets,
+    bucket,
+    setBucket,
+    bucketCounts,
     threads,
     forProjectFilter,
     total,
