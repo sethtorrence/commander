@@ -1,0 +1,830 @@
+{
+  "changes": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id,displayName,parentFolderId,childFolderCount)",
+          "value": [
+            {
+              "id": "AAMkAGI2-fld-inbox=",
+              "displayName": "Inbox",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 1,
+              "unreadItemCount": 0,
+              "totalItemCount": 4,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-sentitems=",
+              "displayName": "Sent Items",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 1,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-archive=",
+              "displayName": "Archive",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 120,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-deleteditems=",
+              "displayName": "Deleted Items",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 3,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-junkemail=",
+              "displayName": "Junk Email",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 9,
+              "sizeInBytes": 0,
+              "isHidden": false
+            }
+          ],
+          "@odata.nextLink": "https://graph.test/v1.0/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100&$skiptoken=folders-page-2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100&$skiptoken=folders-page-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id,displayName,parentFolderId,childFolderCount)",
+          "value": [
+            {
+              "id": "AAMkAGI2-fld-drafts=",
+              "displayName": "Drafts",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-outbox=",
+              "displayName": "Outbox",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-projects=",
+              "displayName": "Projects",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 1,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-conversationhistory=",
+              "displayName": "Conversation History",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-inbox=/childFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-inbox=')/childFolders(id,displayName,parentFolderId,childFolderCount)",
+          "value": [
+            {
+              "id": "AAMkAGI2-fld-receipts=",
+              "displayName": "Receipts",
+              "parentFolderId": "AAMkAGI2-fld-inbox=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-inbox=')/messages/delta?$deltatoken=inbox-1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-inbox=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [
+            {
+              "@odata.etag": "W/\"CQAAABYAAAD23\"",
+              "id": "AAMkAGI2-msg-offsite-3=",
+              "receivedDateTime": "2026-10-03T13:20:00Z",
+              "sentDateTime": "2026-10-03T13:20:00Z",
+              "subject": "RE: Q4 offsite dates",
+              "bodyPreview": "Agenda attached in the doc.",
+              "body": {
+                "contentType": "html",
+                "content": "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"http://schemas.microsoft.com/office/2004/12/omml\" xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n<head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\r\n<meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\">\r\n<!--[if !mso]><style>v\\:* {behavior:url(#default#VML);}\r\no\\:* {behavior:url(#default#VML);}\r\n</style><![endif]--><style><!--\r\n/* Font Definitions */\r\n@font-face\r\n\t{font-family:\"Cambria Math\";}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Aptos\",sans-serif;}\r\n.MsoChpDefault\r\n\t{mso-style-type:export-only;}\r\n@page WordSection1\r\n\t{size:612.0pt 792.0pt;}\r\ndiv.WordSection1\r\n\t{page:WordSection1;}\r\n--></style><!--[if gte mso 9]><xml>\r\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\r\n</xml><![endif]-->\r\n</head>\r\n<body lang=\"EN-GB\" link=\"#467886\" vlink=\"#96607D\" style=\"word-wrap:break-word\">\r\n<div class=\"WordSection1\">\r\n<p class=\"MsoNormal\">Agenda is in the shared doc.<o:p></o:p></p>\r\n</div>\r\n</body>\r\n</html>\r\n"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Dana Whitfield",
+                  "address": "dana@northwind.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Dana Whitfield",
+                  "address": "dana@northwind.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Sam Rivera",
+                    "address": "sam@contoso.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": false,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-inbox=",
+              "conversationId": "AAQkAGI2-conv-offsite=",
+              "internetMessageId": "<offsite-3@mail.northwind.test>",
+              "internetMessageHeaders": [
+                {
+                  "name": "Received",
+                  "value": "from EUR05-AM6-obe.outbound.protection.outlook.com (2a01:111:f403:2612::700) by AM0PR02MB.outlook.office365.com with HTTPS; Thu, 1 Oct 2026 08:14:02 +0000"
+                },
+                {
+                  "name": "MIME-Version",
+                  "value": "1.0"
+                },
+                {
+                  "name": "Message-ID",
+                  "value": "<offsite-3@mail.northwind.test>"
+                },
+                {
+                  "name": "In-Reply-To",
+                  "value": "<offsite-2@mail.northwind.test>"
+                },
+                {
+                  "name": "References",
+                  "value": "<offsite-1@mail.northwind.test> <sam-reply-1@contoso.test> <offsite-2@mail.northwind.test>"
+                }
+              ],
+              "categories": [],
+              "hasAttachments": false,
+              "lastModifiedDateTime": "2026-10-03T13:20:00Z"
+            },
+            {
+              "@odata.etag": "W/\"CQAAABYAAAD23\"",
+              "id": "AAMkAGI2-msg-offsite-2=",
+              "receivedDateTime": "2026-10-02T15:40:11Z",
+              "sentDateTime": "2026-10-02T15:40:00Z",
+              "subject": "RE: Q4 offsite dates",
+              "bodyPreview": "Booked the venue for 19–21 Nov. Agenda to follow.",
+              "body": {
+                "contentType": "html",
+                "content": "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"http://schemas.microsoft.com/office/2004/12/omml\" xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n<head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\r\n<meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\">\r\n<!--[if !mso]><style>v\\:* {behavior:url(#default#VML);}\r\no\\:* {behavior:url(#default#VML);}\r\n</style><![endif]--><style><!--\r\n/* Font Definitions */\r\n@font-face\r\n\t{font-family:\"Cambria Math\";}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Aptos\",sans-serif;}\r\n.MsoChpDefault\r\n\t{mso-style-type:export-only;}\r\n@page WordSection1\r\n\t{size:612.0pt 792.0pt;}\r\ndiv.WordSection1\r\n\t{page:WordSection1;}\r\n--></style><!--[if gte mso 9]><xml>\r\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\r\n</xml><![endif]-->\r\n</head>\r\n<body lang=\"EN-GB\" link=\"#467886\" vlink=\"#96607D\" style=\"word-wrap:break-word\">\r\n<div class=\"WordSection1\">\r\n<p class=\"MsoNormal\">Booked the venue for 19–21 Nov. Agenda to follow.<o:p></o:p></p>\r\n</div>\r\n</body>\r\n</html>\r\n"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Dana Whitfield",
+                  "address": "dana@northwind.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Dana Whitfield",
+                  "address": "dana@northwind.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Sam Rivera",
+                    "address": "sam@contoso.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-inbox=",
+              "conversationId": "AAQkAGI2-conv-offsite=",
+              "internetMessageId": "<offsite-2@mail.northwind.test>",
+              "internetMessageHeaders": [
+                {
+                  "name": "Received",
+                  "value": "from EUR05-AM6-obe.outbound.protection.outlook.com (2a01:111:f403:2612::700) by AM0PR02MB.outlook.office365.com with HTTPS; Thu, 1 Oct 2026 08:14:02 +0000"
+                },
+                {
+                  "name": "MIME-Version",
+                  "value": "1.0"
+                },
+                {
+                  "name": "Message-ID",
+                  "value": "<offsite-2@mail.northwind.test>"
+                },
+                {
+                  "name": "In-Reply-To",
+                  "value": "<sam-reply-1@contoso.test>"
+                },
+                {
+                  "name": "References",
+                  "value": "<offsite-1@mail.northwind.test> <sam-reply-1@contoso.test>"
+                }
+              ],
+              "categories": [],
+              "hasAttachments": false,
+              "lastModifiedDateTime": "2026-10-03T13:05:00Z"
+            },
+            {
+              "@odata.type": "#microsoft.graph.message",
+              "id": "AAMkAGI2-msg-digest=",
+              "@removed": {
+                "reason": "deleted"
+              }
+            },
+            {
+              "@odata.type": "#microsoft.graph.message",
+              "id": "AAMkAGI2-msg-certificate=",
+              "@removed": {
+                "reason": "deleted"
+              }
+            }
+          ],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-inbox=')/messages/delta?$deltatoken=inbox-2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-sentitems=')/messages/delta?$deltatoken=sent-1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-sentitems=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-sentitems=')/messages/delta?$deltatoken=sent-2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-archive=')/messages/delta?$deltatoken=archive-1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-archive=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.message",
+              "id": "AAMkAGI2-msg-invoice=",
+              "@removed": {
+                "reason": "deleted"
+              }
+            }
+          ],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-archive=')/messages/delta?$deltatoken=archive-2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-receipts=')/messages/delta?$deltatoken=receipts-1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-receipts=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-receipts=')/messages/delta?$deltatoken=receipts-2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-projects=')/messages/delta?$deltatoken=projects-1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-projects=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [
+            {
+              "@odata.etag": "W/\"CQAAABYAAAD20\"",
+              "id": "AAMkAGI2-msg-digest=",
+              "receivedDateTime": "2026-09-20T07:00:00Z",
+              "sentDateTime": "2026-09-20T07:00:00Z",
+              "subject": "Weekly digest: café edition",
+              "bodyPreview": "This week at Northwind.",
+              "body": {
+                "contentType": "text",
+                "content": "This week at Northwind."
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Northwind Weekly",
+                  "address": "news@northwind.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Northwind Weekly",
+                  "address": "news@northwind.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Sam Rivera",
+                    "address": "sam@contoso.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-projects=",
+              "conversationId": "AAQkAGI2-conv-digest=",
+              "internetMessageId": "<digest-38@news.northwind.test>",
+              "internetMessageHeaders": [
+                {
+                  "name": "Received",
+                  "value": "from EUR05-AM6-obe.outbound.protection.outlook.com (2a01:111:f403:2612::700) by AM0PR02MB.outlook.office365.com with HTTPS; Thu, 1 Oct 2026 08:14:02 +0000"
+                },
+                {
+                  "name": "MIME-Version",
+                  "value": "1.0"
+                },
+                {
+                  "name": "Message-ID",
+                  "value": "<digest-38@news.northwind.test>"
+                },
+                {
+                  "name": "List-Unsubscribe",
+                  "value": "<mailto:unsubscribe@news.northwind.test>, <https://news.northwind.test/u/38>"
+                },
+                {
+                  "name": "List-Id",
+                  "value": "Northwind Weekly <weekly.news.northwind.test>"
+                }
+              ],
+              "categories": ["Newsletters"],
+              "hasAttachments": false,
+              "lastModifiedDateTime": "2026-10-03T13:06:00Z"
+            }
+          ],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-projects=')/messages/delta?$deltatoken=projects-2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-deleteditems=')/messages/delta?$deltatoken=deleted-1"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-deleteditems=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [
+            {
+              "id": "AAMkAGI2-msg-certificate=",
+              "isRead": true,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-deleteditems=",
+              "categories": [],
+              "lastModifiedDateTime": "2026-10-03T13:07:00Z",
+              "receivedDateTime": "2026-10-03T09:02:45Z"
+            }
+          ],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-deleteditems=')/messages/delta?$deltatoken=deleted-2"
+        }
+      }
+    }
+  ],
+  "restored": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id,displayName,parentFolderId,childFolderCount)",
+          "value": [
+            {
+              "id": "AAMkAGI2-fld-inbox=",
+              "displayName": "Inbox",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 1,
+              "unreadItemCount": 0,
+              "totalItemCount": 4,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-sentitems=",
+              "displayName": "Sent Items",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 1,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-archive=",
+              "displayName": "Archive",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 120,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-deleteditems=",
+              "displayName": "Deleted Items",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 3,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-junkemail=",
+              "displayName": "Junk Email",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 9,
+              "sizeInBytes": 0,
+              "isHidden": false
+            }
+          ],
+          "@odata.nextLink": "https://graph.test/v1.0/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100&$skiptoken=folders-page-2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100&$skiptoken=folders-page-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id,displayName,parentFolderId,childFolderCount)",
+          "value": [
+            {
+              "id": "AAMkAGI2-fld-drafts=",
+              "displayName": "Drafts",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-outbox=",
+              "displayName": "Outbox",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-projects=",
+              "displayName": "Projects",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 1,
+              "sizeInBytes": 0,
+              "isHidden": false
+            },
+            {
+              "id": "AAMkAGI2-fld-conversationhistory=",
+              "displayName": "Conversation History",
+              "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-inbox=/childFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-inbox=')/childFolders(id,displayName,parentFolderId,childFolderCount)",
+          "value": [
+            {
+              "id": "AAMkAGI2-fld-receipts=",
+              "displayName": "Receipts",
+              "parentFolderId": "AAMkAGI2-fld-inbox=",
+              "childFolderCount": 0,
+              "unreadItemCount": 0,
+              "totalItemCount": 0,
+              "sizeInBytes": 0,
+              "isHidden": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-inbox=')/messages/delta?$deltatoken=inbox-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-inbox=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [
+            {
+              "@odata.etag": "W/\"CQAAABYAAAD25\"",
+              "id": "AAMkAGI2-msg-certificate=",
+              "receivedDateTime": "2026-10-03T09:02:45Z",
+              "sentDateTime": "2026-10-03T09:02:00Z",
+              "subject": "Staging certificate",
+              "bodyPreview": "The staging certificate expires on Friday. Can you renew it? The CSR is attached.",
+              "body": {
+                "contentType": "text",
+                "content": "The staging certificate expires on Friday. Can you renew it?\r\nThe CSR is attached.\r\n\r\nPriya"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Priya Patel",
+                  "address": "priya@contoso.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Priya Patel",
+                  "address": "priya@contoso.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Sam Rivera",
+                    "address": "sam@contoso.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-inbox=",
+              "conversationId": "AAQkAGI2-conv-certificate=",
+              "internetMessageId": "<CERT01@contoso.test>",
+              "internetMessageHeaders": [
+                {
+                  "name": "Received",
+                  "value": "from EUR05-AM6-obe.outbound.protection.outlook.com (2a01:111:f403:2612::700) by AM0PR02MB.outlook.office365.com with HTTPS; Thu, 1 Oct 2026 08:14:02 +0000"
+                },
+                {
+                  "name": "MIME-Version",
+                  "value": "1.0"
+                },
+                {
+                  "name": "Message-ID",
+                  "value": "<CERT01@contoso.test>"
+                }
+              ],
+              "categories": [],
+              "hasAttachments": true,
+              "lastModifiedDateTime": "2026-10-03T14:00:00Z"
+            }
+          ],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-inbox=')/messages/delta?$deltatoken=inbox-3"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-sentitems=')/messages/delta?$deltatoken=sent-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-sentitems=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-sentitems=')/messages/delta?$deltatoken=sent-3"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-archive=')/messages/delta?$deltatoken=archive-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-archive=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-archive=')/messages/delta?$deltatoken=archive-3"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-receipts=')/messages/delta?$deltatoken=receipts-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-receipts=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-receipts=')/messages/delta?$deltatoken=receipts-3"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-projects=')/messages/delta?$deltatoken=projects-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-projects=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-projects=')/messages/delta?$deltatoken=projects-3"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders('AAMkAGI2-fld-deleteditems=')/messages/delta?$deltatoken=deleted-2"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-deleteditems=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.message",
+              "id": "AAMkAGI2-msg-certificate=",
+              "@removed": {
+                "reason": "deleted"
+              }
+            },
+            {
+              "@odata.type": "#microsoft.graph.message",
+              "id": "AAMkAGI2-msg-old-trash=",
+              "@removed": {
+                "reason": "deleted"
+              }
+            }
+          ],
+          "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-deleteditems=')/messages/delta?$deltatoken=deleted-3"
+        }
+      }
+    }
+  ]
+}

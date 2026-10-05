@@ -60,16 +60,20 @@ export function snoozeTime(at: number, now: number): string {
 
 /**
  * What a toast says once an action is done to the thread called `subject`. `bucketName` names the
- * Bucket a thread was moved to (#137): Unsorted for none.
+ * Bucket a thread was moved to (#137): Unsorted for none. Outlook (#136) calls a star a flag.
  */
 export function actionToast(
   action: ThreadAction,
   subject: string,
   now: number,
   bucketName: (bucketId: string | null) => string = (bucketId) => bucketId ?? 'Unsorted',
+  provider: 'Gmail' | 'Outlook' = 'Gmail',
 ): string {
   const said = subject || '(no subject)';
+  const outlook = provider === 'Outlook';
   switch (action.type) {
+    case 'move':
+      return `Moved to ${action.folder.name}: ${said}`;
     case 'archive':
       return `Archived: ${said}`;
     case 'move-to-inbox':
@@ -81,9 +85,9 @@ export function actionToast(
     case 'unread':
       return `Marked unread: ${said}`;
     case 'star':
-      return `Starred: ${said}`;
+      return `${outlook ? 'Flagged' : 'Starred'}: ${said}`;
     case 'unstar':
-      return `Unstarred: ${said}`;
+      return `${outlook ? 'Unflagged' : 'Unstarred'}: ${said}`;
     case 'label':
       return `Labelled ${action.label.name}: ${said}`;
     case 'unlabel':

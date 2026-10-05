@@ -12,7 +12,12 @@ import type {
   MessageFields,
   OutgoingChange,
 } from '@commander/domain';
-import type { AccountSummary, AccountsState, GoogleAccountSummary } from '@commander/domain/ipc';
+import type {
+  AccountSummary,
+  AccountsState,
+  GoogleAccountSummary,
+  OutlookAccountSummary,
+} from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import { clockTime } from '../../settings/account-sync';
 
@@ -21,8 +26,8 @@ import { clockTime } from '../../settings/account-sync';
   Accounts, goes through here, so components never build requests themselves. Emails are Items, one
   per message; the Section shows them as threads. Filing a thread files each of its messages, as one
   change the User can undo, and so does organising it (#135): archive, Trash, star, read, labels and
-  snooze are edits of each message's synced fields (ADR 0003), which the Core queues for Gmail. So is
-  moving it to a Bucket (#137), though that stays in Commander.
+  snooze are edits of each message's synced fields (ADR 0003), which the Core queues for Gmail or
+  Outlook. So is moving it to a Bucket (#137), though that stays in Commander.
 */
 
 export interface EmailClient {
@@ -46,11 +51,11 @@ export interface EmailClient {
   labels(account?: string): Promise<EmailLabel[]>;
   /** Edits messages' synced fields, as one change. Returns its entries. */
   edit(changes: readonly MessageFields[]): Promise<ActivityEntry[]>;
-  /** The changes still on their way to Gmail (or that couldn't sync) for these messages. */
+  /** The changes still on their way to Gmail or Outlook (or that couldn't sync) for these messages. */
   outgoing(itemIds: readonly string[]): Promise<OutgoingChange[]>;
   /** Sends a message's changes that couldn't sync again. */
   retry(itemId: string): Promise<void>;
-  /** A message's activity log, newest first (for the note when a change made in Gmail won). */
+  /** A message's activity log, newest first (for the note when a change made in Gmail or Outlook won). */
   history(itemId: string): Promise<ActivityEntry[]>;
   /** One thread's messages, oldest first, with their plain-text bodies. */
   thread(account: string, threadKey: string): Promise<EmailThread | null>;
@@ -98,22 +103,38 @@ export function emailIn(itemStore: ItemStoreClient): EmailClient {
   };
 }
 
-/** The email Accounts (Google Accounts with Gmail on, so far), and how each is syncing. */
+/** An email Account: a Google Account carrying Gmail, or an Outlook Account carrying its mail (#136). */
+export type EmailAccountSummary = GoogleAccountSummary | OutlookAccountSummary;
+
+/** The address an email Account signed in with. */
+export const emailAddressOf = (account: EmailAccountSummary) =>
+  account.source === 'google' ? account.email : account.userPrincipalName;
+
+/** The Source an email Account's mail comes from. */
+export const mailSourceOf = (account: EmailAccountSummary): 'gmail' | 'outlook' =>
+  account.source === 'google' ? 'gmail' : 'outlook';
+
+/** What the User calls an email Account's mail: Gmail or Outlook. */
+export const providerOf = (account: EmailAccountSummary | undefined): 'Gmail' | 'Outlook' =>
+  account?.source === 'outlook' ? 'Outlook' : 'Gmail';
+
+/** The email Accounts (Google Accounts with Gmail on, Outlook Accounts with mail on), and how each is syncing. */
 export interface EmailAccountsClient {
-  list(): Promise<GoogleAccountSummary[]>;
-  /** Syncs the Account's mail at once (the sync engine's refresh of its Gmail). */
-  refresh(accountId: string): Promise<void>;
+  list(): Promise<EmailAccountSummary[]>;
+  /** Syncs the Account's mail at once (the sync engine's refresh of its Gmail or Outlook). */
+  refresh(accountId: string, source?: 'gmail' | 'outlook'): Promise<void>;
   /** Called with the Accounts whenever they or their syncing change. Returns the unsubscribe. */
-  onChange(listener: (accounts: GoogleAccountSummary[]) => void): () => void;
+  onChange(listener: (accounts: EmailAccountSummary[]) => void): () => void;
 }
 
 type AccountsBridge = Pick<Window['commander'], 'accounts' | 'onAccountsChanged'>;
 
-/** The Accounts whose mail Commander syncs: Google Accounts with Gmail switched on. */
-export const emailAccountsOf = (accounts: readonly AccountSummary[]): GoogleAccountSummary[] =>
+/** The Accounts whose mail Commander syncs: Google Accounts with Gmail on, Outlook Accounts with mail on. */
+export const emailAccountsOf = (accounts: readonly AccountSummary[]): EmailAccountSummary[] =>
   accounts.filter(
-    (account): account is GoogleAccountSummary =>
-      account.source === 'google' && account.sources.some((each) => each.source === 'gmail' && each.enabled),
+    (account): account is EmailAccountSummary =>
+      (account.source === 'google' || account.source === 'outlook') &&
+      account.sources.some((each) => each.source === mailSourceOf(account) && each.enabled),
   );
 
 export function emailAccountsIn(bridge: AccountsBridge): EmailAccountsClient {
@@ -122,8 +143,8 @@ export function emailAccountsIn(bridge: AccountsBridge): EmailAccountsClient {
     async list() {
       return of((await bridge.accounts({ op: 'list' })).state);
     },
-    async refresh(accountId) {
-      await bridge.accounts({ op: 'sync-now', accountId, source: 'gmail' });
+    async refresh(accountId, source = 'gmail') {
+      await bridge.accounts({ op: 'sync-now', accountId, source });
     },
     onChange(listener) {
       return bridge.onAccountsChanged((state) => listener(of(state)));
@@ -136,13 +157,14 @@ export function emailAccountsIn(bridge: AccountsBridge): EmailAccountsClient {
 
 const COUNT = new Intl.NumberFormat('en');
 
-// An Account's mail sync: its Gmail's, of the Sources it carries (Google Calendar syncs too).
+// An Account's mail sync: its Gmail's or Outlook's, of the Sources it carries (its calendar syncs too).
 function lineFor(
-  account: GoogleAccountSummary,
+  account: EmailAccountSummary,
   now: Date,
 ): { text: string; problem: boolean; syncing: boolean } {
-  const carried = account.sources.find((each) => each.source === 'gmail')?.sync;
-  const sync = carried ?? (account.sync?.source === 'gmail' ? account.sync : null);
+  const source = mailSourceOf(account);
+  const carried = account.sources.find((each) => each.source === source)?.sync;
+  const sync = carried ?? (account.sync?.source === source ? account.sync : null);
   if (sync?.progress) {
     const { done, total } = sync.progress;
     return {
@@ -164,7 +186,7 @@ function lineFor(
  * each is named.
  */
 export function emailSyncLine(
-  accounts: readonly GoogleAccountSummary[],
+  accounts: readonly EmailAccountSummary[],
   now: Date,
 ): { text: string; problem: boolean; syncing: boolean } {
   if (!accounts.length) return { text: 'No email Account connected', problem: false, syncing: false };
@@ -175,7 +197,8 @@ export function emailSyncLine(
   if (lines.length === 1 && only) return only;
   const text = lines
     .map((line, index) => {
-      const name = accounts[index]?.email ?? '';
+      const account = accounts[index];
+      const name = account ? emailAddressOf(account) : '';
       return line.problem
         ? `${name}: ${line.text}`
         : `${name} ${line.text.charAt(0).toLowerCase()}${line.text.slice(1)}`;

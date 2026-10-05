@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createFakeOutlookMail, type FakeOutlookMail } from './fake-outlook-mail';
 
 // A stand-in for the Microsoft identity platform (a single-tenant app's authority) and Microsoft
 // Graph, for tests only (unit and end-to-end). It behaves like Microsoft where Commander depends on
@@ -25,7 +26,8 @@ import type { AddressInfo } from 'node:net';
 // `transactionId` it has seen, as Graph does for a retried create), `GET /me/events` filtered on an
 // extended property's value (Commander's marker), `GET /me/events/{id}/calendar`, and `PATCH` and
 // `DELETE /me/events/{id}`, each change returned by the next delta (with `transactionId`, but never
-// extended properties, which delta can't expand). Nothing here talks to the real Microsoft.
+// extended properties, which delta can't expand); and for Outlook mail (#136), each user's mailbox
+// (fake-outlook-mail.ts). Nothing here talks to the real Microsoft.
 
 export type FakeMicrosoftUser = { id: string; displayName: string; userPrincipalName: string };
 
@@ -133,8 +135,10 @@ export type FakeMicrosoft = {
   putEvent(userId: string, calendarId: string, event: FakeOutlookEvent): void;
   // Deletes an event (the next delta returns it as @removed).
   removeEvent(userId: string, calendarId: string, eventId: string): void;
-  // Every delta link handed out so far stops working (410 SyncStateNotFound).
+  // Every delta link handed out so far stops working (410 SyncStateNotFound), mail's too.
   expireDeltaLinks(): void;
+  // Outlook mail (#136): each user's mailbox, its folders and messages (fake-outlook-mail.ts).
+  mail: FakeOutlookMail;
   // The Prefer header of every calendar request.
   calendarPrefers: string[];
   // Every answer to an invitation Commander sent, oldest first.
@@ -336,7 +340,9 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     },
     expireDeltaLinks: () => {
       deltaGeneration += 1;
+      fake.mail.expireDeltaLinks();
     },
+    mail: createFakeOutlookMail(() => fake.graphUrl),
     calendarPrefers: [],
     rsvps: [],
     calendarWrites: [],
@@ -990,6 +996,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
         .end(JSON.stringify({ error: { code: 'TooManyRequests', message: 'Too many requests.' } }));
       return;
     }
+    if (fake.mail.handles(request, url)) return void fake.mail.handle(request, url, response, user);
     if (isCalendarWrite(request, url)) return void calendarWrite(user, request, url, response);
     if (request.method === 'POST') {
       if (url.pathname.startsWith('/v1.0/chats/')) return void chatAction(request, url, response, user);
@@ -1088,7 +1095,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       return authorize(url, response);
     if (request.method === 'POST' && url.pathname === `${authority}/token`)
       return void tokenEndpoint(request, response);
-    if (isCalendarWrite(request, url)) return graph(request, url, response);
+    if (isCalendarWrite(request, url) || fake.mail.handles(request, url))
+      return graph(request, url, response);
     if ((request.method === 'GET' || request.method === 'POST') && url.pathname.startsWith('/v1.0/'))
       return graph(request, url, response);
     response.writeHead(404).end();

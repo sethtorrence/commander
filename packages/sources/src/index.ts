@@ -20,6 +20,7 @@ export {
 } from './google-calendar/google-calendar-source';
 export type { ListedCalendar } from './google-calendar/shapes';
 export { createLinearSource, LINEAR_CADENCE, type LinearSourceOptions } from './linear/linear-source';
+export { createOutlookSource, OUTLOOK_CADENCE, type OutlookSourceOptions } from './outlook/outlook-source';
 export {
   createOutlookCalendarSource,
   OUTLOOK_CALENDAR_CADENCE,

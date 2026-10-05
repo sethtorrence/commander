@@ -24,6 +24,38 @@ export const gmailCatalog = z.object({
 });
 export type GmailCatalog = z.infer<typeof gmailCatalog>;
 
+// An Outlook folder (#136), as a message's `folder` names it: its id, its name, and which of Outlook's
+// own folders it is (Graph's well-known names: `inbox`, `archive`, `sentitems`…), null for the User's.
+export const emailFolder = emailLabel.extend({ wellKnown: z.string().nullable().optional() });
+export type EmailFolder = z.infer<typeof emailFolder>;
+
+// Outlook's own folders that are never a message's label (the views and chips have their own words for
+// them: the Inbox, Archive and Trash views) nor a folder to pick in Move to folder.
+export const OUTLOOK_SYSTEM_FOLDERS: ReadonlySet<string> = new Set([
+  'inbox',
+  'archive',
+  'sentitems',
+  'drafts',
+  'deleteditems',
+  'junkemail',
+  'outbox',
+]);
+
+/** Whether an Outlook folder is one of Outlook's own (see OUTLOOK_SYSTEM_FOLDERS). */
+export const isSystemFolder = (folder: Pick<EmailFolder, 'wellKnown'>) =>
+  !!folder.wellKnown && OUTLOOK_SYSTEM_FOLDERS.has(folder.wellKnown);
+
+// What an Outlook Account keeps beside its mail (#136): its folders as its last sync listed them (child
+// folders named by their path, "Projects / Titanlink"), for Move to folder (`l`) and the view list.
+// `system`: one of Outlook's own (isSystemFolder); `synced`: Commander downloads its mail.
+export const outlookCatalog = z.object({
+  kind: z.literal('outlook'),
+  folders: z.array(
+    emailFolder.extend({ parentId: z.string().nullable(), system: z.boolean(), synced: z.boolean() }),
+  ),
+});
+export type OutlookCatalog = z.infer<typeof outlookCatalog>;
+
 // An attachment's metadata. Attachments are never downloaded during sync; the reading ticket fetches
 // one on demand by its part id (Gmail's attachment ids aren't stable between fetches).
 export const emailAttachment = z.object({
@@ -79,8 +111,14 @@ export const emailDetail = z.object({
   bucket: emailBucket.nullable().optional(),
   // Sent from this Account (Gmail's SENT label).
   sentByMe: z.boolean(),
-  // The Source's labels (Gmail, system ones included) or folder (Outlook).
+  // The Source's labels (Gmail, system ones included) or folder (Outlook, unless one of its own).
   labels: z.array(emailLabel),
+  // Outlook (#136): the folder it is filed in, kept while it is in Deleted Items (inTrash) so restoring
+  // it puts it back. Absent on Gmail's mail, which has labels instead.
+  folder: emailFolder.nullable().optional(),
+  // Outlook's categories on it, as Outlook has them. Read-only here: Buckets write back as categories
+  // (#16), so Commander doesn't offer them as labels.
+  categories: z.array(z.string()).optional(),
   attachments: z.array(emailAttachment),
   // It carries a calendar invitation (a text/calendar part).
   hasInvitation: z.boolean(),

@@ -24,6 +24,7 @@ import {
   type Item,
   inBucket,
   isPickableLabel,
+  outlookCatalog,
   parseEmailSearch,
   type sourceItem,
   type ThreadFlags,
@@ -483,21 +484,32 @@ export function emailsIn(
     };
   }
 
-  /** The labels the User can put on mail: from the Account's catalog, and any its mail carries. */
+  /**
+   * The labels the User can put on mail: from the Account's catalog, and any its mail carries. An
+   * Outlook Account's are its folders (#136): those Commander syncs, other than Outlook's own.
+   */
   function labelsOf(account: string | undefined): EmailLabel[] {
     const found = new Map<string, EmailLabel>();
     const { sourceCatalogs } = schema;
     const catalogs = db
       .select({ catalog: sourceCatalogs.catalog })
       .from(sourceCatalogs)
-      .where(account ? eq(sourceCatalogs.account, account) : eq(sourceCatalogs.source, 'gmail'))
+      .where(
+        account ? eq(sourceCatalogs.account, account) : inArray(sourceCatalogs.source, ['gmail', 'outlook']),
+      )
       .all();
     for (const row of catalogs) {
-      const parsed = gmailCatalog.safeParse(row.catalog);
-      if (!parsed.success) continue;
-      for (const label of parsed.data.labels)
-        if (!label.system && isPickableLabel(label.id))
-          found.set(label.id, { id: label.id, name: label.name });
+      const gmail = gmailCatalog.safeParse(row.catalog);
+      if (gmail.success) {
+        for (const label of gmail.data.labels)
+          if (!label.system && isPickableLabel(label.id))
+            found.set(label.id, { id: label.id, name: label.name });
+        continue;
+      }
+      const outlook = outlookCatalog.safeParse(row.catalog);
+      if (!outlook.success) continue;
+      for (const folder of outlook.data.folders)
+        if (!folder.system && folder.synced) found.set(folder.id, { id: folder.id, name: folder.name });
     }
     const carried = db
       .selectDistinct({

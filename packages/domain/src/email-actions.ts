@@ -1,7 +1,7 @@
 import { BUCKET_FIELD } from './buckets';
-import type { EmailDetail, EmailLabel } from './email';
+import type { EmailDetail, EmailFolder, EmailLabel } from './email';
 import { EMAIL_VIEWS, type EmailFixedView, type EmailListView } from './email-threads';
-import { isEmailLabelField, LABEL_FIELD, SNOOZE_FIELD } from './synced-fields';
+import { FOLDER_FIELD, isEmailLabelField, LABEL_FIELD, SNOOZE_FIELD } from './synced-fields';
 
 /*
   Organising email (#135), as pure functions the Item store and the window share:
@@ -30,7 +30,9 @@ export type ThreadAction =
   | { type: 'snooze'; until: number }
   | { type: 'unsnooze' }
   // Moves the thread to a Bucket (null: Unsorted), by the User (#137).
-  | { type: 'bucket'; bucketId: string | null };
+  | { type: 'bucket'; bucketId: string | null }
+  // Outlook (#136): Move to folder.
+  | { type: 'move'; folder: EmailFolder };
 
 export type ThreadMessage = { id: string; detail: EmailDetail };
 export type MessageFields = { itemId: string; fields: Record<string, unknown> };
@@ -104,6 +106,23 @@ export function threadActionFields(
           ? null
           : { [BUCKET_FIELD]: { bucketId: action.bucketId, sortedBy: 'user' } },
       );
+    case 'move': {
+      // As Outlook moves a conversation: the User's own messages stay in Sent Items.
+      const folder: EmailFolder = {
+        id: action.folder.id,
+        name: action.folder.name,
+        wellKnown: action.folder.wellKnown ?? null,
+      };
+      const intoInbox = folder.wellKnown === 'inbox';
+      return each((detail) => {
+        if (detail.folder?.wellKnown === 'sentitems') return null;
+        return {
+          ...(detail.folder?.id === folder.id ? {} : { [FOLDER_FIELD]: folder }),
+          ...(detail.inInbox === intoInbox ? {} : { inbox: intoInbox }),
+          ...(detail.inTrash ? { trash: false } : {}),
+        };
+      });
+    }
   }
 }
 
@@ -263,6 +282,21 @@ export function gmailSearchUrl(accountEmail: string, text: string): string {
     .replace(/\s+/g, ' ')
     .trim();
   return `https://mail.google.com/mail/?authuser=${encodeURIComponent(accountEmail)}#search/${encodeURIComponent(query)}`;
+}
+
+/**
+ * Outlook on the web's search for what was typed, in the Account (#136), for mail older than Commander
+ * downloaded: work and school accounts at outlook.office.com, personal ones at outlook.live.com. Its
+ * search box has no `in:` for Commander's views, so those are left out; the other operators (from:,
+ * to:, subject:, has:attachment) are Outlook's own too.
+ */
+export function outlookSearchUrl(account: string, text: string, personal: boolean): string {
+  const query = text
+    .replace(/(^|\s)in:(?:"[^"]*"|\S+)/gi, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const host = personal ? 'outlook.live.com' : 'outlook.office.com';
+  return `https://${host}/mail/deeplink/search?query=${encodeURIComponent(query)}&login_hint=${encodeURIComponent(account)}`;
 }
 
 // ---------------------------------------------------------------------------------------------

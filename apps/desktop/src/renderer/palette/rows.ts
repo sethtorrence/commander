@@ -2,6 +2,7 @@ import {
   type Filing,
   gmailSearchUrl,
   type Memory,
+  outlookSearchUrl,
   type Person,
   type Project,
   type SearchHit,
@@ -23,8 +24,9 @@ import type { PaletteQuery } from './query';
     Ares knows that matches, each opening What Ares knows at the memory
   - Commands
   - Search in Linear, last, when local results are thin and a Linear Account is connected
-  - Search in Gmail (#135), one row per email Account, when emails are among the results: Commander
-    keeps only the 30 days before an Account was connected and what came since
+  - Search in Gmail (#135) and Search in Outlook (#136), one row per email Account, when emails are
+    among the results: Commander keeps only the 30 days before an Account was connected and what
+    came since
 
   Before anything is typed it offers Jump, Projects and Commands. Once chips narrow the search to
   Items (`/` in a Section), only results show.
@@ -67,6 +69,8 @@ export interface PaletteContext {
   linearAccounts: readonly { name: string; urlKey: string }[];
   /** The email Accounts with Gmail on, for Gmail's own search. */
   gmailAccounts?: readonly { email: string }[];
+  /** The Outlook Accounts with mail on, for Outlook on the web's search (#136). */
+  outlookAccounts?: readonly { address: string; personal: boolean }[];
   /** Today, YYYY-MM-DD. */
   today: string;
 }
@@ -265,6 +269,16 @@ export function paletteGroups(context: PaletteContext): PaletteGroup[] {
         label: `Search “${words}” in Gmail`,
         hint: `${account.email} ↗`,
         action: { type: 'browser', url: gmailSearchUrl(account.email, words) },
+      })),
+    );
+    add(
+      'Search in Outlook',
+      (context.outlookAccounts ?? []).map((account) => ({
+        key: `outlook-search:${account.address}`,
+        tag: 'Outlook',
+        label: `Search “${words}” in Outlook`,
+        hint: `${account.address} ↗`,
+        action: { type: 'browser', url: outlookSearchUrl(account.address, words, account.personal) },
       })),
     );
   }

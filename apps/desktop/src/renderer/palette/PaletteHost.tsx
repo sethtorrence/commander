@@ -9,7 +9,7 @@ import { PEOPLE_SETTINGS } from '../people/PeopleSettings';
 import { useProjects } from '../projects/context';
 import { inFilter } from '../projects/filter';
 import { SECTIONS } from '../sections';
-import { emailAccountsIn } from '../sections/email/email';
+import { type EmailAccountSummary, emailAccountsIn } from '../sections/email/email';
 import { linearAccountsIn } from '../sections/linear/linear-issues';
 import { dayKey } from '../sections/notes/days';
 import { sectionFor } from '../sections/todos/links';
@@ -52,10 +52,10 @@ function useAccounts(): AccountSummary[] {
   return accounts;
 }
 
-// The email Accounts (Gmail on), for Search in Gmail.
-function useGmailAccounts(): { email: string }[] {
+// The email Accounts (Gmail or Outlook mail on), for Search in Gmail and Search in Outlook.
+function useEmailAccounts(): EmailAccountSummary[] {
   const client = useMemo(() => emailAccountsIn(window.commander), []);
-  const [accounts, setAccounts] = useState<{ email: string }[]>([]);
+  const [accounts, setAccounts] = useState<EmailAccountSummary[]>([]);
   useEffect(() => {
     let current = true;
     client.list().then((next) => current && setAccounts(next), report);
@@ -78,7 +78,20 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
   const { toggleTheme } = useAppearance();
   const commands = useCommandRegistry();
   const accounts = useAccounts();
-  const gmailAccounts = useGmailAccounts();
+  const emailAccounts = useEmailAccounts();
+  const gmailAccounts = useMemo(
+    () => emailAccounts.flatMap((each) => (each.source === 'google' ? [{ email: each.email }] : [])),
+    [emailAccounts],
+  );
+  const outlookAccounts = useMemo(
+    () =>
+      emailAccounts.flatMap((each) =>
+        each.source === 'outlook'
+          ? [{ address: each.userPrincipalName, personal: each.personal === true }]
+          : [],
+      ),
+    [emailAccounts],
+  );
   const now = useNow(60_000);
   const today = dayKey(now);
   const connected = accounts.filter((account) => account.status === 'connected');
@@ -166,6 +179,7 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
       commands={commands.available}
       accounts={accounts}
       gmailAccounts={gmailAccounts}
+      outlookAccounts={outlookAccounts}
       now={now}
       today={today}
       onAction={onAction}

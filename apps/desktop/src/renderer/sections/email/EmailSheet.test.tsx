@@ -394,7 +394,7 @@ describe('the Email sheet', () => {
     renderSheet();
 
     await screen.findByText(
-      'No email Account connected yet. Connect a Google Account in Settings → Accounts (,).',
+      'No email Account connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).',
     );
     // With nothing to count, the Email tab shows no count.
     expect(controls.setTabCount).not.toHaveBeenCalledWith('email', 0);

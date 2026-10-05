@@ -1,0 +1,491 @@
+[
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id,displayName,parentFolderId,childFolderCount)",
+        "value": [
+          {
+            "id": "AAMkAGI2-fld-inbox=",
+            "displayName": "Inbox",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 1,
+            "unreadItemCount": 0,
+            "totalItemCount": 4,
+            "sizeInBytes": 0,
+            "isHidden": false
+          },
+          {
+            "id": "AAMkAGI2-fld-sentitems=",
+            "displayName": "Sent Items",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 1,
+            "sizeInBytes": 0,
+            "isHidden": false
+          },
+          {
+            "id": "AAMkAGI2-fld-archive=",
+            "displayName": "Archive",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 120,
+            "sizeInBytes": 0,
+            "isHidden": false
+          },
+          {
+            "id": "AAMkAGI2-fld-deleteditems=",
+            "displayName": "Deleted Items",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 3,
+            "sizeInBytes": 0,
+            "isHidden": false
+          },
+          {
+            "id": "AAMkAGI2-fld-junkemail=",
+            "displayName": "Junk Email",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 9,
+            "sizeInBytes": 0,
+            "isHidden": false
+          }
+        ],
+        "@odata.nextLink": "https://graph.test/v1.0/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100&$skiptoken=folders-page-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100&$skiptoken=folders-page-2"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id,displayName,parentFolderId,childFolderCount)",
+        "value": [
+          {
+            "id": "AAMkAGI2-fld-drafts=",
+            "displayName": "Drafts",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 0,
+            "sizeInBytes": 0,
+            "isHidden": false
+          },
+          {
+            "id": "AAMkAGI2-fld-outbox=",
+            "displayName": "Outbox",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 0,
+            "sizeInBytes": 0,
+            "isHidden": false
+          },
+          {
+            "id": "AAMkAGI2-fld-projects=",
+            "displayName": "Projects",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 1,
+            "sizeInBytes": 0,
+            "isHidden": false
+          },
+          {
+            "id": "AAMkAGI2-fld-conversationhistory=",
+            "displayName": "Conversation History",
+            "parentFolderId": "AAMkAGI2-fld-msgfolderroot=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 0,
+            "sizeInBytes": 0,
+            "isHidden": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders/AAMkAGI2-fld-inbox=/childFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-inbox=')/childFolders(id,displayName,parentFolderId,childFolderCount)",
+        "value": [
+          {
+            "id": "AAMkAGI2-fld-receipts=",
+            "displayName": "Receipts",
+            "parentFolderId": "AAMkAGI2-fld-inbox=",
+            "childFolderCount": 0,
+            "unreadItemCount": 0,
+            "totalItemCount": 0,
+            "sizeInBytes": 0,
+            "isHidden": false
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders('AAMkAGI2-fld-inbox=')/messages/delta?$deltatoken=inbox-1"
+    },
+    "response": {
+      "status": 410,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "error": {
+          "code": "SyncStateNotFound",
+          "message": "The sync state generation is not found.",
+          "innerError": {
+            "date": "2026-10-03T12:00:00",
+            "request-id": "b4e1d7a2-0000-4000-8000-000000000410"
+          }
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders/AAMkAGI2-fld-inbox=/messages/delta?$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime&$filter=receivedDateTime ge 2026-09-03T12:00:00.000Z&$orderby=receivedDateTime desc"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-inbox=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+        "value": [
+          {
+            "@odata.etag": "W/\"CQAAABYAAAD25\"",
+            "id": "AAMkAGI2-msg-certificate=",
+            "receivedDateTime": "2026-10-03T09:02:45Z",
+            "sentDateTime": "2026-10-03T09:02:00Z",
+            "subject": "Staging certificate",
+            "bodyPreview": "The staging certificate expires on Friday. Can you renew it? The CSR is attached.",
+            "body": {
+              "contentType": "text",
+              "content": "The staging certificate expires on Friday. Can you renew it?\r\nThe CSR is attached.\r\n\r\nPriya"
+            },
+            "from": {
+              "emailAddress": {
+                "name": "Priya Patel",
+                "address": "priya@contoso.test"
+              }
+            },
+            "sender": {
+              "emailAddress": {
+                "name": "Priya Patel",
+                "address": "priya@contoso.test"
+              }
+            },
+            "toRecipients": [
+              {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              }
+            ],
+            "ccRecipients": [],
+            "bccRecipients": [],
+            "replyTo": [],
+            "isRead": false,
+            "isDraft": false,
+            "flag": {
+              "flagStatus": "notFlagged"
+            },
+            "parentFolderId": "AAMkAGI2-fld-inbox=",
+            "conversationId": "AAQkAGI2-conv-certificate=",
+            "internetMessageId": "<CERT01@contoso.test>",
+            "internetMessageHeaders": [
+              {
+                "name": "Received",
+                "value": "from EUR05-AM6-obe.outbound.protection.outlook.com (2a01:111:f403:2612::700) by AM0PR02MB.outlook.office365.com with HTTPS; Thu, 1 Oct 2026 08:14:02 +0000"
+              },
+              {
+                "name": "MIME-Version",
+                "value": "1.0"
+              },
+              {
+                "name": "Message-ID",
+                "value": "<CERT01@contoso.test>"
+              }
+            ],
+            "categories": [],
+            "hasAttachments": true,
+            "lastModifiedDateTime": "2026-10-03T09:02:45Z"
+          },
+          {
+            "@odata.etag": "W/\"CQAAABYAAAD23\"",
+            "id": "AAMkAGI2-msg-offsite-2=",
+            "receivedDateTime": "2026-10-02T15:40:11Z",
+            "sentDateTime": "2026-10-02T15:40:00Z",
+            "subject": "RE: Q4 offsite dates",
+            "bodyPreview": "Booked the venue for 19–21 Nov. Agenda to follow.",
+            "body": {
+              "contentType": "html",
+              "content": "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"http://schemas.microsoft.com/office/2004/12/omml\" xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n<head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\r\n<meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\">\r\n<!--[if !mso]><style>v\\:* {behavior:url(#default#VML);}\r\no\\:* {behavior:url(#default#VML);}\r\n</style><![endif]--><style><!--\r\n/* Font Definitions */\r\n@font-face\r\n\t{font-family:\"Cambria Math\";}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Aptos\",sans-serif;}\r\n.MsoChpDefault\r\n\t{mso-style-type:export-only;}\r\n@page WordSection1\r\n\t{size:612.0pt 792.0pt;}\r\ndiv.WordSection1\r\n\t{page:WordSection1;}\r\n--></style><!--[if gte mso 9]><xml>\r\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\r\n</xml><![endif]-->\r\n</head>\r\n<body lang=\"EN-GB\" link=\"#467886\" vlink=\"#96607D\" style=\"word-wrap:break-word\">\r\n<div class=\"WordSection1\">\r\n<p class=\"MsoNormal\">Booked the venue for 19–21 Nov. Agenda to follow.<o:p></o:p></p>\r\n</div>\r\n</body>\r\n</html>\r\n"
+            },
+            "from": {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            },
+            "sender": {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            },
+            "toRecipients": [
+              {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              }
+            ],
+            "ccRecipients": [],
+            "bccRecipients": [],
+            "replyTo": [],
+            "isRead": false,
+            "isDraft": false,
+            "flag": {
+              "flagStatus": "flagged",
+              "startDateTime": {
+                "dateTime": "2026-10-02T00:00:00.0000000",
+                "timeZone": "UTC"
+              },
+              "dueDateTime": {
+                "dateTime": "2026-10-09T00:00:00.0000000",
+                "timeZone": "UTC"
+              }
+            },
+            "parentFolderId": "AAMkAGI2-fld-inbox=",
+            "conversationId": "AAQkAGI2-conv-offsite=",
+            "internetMessageId": "<offsite-2@mail.northwind.test>",
+            "internetMessageHeaders": [
+              {
+                "name": "Received",
+                "value": "from EUR05-AM6-obe.outbound.protection.outlook.com (2a01:111:f403:2612::700) by AM0PR02MB.outlook.office365.com with HTTPS; Thu, 1 Oct 2026 08:14:02 +0000"
+              },
+              {
+                "name": "MIME-Version",
+                "value": "1.0"
+              },
+              {
+                "name": "Message-ID",
+                "value": "<offsite-2@mail.northwind.test>"
+              },
+              {
+                "name": "In-Reply-To",
+                "value": "<sam-reply-1@contoso.test>"
+              },
+              {
+                "name": "References",
+                "value": "<offsite-1@mail.northwind.test> <sam-reply-1@contoso.test>"
+              }
+            ],
+            "categories": [],
+            "hasAttachments": false,
+            "lastModifiedDateTime": "2026-10-02T15:40:11Z"
+          },
+          {
+            "@odata.etag": "W/\"CQAAABYAAAD23\"",
+            "id": "AAMkAGI2-msg-offsite-1=",
+            "receivedDateTime": "2026-10-01T08:14:02Z",
+            "sentDateTime": "2026-10-01T08:14:00Z",
+            "subject": "Q4 offsite dates",
+            "bodyPreview": "Which dates work for you for the Q4 offsite? The venue holds 19–21 Nov for us until Friday.",
+            "body": {
+              "contentType": "html",
+              "content": "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"http://schemas.microsoft.com/office/2004/12/omml\" xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n<head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\r\n<meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\">\r\n<!--[if !mso]><style>v\\:* {behavior:url(#default#VML);}\r\no\\:* {behavior:url(#default#VML);}\r\n</style><![endif]--><style><!--\r\n/* Font Definitions */\r\n@font-face\r\n\t{font-family:\"Cambria Math\";}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Aptos\",sans-serif;}\r\n.MsoChpDefault\r\n\t{mso-style-type:export-only;}\r\n@page WordSection1\r\n\t{size:612.0pt 792.0pt;}\r\ndiv.WordSection1\r\n\t{page:WordSection1;}\r\n--></style><!--[if gte mso 9]><xml>\r\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\r\n</xml><![endif]-->\r\n</head>\r\n<body lang=\"EN-GB\" link=\"#467886\" vlink=\"#96607D\" style=\"word-wrap:break-word\">\r\n<div class=\"WordSection1\">\r\n<p class=\"MsoNormal\">Hi Sam,<o:p></o:p></p>\r\n<p class=\"MsoNormal\">&nbsp;<o:p></o:p></p>\r\n<p class=\"MsoNormal\">Which dates work for you for the <b>Q4 offsite</b>? The venue holds 19–21 Nov for us until Friday.<o:p></o:p></p>\r\n<p class=\"MsoNormal\">&nbsp;<o:p></o:p></p>\r\n<p class=\"MsoNormal\">Dana<o:p></o:p></p>\r\n<p class=\"MsoNormal\"><img width=\"120\" height=\"40\" style=\"width:1.25in;height:.4166in\" id=\"Picture_x0020_1\" src=\"cid:image001.png@01DB1A2B.3C4D5E60\" alt=\"Northwind\"><o:p></o:p></p>\r\n<p class=\"MsoNormal\"><img src=\"https://tracker.northwind.test/open.gif?u=sam\" width=\"1\" height=\"1\"><o:p></o:p></p>\r\n</div>\r\n</body>\r\n</html>\r\n"
+            },
+            "from": {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            },
+            "sender": {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            },
+            "toRecipients": [
+              {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              }
+            ],
+            "ccRecipients": [],
+            "bccRecipients": [],
+            "replyTo": [],
+            "isRead": true,
+            "isDraft": false,
+            "flag": {
+              "flagStatus": "notFlagged"
+            },
+            "parentFolderId": "AAMkAGI2-fld-inbox=",
+            "conversationId": "AAQkAGI2-conv-offsite=",
+            "internetMessageId": "<offsite-1@mail.northwind.test>",
+            "internetMessageHeaders": [
+              {
+                "name": "Received",
+                "value": "from EUR05-AM6-obe.outbound.protection.outlook.com (2a01:111:f403:2612::700) by AM0PR02MB.outlook.office365.com with HTTPS; Thu, 1 Oct 2026 08:14:02 +0000"
+              },
+              {
+                "name": "MIME-Version",
+                "value": "1.0"
+              },
+              {
+                "name": "From",
+                "value": "Dana Whitfield <dana@northwind.test>"
+              },
+              {
+                "name": "To",
+                "value": "Sam Rivera <sam@contoso.test>"
+              },
+              {
+                "name": "Subject",
+                "value": "Q4 offsite dates"
+              },
+              {
+                "name": "Message-ID",
+                "value": "<offsite-1@mail.northwind.test>"
+              },
+              {
+                "name": "Content-Type",
+                "value": "multipart/related; boundary=\"_004_offsite1\""
+              }
+            ],
+            "categories": [],
+            "hasAttachments": false,
+            "lastModifiedDateTime": "2026-10-01T08:14:02Z"
+          }
+        ],
+        "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-inbox=')/messages/delta?$deltatoken=inbox-fresh"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders('AAMkAGI2-fld-sentitems=')/messages/delta?$deltatoken=sent-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-sentitems=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+        "value": [],
+        "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-sentitems=')/messages/delta?$deltatoken=sent-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders('AAMkAGI2-fld-archive=')/messages/delta?$deltatoken=archive-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-archive=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+        "value": [],
+        "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-archive=')/messages/delta?$deltatoken=archive-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders('AAMkAGI2-fld-receipts=')/messages/delta?$deltatoken=receipts-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-receipts=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+        "value": [],
+        "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-receipts=')/messages/delta?$deltatoken=receipts-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders('AAMkAGI2-fld-projects=')/messages/delta?$deltatoken=projects-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-projects=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+        "value": [],
+        "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-projects=')/messages/delta?$deltatoken=projects-2"
+      }
+    }
+  },
+  {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders('AAMkAGI2-fld-deleteditems=')/messages/delta?$deltatoken=deleted-1"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders('AAMkAGI2-fld-deleteditems=')/messages(id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,internetMessageHeaders,categories,hasAttachments,lastModifiedDateTime)",
+        "value": [],
+        "@odata.deltaLink": "https://graph.test/v1.0/me/mailFolders('AAMkAGI2-fld-deleteditems=')/messages/delta?$deltatoken=deleted-2"
+      }
+    }
+  }
+]

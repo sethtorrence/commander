@@ -7,7 +7,7 @@ import { type ElectronApplication, expect, type Page, test } from '@playwright/t
 import { HOSTILE } from '../../core/src/email-reader/hostile-corpus';
 import { sanitizeEmailHtml } from '../../core/src/email-reader/sanitize';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
-import { type FakeMicrosoft, startFakeMicrosoft } from '../src/main/microsoft/fake-microsoft-server';
+import { type FakeMicrosoft, SAM, startFakeMicrosoft } from '../src/main/microsoft/fake-microsoft-server';
 import { openSettings, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
@@ -432,70 +432,24 @@ test('inline images and attachments: shown from the message’s own parts, saved
 test('Outlook Accounts hold images back: Show images and Always show from this sender work, persist, and are removable in Settings', async () => {
   test.setTimeout(90_000);
   microsoft = await startFakeMicrosoft();
+  // Outlook mail syncs from the fake Graph (#136).
+  for (const [id, subject] of [
+    ['o1', 'Outlook first'],
+    ['o2', 'Outlook second'],
+  ] as const)
+    microsoft.mail.deliver(SAM.id, {
+      from: { name: 'Shop', address: 'news@shop.test' },
+      to: [{ name: SAM.displayName, address: SAM.userPrincipalName }],
+      subject,
+      html: `<p>${subject}</p><img src="${trackerBase}/${id}.png" width="20" height="20">`,
+      date: Date.now() - 60_000,
+    });
   commander = await launchCommander({ env: environment() });
   const { app, userDataDir } = commander;
   let window = await commander.window();
   await standInForTheBrowser(app);
   await connect(window, 'google');
   await connect(window, 'outlook');
-  const outlookId = await window.evaluate(async () => {
-    const { state } = await (globalThis as unknown as Window).commander.accounts({ op: 'list' });
-    return state.accounts.find((account) => account.source === 'outlook')?.id as string;
-  });
-  // Outlook mail sync comes later (#136): its Items are saved as it will save them.
-  const outlookEmail = (id: string, subject: string, from: string) => ({
-    externalId: id,
-    kind: 'email',
-    title: subject,
-    people: [from],
-    status: 'open',
-    detail: {
-      kind: 'email',
-      messageId: `<${id}@contoso.test>`,
-      inReplyTo: null,
-      references: [],
-      threadKey: `mid:<${id}@contoso.test>`,
-      sourceThreadId: null,
-      from: { name: null, address: from },
-      to: [],
-      cc: [],
-      bcc: [],
-      replyTo: [],
-      subject,
-      sentAt: Date.now() - 60_000,
-      snippet: subject,
-      read: false,
-      starred: false,
-      inInbox: true,
-      sentByMe: false,
-      labels: [],
-      attachments: [],
-      hasInvitation: false,
-      listUnsubscribe: null,
-      listId: null,
-    },
-    body: {
-      text: subject,
-      html: `<p>${subject}</p><img src="${trackerBase}/${id}.png" width="20" height="20">`,
-      textFromHtml: false,
-      truncated: false,
-    },
-  });
-  await app.evaluate(
-    (_electron, { account, items }) =>
-      (
-        globalThis as unknown as {
-          commanderTestHooks: { saveEmailItems: (source: string, account: string, items: unknown[]) => void };
-        }
-      ).commanderTestHooks.saveEmailItems('outlook', account, items),
-    {
-      account: outlookId,
-      items: [
-        outlookEmail('o1', 'Outlook first', 'news@shop.test'),
-        outlookEmail('o2', 'Outlook second', 'news@shop.test'),
-      ],
-    },
-  );
   await window.keyboard.press('Escape');
 
   await openThread(window, 'Outlook first');

@@ -110,9 +110,7 @@ export function setUpAccounts({
   ]);
 
   // Syncing runs in the Core: it learns the Accounts (and which need reconnecting) from here, and
-  // reports a sign-in a Source refused, which may mean the Account needs reconnecting. Sources the
-  // Core can't sync yet (Outlook and Outlook Calendar, for now) are passed on and left alone
-  // there.
+  // reports a sign-in a Source refused, which may mean the Account needs reconnecting.
   const sync = createCoreSyncChannel({
     send: sendToCore,
     endpoints: {
