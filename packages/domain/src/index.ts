@@ -43,6 +43,7 @@ export * from './logged-fields';
 export * from './markdown-copy-messages';
 export * from './meeting-prep';
 export * from './meetings';
+export * from './memory';
 export * from './model-messages';
 export * from './models';
 export * from './outgoing';

@@ -6,6 +6,7 @@ import { createModelClient, type ModelProviderAdapter, type ProviderRequest } fr
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Gate, openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
+import { learnExamples } from './learn-examples';
 import { createJobRunner, type JobRunner } from './runner';
 import { SUGGEST_TODOS, suggestTodosJob } from './suggest-todos';
 
@@ -303,6 +304,26 @@ describe('Suggest Todos', () => {
         .map((todo) => todo.title)
         .sort(),
     ).toEqual(['Book flights for the offsite in Lisbon', 'Send Dana the Q3 numbers'].sort());
+  });
+
+  it('reads what the User’s earlier dismissals taught Ares about similar Blocks, as the User’s own (#74)', async () => {
+    await runWithRecordedReply();
+    const flights = gate.activity({ statuses: ['pending'] })[0];
+    gate.dismiss(flights?.id as number);
+    expect(learnExamples(store)).toBe(1);
+
+    block('trains', 'maybe book trains for the offsite', null, 'a4');
+    runner.run(SUGGEST_TODOS);
+    await runner.settled();
+
+    const material = prompt();
+    expect(material).toMatch(
+      /label="Daily Note · Saturday 3 October 2026" source="the User">\n- \[B1\] maybe book trains/,
+    );
+    expect(material).toMatch(
+      /label="What Ares knows" source="the User">\n- \(example\) Not a Todo: “maybe book flights for the offsite” \(Ares suggested “Book flights for the offsite”\)/,
+    );
+    expect(instructions()).toContain('Not a Todo');
   });
 
   it('undoing an Ares-added Todo removes it, and counts as a dismissal', async () => {

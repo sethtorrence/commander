@@ -63,6 +63,14 @@ import {
 } from './items';
 import { type LinearCatalog, linearCatalog } from './linear';
 import { type LinearSendPrefill, linearIssueDraft, linearSendPrefill } from './linear-send';
+import {
+  type MemoryChange,
+  memoryAction,
+  memoryChange,
+  memoryQuery,
+  type WhatAresKnows,
+  whatAresKnows,
+} from './memory';
 import { type OutgoingChange, outgoingChange, outgoingQuery } from './outgoing';
 import { type PeopleChange, type Person, peopleAction, peopleChange, person } from './people';
 import {
@@ -240,6 +248,11 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
     op: z.literal('create-meeting'),
     draft: commanderEventDraft.refine((draft) => draft.kind === 'meeting', 'Only a meeting is made this way'),
   }),
+  // What Ares knows (#74): his memories, everything or those matching the words typed, and the User's
+  // changes to them (confirm, edit, keep, delete, add a preference). Memories are not Items: not in the
+  // activity log.
+  z.object({ op: z.literal('memories'), query: memoryQuery.default({}) }),
+  z.object({ op: z.literal('change-memory'), action: memoryAction }),
 ]);
 export type ItemStoreRequest = z.input<typeof itemStoreRequest>;
 export type ItemStoreOp = ItemStoreRequest['op'];
@@ -317,6 +330,8 @@ export type ItemStoreResults = {
   'save-scheduling-settings': SchedulingSettings;
   'find-time': FindTimeResult;
   'create-meeting': ActivityEntry;
+  memories: WhatAresKnows;
+  'change-memory': MemoryChange;
 };
 
 export const itemStoreResult = {
@@ -383,6 +398,8 @@ export const itemStoreResult = {
   'save-scheduling-settings': schedulingSettings,
   'find-time': findTimeResult,
   'create-meeting': activityEntry,
+  memories: whatAresKnows,
+  'change-memory': memoryChange,
 } satisfies Record<ItemStoreOp, z.ZodType>;
 
 export type ItemStoreResponse<Op extends ItemStoreOp = ItemStoreOp> =

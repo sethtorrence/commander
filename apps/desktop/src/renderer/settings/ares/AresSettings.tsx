@@ -21,6 +21,9 @@ import {
   SelectValue,
 } from '@commander/ui';
 import { type FormEvent, type ReactNode, useEffect, useReducer, useState } from 'react';
+import { requestReveal } from '../../frame/reveal';
+import { WHAT_ARES_KNOWS } from '../../memory/WhatAresKnows';
+import { useOpenSection } from '../../sections/section';
 import { Readout, ReadoutRow, SettingRow, SettingsGroup } from '../parts';
 import { AresJobs } from './AresJobs';
 import { formatLatency, formatUsd } from './format';
@@ -434,6 +437,27 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+// What Ares knows (#74) lives in the Ares Section, beside his activity: this opens it there.
+function WhatAresKnowsRow() {
+  const openSection = useOpenSection();
+  return (
+    <SettingRow
+      label="What Ares knows"
+      description="What he has learned from your answers, your notes and your Sources: confirm, edit or delete any of it."
+    >
+      <Button
+        data-testid="open-what-ares-knows"
+        onClick={() => {
+          openSection('ares');
+          requestReveal(WHAT_ARES_KNOWS, '');
+        }}
+      >
+        Open What Ares knows →
+      </Button>
+    </SettingRow>
+  );
+}
+
 /** Settings → Ares: his API key, Test, the Quick and Deep tiers and the cap; then Usage. */
 export function AresSettings({ no, usageNo }: { no: string; usageNo: string }) {
   const [usageVersion, refreshUsage] = useReducer((version: number) => version + 1, 0);
@@ -444,6 +468,7 @@ export function AresSettings({ no, usageNo }: { no: string; usageNo: string }) {
         <TestRow onCall={refreshUsage} />
         <ModelSettingsForm onSaved={refreshUsage} />
         <AresJobs />
+        <WhatAresKnowsRow />
       </SettingsGroup>
       <UsagePanel no={usageNo} version={usageVersion} />
     </>

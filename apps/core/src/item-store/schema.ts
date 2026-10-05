@@ -960,3 +960,56 @@ export const githubSummaryDetails = sqliteTable(
   },
   (t) => [index('github_summary_details_cadence_day').on(t.cadence, t.day)],
 );
+
+// Memory (#74, ADR 0006): what Ares has learned and keeps about the User's world. Not Items, so not
+// in the activity log; written only through the Item store (../memory). Rule memories aren't stored:
+// they are the Rules themselves, shown in Memory. A deleted memory keeps its row (`deleted_at`), so
+// what learned it never learns it again (its `key`). `keywords`: more words it is found by, never
+// shown (an example's Item's title, team, labels and people). `handles`: the people it is about, as
+// handles, for finding it by who an Item involves. `kept_at`: when the User last kept a fact flagged
+// for review; a source deleted after it flags the fact again. `edited_at`: the User's words since.
+export const memories = sqliteTable(
+  'memories',
+  {
+    id: text('id').primaryKey(),
+    kind: text('kind').$type<'example' | 'fact' | 'preference'>().notNull(),
+    text: text('text').notNull(),
+    keywords: text('keywords').notNull().default(''),
+    confirmed: integer('confirmed', { mode: 'boolean' }).notNull(),
+    by: text('by').$type<'ares' | 'user'>().notNull(),
+    key: text('key'),
+    personId: text('person_id'),
+    projectId: text('project_id'),
+    handles: text('handles', { mode: 'json' }).$type<string[]>().notNull(),
+    learnedAt: integer('learned_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+    editedAt: integer('edited_at'),
+    keptAt: integer('kept_at'),
+    deletedAt: integer('deleted_at'),
+  },
+  (t) => [
+    uniqueIndex('memories_key').on(t.key),
+    index('memories_person').on(t.personId),
+    index('memories_project').on(t.projectId),
+  ],
+);
+
+// The Items each memory came from. No foreign key to the Items: a source Commander no longer holds
+// at all is shown as gone (and flags its fact for review), not refused.
+export const memorySources = sqliteTable(
+  'memory_sources',
+  {
+    memoryId: text('memory_id')
+      .notNull()
+      .references(() => memories.id),
+    itemId: text('item_id').notNull(),
+    at: integer('at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.memoryId, t.itemId] }), index('memory_sources_item').on(t.itemId)],
+);
+
+// How far each of Ares's learners has got (the last activity entry turned into examples, say).
+export const memoryProgress = sqliteTable('memory_progress', {
+  name: text('name').primaryKey(),
+  value: integer('value').notNull(),
+});

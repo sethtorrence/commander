@@ -1,5 +1,6 @@
 import {
   type Item,
+  type Memory,
   type Person,
   type Project,
   type SearchHit,
@@ -40,6 +41,8 @@ export type SearchSources = {
   bodyText?: (itemId: string) => string | null;
   // Everyone Commander knows (#117), the User first, then by name.
   people?: () => Person[];
+  // What Ares knows (#74) matching the words typed, best first: Memory finds its own.
+  memories?: (text: string) => Memory[];
 };
 
 const sentAtOf = (item: Item) => (item.detail?.kind === 'email' ? item.detail.sentAt : null);
@@ -154,6 +157,7 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
         hits: emailsNewestFirst(hits),
         projects: narrowed ? [] : matchingProjects(query.text),
         people: narrowed ? [] : matchingPeople(query.text),
+        memories: narrowed ? [] : (sources.memories?.(query.text) ?? []),
       };
     },
   };

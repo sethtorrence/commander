@@ -26,7 +26,7 @@ let note: string;
 const provider: ModelProviderAdapter = {
   async send(request) {
     calls.push(request);
-    const text = ranks(request) ? '{"ranking":[]}' : '{"todos":[]}';
+    const text = ranks(request) ? '{"ranking":[]}' : suggests(request) ? '{"todos":[]}' : '{"facts":[]}';
     return { text, usage: { inputTokens: 10, cachedTokens: 0, outputTokens: 5 } };
   },
   stream: () => Promise.reject(new Error('not used')),
@@ -35,7 +35,9 @@ const provider: ModelProviderAdapter = {
 // Which job a call was for, by its instructions.
 const ranks = (request: ProviderRequest) =>
   !!request.messages[0]?.content.includes("rank the User's Dashboard");
-const suggestCalls = () => calls.filter((call) => !ranks(call));
+const suggests = (request: ProviderRequest) =>
+  !!request.messages[0]?.content.includes('You find the things the User needs to do');
+const suggestCalls = () => calls.filter(suggests);
 const rankCalls = () => calls.filter(ranks);
 
 function open() {
@@ -107,6 +109,35 @@ async function wait(ms: number) {
 }
 
 describe('the Agent', () => {
+  it('learns an example the moment the User dismisses a suggestion of his (#74)', async () => {
+    const block = writeBlock('maybe book flights for the offsite');
+    const outcome = gate.propose({
+      itemId: block,
+      action: 'suggest-todos',
+      actionKind: 'organise',
+      section: 'notes',
+      itemActions: [
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title: 'Book flights',
+            detail: { kind: 'todo', origin: 'ares', dueOn: null, backedBy: null },
+          },
+        },
+        { type: 'link', from: { step: 0 }, linkType: 'made-from', to: block },
+      ],
+      confidence: 0.5,
+      reason: 'You wrote it',
+    });
+    if (outcome.decision !== 'ask') throw new Error('expected a suggestion');
+    gate.dismiss(outcome.suggestion.id);
+    agent.aresChanged();
+    expect(store.memory.list().memories.map((memory) => memory.text)).toEqual([
+      'Not a Todo: “maybe book flights for the offsite” (Ares suggested “Book flights”)',
+    ]);
+  });
+
   it('runs Suggest Todos once the User pauses after changing a Block, and says when Ares works', async () => {
     const block = writeBlock('need to send Dana the Q3 numbers');
     agent.userChanged([block]);

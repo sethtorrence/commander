@@ -99,6 +99,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
+import { type MemoryStore, openMemory } from '../memory';
 import { openSearch, type Search } from '../search';
 import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
@@ -169,6 +170,7 @@ import {
 } from './synced-changes';
 import { openUpdateStore, type UpdateStore } from './updates';
 
+export type { LearnedMemory, MemoryLookup, MemoryStore, RecalledMemory } from '../memory';
 export type { Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
@@ -381,6 +383,9 @@ export type ItemStore = {
   injectionWarnings: InjectionWarningStore;
   // Global search over the live Items, kept current by every write here.
   search: Search;
+  // Memory (#74, ../memory): what Ares has learned and keeps, in the same database. His learners write
+  // it, the User confirms, edits and deletes in What Ares knows, and his jobs look it up.
+  memory: MemoryStore;
   // A Project as a Link (or a `[[` link token) shows it: the one it was merged into, if it was. Null
   // for no such Project.
   projectRef(projectId: string): ProjectRef | null;
@@ -487,6 +492,8 @@ function dayTitle(day: string): string {
 }
 
 const calendarDay = z.iso.date();
+// At most this many memories in the palette's Memory group.
+const MEMORIES_SEARCHED = 6;
 
 export function openItemStore(options: ItemStoreOptions): ItemStore {
   const now = options.now ?? Date.now;
@@ -655,6 +662,39 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     projects: () => projects.list(),
   });
 
+  // Memory: what Ares has learned, beside the Items. A memory's sources are Items, tombstones included.
+  const memory = openMemory({
+    db,
+    sqlite,
+    now,
+    sources: {
+      refs(itemIds) {
+        const { items } = schema;
+        const found = new Map<string, ItemRef>();
+        for (let i = 0; i < itemIds.length; i += 500) {
+          const rows = db
+            .select({
+              id: items.id,
+              kind: items.kind,
+              title: items.title,
+              source: items.source,
+              deletedAt: items.deletedAt,
+            })
+            .from(items)
+            .where(inArray(items.id, itemIds.slice(i, i + 500)))
+            .all();
+          for (const row of rows) found.set(row.id, row);
+        }
+        return found;
+      },
+      rules: () => rules.list(),
+      projects: () => projects.list({ includeArchived: true }),
+      buckets: () => buckets.list(),
+      people: () => people.list(),
+      error: (code, message) => new ItemStoreError(code, message),
+    },
+  });
+
   // The search index follows every Item written below (insertItem and writeState).
   const search = openSearch(sqlite, {
     *allItems() {
@@ -680,6 +720,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     // An email's text is searched too; it is kept beside the Item, not in it.
     bodyText: (itemId) => emails.readBody(itemId)?.text ?? null,
     people: () => people.list(),
+    // What Ares knows, for the palette's Memory group.
+    memories: (text) => memory.search(text, MEMORIES_SEARCHED),
   });
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
@@ -2153,6 +2195,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       since: (after) => warnings.since(after),
     },
     search: { query: (query) => search.query(query) },
+    memory: {
+      ...memory,
+      learn: sqlite.transaction((input: Parameters<MemoryStore['learn']>[0]) => memory.learn(input)),
+      change: sqlite.transaction((action: Parameters<MemoryStore['change']>[0]) => memory.change(action)),
+      saveProgress: sqlite.transaction((name: string, value: number) => memory.saveProgress(name, value)),
+    },
 
     saveFromSource,
     removeAccountItems,

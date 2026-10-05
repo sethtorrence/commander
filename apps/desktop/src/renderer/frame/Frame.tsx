@@ -288,34 +288,35 @@ export function Frame() {
         }
       />
       <main className="relative z-1 ml-(--rul) pt-(--body)">
+        {/* Settings may open a Section too (What Ares knows, from Settings → Ares). */}
         <FrameControlsProvider value={controls}>
           <HeaderSlotProvider value={headerSlot}>
             {SECTIONS.map((section, i) => (
               <SectionView key={section.id} section={section} number={i + 1} open={open === section.id} />
             ))}
           </HeaderSlotProvider>
-        </FrameControlsProvider>
-        {page && (
-          <section
-            className="grid grid-cols-8"
-            hidden={open !== PROJECT_PAGE_SCOPE}
-            aria-label="Project page"
-          >
-            <ShortcutScope scope={PROJECT_PAGE_SCOPE} group="Project page">
-              <ProjectPage
-                projectId={page}
-                active={open === PROJECT_PAGE_SCOPE}
-                itemStore={window.commander.itemStore}
-                back={back}
-                onOpenSection={openSection}
-                changes={itemChangesFromCore}
-              />
-            </ShortcutScope>
+          {page && (
+            <section
+              className="grid grid-cols-8"
+              hidden={open !== PROJECT_PAGE_SCOPE}
+              aria-label="Project page"
+            >
+              <ShortcutScope scope={PROJECT_PAGE_SCOPE} group="Project page">
+                <ProjectPage
+                  projectId={page}
+                  active={open === PROJECT_PAGE_SCOPE}
+                  itemStore={window.commander.itemStore}
+                  back={back}
+                  onOpenSection={openSection}
+                  changes={itemChangesFromCore}
+                />
+              </ShortcutScope>
+            </section>
+          )}
+          <section className="grid grid-cols-8" hidden={open !== SETTINGS} aria-label="Settings">
+            <SettingsScreen open={open === SETTINGS} />
           </section>
-        )}
-        <section className="grid grid-cols-8" hidden={open !== SETTINGS} aria-label="Settings">
-          <SettingsScreen open={open === SETTINGS} />
-        </section>
+        </FrameControlsProvider>
       </main>
       <CheatSheet open={cheatSheet} onOpenChange={setCheatSheet} />
       <FindTimeHost />

@@ -185,7 +185,7 @@ One thread of typed back-and-forth between the User and Ares; several can run at
 _Avoid_: Chat, session, thread (alone)
 
 **Memory**:
-What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from.
+What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from; one he picked up from outside content is unconfirmed, only ever background to him, until the User confirms it. The User sees and changes it on What Ares knows.
 _Avoid_: Knowledge base, context, history, profile
 
 **Update**:

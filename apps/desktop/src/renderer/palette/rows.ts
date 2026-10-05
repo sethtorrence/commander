@@ -1,6 +1,7 @@
 import {
   type Filing,
   gmailSearchUrl,
+  type Memory,
   type Person,
   type Project,
   type SearchHit,
@@ -18,7 +19,8 @@ import type { PaletteQuery } from './query';
 
   - Jump: Sections and today's Daily Note; then Projects (their pages); then People (#117), which
     open Settings → People at the Person until the People view gives them a page
-  - search results grouped by kind, the group holding the best hit first
+  - search results grouped by kind, the group holding the best hit first; then Memory (#74): what
+    Ares knows that matches, each opening What Ares knows at the memory
   - Commands
   - Search in Linear, last, when local results are thin and a Linear Account is connected
   - Search in Gmail (#135), one row per email Account, when emails are among the results: Commander
@@ -33,6 +35,7 @@ export type PaletteAction =
   | { type: 'today' }
   | { type: 'project'; projectId: string }
   | { type: 'person'; personId: string }
+  | { type: 'memory'; memoryId: string }
   | { type: 'item'; hit: SearchHit }
   | { type: 'command'; command: Command }
   | { type: 'browser'; url: string };
@@ -159,6 +162,23 @@ function personRow(person: Person): PaletteRow {
   };
 }
 
+const MEMORY_TAGS: Record<Memory['kind'], string> = {
+  fact: 'Fact',
+  example: 'Example',
+  preference: 'Preference',
+  rule: 'Rule',
+};
+
+function memoryRow(memory: Memory): PaletteRow {
+  return {
+    key: `memory:${memory.id}`,
+    tag: MEMORY_TAGS[memory.kind],
+    label: memory.text,
+    hint: `What Ares knows${memory.confirmed ? '' : ' · unconfirmed'}`,
+    action: { type: 'memory', memoryId: memory.id },
+  };
+}
+
 export function paletteGroups(context: PaletteContext): PaletteGroup[] {
   const { query, result } = context;
   const groups: PaletteGroup[] = [];
@@ -199,6 +219,7 @@ export function paletteGroups(context: PaletteContext): PaletteGroup[] {
       byGroup.set(title, [...(byGroup.get(title) ?? []), hitRow(hit, context.today)]);
     }
     for (const [title, rows] of byGroup) add(title, rows);
+    if (!scoped) add('Memory', (result.memories ?? []).map(memoryRow));
   }
 
   if (!scoped) {

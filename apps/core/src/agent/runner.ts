@@ -31,7 +31,8 @@
 //   get the warning mark. Every string in the reply is cleaned before the job sees it (the builder's
 //   internal wording stripped, URLs the model wasn't shown removed) and checked against the schema
 //   again. A proposal from a run that read outside Items says which one caused it, and is chained
-//   (always Ask) unless it acts only on that Item itself; the gate checks the same again.
+//   (always Ask) unless it acts only on that Item itself; the gate checks the same again. One from a
+//   run whose prompt held background (Memory's unconfirmed facts, #74) is always chained.
 // - A switched-off job, or one whose action the Autonomy settings have Off, doesn't run at all.
 // - A failed or over-cap call is logged and retried on the next trigger; after repeated failures (a
 //   missing key and the cap aside) automatic triggers wait (1, 2, 4… minutes, at most an hour), while
@@ -267,12 +268,19 @@ function touched(proposal: JobProposal): Set<string> {
 
 // A proposal, checked before it goes to the gate: its reason loses the builder's wording, and from a
 // run that read outside Items it names the one that caused it (the Item it acts on, if that is one,
-// else the only one) and is chained unless it acts on that Item alone. Returns why it was dropped
-// instead, when the cause can't be told.
+// else the only one) and is chained unless it acts on that Item alone. From a run whose prompt held
+// background (Memory's unconfirmed facts, #74) it is always chained: what Ares picked up from outside
+// content is never more than background, so it can only ever lead to a Suggestion. Returns why it was
+// dropped instead, when the cause can't be told.
 function checked(proposal: JobProposal, prompt: BuiltPrompt): JobProposal | string {
   const reason = stripInternalWording(proposal.reason, prompt.material).trim() || 'Ares suggested this.';
   const outside = new Set(prompt.outside.map((block) => block.itemId));
-  if (!outside.size) return { ...proposal, reason };
+  const background = prompt.background?.itemIds ?? [];
+  if (!outside.size) {
+    if (!prompt.background) return { ...proposal, reason };
+    const causedBy = proposal.causedBy ?? (background[0] ? { itemId: background[0] } : undefined);
+    return { ...proposal, reason, ...(causedBy && { causedBy }), chained: true };
+  }
   let causedBy = proposal.causedBy;
   if (!causedBy?.itemId && !causedBy?.entryId) {
     const only = outside.size === 1 ? [...outside][0] : undefined;
@@ -281,7 +289,11 @@ function checked(proposal: JobProposal, prompt: BuiltPrompt): JobProposal | stri
     causedBy = { ...causedBy, itemId };
   }
   // With several outside Items read, any of them may have steered it: it can't be "on itself".
-  const onItself = outside.size === 1 && outside.has(proposal.itemId) && causedBy.itemId === proposal.itemId;
+  const onItself =
+    outside.size === 1 &&
+    !prompt.background &&
+    outside.has(proposal.itemId) &&
+    causedBy.itemId === proposal.itemId;
   const alone = [...touched(proposal)].every((itemId) => itemId === proposal.itemId);
   return { ...proposal, reason, causedBy, chained: proposal.chained || !(onItself && alone) };
 }

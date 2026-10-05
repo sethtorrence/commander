@@ -36,23 +36,43 @@ const RRF_K = 60;
  * 1 / (k + rank) over the lists it is in. Exact matches stay on top. With one list it keeps its order.
  */
 export function fuse(lists: { foundBy: FoundBy; hits: RetrievedHit[] }[], limit: number): FusedHit[] {
-  const merged = new Map<string, FusedHit & { score: number; first: number }>();
+  return fuseRanked(
+    lists.map(({ foundBy, hits }) => ({
+      foundBy,
+      hits: hits.map(({ itemId, exact }) => ({ id: itemId, exact })),
+    })),
+    limit,
+  ).map(({ id, exact, foundBy }) => ({ itemId: id, exact, foundBy }));
+}
+
+/**
+ * `fuse` for anything ranked by id, found by retrievers of any names: Memory (../memory) fuses its
+ * word index with its lookup by fields the same way.
+ */
+export function fuseRanked<Found extends string>(
+  lists: { foundBy: Found; hits: { id: string; exact: boolean }[] }[],
+  limit: number,
+): { id: string; exact: boolean; foundBy: Found[] }[] {
+  const merged = new Map<
+    string,
+    { id: string; exact: boolean; foundBy: Found[]; score: number; first: number }
+  >();
   let seen = 0;
   for (const { foundBy, hits } of lists) {
     hits.forEach((hit, rank) => {
-      const known = merged.get(hit.itemId);
+      const known = merged.get(hit.id);
       const score = 1 / (RRF_K + rank + 1);
       if (known) {
         known.score += score;
         known.exact ||= hit.exact;
         if (!known.foundBy.includes(foundBy)) known.foundBy.push(foundBy);
       } else {
-        merged.set(hit.itemId, { ...hit, foundBy: [foundBy], score, first: seen++ });
+        merged.set(hit.id, { id: hit.id, exact: hit.exact, foundBy: [foundBy], score, first: seen++ });
       }
     });
   }
   return [...merged.values()]
     .sort((a, b) => Number(b.exact) - Number(a.exact) || b.score - a.score || a.first - b.first)
     .slice(0, limit)
-    .map(({ itemId, exact, foundBy }) => ({ itemId, exact, foundBy }));
+    .map(({ id, exact, foundBy }) => ({ id, exact, foundBy }));
 }
