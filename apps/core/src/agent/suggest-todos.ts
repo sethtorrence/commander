@@ -13,9 +13,12 @@
 //   it or keeps it as a suggestion for the margin of the Daily Note.
 // - The runner remembers every Block it sent, with its text, so a dismissed suggestion (or an Ares
 //   Todo undone) is never offered again for the same text.
+// - With them go the User's preferences and what their earlier answers taught Ares (#74): examples
+//   of suggestions they dismissed or undid for Blocks like these, so he doesn't offer their like again.
 import { type Item, imageAttachmentOf, inheritedFiling } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from '../item-store';
+import { recall } from './memory-context';
 import type { AgentJob, JobInput } from './runner';
 
 export const SUGGEST_TODOS = 'suggest-todos';
@@ -53,6 +56,8 @@ const INSTRUCTIONS = `You are Ares. You find the things the User needs to do in 
 Each line in the data is a Block the User wrote; Blocks sit under the Blocks above them. Only the Blocks marked with a reference ([B1], [B2]…) are for you to judge; the others are there as context. For each marked Block, decide whether it holds something the User needs to do: a task, errand, follow-up or commitment ("need to send Dana the Q3 numbers", "call the bank about the card", "remember to book flights").
 
 These are not things to do: headings and section names ("Morning", "Meetings"), notes and facts ("Priya leads the reliability push"), ideas with no commitment, questions, things already done ("sent the deck"), and things someone else will do.
+
+The data may also hold what Ares knows: the User's answers to his earlier suggestions ("Not a Todo: …" is a Block like it the User didn't want a Todo for) and their preferences. Follow them: don't suggest a Todo for a Block like one the User said is not a Todo.
 
 Reply with only this JSON object: {"todos":[{"blockId":"B1","title":"…","confidence":0.9}]}
 - One entry per marked Block that holds something to do. Leave the others out; an empty list is fine.
@@ -212,11 +217,18 @@ export function suggestTodosJob(
 
     prompt: (input) => ({
       instructions: INSTRUCTIONS,
-      data: input.notes.map((note) => ({
-        label: `Daily Note · ${note.title}`,
-        from: note.blocks,
-        text: note.lines.join('\n'),
-      })),
+      data: [
+        ...input.notes.map((note) => ({
+          label: `Daily Note · ${note.title}`,
+          from: note.blocks,
+          text: note.lines.join('\n'),
+        })),
+        // What the User's answers taught Ares about Blocks like these, and their preferences (#74).
+        ...recall(itemStore, {
+          text: input.offered.map((offered) => offered.text).join('\n'),
+          kinds: ['example', 'preference'],
+        }),
+      ],
     }),
 
     output: OUTPUT,

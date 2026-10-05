@@ -12,6 +12,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Gate, openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
 import { fileIntoProjectsJob, staleFilingSuggestions } from './file-into-projects';
+import { createFiling } from './filing';
+import { learnExamples } from './learn-examples';
 import { createJobRunner, type JobRunner } from './runner';
 
 // "File into Projects" end to end through the runner, on Linear issue fixtures saved as Linear sync
@@ -31,6 +33,8 @@ let runner: JobRunner;
 let calls: ProviderRequest[];
 // What the fake model answers for each issue, by identifier.
 let replies: Record<string, { projectCode: string; confidence: number; reason?: string }>;
+// When set, decides the reply from the prompt itself (the Memory cases).
+let decide: ((prompt: string) => { projectCode: string; confidence: number } | undefined) | null;
 let lt: Project;
 let tl: Project;
 let tx: Project;
@@ -40,7 +44,7 @@ const provider: ModelProviderAdapter = {
     calls.push(request);
     const content = request.messages.at(-1)?.content ?? '';
     const [, ref, identifier] = /label="(I\d+) · Linear issue ([A-Z]+-\d+)"/.exec(content) ?? [];
-    const reply = identifier ? replies[identifier] : undefined;
+    const reply = identifier ? (decide?.(content) ?? replies[identifier]) : undefined;
     const filings = reply && ref ? [{ itemId: ref, ...reply }] : [];
     return {
       text: JSON.stringify({ filings, steering: [] }),
@@ -54,9 +58,15 @@ function project(name: string, code: string): Project {
   return store.changeProject({ type: 'create', project: { name, code, accent: 'blue' } }).project as Project;
 }
 
-type IssueInput = { id: string; title: string; team?: typeof ENG; description?: string };
+type IssueInput = {
+  id: string;
+  title: string;
+  team?: typeof ENG;
+  description?: string;
+  assignee?: { id: string; name: string; email: string };
+};
 
-function detailOf({ id, team = OPS, description }: IssueInput): LinearIssueDetail {
+function detailOf({ id, team = OPS, description, assignee }: IssueInput): LinearIssueDetail {
   return {
     kind: 'linear-issue',
     identifier: `${team.key}-${id}`,
@@ -64,7 +74,7 @@ function detailOf({ id, team = OPS, description }: IssueInput): LinearIssueDetai
     team,
     state: { id: 'state-todo', name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
     priority: 0,
-    assignee: null,
+    assignee: assignee ? { ...assignee, displayName: assignee.name } : null,
     creator: null,
     labels: [{ id: 'label-infra', name: 'infra', color: '#000000' }],
     cycle: null,
@@ -109,6 +119,7 @@ beforeEach(() => {
   clock = Date.UTC(2026, 9, 3, 9);
   calls = [];
   replies = {};
+  decide = null;
   store = openItemStore({
     path: join(dir, 'commander.db'),
     snapshotDir: join(dir, 'snapshots'),
@@ -347,5 +358,72 @@ describe('File into Projects', () => {
         }),
       ).toThrow(/never re-files/);
     }
+  });
+});
+
+describe('File into Projects with Memory (#74)', () => {
+  it('reads the examples about a similar Item as the User’s own, and files it as the User corrected the last one', async () => {
+    // Ares guessed TL for the first pager issue; the User corrected it to TX.
+    replies = { 'OPS-1': { projectCode: 'TL', confidence: 0.55 } };
+    const first = sync({ id: '1', title: 'Pager rota for October' })['OPS-1'] as string;
+    await run();
+    const [suggestion] = gate.activity({ itemId: first, statuses: ['pending'] });
+    createFiling({ itemStore: store, gate }).settle(suggestion?.id as number, tx.id);
+    expect(learnExamples(store)).toBe(1);
+
+    // A similar one arrives. Without the example the model would guess TL again; with it, TX.
+    decide = (prompt) =>
+      /label="What Ares knows" source="the User">[\s\S]*belongs to TX \(Tactics\), not TL/.test(prompt)
+        ? { projectCode: 'TX', confidence: 0.95 }
+        : { projectCode: 'TL', confidence: 0.55 };
+    const second = sync({ id: '2', title: 'Pager rota for November' })['OPS-2'] as string;
+    await run([second]);
+
+    const prompt = prompts().at(-1) as string;
+    expect(prompt).toContain(
+      '- (example) Linear issue OPS-1 (team OPS · Relay · infra) belongs to TX (Tactics), not TL (Titanlink)',
+    );
+    expect(prompt).not.toContain('source="background"');
+    expect(filingOf(second)).toEqual({ projectId: tx.id, filedBy: 'ares' });
+  });
+
+  it('marks unconfirmed facts as background, so what they lead to waits as a suggestion', async () => {
+    const priya = { id: 'user-priya', name: 'Priya Patel', email: 'priya@acme.test' };
+    const source = sync({ id: '1', title: 'Priya on the Tactics rota' })['OPS-1'] as string;
+    store.record(
+      { type: 'update', itemId: source, changes: { filing: { projectId: tx.id, filedBy: 'user' } } },
+      user,
+    );
+    store.memory.learn({
+      kind: 'fact',
+      text: 'Priya Patel works mostly on TX',
+      confirmed: false,
+      projectId: tx.id,
+      handles: ['priya@acme.test'],
+      sources: [source],
+    });
+    decide = (prompt) =>
+      prompt.includes('Priya Patel works mostly on TX') ? { projectCode: 'TX', confidence: 0.95 } : undefined;
+    const issue = sync({ id: '2', title: 'Rotate the pager', assignee: priya })['OPS-2'] as string;
+    await run([issue]);
+
+    const prompt = prompts().at(-1) as string;
+    expect(prompt).toMatch(
+      /label="What Ares has picked up \(unconfirmed\)" source="background">\n┆ - \(fact\) Priya Patel works mostly on TX/,
+    );
+    expect(calls.at(-1)?.messages[0]?.content).toContain('source="background"');
+    // Sure as the model was, it is only a suggestion: the dashed Badge.
+    expect(filingOf(issue)).toBeNull();
+    expect(gate.activity({ itemId: issue, statuses: ['pending'] })).toEqual([
+      expect.objectContaining({ decision: 'ask', chained: true }),
+    ]);
+
+    // Once the User confirms the fact, it is theirs: the next such Item is filed by it.
+    const fact = store.memory.list().memories.find((memory) => memory.kind === 'fact');
+    store.memory.change({ type: 'confirm', memoryId: fact?.id as string });
+    const next = sync({ id: '3', title: 'Pager handover', assignee: priya })['OPS-3'] as string;
+    await run([next]);
+    expect(prompts().at(-1)).toMatch(/label="What Ares knows" source="the User">\n- \(fact\) Priya Patel/);
+    expect(filingOf(next)).toEqual({ projectId: tx.id, filedBy: 'ares' });
   });
 });

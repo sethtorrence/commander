@@ -22,6 +22,10 @@
 //   - A calendar event (#127) by its title, calendar, organiser, attendees (people, not rooms) and a
 //     trimmed slice of its description, inside the event's own block.
 //   - All with their linked Items' Projects (codes only, never their words).
+//   - And what Ares knows about Items like it (#74, memory-context.ts): the User's earlier answers to
+//     his filing (examples), facts about its People and Projects, and preferences, found by its words
+//     and its people. Confirmed ones are the User's own material; unconfirmed ones go in as background,
+//     which makes the filing only a suggestion (the runner's checks, ADR 0004's fifth amendment).
 // - The reply names the Item by the reference its block was given and a Project by its code (or
 //   "unfiled"), with a confidence; codes are checked against the active Projects here, and anything
 //   else is dropped. Each filing is a proposal (Organise / "File into Projects", in the Item's own
@@ -53,6 +57,7 @@ import {
 } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from '../item-store';
+import { aboutItem, recall } from './memory-context';
 import type { PromptData } from './prompt';
 import type { AgentJob, JobInput } from './runner';
 import { bySeries, seriesFiling, seriesKey } from './series-filing';
@@ -106,7 +111,9 @@ The data holds the User's Projects (each with its two-letter code and name, and 
 - a calendar event: its title, the calendar it is on, its organiser and attendees, and some of its description;
 and the Projects of Items linked to it.
 
-Decide which one Project the Item belongs to, judging by its team, Linear project, labels, calendar, people (and the Projects they work on), subject and content, and its linked Items' Projects, the way the User's Rules file similar Items. If none fits, or you can't tell, say "unfiled".
+It may also hold what Ares knows about Items like it: the User's answers to his earlier filing (examples: "… belongs to TX (Tactics), not TL (Titanlink)"), facts about People and Projects, and the User's preferences; and, marked as background, facts Ares picked up that the User hasn't confirmed.
+
+Decide which one Project the Item belongs to, judging by its team, Linear project, labels, calendar, people (and the Projects they work on), subject and content, and its linked Items' Projects, the way the User's Rules file similar Items. An example about a similar Item (same team, Linear project, labels or people) is the User's own answer: file the Item the same way. A fact that a person works mostly on a Project is only a hint: it never outweighs the Item's own team, Linear project, labels or subject. If none fits, or you can't tell, say "unfiled".
 
 Reply with only this JSON object: {"filings":[{"itemId":"I1","projectCode":"TL","confidence":0.9,"reason":"…"}]}
 - itemId: the Item's reference, exactly as labelled.
@@ -476,6 +483,17 @@ export function fileIntoProjectsJob(
     prompt(input) {
       const data: PromptData[] = [
         { label: 'Projects', from: 'user-settings', text: projectsText(itemStore.projects()) },
+        // What Ares knows about Items like these (#74): examples, facts and preferences, by their words
+        // and by the people involved; unconfirmed ones only as background.
+        ...input.candidates.flatMap(({ item }) => {
+          const about = aboutItem(item);
+          const issue = issueOf(item);
+          return recall(itemStore, {
+            text: [about.words, issue?.description ? cut(issue.description, MAX_DESCRIPTION) : ''].join(' '),
+            handles: about.handles,
+            kinds: ['example', 'fact', 'preference'],
+          });
+        }),
         ...input.candidates.map(({ ref, item }) => ({
           label: chatOf(item)
             ? `${ref} · Teams Chat`

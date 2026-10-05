@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { item, itemKind } from './items';
+import { memory } from './memory';
 import { person } from './people';
 import { project } from './projects';
 
@@ -50,5 +51,7 @@ export const searchResult = z.object({
   // People whose name or a handle matches (#117), the User first, then by name. Only when no filter
   // narrows the search to Items.
   people: z.array(person).optional(),
+  // What Ares knows (#74) whose words match, best first. Only when no filter narrows the search.
+  memories: z.array(memory).optional(),
 });
 export type SearchResult = z.infer<typeof searchResult>;

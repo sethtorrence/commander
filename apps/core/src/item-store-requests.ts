@@ -204,6 +204,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.emailSearch(request.query) };
       case 'email-labels':
         return { ok: true, result: store.emailLabels(request.account) };
+      case 'memories':
+        return { ok: true, result: store.memory.list(request.query) };
+      case 'change-memory':
+        return { ok: true, result: store.memory.change(request.action) };
     }
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

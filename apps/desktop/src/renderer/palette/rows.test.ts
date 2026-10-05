@@ -1,4 +1,4 @@
-import type { Item, Person, Project, SearchHit, SearchResult } from '@commander/domain';
+import type { Item, Memory, Person, Project, SearchHit, SearchResult } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { readQuery } from './query';
 import { type PaletteContext, paletteGroups } from './rows';
@@ -231,6 +231,33 @@ describe('as the User types', () => {
         label: 'Priya Patel',
         hint: 'Linear · GitHub · Email',
         action: { type: 'person', personId: 'person-priya' },
+      },
+    ]);
+  });
+
+  it('lists what Ares knows that matches as its own Memory group, each opening at the memory (#74)', () => {
+    const memory: Memory = {
+      id: 'memory-1',
+      kind: 'fact',
+      text: 'Priya works mostly on TL',
+      confirmed: false,
+      by: 'ares',
+      personId: null,
+      projectId: null,
+      ruleId: null,
+      sources: [],
+      learnedAt: 0,
+      updatedAt: 0,
+      forReview: false,
+    };
+    const groups = paletteGroups(context('pri', { hits: [], projects: [], memories: [memory] }));
+    expect(groups.find((group) => group.title === 'Memory')?.rows).toEqual([
+      {
+        key: 'memory:memory-1',
+        tag: 'Fact',
+        label: 'Priya works mostly on TL',
+        hint: 'What Ares knows · unconfirmed',
+        action: { type: 'memory', memoryId: 'memory-1' },
       },
     ]);
   });

@@ -4,6 +4,7 @@ import { toast, useAppearance } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { requestReveal } from '../frame/reveal';
 import { useNow } from '../frame/use-now';
+import { WHAT_ARES_KNOWS } from '../memory/WhatAresKnows';
 import { PEOPLE_SETTINGS } from '../people/PeopleSettings';
 import { useProjects } from '../projects/context';
 import { inFilter } from '../projects/filter';
@@ -131,6 +132,10 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
         // Settings → People at the Person, until the People view (#122) gives them a page.
         onOpenSettings();
         return requestReveal(PEOPLE_SETTINGS, action.personId);
+      case 'memory':
+        // What Ares knows, in the Ares Section, at the memory.
+        onOpenSection('ares');
+        return requestReveal(WHAT_ARES_KNOWS, action.memoryId);
       case 'command':
         return action.command.run();
       case 'browser':

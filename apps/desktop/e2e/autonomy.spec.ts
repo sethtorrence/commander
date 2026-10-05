@@ -118,8 +118,8 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
   await choose(window, 'Act for you · Everywhere', 'Ask');
 
   // The registered actions, each with a level of its own; ranking the Dashboard, spotting stuck
-  // Linear issues, spotting what's waiting on the User, preparing for meetings and writing the GitHub
-  // summary say Ask works as Auto.
+  // Linear issues, spotting what's waiting on the User, preparing for meetings, writing the GitHub
+  // summary and learning facts say Ask works as Auto.
   await expect(grid.getByTestId('registered-action')).toHaveText([
     /Suggest Todos/,
     /Rank the Dashboard/,
@@ -128,6 +128,7 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
     /File into Projects/,
     /Prepare for meetings/,
     /Write the GitHub summary.*Ask works as Auto here/,
+    /Learn facts.*Ask works as Auto here/,
     /Draft replies/,
     /Block time for Todos/,
     /Hold time for yourself/,

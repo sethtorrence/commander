@@ -14,6 +14,9 @@ import { blockTimeForTodosJob } from './block-time-for-todos';
 import { fileIntoProjectsJob } from './file-into-projects';
 import { createFiling, type Filing } from './filing';
 import { createGitHubSummaries, type GitHubSummaries } from './github-summaries';
+import { learnAppearances } from './learn-appearances';
+import { learnExamples } from './learn-examples';
+import { learnFactsJob } from './learn-facts';
 import { prepareMeetingsJob } from './prepare-meetings';
 import { proposeEventsJob } from './propose-events';
 import { rankDashboardJob } from './rank-dashboard';
@@ -117,6 +120,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       blockTimeForTodosJob(itemStore, { now }),
       proposeEventsJob(itemStore, { now }),
       summaryJob,
+      learnFactsJob(itemStore, { now }),
     ],
     client: options.client,
     gate: options.gate,
@@ -170,9 +174,24 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     }
   };
 
+  // Memory (#74): the User's answers to Ares become examples as soon as they are given (before any job
+  // looks Memory up again), and where People appear is counted again on the idle catch-up.
+  const learn = ({ appearances = false }: { appearances?: boolean } = {}) => {
+    try {
+      learnExamples(itemStore);
+      if (appearances) learnAppearances(itemStore);
+    } catch (error) {
+      options.log?.(`Couldn’t learn from your answers: ${error}`);
+    }
+  };
+  learn({ appearances: true });
+
   let lastChange = now();
   let caughtUp = false;
-  const idle = () => runner.trigger({ kind: 'idle' });
+  const idle = () => {
+    learn({ appearances: true });
+    runner.trigger({ kind: 'idle' });
+  };
   const watch = setInterval(
     () => {
       if (caughtUp || now() - lastChange < idleAfterMs) return;
@@ -211,17 +230,21 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       dismissStale();
       fileSeries();
       const blocks = itemIds.filter((id) => itemStore.get(id)?.item.kind === 'block');
+      // An answer to Ares (filing an Item he filed or suggested for) is never typing in a Daily Note.
+      if (blocks.length < itemIds.length) learn();
       if (blocks.length) runner.trigger({ kind: 'typing', itemIds: blocks });
       const ranked = itemIds.filter((id) => RANKED_KINDS.has(itemStore.get(id)?.item.kind ?? ''));
       if (ranked.length) runner.trigger({ kind: 'todos-changed', itemIds: ranked });
     },
 
     aresChanged() {
+      learn();
       runner.trigger({ kind: 'todos-changed', itemIds: [] });
     },
 
     synced({ source, account, itemIds }) {
       dismissStale();
+      learn();
       // The User replied in a Chat Ares flagged: the flag goes at once, with no call.
       if (source === 'teams') {
         try {
