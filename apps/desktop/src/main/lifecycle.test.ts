@@ -1,6 +1,26 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { keepInTray, stopCoreOnQuit } from './lifecycle';
+import { inTurn, keepInTray, stopCoreOnQuit } from './lifecycle';
+
+describe('inTurn', () => {
+  it('runs each step after the one before, never waiting on one longer than its time', async () => {
+    vi.useFakeTimers();
+    const ran: string[] = [];
+    const steps = inTurn([
+      // The window never answers: its time runs out, and the held messages still go.
+      { run: () => new Promise<void>(() => ran.push('save')), timeoutMs: 2_000 },
+      { run: async () => void ran.push('send held'), timeoutMs: 15_000 },
+    ]);
+
+    const done = steps();
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(ran).toEqual(['save']);
+    await vi.advanceTimersByTimeAsync(1);
+    await done;
+    expect(ran).toEqual(['save', 'send held']);
+    vi.useRealTimers();
+  });
+});
 
 // A stand-in for Electron's app: quit() emits a cancellable before-quit, and only quits
 // for real if nobody prevented it.

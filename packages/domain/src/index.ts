@@ -15,6 +15,7 @@ export * from './core-messages';
 export * from './daily-template';
 export * from './email';
 export * from './email-actions';
+export * from './email-compose';
 export * from './email-reader';
 export * from './email-rules';
 export * from './email-sorting';

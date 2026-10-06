@@ -1,4 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import {
+  type MimePart,
+  mimeHeader,
+  parseMime,
+} from '../../../../../packages/sources/src/email-send/parse-mime';
 
 // The Gmail API v1 part of the fake Google (fake-google-server.ts), for tests only: each user's
 // mailbox, answering what Commander's Gmail sync asks (`users.getProfile`, `labels.list`,
@@ -8,6 +13,10 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // asked for, a historyId that rises with every change, history records for messages added and deleted
 // and labels added and removed, a 404 for a history that has expired or a message it doesn't have, a
 // 400 for a label it doesn't know, and 403 `rateLimitExceeded` when the per-minute quota is spent.
+// Writing email (#138): `messages.send` and `drafts.create` / `update` / `get` / `list` / `delete`,
+// taking raw MIME as JSON (`raw`) or through the upload endpoint (multipart/related), each sent
+// message or draft stored as Gmail would show it (its headers and parts read from the MIME), with
+// `messages.get?format=metadata` for a retried send's check.
 // Nothing here talks to the real Gmail.
 
 export type FakeGmailMessageInput = {
@@ -54,9 +63,14 @@ type HistoryRecord = {
   labelsRemoved?: { message: { id: string; threadId: string; labelIds: string[] }; labelIds: string[] }[];
 };
 
+// A message sent through the fake: its raw MIME, read, and the thread Gmail put it in.
+export type FakeGmailSent = { id: string; threadId: string; raw: Buffer; mime: MimePart };
+
 type Mailbox = {
   email: string;
   messages: Map<string, StoredMessage>;
+  // Drafts: draft id → the id of its message (a new one each time it is saved).
+  drafts: Map<string, string>;
   history: HistoryRecord[];
   historyId: number;
   // History before this historyId has expired (history.list from earlier answers 404).
@@ -83,6 +97,14 @@ export type FakeGmail = {
   expireHistory(email: string): void;
   // Every Gmail request answers 403 rateLimitExceeded until switched back.
   throttle(throttled: boolean): void;
+  // Every message sent (#138), oldest first.
+  sent: FakeGmailSent[];
+  // Sends are refused with this reason (400 invalidArgument, as for a bad recipient) until null again.
+  refuseSends(reason: string | null): void;
+  // A user's drafts as Gmail holds them: each draft's id, subject and body text.
+  drafts(email: string): { id: string; messageId: string; subject: string; text: string }[];
+  // Saves a draft as the User would in Gmail. Returns its draft id.
+  saveDraft(email: string, message: Omit<FakeGmailMessageInput, 'labels'>): string;
   // Answers a Gmail request, for the user its access token belongs to (null: not signed in).
   handle(
     request: IncomingMessage,
@@ -221,7 +243,14 @@ export function createFakeGmail(): FakeGmail {
   const mailbox = (email: string): Mailbox => {
     let found = mailboxes.get(email);
     if (!found) {
-      found = { email, messages: new Map(), history: [], historyId: 1000, expiredBefore: 0 };
+      found = {
+        email,
+        messages: new Map(),
+        drafts: new Map(),
+        history: [],
+        historyId: 1000,
+        expiredBefore: 0,
+      };
       mailboxes.set(email, found);
     }
     return found;
@@ -337,9 +366,252 @@ export function createFakeGmail(): FakeGmail {
     });
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Writing email (#138)
+
+  let sendsRefused: string | null = null;
+
+  // A raw message's Gmail payload: its headers, and its parts (text with their data, attachments by id).
+  function payloadOf(mime: MimePart, id: string, parts: Map<string, Buffer>, partId = ''): unknown {
+    const headers = mime.headers.map(({ name, value }) => ({ name, value }));
+    if (mime.parts.length) {
+      return {
+        partId,
+        mimeType: mime.type,
+        filename: '',
+        headers,
+        body: { size: 0 },
+        parts: mime.parts.map((part, index) =>
+          payloadOf(part, id, parts, partId ? `${partId}.${index}` : String(index)),
+        ),
+      };
+    }
+    if (mime.filename || mime.disposition === 'attachment') {
+      const attachmentId = `att-${id}-${parts.size + 1}`;
+      parts.set(attachmentId, mime.body);
+      return {
+        partId,
+        mimeType: mime.type,
+        filename: mime.filename ?? 'attachment',
+        headers,
+        body: { size: mime.body.length, attachmentId },
+      };
+    }
+    return {
+      partId,
+      mimeType: mime.type,
+      filename: '',
+      headers,
+      body: { size: mime.body.length, data: mime.body.toString('base64url') },
+    };
+  }
+
+  // Keeps a raw message (a send, or a draft saved) as Gmail would show it.
+  function storeRaw(box: Mailbox, raw: Buffer, labelIds: string[], threadId: string | undefined) {
+    const mime = parseMime(raw);
+    const id = (nextId++).toString(16);
+    const date = Date.parse(mimeHeader(mime, 'Date') ?? '') || Date.now();
+    const parts = new Map<string, Buffer>();
+    const payload = payloadOf(mime, id, parts) as object;
+    const text = (function first(part: MimePart): string {
+      if (!part.parts.length) return part.type === 'text/plain' ? part.body.toString('utf8') : '';
+      for (const each of part.parts) {
+        const found = first(each);
+        if (found) return found;
+      }
+      return '';
+    })(mime);
+    const message: StoredMessage = {
+      id,
+      threadId: threadId ?? id,
+      labelIds,
+      date,
+      historyId: 0,
+      json: {
+        id,
+        threadId: threadId ?? id,
+        labelIds,
+        snippet: text.replace(/\s+/g, ' ').trim().slice(0, 120),
+        internalDate: String(date),
+        sizeEstimate: raw.length,
+        payload: { ...payload, partId: '' },
+      },
+      parts,
+    };
+    box.messages.set(id, message);
+    message.historyId = record(box, { messagesAdded: [{ message: refOf(message) }] });
+    message.json = { ...(message.json as object), historyId: String(message.historyId) };
+    return { message, mime };
+  }
+
+  function forget(box: Mailbox, id: string) {
+    const message = box.messages.get(id);
+    if (!message) return;
+    box.messages.delete(id);
+    record(box, { messagesDeleted: [{ message: { id, threadId: message.threadId } }] });
+  }
+
+  // A write's body: JSON, or (the upload endpoint) its JSON metadata and raw message.
+  async function rawBodyOf(
+    request: IncomingMessage,
+  ): Promise<{ json: Record<string, unknown>; raw: Buffer | null }> {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) chunks.push(chunk as Buffer);
+    const bytes = Buffer.concat(chunks);
+    const type = String(request.headers['content-type'] ?? '');
+    const boundary = /boundary=([^;]+)/.exec(type)?.[1];
+    if (type.startsWith('multipart/related') && boundary) {
+      const text = bytes.toString('latin1');
+      const [, metadata = '', message = ''] = text.split(`--${boundary}`);
+      const body = (part: string) =>
+        part
+          .slice(part.search(/\r?\n\r?\n/))
+          .replace(/^\r?\n\r?\n/, '')
+          .replace(/\r?\n$/, '');
+      return { json: JSON.parse(body(metadata) || '{}'), raw: Buffer.from(body(message), 'latin1') };
+    }
+    const json = bytes.length ? (JSON.parse(bytes.toString('utf8')) as Record<string, unknown>) : {};
+    return { json, raw: null };
+  }
+
+  const rawOf = (json: Record<string, unknown>, raw: Buffer | null): Buffer | null => {
+    if (raw) return raw;
+    const field = (json.raw ?? (json.message as { raw?: unknown } | undefined)?.raw) as string | undefined;
+    return typeof field === 'string' ? Buffer.from(field, 'base64url') : null;
+  };
+  const threadOf = (json: Record<string, unknown>) =>
+    (json.threadId ?? (json.message as { threadId?: unknown } | undefined)?.threadId) as string | undefined;
+  const notFound = (response: ServerResponse) =>
+    json(response, 404, googleError(404, 'NOT_FOUND', 'notFound', 'Requested entity was not found.'));
+
+  function draftJson(box: Mailbox, draftId: string, full: boolean) {
+    const message = box.messages.get(box.drafts.get(draftId) ?? '');
+    if (!message) return null;
+    return {
+      id: draftId,
+      message: full
+        ? message.json
+        : { id: message.id, threadId: message.threadId, labelIds: message.labelIds },
+    };
+  }
+
+  async function compose(
+    request: IncomingMessage,
+    response: ServerResponse,
+    box: Mailbox,
+    path: string,
+    url: URL,
+  ) {
+    const method = request.method ?? 'GET';
+    if (method === 'POST' && path === '/messages/send') {
+      const { json: body, raw } = await rawBodyOf(request);
+      fake.writes.push({ path, body: { ...body, raw: '<raw>' } });
+      if (sendsRefused)
+        return json(response, 400, googleError(400, 'INVALID_ARGUMENT', 'invalidArgument', sendsRefused));
+      const bytes = rawOf(body, raw);
+      if (!bytes)
+        return json(response, 400, googleError(400, 'INVALID_ARGUMENT', 'invalidArgument', 'No raw message'));
+      const { message, mime } = storeRaw(box, bytes, ['SENT'], threadOf(body));
+      fake.sent.push({ id: message.id, threadId: message.threadId, raw: bytes, mime });
+      return json(response, 200, { id: message.id, threadId: message.threadId, labelIds: message.labelIds });
+    }
+    if (path === '/drafts' && method === 'GET') {
+      const wanted = /rfc822msgid:(\S+)/.exec(url.searchParams.get('q') ?? '')?.[1];
+      const drafts = [...box.drafts.keys()]
+        .filter((draftId) => {
+          if (!wanted) return true;
+          const message = box.messages.get(box.drafts.get(draftId) ?? '');
+          const headers = (message?.json as { payload?: { headers?: { name: string; value: string }[] } })
+            ?.payload?.headers;
+          const messageId = headers?.find((each) => each.name.toLowerCase() === 'message-id')?.value ?? '';
+          return messageId.replace(/^<|>$/g, '') === wanted.replace(/^<|>$/g, '');
+        })
+        .map((draftId) => draftJson(box, draftId, false));
+      return json(response, 200, { ...(drafts.length ? { drafts } : {}), resultSizeEstimate: drafts.length });
+    }
+    if (path === '/drafts' && method === 'POST') {
+      const { json: body, raw } = await rawBodyOf(request);
+      fake.writes.push({ path, body: { message: { raw: '<raw>' } } });
+      const bytes = rawOf(body, raw);
+      if (!bytes)
+        return json(response, 400, googleError(400, 'INVALID_ARGUMENT', 'invalidArgument', 'No raw message'));
+      const draftId = `r-${(nextId++).toString(16)}`;
+      const { message } = storeRaw(box, bytes, ['DRAFT'], threadOf(body));
+      box.drafts.set(draftId, message.id);
+      return json(response, 200, draftJson(box, draftId, false));
+    }
+    const draft = /^\/drafts\/([^/]+)$/.exec(path)?.[1];
+    if (draft) {
+      const draftId = decodeURIComponent(draft);
+      const held = box.drafts.get(draftId);
+      if (!held) return notFound(response);
+      if (method === 'GET')
+        return json(response, 200, draftJson(box, draftId, url.searchParams.get('format') === 'full'));
+      if (method === 'DELETE') {
+        fake.writes.push({ path, body: undefined });
+        forget(box, held);
+        box.drafts.delete(draftId);
+        return void response.writeHead(204).end();
+      }
+      if (method === 'PUT') {
+        const { json: body, raw } = await rawBodyOf(request);
+        fake.writes.push({ path, body: { message: { raw: '<raw>' } } });
+        const bytes = rawOf(body, raw);
+        if (!bytes)
+          return json(
+            response,
+            400,
+            googleError(400, 'INVALID_ARGUMENT', 'invalidArgument', 'No raw message'),
+          );
+        forget(box, held);
+        const { message } = storeRaw(box, bytes, ['DRAFT'], threadOf(body));
+        box.drafts.set(draftId, message.id);
+        return json(response, 200, draftJson(box, draftId, false));
+      }
+    }
+    return json(response, 405, {});
+  }
+
   const fake: FakeGmail = {
     requests: [],
     writes: [],
+    sent: [],
+
+    refuseSends(reason) {
+      sendsRefused = reason;
+    },
+
+    drafts(email) {
+      const box = mailbox(email);
+      return [...box.drafts].flatMap(([id, messageId]) => {
+        const message = box.messages.get(messageId);
+        if (!message) return [];
+        const payload = (message.json as { payload?: { headers?: { name: string; value: string }[] } })
+          .payload;
+        const subject = payload?.headers?.find((each) => each.name.toLowerCase() === 'subject')?.value ?? '';
+        return [{ id, messageId, subject, text: (message.json as { snippet?: string }).snippet ?? '' }];
+      });
+    },
+
+    saveDraft(email, input) {
+      const box = mailbox(email);
+      const id = (nextId++).toString(16);
+      const draftId = `r-${id}`;
+      const message: StoredMessage = {
+        id,
+        threadId: input.threadId ?? id,
+        labelIds: ['DRAFT'],
+        date: input.date,
+        historyId: 0,
+        json: messageJson(id, input.threadId ?? id, ['DRAFT'], input),
+        parts: new Map(),
+      };
+      box.messages.set(id, message);
+      box.drafts.set(draftId, id);
+      message.historyId = record(box, { messagesAdded: [{ message: refOf(message) }] });
+      message.json = { ...(message.json as object), historyId: String(message.historyId) };
+      return draftId;
+    },
 
     deliver(email, input) {
       const box = mailbox(email);
@@ -410,8 +682,10 @@ export function createFakeGmail(): FakeGmail {
         return json(response, 403, googleError(403, 'PERMISSION_DENIED', 'rateLimitExceeded', message));
       }
       const box = mailbox(email);
-      const path = url.pathname.replace(/^\/gmail\/v1\/users\/me/, '');
+      const path = url.pathname.replace(/^(?:\/upload)?\/gmail\/v1\/users\/me/, '');
       if (request.method === 'POST' && WRITE_PATH.test(path)) return write(request, response, box, path);
+      if (path === '/messages/send' || path === '/drafts' || path.startsWith('/drafts/'))
+        return compose(request, response, box, path, url);
       if (request.method !== 'GET') return json(response, 405, {});
       if (path === '/profile') {
         return json(response, 200, {
@@ -453,6 +727,14 @@ export function createFakeGmail(): FakeGmail {
         if (url.searchParams.get('format') === 'minimal') {
           const { payload: _payload, ...minimal } = message.json as { payload?: unknown };
           return json(response, 200, minimal);
+        }
+        if (url.searchParams.get('format') === 'metadata') {
+          const { payload, ...rest } = message.json as {
+            payload?: { headers?: { name: string; value: string }[] };
+          };
+          const wanted = url.searchParams.getAll('metadataHeaders').map((name) => name.toLowerCase());
+          const headers = (payload?.headers ?? []).filter((each) => wanted.includes(each.name.toLowerCase()));
+          return json(response, 200, { ...rest, payload: { headers } });
         }
         return json(response, 200, message.json);
       }

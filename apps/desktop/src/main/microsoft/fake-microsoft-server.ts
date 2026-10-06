@@ -1111,6 +1111,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       return authorize(url, response);
     if (request.method === 'POST' && url.pathname === `${authority}/token`)
       return void tokenEndpoint(request, response);
+    // An attachment's upload session (#138): its URL is its own authorisation, as Graph's are.
+    if (fake.mail.handlesUpload(request, url)) return void fake.mail.upload(request, url, response);
     if (isCalendarWrite(request, url) || fake.mail.handles(request, url))
       return graph(request, url, response);
     if ((request.method === 'GET' || request.method === 'POST') && url.pathname.startsWith('/v1.0/'))

@@ -7,6 +7,9 @@ import type {
   AutonomySection,
   ChannelPostDetail,
   ChatDetail,
+  ComposeAttachment,
+  ComposeBody,
+  ComposeMode,
   DashboardBand,
   EmailDetail,
   EventDetail,
@@ -359,6 +362,8 @@ export const emailDetails = sqliteTable(
     snoozedUntil: integer('snoozed_until'),
     // Back from a snooze set for then: the thread sorts to the top of the inbox from that time.
     returnedFrom: integer('returned_from'),
+    // A draft (#138): never part of a thread or a view; listed in Drafts.
+    draft: integer('draft', { mode: 'boolean' }).notNull().default(false),
     // The rest of the detail, without `kind`.
     data: text('data', { mode: 'json' }).$type<Omit<EmailDetail, 'kind'>>().notNull(),
   },
@@ -1051,4 +1056,51 @@ export const memorySources = sqliteTable(
 export const memoryProgress = sqliteTable('memory_progress', {
   name: text('name').primaryKey(),
   value: integer('value').notNull(),
+});
+
+// Writing email (#138): Commander's own record of each message written in its composer, beside the
+// message's `email` Item (whose detail carries what any email does: its recipients, subject and whether
+// it is still a draft). What the composer needs to open it again: how it was begun (a reply to which
+// message), its body as the composer's model (never HTML), its attachments (the files kept in the data
+// folder until it is sent), the quote below it (made once, from the message replied to, as the
+// sanitiser cleaned it), and the Message-ID Commander gave it, fixed for good: a crash between sending
+// and saving the Source's answer is matched by it. `sendAt`: when it goes once the User pressed Send,
+// the end of its Undo time (null while a draft). `sourceText`: the draft's text as the Source answered
+// Commander's last save of it; text that differs since was changed in Gmail or Outlook, and the
+// composer opens that instead. Not Item state: never in the activity log.
+export const emailCompose = sqliteTable(
+  'email_compose',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => items.id),
+    mode: text('mode').$type<ComposeMode>().notNull(),
+    replyToItemId: text('reply_to_item_id'),
+    body: text('body', { mode: 'json' }).$type<ComposeBody>().notNull(),
+    attachments: text('attachments', { mode: 'json' }).$type<ComposeAttachment[]>().notNull(),
+    quoteHtml: text('quote_html'),
+    quoteText: text('quote_text'),
+    messageId: text('message_id').notNull(),
+    sendAt: integer('send_at'),
+    sourceText: text('source_text'),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [index('email_compose_message_id').on(t.messageId)],
+);
+
+// Settings → Email's writing settings (#138), in a single row: the Account new mail goes from, and how
+// long every send is held with Undo.
+export const emailComposeSettings = sqliteTable('email_compose_settings', {
+  id: integer('id').primaryKey(),
+  defaultAccount: text('default_account'),
+  undoSeconds: integer('undo_seconds').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// Each email Account's signature (#138), stored in Commander (Graph can't read Outlook's), as the
+// composer's model.
+export const emailSignatures = sqliteTable('email_signatures', {
+  account: text('account').primaryKey(),
+  body: text('body', { mode: 'json' }).$type<ComposeBody>().notNull(),
+  updatedAt: integer('updated_at').notNull(),
 });

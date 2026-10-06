@@ -20,7 +20,7 @@ import {
   Input,
   Kbd,
 } from '@commander/ui';
-import { forwardRef, type KeyboardEvent, useState } from 'react';
+import { forwardRef, type KeyboardEvent, type ReactNode, useState } from 'react';
 import type { IssueSync } from '../linear/editing';
 import { type EmailAccountSummary, emailAddressOf, providerOf } from './email';
 import { SNOOZE_NOTE, snoozeTime } from './organising';
@@ -40,11 +40,14 @@ export function ViewBar({
   view,
   searching,
   onView,
+  extra,
 }: {
   views: EmailViewCount[];
   view: EmailListView;
   searching: boolean;
   onView: (view: EmailListView) => void;
+  /** Views of another kind after these (Drafts and Outbox, #138). */
+  extra?: ReactNode;
 }) {
   const shown = views.length ? views : [{ view: 'inbox' as const, name: 'Inbox', threads: 0, unread: 0 }];
   return (
@@ -76,6 +79,7 @@ export function ViewBar({
             </button>
           );
         })}
+        {extra}
       </div>
     </div>
   );

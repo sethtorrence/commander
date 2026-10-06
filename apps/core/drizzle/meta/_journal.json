@@ -309,6 +309,13 @@
       "when": 1791270001828,
       "tag": "0043_injection_warning_cleared",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "6",
+      "when": 1791310607892,
+      "tag": "0044_email_compose",
+      "breakpoints": true
     }
   ]
 }

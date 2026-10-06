@@ -20,6 +20,10 @@ import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
 import { CloudMailQuestions } from './CloudMail';
+import { Composer } from './compose/Composer';
+import { DraftList, OutboxList, OutboxNote } from './compose/ComposeViews';
+import { type ComposeClient, noCompose } from './compose/compose';
+import { useCompose } from './compose/use-compose';
 import { BucketPicker, BucketStrip } from './EmailBuckets';
 import {
   FolderPicker,
@@ -70,6 +74,13 @@ const KEYS: [ReactNode, string][] = [
   [<Kbd key="e">E</Kbd>, 'Archive'],
   [<Kbd key="z">Z</Kbd>, 'Snooze'],
   [<Kbd key="v">V</Kbd>, 'Bucket'],
+  [
+    <>
+      <Kbd>C</Kbd>
+      <Kbd>R</Kbd>
+    </>,
+    'Write · Reply',
+  ],
   [<Kbd key="slash">/</Kbd>, 'Search'],
   [<Kbd key="b">B</Kbd>, 'Project'],
   [<Kbd key="esc">Esc</Kbd>, 'Close'],
@@ -401,12 +412,18 @@ export function EmailSheet({
   accounts,
   changes,
   reader = textOnlyReader,
+  compose = noCompose,
+  onSaveBeforeQuit,
 }: {
   client: EmailClient;
   accounts: EmailAccountsClient;
   changes: ItemChanges;
   /** The sandboxed HTML reader (the window's bridge); without it every message shows as text. */
   reader?: EmailReaderClient;
+  /** Writing email (#138): the composer, drafts and the Outbox (the window's bridge). */
+  compose?: ComposeClient;
+  /** Saves the composer's draft when Commander quits (the window's bridge). */
+  onSaveBeforeQuit?: (save: () => Promise<void>) => () => void;
 }) {
   const { include } = useProjectFilter();
   const { projectOf, projectById, settleFiling } = useProjects();
@@ -425,6 +442,20 @@ export function EmailSheet({
   >(null);
   const [typed, setTyped] = useState('');
   const searchBox = useRef<HTMLInputElement>(null);
+  // Writing email (#138): the composer, the Undo toast, and the Drafts and Outbox views.
+  const writing = useCompose({ client: compose, changes });
+  const [special, setSpecial] = useState<'drafts' | 'outbox' | null>(null);
+  // A reply is written below its thread's messages while that thread is open; elsewhere as a sheet.
+  const replyTo = writing.composer?.state.replyToItemId ?? null;
+  const inline =
+    writing.composer?.placement === 'inline' && open && !!replyTo && !!selected?.itemIds.includes(replyTo);
+  // Replying opens the thread, with the composer below its messages.
+  const write = (mode: 'reply' | 'reply-all' | 'forward') => {
+    if (!selected) return;
+    setSpecial(null);
+    setOpen(true);
+    void writing.open(mode, selected.latest.id);
+  };
   const several = state.accounts.length > 1 && state.account === 'all';
   const accountName = useCallback(
     (accountId: string) => {
@@ -608,6 +639,10 @@ export function EmailSheet({
       run: () => searchBox.current?.focus(),
     },
     { keys: 'Ctrl+z', label: 'Undo', run: () => void state.undoLast() },
+    { keys: 'c', label: 'New message', run: () => void writing.open('new') },
+    { keys: 'r', label: 'Reply', when: () => !!selected, run: () => write('reply') },
+    { keys: 'Shift+R', label: 'Reply all', when: () => !!selected, run: () => write('reply-all') },
+    { keys: 'f', label: 'Forward', when: () => !!selected, run: () => write('forward') },
   ]);
 
   const status = emailSyncLine(state.accounts, now);
@@ -653,8 +688,36 @@ export function EmailSheet({
       <ViewBar
         views={state.views}
         view={state.view}
-        searching={state.search !== null}
-        onView={state.setView}
+        searching={state.search !== null || special !== null}
+        onView={(view) => {
+          setSpecial(null);
+          state.setView(view);
+        }}
+        extra={(
+          [
+            ['drafts', 'Drafts', writing.drafts.length],
+            ['outbox', 'Outbox', writing.outbox.length],
+          ] as const
+        ).map(([view, name, count]) => (
+          <button
+            key={view}
+            type="button"
+            role="tab"
+            aria-selected={special === view}
+            data-view={view}
+            onClick={() => {
+              setSpecial(view);
+              setOpen(false);
+            }}
+            className={cn(
+              'flex flex-none cursor-pointer items-center gap-2 border-0 border-r border-line2 px-3.5 font-mono text-label leading-none font-semibold uppercase tracking-caps whitespace-nowrap',
+              special === view ? 'bg-ink text-sheet' : 'bg-transparent text-ink hover:bg-raise',
+            )}
+          >
+            {name}
+            {count > 0 && <b className={special === view ? 'text-sheet' : 'text-muted'}>{count}</b>}
+          </button>
+        ))}
       />
       <SectionProjectFilter items={state.forProjectFilter} />
       {noAccounts ? (
@@ -676,7 +739,20 @@ export function EmailSheet({
                 onLeave={leaveSearch}
               />
             </div>
-            {state.threads.length ? (
+            {special === 'drafts' ? (
+              <DraftList
+                drafts={writing.drafts}
+                accountName={(id) => (several ? accountName(id) : null)}
+                onOpen={(itemId) => void writing.openDraft(itemId)}
+                onDiscard={(itemId) => void writing.discard(itemId)}
+              />
+            ) : special === 'outbox' ? (
+              <OutboxList
+                outbox={writing.outbox}
+                onUndo={(itemId) => void writing.undo(itemId)}
+                onRetry={(itemId) => void writing.retry(itemId)}
+              />
+            ) : state.threads.length ? (
               <ul className="m-0 list-none p-0">
                 {state.threads.map((thread, index) => (
                   <ThreadRow
@@ -725,6 +801,32 @@ export function EmailSheet({
               accountName={accountName}
               reader={reader}
               onClose={() => setOpen(false)}
+              noteFor={(item) => {
+                const entry = writing.outbox.find((each) => each.itemId === item.id);
+                return entry ? (
+                  <OutboxNote
+                    entry={entry}
+                    className="mt-3 border-t border-line2 pt-2"
+                    onUndo={() => void writing.undo(entry.itemId)}
+                    onRetry={() => void writing.retry(entry.itemId)}
+                  />
+                ) : null;
+              }}
+              footer={
+                inline && writing.composer ? (
+                  <Composer
+                    key={writing.composer.state.itemId ?? writing.composer.state.replyToItemId ?? 'reply'}
+                    client={compose}
+                    initial={writing.current() ?? writing.composer.state}
+                    accounts={state.accounts}
+                    placement="inline"
+                    onClose={writing.close}
+                    onSent={writing.sent}
+                    onState={writing.track}
+                    {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
+                  />
+                ) : null
+              }
               toolbar={
                 selected && (
                   <>
@@ -804,6 +906,19 @@ export function EmailSheet({
             void act({ type: 'bucket', bucketId }, organised);
           }}
           onClose={() => setOrganising(null)}
+        />
+      )}
+      {writing.composer && !inline && (
+        <Composer
+          key={writing.composer.state.itemId ?? writing.composer.state.replyToItemId ?? 'new'}
+          client={compose}
+          initial={writing.current() ?? writing.composer.state}
+          accounts={state.accounts}
+          placement="sheet"
+          onClose={writing.close}
+          onSent={writing.sent}
+          onState={writing.track}
+          {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
         />
       )}
       {picking && (

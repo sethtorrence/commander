@@ -124,6 +124,10 @@ export const emailDetail = z.object({
   hasInvitation: z.boolean(),
   listUnsubscribe: z.string().nullable(),
   listId: z.string().nullable(),
+  // A draft (#138): one in the Source's Drafts folder (made in Gmail or Outlook, or saved there from
+  // Commander's composer), or one Commander holds that hasn't reached it yet. Drafts are never part of a
+  // thread or a view: they show in Drafts, and open in the composer. Absent on mail that isn't one.
+  draft: z.boolean().optional(),
 });
 export type EmailDetail = z.infer<typeof emailDetail>;
 

@@ -9,6 +9,7 @@ import { setUpAgent } from './agent';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { setUpBusyCopies } from './busy-copies';
+import { composeFiles, setUpCompose } from './compose';
 import { setUpEmailReader } from './email-reader';
 import { workerSanitiser } from './email-reader/sanitiser';
 import { setUpGitHubDiscussion } from './github-discussion';
@@ -95,11 +96,14 @@ const githubDiscussion = setUpGitHubDiscussion(itemStore, {
 // Source sync: every Account on its cadence, writing through the Item store. GitHub sync reads what
 // each Account watches. An Account needing reconnecting (or reconnected) is Ares's to mention in the
 // next Update.
+// Writing email (#138): the files of attachments waiting to be sent, read by the email Sources' writes.
+const composeFilesInData = composeFiles(dataDir);
 const sync = setUpSync(itemStore, {
   send: (message) => port.postMessage(message),
   accessTokens,
   githubWatch: (account, apiUrl) => githubWatch.forSync(account, apiUrl),
   onAccountsChanged: () => updates?.sweep(),
+  attachment: (id) => composeFilesInData.read(id),
 });
 // The oversight summary (#119): finishes Links after GitHub and Linear syncs, and the writer's detail
 // fetched for the pull requests in today's summary. What it links shows at once in open views.
@@ -132,6 +136,25 @@ const emailReader = setUpEmailReader({
   testHooks: process.argv.includes('--test-hooks'),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
+// Writing email (#138): drafts saved and messages sent through the outgoing queue, each send held for
+// the Undo time here in the Core (so closing the window keeps it), and sent before Commander quits.
+const compose = setUpCompose({
+  store: itemStore,
+  files: composeFilesInData,
+  accounts: () => sync.accounts(),
+  canSend: (account) =>
+    sync.engine
+      .statuses()
+      .filter((status) => status.account === account)
+      .every((status) => !['offline', 'asleep', 'needs-reconnect'].includes(status.activity)),
+  sanitise: emailSanitiser.sanitise,
+  reader: emailReader,
+  send: (message) => port.postMessage(message),
+  onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
+});
+compose.sweep();
+setInterval(() => compose.sweep(), 60 * 60 * 1000);
+
 // The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Notes.
 const markdownCopy = setUpMarkdownCopy({
   store: itemStore,
@@ -289,6 +312,7 @@ port.on('message', ({ data }) => {
   if (updates?.handle(data)) return;
   if (githubWatch.handle(data)) return;
   if (emailReader.handle(data)) return;
+  if (compose.handle(data)) return;
   if (githubDiscussion.handle(data)) return;
   if (scheduler.handle(data, (reply) => port.postMessage(reply))) return;
   let changed: CoreMessage | null = null;

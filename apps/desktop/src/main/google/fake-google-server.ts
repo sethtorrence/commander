@@ -743,7 +743,10 @@ export async function startFakeGoogle(
     if (request.method === 'GET' && url.pathname === '/o/oauth2/v2/auth') return authorize(url, response);
     if (request.method === 'POST' && url.pathname === '/token') return void tokenEndpoint(request, response);
     if (request.method === 'GET' && url.pathname === '/v1/userinfo') return userinfo(request, response);
-    if (url.pathname.startsWith('/gmail/v1/users/me/')) {
+    if (
+      url.pathname.startsWith('/gmail/v1/users/me/') ||
+      url.pathname.startsWith('/upload/gmail/v1/users/me/')
+    ) {
       const authorization = request.headers.authorization ?? '';
       const user = authorization.startsWith('Bearer ')
         ? accessTokens.get(authorization.slice('Bearer '.length))

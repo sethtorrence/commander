@@ -8,6 +8,7 @@ import {
   type SourceItem,
 } from '@commander/domain';
 import { z } from 'zod';
+import { isComposeWrite } from '../email-send/compose-write';
 import {
   type Cadence,
   CursorExpired,
@@ -24,6 +25,7 @@ import {
   WriteRejected,
   type WriteRequest,
 } from '../source';
+import { writeOutlookCompose } from './compose';
 import { connectGraphMail, GraphBadRequest, type GraphMail, GraphNotFound } from './graph';
 import { mailboxGate } from './mailbox-gate';
 import {
@@ -84,6 +86,9 @@ import {
 // is left as Outlook has it and reported as superseded: the newer change wins, per field.
 //
 // Reading (#134): attachments and inline images through `/messages/{id}/attachments/{id}/$value`.
+//
+// Writing email (#138): messages written in Commander are saved as drafts and sent through the outgoing
+// queue (compose.ts); the Drafts folder is read too, its messages kept as drafts.
 
 export const OUTLOOK_CADENCE: Cadence = { defaultMinutes: 15, choices: [5, 10, 15, 30, 60] };
 
@@ -178,8 +183,9 @@ const outlookCursor = z.object({
 export type OutlookCursor = z.infer<typeof outlookCursor>;
 type FolderMark = z.infer<typeof folderMark>;
 
-// A folder Commander reads: its mail downloaded, or (Deleted Items) only checked for held mail.
-type Planned = { id: string; role: 'mail' | 'trash' };
+// A folder Commander reads: its mail downloaded, (Deleted Items) only checked for held mail, or (Drafts,
+// #138) its drafts downloaded as drafts.
+type Planned = { id: string; role: 'mail' | 'trash' | 'drafts' };
 
 // What Commander last learnt of an Account's mailbox, for writes between syncs.
 type Mailbox = { wellKnown: Record<string, string>; folders: Map<string, EmailFolder>; me: string | null };
@@ -268,6 +274,7 @@ function folderPlan(listed: GraphMailFolder[], wellKnown: Record<string, string>
     const own = folder.displayName?.trim() || (known ? DEFAULT_NAMES[known] : null) || 'Folder';
     let role: ListedFolder['role'];
     if (known === 'deleteditems') role = 'trash';
+    else if (known === 'drafts') role = 'drafts';
     else if ((known && NOT_DOWNLOADED.has(known)) || (above && above.role !== 'mail')) role = null;
     else role = 'mail';
     const made: ListedFolder = {
@@ -288,15 +295,17 @@ function folderPlan(listed: GraphMailFolder[], wellKnown: Record<string, string>
 // Deleted Items last (so a message moved there from a folder read earlier is seen as trashed).
 function readingOrder(folders: Map<string, ListedFolder>): Planned[] {
   const rank = (folder: ListedFolder) =>
-    folder.role === 'trash'
-      ? 9
-      : folder.wellKnown === 'inbox'
-        ? 0
-        : folder.wellKnown === 'sentitems'
-          ? 1
-          : folder.wellKnown === 'archive'
-            ? 2
-            : 3;
+    folder.role === 'drafts'
+      ? 10
+      : folder.role === 'trash'
+        ? 9
+        : folder.wellKnown === 'inbox'
+          ? 0
+          : folder.wellKnown === 'sentitems'
+            ? 1
+            : folder.wellKnown === 'archive'
+              ? 2
+              : 3;
   return [...folders.values()]
     .filter((folder) => folder.role !== null)
     .map((folder, index) => ({ folder, index }))
@@ -309,6 +318,8 @@ const windowFilter = (windowStart: number) => encodeURIComponent(`receivedDateTi
 // A folder's first delta round. `plain`: without internet headers, should Graph refuse them in a delta
 // (threading then falls back to conversationId for that folder).
 const firstRound = (folder: Planned, windowStart: number, plain = false) => {
+  // Every draft, however old: drafts are few, and finished whenever.
+  if (folder.role === 'drafts') windowStart = 0;
   const fields =
     folder.role === 'trash'
       ? TRASH_FIELDS
@@ -360,6 +371,21 @@ export function createOutlookSource({
         const found = await lookUpMailbox(api);
         mailbox = { ...found, folders: mailbox?.folders ?? new Map() };
         mailboxes.set(request.account, mailbox);
+      }
+      if (isComposeWrite(request.changes)) {
+        // Outlook's own folders by their names, should no sync have listed them since Commander started.
+        const folders = new Map(mailbox.folders);
+        for (const [name, folderId] of Object.entries(mailbox.wellKnown))
+          if (!folders.has(folderId))
+            folders.set(folderId, { id: folderId, name: DEFAULT_NAMES[name] ?? name, wellKnown: name });
+        const context = {
+          folders,
+          inbox: mailbox.wellKnown.inbox ?? null,
+          sent: mailbox.wellKnown.sentitems ?? null,
+          me: mailbox.me,
+        };
+        const written = await writeOutlookCompose(api, request, { context, wellKnown: mailbox.wellKnown });
+        return { ...written, cost: api.cost };
       }
       return { ...(await writeMessage(api, request, mailbox)), cost: api.cost };
     },
@@ -470,10 +496,11 @@ async function syncMailbox(
   // Saves a mail folder's page: its messages, and the removals to judge once every folder is read.
   async function takeMail(page: DeltaPage, folder: Planned, returned: Set<string>, counting: boolean) {
     const messages: GraphMessage[] = [];
+    const drafts = folder.role === 'drafts';
     for (const message of page.value) {
       if (message['@removed']) {
         if (!seen.has(message.id)) cursor.removed[message.id] = folder.id;
-      } else if (message.isDraft !== true) messages.push(message);
+      } else if ((message.isDraft === true) === drafts) messages.push(message);
     }
     if (!messages.length) return;
     const held = storedById(messages.map((message) => message.id));
@@ -503,9 +530,19 @@ async function syncMailbox(
         return false;
       });
     }
-    const items = messages.map((message) =>
-      readOutlookMessage(message, context, listedAttachments.get(message.id) ?? heldAttachments(message.id)),
-    );
+    const items = messages.map((message) => {
+      const item = readOutlookMessage(
+        message,
+        context,
+        listedAttachments.get(message.id) ?? heldAttachments(message.id),
+      );
+      if (!drafts || item.detail?.kind !== 'email') return item;
+      return {
+        ...item,
+        status: 'archived' as const,
+        detail: { ...item.detail, draft: true, inInbox: false },
+      };
+    });
     for (const message of messages) {
       seen.add(message.id);
       returned.add(message.id);

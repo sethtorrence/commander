@@ -336,6 +336,9 @@ importers:
       '@commander/domain':
         specifier: workspace:*
         version: link:../domain
+      nodemailer:
+        specifier: ^10.0.15
+        version: 10.0.15
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -2740,6 +2743,10 @@ packages:
     resolution: {integrity: sha512-kQK9LGGFiHtrWiNhZtA7Qbw17AQz+dmsEKODRIVTXA9+e5MS/2gZEBhYJt13GrAz5/IOZKddH/0Z3TP/Zgo+yw==}
     engines: {node: '>=18'}
 
+  nodemailer@10.0.15:
+    resolution: {integrity: sha512-EUqp5PhtcsYXs9Fq/lS7s/8zlTrnBqmzZWzFFROrNikMiz+om/YRKMwqN907t+0A1KKyT8jd39CBUbFZmaZmcA==}
+    engines: {node: '>=20.0.0'}
+
   object-keys@1.1.1:
     resolution: {integrity: sha512-NuAESUOUMrlIXOfHKzD6bpPu3tYt3xvjNdRIQ+FeT0lNb4K8WR70CaDxhuNguS2XG+GjkyMwOzsN5ZktImfhLA==}
     engines: {node: '>= 0.4'}
@@ -5085,6 +5092,8 @@ snapshots:
   node-addon-api@8.9.2: {}
 
   node-releases@2.0.57: {}
+
+  nodemailer@10.0.15: {}
 
   object-keys@1.1.1: {}
 

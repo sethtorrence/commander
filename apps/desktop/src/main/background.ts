@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { ipc } from '@commander/domain';
 import { app, type BrowserWindow, ipcMain, type UtilityProcess } from 'electron';
 import { autostartPath, isAutostartEnabled, launchAtLoginCommand, setAutostart } from './autostart';
-import { keepInTray, stopCoreOnQuit } from './lifecycle';
+import { inTurn, keepInTray, stopCoreOnQuit } from './lifecycle';
 import { ownPidRecord, pidFilePath, removePidFile, writePidFile } from './pid-file';
 import { askWindowToSave } from './save-before-quit';
 import { DESKTOP_ENTRY, focusThroughHyprland, installSummon, summonWindow } from './summon';
@@ -27,8 +27,17 @@ export const startsHidden = (argv: string[]) => argv.includes('--hidden');
 
 let tray: CommanderTray | null = null; // Held so the tray icon isn't garbage-collected.
 
-// Returns the tray, for Ares's quiet count of what he has queued.
-export function runInBackground(window: BrowserWindow, core: UtilityProcess): CommanderTray {
+// How long quitting waits for the window to save what it holds, then for messages held for Undo to go.
+const SAVE_BEFORE_QUIT_MS = 2_000;
+const SEND_HELD_BEFORE_QUIT_MS = 15_000;
+
+// Returns the tray, for Ares's quiet count of what he has queued. `sendHeld`: asks the Core to send the
+// messages held for Undo (#138) before it stops.
+export function runInBackground(
+  window: BrowserWindow,
+  core: UtilityProcess,
+  { sendHeld }: { sendHeld?: () => Promise<void> } = {},
+): CommanderTray {
   keepInTray(window, app);
   const saving = askWindowToSave({
     send: (channel, id) => window.webContents.send(channel, id),
@@ -37,7 +46,15 @@ export function runInBackground(window: BrowserWindow, core: UtilityProcess): Co
   ipcMain.on(ipc.savedBeforeQuit, (event, id: unknown) => {
     if (event.sender === window.webContents) saving.settle(id);
   });
-  stopCoreOnQuit(app, core, { beforeStop: saving.request });
+  // The window saves first (a draft it was holding is among what it saves), then held messages go.
+  const beforeStop = inTurn([
+    { run: saving.request, timeoutMs: SAVE_BEFORE_QUIT_MS },
+    ...(sendHeld ? [{ run: sendHeld, timeoutMs: SEND_HELD_BEFORE_QUIT_MS }] : []),
+  ]);
+  stopCoreOnQuit(app, core, {
+    beforeStop,
+    beforeStopTimeoutMs: SAVE_BEFORE_QUIT_MS + (sendHeld ? SEND_HELD_BEFORE_QUIT_MS : 0) + 500,
+  });
 
   const open = () => {
     summonWindow(window);

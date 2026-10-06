@@ -25,6 +25,22 @@ export function keepInTray(window: HideableWindow, app: QuittableApp): void {
   });
 }
 
+// Runs each step in turn, giving each no more than its own time: one that hangs never stops the next.
+export function inTurn(
+  steps: readonly { run: () => Promise<void>; timeoutMs: number }[],
+): () => Promise<void> {
+  return async () => {
+    for (const step of steps) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const tooLong = new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, step.timeoutMs);
+      });
+      await Promise.race([step.run().catch(() => {}), tooLong]);
+      clearTimeout(timer);
+    }
+  };
+}
+
 type StoppableCore = {
   on(event: 'exit', listener: (code: number) => void): unknown;
   kill(): boolean;

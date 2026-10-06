@@ -147,10 +147,10 @@ test('connect Outlook → first sync → read a thread → archive → move to a
   await expect(
     section.getByRole('tablist', { name: 'Account' }).getByRole('tab', { name: SAM.userPrincipalName }),
   ).toContainText('Outlook');
-  // Junk Email, Drafts and Outbox were never read.
-  expect(
-    microsoft.mail.requests.some((request) => /fld-(junkemail|drafts|outbox)=\/messages/.test(request)),
-  ).toBe(false);
+  // Junk Email and Outbox were never read (Drafts is, for the drafts made in Outlook, #138).
+  expect(microsoft.mail.requests.some((request) => /fld-(junkemail|outbox)=\/messages/.test(request))).toBe(
+    false,
+  );
 
   // Read the thread: Outlook holds remote images back; the inline logo comes through Graph.
   await row(section, 'RE: Q4 offsite dates').click();

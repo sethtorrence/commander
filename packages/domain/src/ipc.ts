@@ -48,6 +48,8 @@ export const ipc = {
   // the real destination of the link hovered in an email's frame (emailLinkHover, '' when none).
   emailReader: 'email-reader',
   emailLinkHover: 'email-link-hover',
+  // Writing email (#138); see email-compose.ts for the validated contract.
+  compose: 'compose',
 } as const;
 
 // An Item to show in its Section: the Calendar Section and the event, for a meeting's heads-up.

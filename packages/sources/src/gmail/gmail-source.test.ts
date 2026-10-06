@@ -147,18 +147,20 @@ async function afterFirstSync() {
 }
 
 describe('first sync', () => {
-  it('downloads the 30 days before the Account was connected, newest first, skipping drafts', async () => {
+  it('downloads the 30 days before the Account was connected, newest first, keeping drafts apart', async () => {
     const recorded = replay(firstSync as Exchange[]);
 
     const { result, items } = await sync(recorded.fetch);
 
     expect(recorded.remaining()).toBe(0);
-    expect(items.map((item) => item.externalId)).toEqual([M4, M3, M2, M1]);
+    // The draft met among the messages is kept as a draft of its own (#138), listed with drafts.list.
+    expect(items.map((item) => item.externalId)).toEqual([M4, M3, M2, M1, 'draft:r-8133071950']);
     expect(held.has(DRAFT)).toBe(false);
+    expect(held.get('draft:r-8133071950')?.detail).toMatchObject({ draft: true, sourceVersion: DRAFT });
     expect(result.cursor).toEqual({ v: 1, windowStart: NOW - 30 * DAY, historyId: '5000' });
     // Every request carries the borrowed token, and the run reports Gmail's quota units.
     expect(sent.every((each) => each.authorization === 'Bearer ya29.recorded')).toBe(true);
-    expect(result.cost).toEqual({ requests: 10, complexity: 1 + 1 + 5 + 5 + 5 * 20 + 2 });
+    expect(result.cost).toEqual({ requests: 12, complexity: 1 + 1 + 5 + 5 + 5 * 20 + 2 + 5 + 5 });
   });
 
   it('makes email Items with their bodies, Gmail labels and threads', async () => {
@@ -227,7 +229,7 @@ describe('first sync', () => {
 
     expect(recorded.remaining()).toBe(0);
     expect(gets()).toEqual([DRAFT, M2, M1]);
-    expect([...held.keys()].sort()).toEqual([M1, M2, M3, M4].sort());
+    expect([...held.keys()].sort()).toEqual([M1, M2, M3, M4, 'draft:r-8133071950'].sort());
     expect(result.cursor).toEqual({ v: 1, windowStart: NOW - 30 * DAY, historyId: '5001' });
   });
 
@@ -289,6 +291,8 @@ describe('after the first sync', () => {
     expect(recorded.remaining()).toBe(0);
     expect(gets()).toEqual([M5]);
     expect(held.get(M5)).toMatchObject({ title: 'Staging certificate', status: 'open' });
+    // A draft saved in Gmail (#138): the drafts are listed, and only the new one fetched.
+    expect(held.get('draft:r-2290017466')?.detail).toMatchObject({ draft: true });
     expect(detailOf(M4).read).toBe(true);
     expect(detailOf(M1)).toMatchObject({ starred: true, inInbox: false });
     expect(held.get(M1)?.status).toBe('archived');

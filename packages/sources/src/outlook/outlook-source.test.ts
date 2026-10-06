@@ -132,14 +132,17 @@ describe('the first sync', () => {
     const { cursor, cost, pages } = await sync(recorded.fetch);
 
     expect(recorded.remaining()).toBe(0);
-    expect(cost.requests).toBe(17);
+    expect(cost.requests).toBe(18);
     expect(OUTLOOK_CADENCE).toEqual({ defaultMinutes: 15, choices: [5, 10, 15, 30, 60] });
     expect(sent.every((each) => each.authorization === 'Bearer eyJ0eXAiOi.recorded')).toBe(true);
     // Every request asks for immutable ids, so a moved message keeps its id.
     expect(sent.every((each) => each.prefer?.includes('IdType="ImmutableId"'))).toBe(true);
-    // Junk Email, Drafts, Outbox and Conversation History are never read.
-    for (const skipped of ['junkemail', 'drafts', 'outbox', 'conversationhistory'])
+    // Junk Email, Outbox and Conversation History are never read. Drafts are read for the drafts made
+    // elsewhere (#138), every one of them, however old.
+    for (const skipped of ['junkemail', 'outbox', 'conversationhistory'])
       expect(sent.some((each) => each.path.includes(`fld-${skipped}`))).toBe(false);
+    expect(sent.at(-1)?.path).toContain('fld-drafts=/messages/delta');
+    expect(sent.at(-1)?.path).toContain('receivedDateTime ge 1970-01-01T00:00:00.000Z');
 
     const [catalog] = catalogs as [OutlookCatalog];
     expect(catalog.kind).toBe('outlook');
@@ -201,6 +204,7 @@ describe('the first sync', () => {
       [F.receipts, true, 'receipts-1'],
       [F.projects, true, 'projects-1'],
       [F.deleted, true, 'deleted-1'],
+      ['AAMkAGI2-fld-drafts=', true, 'drafts-1'],
     ]);
   });
 
@@ -329,7 +333,17 @@ describe('later syncs', () => {
     const result = await sync(recorded.fetch, cursor);
 
     expect(recorded.remaining()).toBe(0);
-    expect(result.cost.requests).toBe(9);
+    expect(result.cost.requests).toBe(10);
+    // A draft made in Outlook (#138): kept as a draft, never part of a thread or the inbox.
+    expect(held.get('AAMkAGI2-msg-draft-lunch=')).toMatchObject({
+      title: 'Lunch next week?',
+      status: 'archived',
+    });
+    expect(detailOf('AAMkAGI2-msg-draft-lunch=')).toMatchObject({
+      draft: true,
+      inInbox: false,
+      to: [{ name: 'Priya Patel', address: 'priya@contoso.test' }],
+    });
     // A reply arrived.
     expect(detailOf(msg('offsite-3'))).toMatchObject({
       read: false,

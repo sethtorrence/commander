@@ -117,6 +117,8 @@ export type SyncEngineOptions = {
   onChannelPostsRefused?: (account: string) => void;
   // What a GitHub Account watches (Settings → GitHub), read before each of its syncs.
   watchOf?: (account: string, source: Source) => Promise<SyncWatch | null> | SyncWatch | null;
+  // A message written in Commander (#138): an attachment's bytes, for its draft or its sending.
+  attachment?: (id: string) => Promise<Uint8Array>;
   now?: () => number;
   random?: () => number;
   log?: (message: string) => void;
@@ -211,6 +213,7 @@ export function createSyncEngine({
   onSignInRefused = () => {},
   onChannelPostsRefused = () => {},
   watchOf,
+  attachment,
   now = Date.now,
   random = Math.random,
   log = (message) => console.warn(message),
@@ -732,6 +735,7 @@ export function createSyncEngine({
         me: entry.account.me ?? null,
         stored: (externalIds) => storedItems(source, account, externalIds),
         accessToken: () => accessTokens.request(account),
+        ...(attachment ? { attachment } : {}),
         signal: abort.signal,
       });
       if (abort.signal.aborted || !isCurrent(entry)) return 'stop';

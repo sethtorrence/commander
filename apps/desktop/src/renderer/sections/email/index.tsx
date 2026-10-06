@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { itemChangesFromCore } from '../../item-store/changes';
 import type { SectionDefinition } from '../section';
+import { composeIn } from './compose/compose';
 import { EmailSheet } from './EmailSheet';
 import { emailAccountsIn, emailIn } from './email';
 import { emailReaderIn } from './reader';
@@ -12,7 +13,17 @@ function EmailSection() {
   const client = useMemo(() => emailIn(window.commander.itemStore), []);
   const accounts = useMemo(() => emailAccountsIn(window.commander), []);
   const reader = useMemo(() => emailReaderIn(window.commander), []);
-  return <EmailSheet client={client} accounts={accounts} changes={itemChangesFromCore} reader={reader} />;
+  const compose = useMemo(() => composeIn(window.commander), []);
+  return (
+    <EmailSheet
+      client={client}
+      accounts={accounts}
+      changes={itemChangesFromCore}
+      reader={reader}
+      compose={compose}
+      onSaveBeforeQuit={window.commander.onSaveBeforeQuit}
+    />
+  );
 }
 
 export const email: SectionDefinition = {

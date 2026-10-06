@@ -163,6 +163,46 @@ export function connectGraphMail({ graphUrl, fetch, now, gate, accessToken, sign
     return parsed(await exchange(method, path, payload, 'write'), shape);
   }
 
+  /**
+   * PUTs one chunk of an attachment to an upload session's URL (#138). The URL is Graph's answer and
+   * carries its own authorisation, so the User's token never goes with it.
+   */
+  async function upload(url: string, chunk: Uint8Array, start: number, total: number): Promise<void> {
+    if (!/^https?:\/\//.test(url))
+      throw new SourceUnavailable('Outlook sent an upload link Commander didn’t expect.', cost);
+    await gate(async () => {
+      signal.throwIfAborted();
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: 'PUT',
+          headers: {
+            'content-type': 'application/octet-stream',
+            'content-range': `bytes ${start}-${start + chunk.byteLength - 1}/${total}`,
+          },
+          body: chunk as Uint8Array<ArrayBuffer>,
+          signal,
+        });
+      } catch (error) {
+        if (signal.aborted) throw error;
+        throw new SourceUnavailable('Commander couldn’t reach Outlook.', cost);
+      }
+      cost.requests += 1;
+      if (!response.ok) {
+        const body = graphError.safeParse(await response.json().catch(() => null));
+        const error = body.success ? body.data?.error : null;
+        const retryAfter = retryAfterMs(response.headers.get('retry-after'), now());
+        throw refusal(
+          response.status,
+          (error?.code ?? '').toLowerCase(),
+          error?.message ?? null,
+          retryAfter,
+          'write',
+        );
+      }
+    });
+  }
+
   /** GETs raw bytes (an attachment's `$value`). */
   async function bytes(path: string): Promise<Uint8Array> {
     const response = await exchange('GET', path, undefined, 'read');
@@ -210,7 +250,7 @@ export function connectGraphMail({ graphUrl, fetch, now, gate, accessToken, sign
     return answers;
   }
 
-  return { get, send, bytes, batch, cost };
+  return { get, send, bytes, batch, upload, cost };
 }
 
 export type GraphMail = ReturnType<typeof connectGraphMail>;

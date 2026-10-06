@@ -11,6 +11,8 @@ import {
 } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SettingRow, SettingsGroup } from '../../settings/parts';
+import { type ComposeClient, composeIn } from './compose/compose';
+import { WritingSettings } from './compose/WritingSettings';
 import { loadMarkRead, MARK_READ_CHOICES, type MarkRead, saveMarkRead } from './organising';
 import { type EmailReaderClient, emailReaderIn } from './reader';
 
@@ -57,17 +59,25 @@ export function EmailSettings({
   no,
   shown = true,
   reader: given,
+  compose: givenCompose,
   onAccountsChanged = (listener) => window.commander.onAccountsChanged(listener),
   storage = window.localStorage,
 }: {
   no: string;
   shown?: boolean;
   reader?: EmailReaderClient;
+  /** Writing email's settings (#138): the default Account and Undo send. Left out where not wired. */
+  compose?: ComposeClient;
   storage?: Storage;
   /** Accounts connected or removed (Settings → Accounts): the list is read again. */
   onAccountsChanged?: (listener: () => void) => () => void;
 }) {
   const reader = useMemo(() => given ?? emailReaderIn(window.commander), [given]);
+  const compose = useMemo(
+    // Tests of the reading settings run without the bridge's writing side.
+    () => givenCompose ?? ('compose' in (window.commander ?? {}) ? composeIn(window.commander) : null),
+    [givenCompose],
+  );
   const [accounts, setAccounts] = useState<EmailImageAccount[] | null>(null);
   const reload = useCallback(() => {
     reader.imageSettings().then(setAccounts, (error: unknown) => toast(String(error)));
@@ -91,7 +101,13 @@ export function EmailSettings({
 
   if (!accounts?.length) return null;
   return (
-    <SettingsGroup no={no} title="Email" note="Reading · remote images" data-testid="email-settings">
+    <SettingsGroup
+      no={no}
+      title="Email"
+      note="Writing · reading · remote images"
+      data-testid="email-settings"
+    >
+      {compose && <WritingSettings client={compose} accounts={accounts} shown={shown} />}
       <MarkReadSetting storage={storage} />
       {accounts.map((account) => (
         <section key={account.account} aria-label={account.name ?? account.account}>

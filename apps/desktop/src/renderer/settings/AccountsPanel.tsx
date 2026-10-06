@@ -29,6 +29,8 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarSwitches } from '../sections/calendar/CalendarSwitches';
 import { calendarSwitchesIn } from '../sections/calendar/calendar-events';
+import { composeIn } from '../sections/email/compose/compose';
+import { SignatureSetting } from '../sections/email/compose/SignatureSetting';
 import { AccountSync } from './AccountSync';
 import {
   describeGitHubAccount,
@@ -226,9 +228,19 @@ function AccountRow({
       {(account.source === 'google' || account.source === 'outlook') && (
         <CarriedSources account={account} busy={busy} onGrant={onReconnect} request={request} />
       )}
+      {(account.source === 'google' || account.source === 'outlook') && <Signature account={account.id} />}
       <AccountSync account={account} request={request} />
     </SettingRow>
   );
+}
+
+// An email Account's signature (#138), where the window can write email (tests may run without it).
+function Signature({ account }: { account: string }) {
+  const client = useMemo(
+    () => ('compose' in (window.commander ?? {}) ? composeIn(window.commander) : null),
+    [],
+  );
+  return client ? <SignatureSetting client={client} account={account} /> : null;
 }
 
 function ApiKeyForm({

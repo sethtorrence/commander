@@ -98,6 +98,18 @@ _Avoid_: Remind, defer, Muted (that's for Chats)
 One email conversation in one Account: the messages its reply headers (Message-ID, In-Reply-To, References) tie together, or the Source's own thread for a message without them; the Email Section lists the inbox as threads, while each message stays its own Item.
 _Avoid_: Conversation (that's with Ares), chain
 
+**Draft**:
+A message being written, in Commander or in Gmail or Outlook, kept in its Account's Drafts folder so it can be finished in either; never part of a Thread or a view until it is sent.
+_Avoid_: Unsent message, compose (as a noun)
+
+**Undo send**:
+The few seconds (10 by default, up to 60) every message the User sends waits in the Core before it really goes, with Undo putting it back in the composer.
+_Avoid_: Send delay, send later (that's scheduling a send)
+
+**Outbox**:
+The messages sent that haven't gone yet: held for Undo send, waiting for a connection, or refused by the Source (with its reason, and Retry).
+_Avoid_: Queue, pending mail, sending
+
 ## Teams
 
 **Chat**:

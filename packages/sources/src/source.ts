@@ -135,6 +135,9 @@ export type WriteRequest = {
   stored?(externalIds: string[]): StoredItem[];
   // A current access token: every write runs as the User.
   accessToken(): Promise<AccessToken>;
+  // A message written in Commander (#138): an attachment's bytes, by its id, kept by the Core until
+  // the message is sent.
+  attachment?(id: string): Promise<Uint8Array>;
   signal: AbortSignal;
 };
 
