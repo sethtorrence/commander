@@ -1,8 +1,8 @@
 import { homedir } from 'node:os';
 import { ipc } from '@commander/domain';
-import { app, type BrowserWindow, ipcMain, type UtilityProcess } from 'electron';
+import { app, type BrowserWindow, ipcMain } from 'electron';
 import { autostartPath, isAutostartEnabled, launchAtLoginCommand, setAutostart } from './autostart';
-import { inTurn, keepInTray, stopCoreOnQuit } from './lifecycle';
+import { inTurn, keepInTray, type StoppableCore, stopCoreOnQuit } from './lifecycle';
 import { ownPidRecord, pidFilePath, removePidFile, writePidFile } from './pid-file';
 import { askWindowToSave } from './save-before-quit';
 import { DESKTOP_ENTRY, focusThroughHyprland, installSummon, summonWindow } from './summon';
@@ -35,7 +35,7 @@ const SEND_HELD_BEFORE_QUIT_MS = 15_000;
 // messages held for Undo (#138) before it stops.
 export function runInBackground(
   window: BrowserWindow,
-  core: UtilityProcess,
+  core: StoppableCore,
   { sendHeld }: { sendHeld?: () => Promise<void> } = {},
 ): CommanderTray {
   keepInTray(window, app);

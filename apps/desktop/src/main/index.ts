@@ -1,7 +1,14 @@
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { attachmentScheme, type Diagnostics, ipc, parseCoreMessage } from '@commander/domain';
+import {
+  attachmentScheme,
+  type CoreMessage,
+  type CoreStatus,
+  type Diagnostics,
+  ipc,
+  parseCoreMessage,
+} from '@commander/domain';
 import {
   app,
   BrowserWindow,
@@ -19,6 +26,7 @@ import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { createComposeChannel } from './compose-channel';
 import { createConversationsChannel } from './conversations-channel';
+import { createCoreSupervisor } from './core-supervisor';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { setUpEmailReader } from './email-reader';
 import { emailReaderSchemePrivileges } from './email-reader/protocol';
@@ -93,9 +101,17 @@ const testHooks = process.env.COMMANDER_TEST_HOOKS === '1';
 let tray: CommanderTray | null = null;
 let queued = 0;
 
-function startCore(secrets: Secrets) {
-  // The Core keeps the database in userData (which --user-data-dir overrides, e.g. in e2e tests).
-  const core = utilityProcess.fork(join(__dirname, 'core.js'), [
+// The end-to-end tests may shorten the waits before a new Core after the Core stops (comma-separated
+// milliseconds, one per stop in a row), so a test can see Commander stop trying.
+const testRestartDelays =
+  testHooks && process.env.COMMANDER_TEST_CORE_RESTART_DELAYS_MS
+    ? process.env.COMMANDER_TEST_CORE_RESTART_DELAYS_MS.split(',').map(Number)
+    : null;
+
+// The Core's arguments. It keeps the database in userData (which --user-data-dir overrides, e.g. in
+// e2e tests).
+function coreArgs(): string[] {
+  return [
     `--data-dir=${app.getPath('userData')}`,
     ...(testHooks ? ['--test-hooks'] : []),
     // The end-to-end tests shorten Ares's pause after typing (the Core honours it only with test hooks).
@@ -120,29 +136,66 @@ function startCore(secrets: Secrets) {
     // The end-to-end tests search by meaning with a stand-in model, so none of them ever downloads the
     // real one (#73). It can only make search by meaning worse, so it needs no test hooks.
     ...(process.env.COMMANDER_TEST_EMBEDDINGS === 'fake' ? ['--embeddings=fake'] : []),
-  ]);
-  const itemStore = createItemStoreChannel((message) => core.postMessage(message));
-  ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));
+  ];
+}
+
+// The window hears whether the Core is running (the banner), and, once a new one is, that it may ask
+// again for what the old one would have pushed.
+function tellWindow(status: CoreStatus) {
+  if (!window || window.isDestroyed()) return;
+  window.webContents.send(ipc.coreStatusChanged, status);
+  if (status.state === 'running' && status.restarts > 0)
+    window.webContents.send(ipc.coreMessage, {
+      type: 'core-restarted',
+      at: Date.now(),
+    } satisfies CoreMessage);
+}
+
+function startCore(secrets: Secrets) {
+  // The Core runs under a supervisor that starts a new one when it stops (#200). Every message to it
+  // goes through `send` (dropped while there is none), and every window request through `relay`,
+  // which fails at once while the Core is down rather than waiting out its time.
+  let fromCore: (raw: unknown) => void = () => {};
+  let coreRestarted = () => {};
+  const supervisor = createCoreSupervisor({
+    fork: () => utilityProcess.fork(join(__dirname, 'core.js'), coreArgs()),
+    onMessage: (raw) => fromCore(raw),
+    onStarted: (restarted) => {
+      if (restarted) coreRestarted();
+    },
+    onStatus: tellWindow,
+    ...(testRestartDelays ? { delaysMs: testRestartDelays } : {}),
+  });
+  supervisor.start();
+  const send = (message: unknown) => void supervisor.send(message);
+  const relay = <R>(run: () => Promise<R>) => supervisor.whileRunning(run);
+  ipcMain.handle(ipc.coreStatus, () => supervisor.status());
+  // The banner's Try again, once Commander has stopped starting the Core.
+  ipcMain.handle(ipc.restartCore, () => supervisor.tryAgain());
+  // Whatever stops once Commander is quitting stays stopped.
+  app.on('before-quit', () => supervisor.quit());
+
+  const itemStore = createItemStoreChannel(send);
+  ipcMain.handle(ipc.itemStore, (_event, request: unknown) => relay(() => itemStore.request(request)));
   // The email reader (#134): emails' HTML in sandboxed frames, their images and attachments.
-  const emailReader = window
-    ? setUpEmailReader({ window, send: (message) => core.postMessage(message), testHooks })
-    : null;
+  const emailReader = window ? setUpEmailReader({ window, send, testHooks, whileCoreRuns: relay }) : null;
   const accounts = setUpAccounts({
     secrets,
     sendToCore: (message) => {
       // A removed Account's remote images and prepared emails go with it (the Core removes its
       // cached attachments and image rules).
       if (message.type === 'remove-account-items') emailReader?.forgetAccount(message.account);
-      core.postMessage(message);
+      send(message);
     },
     testHooks,
+    whileCoreRuns: relay,
   });
-  const models = setUpModels(secrets, core);
-  const autonomy = createAutonomyChannels((message) => core.postMessage(message));
-  ipcMain.handle(ipc.autonomy, (_event, request: unknown) => autonomy.window.request(request));
+  const models = setUpModels(secrets, supervisor);
+  const autonomy = createAutonomyChannels(send);
+  ipcMain.handle(ipc.autonomy, (_event, request: unknown) => relay(() => autonomy.window.request(request)));
   const markdownCopy = createMarkdownCopyChannel({
     userData: app.getPath('userData'),
-    send: (message) => core.postMessage(message),
+    send,
     // Read at call time, so the end-to-end tests can stand in for the system picker.
     async chooseFolder() {
       const options: Electron.OpenDialogOptions = {
@@ -154,17 +207,19 @@ function startCore(secrets: Secrets) {
       return result.canceled ? null : (result.filePaths[0] ?? null);
     },
   });
-  ipcMain.handle(ipc.markdownCopy, (_event, request: unknown) => markdownCopy.request(request));
+  ipcMain.handle(ipc.markdownCopy, (_event, request: unknown) => relay(() => markdownCopy.request(request)));
   // Ares's Updates: the window asks (`U`, the header button, the palette), the Core answers.
-  const updates = createUpdatesChannel((message) => core.postMessage(message));
-  ipcMain.handle(ipc.updates, (_event, request: unknown) => updates.request(request));
+  const updates = createUpdatesChannel(send);
+  ipcMain.handle(ipc.updates, (_event, request: unknown) => relay(() => updates.request(request)));
   // Writing email (#138): the window's composer, answered by the Core.
-  const compose = createComposeChannel((message) => core.postMessage(message));
-  ipcMain.handle(ipc.compose, (_event, request: unknown) => compose.request(request));
+  const compose = createComposeChannel(send);
+  ipcMain.handle(ipc.compose, (_event, request: unknown) => relay(() => compose.request(request)));
   // Conversations with Ares (#191): the window asks, the Core answers; his answers stream as core
   // messages.
-  const conversations = createConversationsChannel((message) => core.postMessage(message));
-  ipcMain.handle(ipc.conversations, (_event, request: unknown) => conversations.request(request));
+  const conversations = createConversationsChannel(send);
+  ipcMain.handle(ipc.conversations, (_event, request: unknown) =>
+    relay(() => conversations.request(request)),
+  );
   // Whether the User is at the machine, from powerMonitor, for "You're here / away" and having the
   // Update ready on return.
   // The end-to-end tests stand in for powerMonitor (their input never reaches the system).
@@ -183,8 +238,16 @@ function startCore(secrets: Secrets) {
       window.webContents.send(ipc.openItem, { sectionId: 'calendar', itemId });
     },
   });
-  const stopPresence = watchPresence({ monitor, send: (report) => core.postMessage(report) });
-  core.on('exit', stopPresence);
+  const watch = () => watchPresence({ monitor, send });
+  let stopPresence = watch();
+  app.on('will-quit', () => stopPresence());
+  // A new Core hears the Accounts to sync, the machine's state and the User's presence again (it
+  // reads everything else from the database).
+  coreRestarted = () => {
+    accounts.coreRestarted();
+    stopPresence();
+    stopPresence = watch();
+  };
   if (testHooks) {
     Object.assign(globalThis, {
       commanderTestHooks: {
@@ -197,16 +260,17 @@ function startCore(secrets: Secrets) {
         emailRequests: () => emailReader?.seenRequests() ?? [],
         prepareUnsanitisedEmail: (html: string) => emailReader?.prepareUnsanitisedForTest(html) ?? null,
         saveEmailItems: (source: string, account: string, items: unknown[]) =>
-          core.postMessage({ type: 'email-test-items', source, account, items }),
+          send({ type: 'email-test-items', source, account, items }),
         // Moves the Core's snooze clock on (#135), so snoozed mail comes back without waiting.
-        moveSnoozeClock: (offsetMs: number) => core.postMessage({ type: 'snooze-test-clock', offsetMs }),
+        moveSnoozeClock: (offsetMs: number) => send({ type: 'snooze-test-clock', offsetMs }),
         // Moves send later's clock on (#139), so a scheduled message's time comes without waiting.
-        moveSendLaterClock: (offsetMs: number) =>
-          core.postMessage({ type: 'send-later-test-clock', offsetMs }),
+        moveSendLaterClock: (offsetMs: number) => send({ type: 'send-later-test-clock', offsetMs }),
+        // The running Core's process id, so a test can stop it as a crash would (#200).
+        corePid: () => supervisor.pid(),
       },
     });
   }
-  core.on('message', (raw: unknown) => {
+  fromCore = (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
     if (markdownCopy.settle(raw) || updates.settle(raw) || compose.settle(raw)) return;
     if (conversations.settle(raw)) return;
@@ -225,8 +289,8 @@ function startCore(secrets: Secrets) {
       tray?.setQueued(queued);
     }
     window?.webContents.send(ipc.coreMessage, parsed.message);
-  });
-  return { core, sendHeld: () => compose.sendHeld() };
+  };
+  return { core: supervisor, sendHeld: () => compose.sendHeld() };
 }
 
 app.whenReady().then(() => {

@@ -41,14 +41,18 @@ export function inTurn(
   };
 }
 
-type StoppableCore = {
-  on(event: 'exit', listener: (code: number) => void): unknown;
+export type StoppableCore = {
+  // Whether there is a Core to stop: none while one that stopped waits to start again (#200).
+  running(): boolean;
+  on(event: 'exit', listener: () => void): unknown;
+  // Stops it for good: no new Core starts after this.
   kill(): boolean;
 };
 
 // Quit waits for the Core to exit (it gets SIGTERM, so it can finish what it is writing),
 // but never longer than timeoutMs. First, `beforeStop` gets up to beforeStopTimeoutMs to finish
-// with the Core while it still runs: the window saves the edits it is holding.
+// with the Core while it still runs: the window saves the edits it is holding. With no Core running
+// (one stopped, and the next isn't up yet), Commander quits straight away.
 export function stopCoreOnQuit(
   app: QuittableApp,
   core: StoppableCore,
@@ -60,25 +64,27 @@ export function stopCoreOnQuit(
 ): void {
   let state: 'running' | 'stopping' | 'stopped' = 'running';
   let finish = () => {};
-  core.on('exit', () => {
-    state = 'stopped';
-    finish();
-  });
+  core.on('exit', () => finish());
   app.on('before-quit', (event) => {
     if (state === 'stopped') return;
+    if (state === 'running' && !core.running()) {
+      state = 'stopped';
+      return;
+    }
     event.preventDefault();
     if (state === 'stopping') return;
     state = 'stopping';
     const stop = () => {
       // The Core may have exited by itself in the meantime.
-      if (state === 'stopped') return app.quit();
-      const timer = setTimeout(() => {
+      if (!core.running()) {
         state = 'stopped';
-        finish();
-      }, timeoutMs);
+        return app.quit();
+      }
+      const timer = setTimeout(() => finish(), timeoutMs);
       finish = () => {
         finish = () => {};
         clearTimeout(timer);
+        state = 'stopped';
         app.quit();
       };
       core.kill();

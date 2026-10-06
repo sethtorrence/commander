@@ -22,7 +22,13 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ItemStore, openItemStore } from '../item-store';
 import { createKnownSecrets } from '../safety/known-secrets';
-import { CONVERSATION_JOB, type Conversations, servedOnThisMachine, setUpConversations } from '.';
+import {
+  CONVERSATION_JOB,
+  type Conversations,
+  servedOnThisMachine,
+  setUpConversations,
+  UNFINISHED_PROBLEM,
+} from '.';
 
 const migrationsFolder = join(import.meta.dirname, '../../drizzle');
 const DAY = '2026-10-06';
@@ -472,6 +478,32 @@ describe('talking to Ares in a Conversation', () => {
       status: 'stopped',
       text: 'Halfway',
     });
+  });
+
+  it('fails an answer the last Core was writing when it stopped, and the User can send it again (#200)', async () => {
+    setUp();
+    const { conversation } = await ask({ op: 'today', day: DAY });
+    await ask({ op: 'send', conversationId: conversation.id, text: 'Go on' });
+    await vi.waitFor(() => expect(model.calls).toHaveLength(1));
+
+    // The Core stops without closing (a crash): a new one starts on the same database.
+    setUp();
+    expect(answerOf(store.conversations.view(conversation.id) as ConversationView)).toMatchObject({
+      status: 'failed',
+      problem: UNFINISHED_PROBLEM,
+    });
+    await ask({ op: 'retry', conversationId: conversation.id });
+    await vi.waitFor(() => expect(model.calls).toHaveLength(1));
+    model.calls[0]?.write('[general]\nDone now');
+    model.calls[0]?.finish();
+    await vi.waitFor(() =>
+      expect(answerOf(store.conversations.view(conversation.id) as ConversationView)).toMatchObject({
+        status: 'done',
+        text: 'Done now',
+      }),
+    );
+    const view = store.conversations.view(conversation.id) as ConversationView;
+    expect(view.turns.filter((turn) => turn.by === 'user').map((turn) => turn.text)).toEqual(['Go on']);
   });
 });
 

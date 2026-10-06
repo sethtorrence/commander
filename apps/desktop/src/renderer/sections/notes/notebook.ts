@@ -1,4 +1,4 @@
-import { attachmentMarkdown, type BlockLinkTarget, type Project } from '@commander/domain';
+import { attachmentMarkdown, type BlockLinkTarget, type Project, reachedNoCore } from '@commander/domain';
 import { insertLink, type LinkQuery, removeLinkAt } from '../../links/block-text';
 import { fileBlock, withTags } from './block-projects';
 import { enterTodo, makeTodo, removeTodo, tickTodo, typeTodoMark } from './block-todos';
@@ -32,6 +32,8 @@ import {
   - Typing is held back until the User pauses (typingPauseMs), then saved as one change, so the
     activity log gets one entry per pause rather than per keystroke. Every other edit flushes it
     first, and `flush()` saves whatever is held (Commander calls it before quitting).
+  - While Commander's core is down (#200), edits still apply here and their saves wait, in order,
+    until it is back (Commander calls `flush()` then too).
   - Each edit, and each pause in typing, is one step to undo. Undo puts the outline back here and
     asks the Item store to undo that step's activity entries; redo undoes those undos.
   - A Block can be a Todo (block-todos.ts): `[] ` typed at its start, or Ctrl+Enter, makes one;
@@ -145,7 +147,10 @@ export interface Notebook {
   undo(): Caret | null;
   /** Redoes the last undone step; returns where the caret was after it. */
   redo(): Caret | null;
-  /** Saves any held-back typing and waits until every change so far is saved. */
+  /**
+   * Saves any held-back typing, and any edits held while Commander's core was down, and waits until
+   * every change so far is saved.
+   */
   flush(): Promise<void>;
 }
 
@@ -197,14 +202,36 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     set({ days: state.days.map((d) => (d.day === day ? { ...d, ...change } : d)) });
 
   // Runs tasks against the Item store one at a time, in order. A failure is reported, and the days on
-  // screen are reloaded so they match what was saved.
-  function enqueue(task: () => Promise<void>): Promise<void> {
-    queue = queue.then(task).catch(async (error) => {
+  // screen are reloaded so they match what was saved. While Commander's core is down (#200) tasks are
+  // held instead, in order, and run once it is back (the next edit, or `flush()`, which Commander
+  // calls then).
+  let held: (() => Promise<void>)[] = [];
+  const runHeld = async () => {
+    while (held[0]) {
+      try {
+        await held[0]();
+      } catch (error) {
+        if (reachedNoCore(error)) return;
+        held = [];
+        throw error;
+      }
+      held.shift();
+    }
+  };
+  const settle = (run: Promise<void>) =>
+    run.catch(async (error) => {
       onError(`Couldn’t save the Daily Note: ${message(error)}`);
       undoStack = [];
       redoStack = [];
       await reload().catch((again) => onError(message(again)));
     });
+  function enqueue(task: () => Promise<void>): Promise<void> {
+    queue = settle(
+      queue.then(() => {
+        held.push(task);
+        return runHeld();
+      }),
+    );
     return queue;
   }
 
@@ -583,6 +610,8 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
 
     async flush() {
       flushTyping();
+      // Anything held while the Core was down goes now.
+      if (held.length) queue = settle(queue.then(runHeld));
       await queue;
     },
   };

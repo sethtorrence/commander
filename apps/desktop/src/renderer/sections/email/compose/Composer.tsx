@@ -5,6 +5,7 @@ import {
   type ComposeBody,
   type ComposeState,
   isBodyEmpty,
+  reachedNoCore,
   sendLaterTime,
   settleAresLink,
   unkeptLinks,
@@ -106,6 +107,8 @@ export function Composer({
       (error: unknown) => {
         dirty.current = true;
         setSaving('idle');
+        // Commander's core is down (#200): its banner says so, and the draft is saved once it is back.
+        if (reachedNoCore(error)) return;
         setProblem(error instanceof Error ? error.message : String(error));
       },
     );

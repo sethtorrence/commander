@@ -64,8 +64,10 @@ export type ConversationStore = {
   // Undo: puts a removed Conversation back as it was (no longer the day's own, if that day has
   // another by now).
   restore(removed: RemovedConversation): ConversationView;
-  // Answers left unfinished when Commander last closed: stopped, keeping what he had written.
-  settleUnfinished(): number;
+  // Answers still unfinished from a Core that stopped without closing (it crashed, or was ended:
+  // closing stops them first, as far as he got): failed with `problem`, keeping what he had written,
+  // so the User's message can be sent again.
+  settleUnfinished(problem: string): number;
 };
 
 export class ConversationError extends Error {
@@ -324,11 +326,11 @@ export function openConversationStore(
       });
     },
 
-    settleUnfinished() {
+    settleUnfinished(problem) {
       const at = now();
       return db
         .update(conversationTurns)
-        .set({ status: 'stopped', endedAt: at })
+        .set({ status: 'failed', problem, endedAt: at })
         .where(inArray(conversationTurns.status, UNFINISHED))
         .run().changes;
     },

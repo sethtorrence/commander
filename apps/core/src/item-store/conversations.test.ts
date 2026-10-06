@@ -207,15 +207,20 @@ describe('Conversations in the Item store', () => {
     expect(left).toContain(blank.conversation.id);
   });
 
-  it('stops answers left unfinished when Commander closed, keeping what was written', () => {
+  it('fails answers a stopped Core left unfinished, keeping what was written, so they can be sent again', () => {
     let store = open();
     const { conversation } = store.conversations.today('2026-10-06');
     const asked = store.conversations.addUserTurn(conversation.id, 'Go on');
     const answer = store.conversations.startAnswer(conversation.id, asked.id, 'streaming');
     store.conversations.saveAnswer(answer.id, { text: 'Halfway' });
     store = reopen(store);
-    expect(store.conversations.settleUnfinished()).toBe(1);
-    expect(store.conversations.turn(answer.id)).toMatchObject({ status: 'stopped', text: 'Halfway' });
+    expect(store.conversations.settleUnfinished('The core stopped.')).toBe(1);
+    expect(store.conversations.turn(answer.id)).toMatchObject({
+      status: 'failed',
+      text: 'Halfway',
+      problem: 'The core stopped.',
+    });
     expect(store.conversations.conversation(conversation.id)?.answering).toBe(false);
+    expect(store.conversations.takeBack(conversation.id)).toMatchObject({ id: asked.id, text: 'Go on' });
   });
 });

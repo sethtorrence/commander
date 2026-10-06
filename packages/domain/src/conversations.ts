@@ -30,8 +30,8 @@ export type TurnAuthor = z.infer<typeof turnAuthor>;
 // - streaming: Ares is writing it.
 // - done: he finished.
 // - stopped: the User stopped him (or Commander closed): what he had written is kept.
-// - failed: no key, the monthly cap, or a failed call: `problem` says why, in his voice, and the
-//   User's message is kept to send again.
+// - failed: no key, the monthly cap, a failed call, or Commander's core stopping while he wrote it
+//   (#200): `problem` says why, in his voice, and the User's message is kept to send again.
 export const turnStatuses = ['queued', 'streaming', 'done', 'stopped', 'failed'] as const;
 export const turnStatus = z.enum(turnStatuses);
 export type TurnStatus = z.infer<typeof turnStatus>;
