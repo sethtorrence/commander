@@ -314,8 +314,10 @@ export function DashboardProvider({
         toast(`${item.title} is a meeting: open it (Enter) or clear it (E)`);
         return;
       }
-      if (item.kind === 'chat') {
-        toast('A Chat has nothing to tick: open it (Enter) to answer, or clear it (E)');
+      if (item.kind === 'chat' || item.kind === 'channel-post') {
+        toast(
+          `${item.kind === 'chat' ? 'A Chat' : 'A Channel post'} has nothing to tick: open it (Enter) to answer, or clear it (E)`,
+        );
         return;
       }
       if (item.kind === 'email') {

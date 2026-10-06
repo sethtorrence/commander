@@ -381,3 +381,62 @@ describe('Chats on the Dashboard (#107)', () => {
 });
 
 const SHORT_DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+describe('a Channel post on the Dashboard (#111)', () => {
+  const ACCOUNT = 'teams:t:u-me';
+  const mention = {
+    id: 'r1',
+    from: { userId: 'u-priya', name: 'Priya Patel' },
+    event: null,
+    createdAt: NOW - HOUR,
+    modifiedAt: NOW - HOUR,
+    deleted: false,
+    text: '@Me please look',
+    mentions: [{ userId: 'u-me', name: 'Me' }],
+    reactions: [],
+    attachments: [],
+    replyTo: null,
+  };
+  const post: Item = {
+    id: 'post-1',
+    kind: 'channel-post',
+    source: 'teams',
+    account: ACCOUNT,
+    externalId: 'tl/c/p1',
+    title: 'Release 4.2',
+    people: [],
+    filing: null,
+    status: 'open',
+    detail: {
+      kind: 'channel-post',
+      team: { id: 'tl', name: 'TL' },
+      channel: { id: 'c', name: 'releases' },
+      subject: null,
+      post: { ...mention, id: 'p1', mentions: [], createdAt: NOW - 2 * HOUR, modifiedAt: NOW - 2 * HOUR },
+      replies: [mention],
+      webUrl: null,
+      mentionsMe: true,
+      lastActivityAt: NOW - HOUR,
+    },
+    createdAt: NOW - 2 * HOUR,
+    updatedAt: NOW - HOUR,
+    deletedAt: null,
+  };
+  const chats = { users: { [ACCOUNT]: 'u-me' }, now: NOW };
+  const ranked: Ranking[] = [{ itemId: 'post-1', band: 'today', reason: 'Priya mentioned you', rank: 1 }];
+
+  it('is about the message mentioning the User, which Enter opens it at', () => {
+    const [row] = feedRows(ranked, [post], {}, new Map(), new Map(), chats);
+    expect(row?.focus).toEqual({ messageId: 'r1', at: NOW - HOUR, why: 'mention' });
+    expect(rowMeta(row as FeedRow, NOW)).toEqual(['1H', 'Mention']);
+  });
+
+  it('is stamped TMS with its team and channel', () => {
+    expect(sourceTag(post)).toEqual({ stamp: 'TMS', text: 'TL / releases' });
+  });
+
+  it('stays cleared until a newer mention', () => {
+    const clears: Clears = { 'post-1': { band: 'today', at: NOW - HOUR } };
+    expect(feedRows(ranked, [post], clears, new Map(), new Map(), chats)).toEqual([]);
+  });
+});

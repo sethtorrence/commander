@@ -9,6 +9,7 @@ import {
   calendarSummary,
   eventQuery,
 } from './calendar';
+import { type ChannelChoices, channelChoices, channelSettingAction } from './channel-posts';
 import { commanderEventDraft } from './commander-events';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import type { EmailLabel } from './email';
@@ -191,6 +192,11 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // "Not waiting on you" (#109): the User clears Ares's waiting flag on a Chat by hand. A correction
   // in the activity log (kept as an example for Memory), undone like any change.
   z.object({ op: z.literal('clear-chat-waiting'), itemId: z.string().min(1) }),
+  // Channel posts (#111): each Teams Account's teams and channels as its last sync listed them, each
+  // with whether the User excluded it; and excluding a team or channel (deleting its posts, in the
+  // activity log, by the User) or including it again.
+  z.object({ op: z.literal('channel-choices') }),
+  z.object({ op: z.literal('change-channel-setting'), action: channelSettingAction }),
   // The Calendar Section: live events overlapping a time range, earliest first; every Account's
   // calendars and whether each is on; and switching one on or off (off hides its events at once and
   // stops syncing it; on syncs it again).
@@ -319,6 +325,8 @@ export type ItemStoreResults = {
   'chat-settings': ChatSetting[];
   'change-chat-setting': ChatSettingChange;
   'clear-chat-waiting': ActivityEntry;
+  'channel-choices': ChannelChoices[];
+  'change-channel-setting': ChannelChoices;
   events: Item[];
   calendars: CalendarSummary[];
   'set-calendar-enabled': CalendarSummary[];
@@ -389,6 +397,8 @@ export const itemStoreResult = {
   'chat-settings': z.array(chatSetting),
   'change-chat-setting': chatSettingChange,
   'clear-chat-waiting': activityEntry,
+  'channel-choices': z.array(channelChoices),
+  'change-channel-setting': channelChoices,
   events: z.array(item),
   calendars: z.array(calendarSummary),
   'set-calendar-enabled': z.array(calendarSummary),

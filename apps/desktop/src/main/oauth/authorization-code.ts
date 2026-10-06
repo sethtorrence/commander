@@ -58,11 +58,13 @@ const errorResponse = z.object({ error: z.string(), error_description: z.string(
 
 // A refresh that failed. `permanent` means the refresh token is no good any more (revoked, expired,
 // or spent outside the replay window), so the Account needs reconnecting; otherwise try again later.
+// `sourceError`: what the Source said, so a Source can tell its own cases apart (Microsoft's AADSTS codes).
 export class RefreshError extends Error {
   override name = 'RefreshError';
   constructor(
     readonly permanent: boolean,
     message: string,
+    readonly sourceError?: SourceError,
   ) {
     super(message);
   }
@@ -210,11 +212,13 @@ export async function refreshTokens({
   }
   const body = await readBody(response);
   if (response.status === 400 || response.status === 401) {
-    const error = readError(body)?.code;
+    const said = readError(body);
+    const error = said?.code;
     if (!error || !TEMPORARY_ERRORS.has(error)) {
       throw new RefreshError(
         true,
         `${client.sourceName} refused to refresh the sign-in (HTTP ${response.status}${error ? `, ${error}` : ''})`,
+        said,
       );
     }
   }

@@ -27,6 +27,9 @@ export type AccountRecord = {
   // For an Account carrying several Sources (a Google Account's Gmail and Google Calendar): which
   // were granted, and which the User has on. Absent for single-Source Accounts.
   sources?: CarriedSource[];
+  // Teams (#111): whether the sign-in carries ChannelMessage.Read.All (granted), and whether the User
+  // switched Sync Channel posts on (only a granted one can be). Absent: never asked for.
+  channelPosts?: { granted: boolean; enabled: boolean };
 };
 
 export type AccountStore = {
@@ -54,6 +57,7 @@ const accountRecord = z.object({
   user: user.nullable(),
   details: z.record(z.string(), z.string()),
   sources: z.array(z.object({ source, granted: z.boolean(), enabled: z.boolean() })).optional(),
+  channelPosts: z.object({ granted: z.boolean(), enabled: z.boolean() }).optional(),
 });
 
 const currentFile = z.object({ version: z.literal(VERSION), accounts: z.array(accountRecord) });

@@ -58,7 +58,18 @@ export const graphMessage = z.object({
   body: z.object({ contentType: z.string().nullish(), content: text }).nullish(),
   attachments: z.array(z.object({ id: text, contentType: text, contentUrl: text, name: text })).nullish(),
   mentions: z
-    .array(z.object({ mentionText: text, mentioned: z.object({ user: identity }).nullish() }))
+    .array(
+      z.object({
+        mentionText: text,
+        mentioned: z
+          .object({
+            user: identity,
+            // A whole team or channel mentioned (Channel posts): `conversationIdentityType` names which.
+            conversation: z.object({ id: text, displayName: text, conversationIdentityType: text }).nullish(),
+          })
+          .nullish(),
+      }),
+    )
     .nullish(),
   reactions: z.array(z.object({ reactionType: z.string(), user: identitySet })).nullish(),
   eventDetail: z.object({ '@odata.type': text }).loose().nullish(),
@@ -142,7 +153,11 @@ export function toMessage(message: GraphMessage): ChatMessage {
 
 // The messages Commander keeps of a Chat: what it had, with what Teams just sent on top (an edit or
 // a deletion replaces the message), oldest first, the newest `cap` of them.
-export function mergeMessages(kept: readonly ChatMessage[], fetched: readonly ChatMessage[], cap: number) {
+export function mergeMessages<M extends ChatMessage>(
+  kept: readonly M[],
+  fetched: readonly M[],
+  cap: number,
+): M[] {
   const byId = new Map(kept.map((message) => [message.id, message]));
   for (const message of fetched) byId.set(message.id, message);
   return [...byId.values()]

@@ -21,6 +21,7 @@ import {
   blockTodoQuery,
   type CalendarSummary,
   type CausedBy,
+  type ChannelSettingAction,
   type ChatSettingAction,
   type CommanderEventDraft,
   type CommanderEventMove,
@@ -111,6 +112,7 @@ import { bucketSortingIn } from './bucket-sorting';
 import { bucketsIn } from './buckets';
 import { type CalendarSettingsStore, calendarSettingsIn } from './calendar-settings';
 import { type CalendarStore, calendarEventRows, calendarsIn, eventRange, eventRows } from './calendars';
+import { type ChannelSettingsStore, channelSettingsIn } from './channel-settings';
 import { type ChatSettingsStore, chatSettingsIn } from './chat-settings';
 import { ChatWaitingError, type ChatWaitingStore, chatWaitingIn } from './chat-waiting';
 import {
@@ -143,6 +145,7 @@ import {
   actorColumns,
   blockDetailOf,
   changesBetween,
+  channelPostDetailOf,
   chatDetailOf,
   dailyNoteDetailOf,
   eventDetailOf,
@@ -178,6 +181,7 @@ export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
 export type { CalendarSettingsStore } from './calendar-settings';
 export type { CalendarStore, ListedCalendar } from './calendars';
+export type { ChannelSettingsStore } from './channel-settings';
 export type { ChatSettingsStore } from './chat-settings';
 export type { BusyCopies, BusyCopy } from './commander-events';
 export type { DashboardStore, StoredClear } from './dashboard';
@@ -414,6 +418,10 @@ export type ItemStore = {
   // Teams Chats the User muted or excluded (chat-settings.ts), in the same database. Excluding one
   // deletes its Item; the sync engine passes an Account's excluded Chats to its sync, to skip.
   chatSettings: ChatSettingsStore;
+  // Teams teams and channels the User excluded from Channel posts (#111, channel-settings.ts), and
+  // each Account's teams and channels as last listed. Excluding one deletes its posts; the sync
+  // engine passes an Account's exclusions to its sync, to skip.
+  channelSettings: ChannelSettingsStore;
   // Ares's waiting flags on Chats (chat-waiting.ts), in the same database: each decorates its Chat
   // (`waiting`); the User clearing one by hand is a correction, undone like any change.
   chatWaiting: ChatWaitingStore;
@@ -784,6 +792,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const found = db.select().from(chatDetails).where(inArray(chatDetails.itemId, chatIds)).all();
       for (const row of found) details.set(row.itemId, chatDetailOf(row));
     }
+    const postIds = idsOf('channel-post');
+    if (postIds.length) {
+      const { channelPostDetails } = schema;
+      const found = db
+        .select()
+        .from(channelPostDetails)
+        .where(inArray(channelPostDetails.itemId, postIds))
+        .all();
+      for (const row of found) details.set(row.itemId, channelPostDetailOf(row));
+    }
     const eventIds = idsOf('event');
     if (eventIds.length) {
       const found = db.select().from(eventDetails).where(inArray(eventDetails.itemId, eventIds)).all();
@@ -908,6 +926,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       schema;
     if (detail?.kind !== 'event') db.delete(eventDetails).where(eq(eventDetails.itemId, id)).run();
     if (detail?.kind !== 'chat') db.delete(chatDetails).where(eq(chatDetails.itemId, id)).run();
+    if (detail?.kind !== 'channel-post')
+      db.delete(schema.channelPostDetails).where(eq(schema.channelPostDetails.itemId, id)).run();
     if (detail?.kind !== 'todo') db.delete(todoDetails).where(eq(todoDetails.itemId, id)).run();
     if (detail?.kind !== 'daily-note')
       db.delete(dailyNoteDetails).where(eq(dailyNoteDetails.itemId, id)).run();
@@ -986,6 +1006,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         db.insert(chatDetails)
           .values({ itemId: id, data })
           .onConflictDoUpdate({ target: chatDetails.itemId, set: { data } })
+          .run();
+        return;
+      }
+      case 'channel-post': {
+        const { channelPostDetails } = schema;
+        const { kind: _kind, ...data } = detail;
+        const values = { teamId: detail.team.id, channelId: detail.channel.id, data };
+        db.insert(channelPostDetails)
+          .values({ itemId: id, ...values })
+          .onConflictDoUpdate({ target: channelPostDetails.itemId, set: values })
           .run();
         return;
       }
@@ -2157,9 +2187,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     deleteItem: (itemId, context) => record({ type: 'delete', itemId }, context),
   });
 
+  const channelSettings = channelSettingsIn(db, {
+    now,
+    deleteItem: (itemId, context) => record({ type: 'delete', itemId }, context),
+  });
+
   const removeAccountItems = sqlite.transaction(
     ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] => {
       chatSettings.removeAccount(account);
+      channelSettings.removeAccount(account);
       return removeItems(liveSourceItems(source, account), actionContext.parse(rawContext));
     },
   );
@@ -2530,6 +2566,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       ),
       excluded: (account) => chatSettings.excluded(account),
       removeAccount: (account) => chatSettings.removeAccount(account),
+    },
+    channelSettings: {
+      list: (account) => channelSettings.list(account),
+      excluded: (account) => channelSettings.excluded(account),
+      choices: () => channelSettings.choices(),
+      change: sqlite.transaction((action: ChannelSettingAction, context: ActionContext) =>
+        channelSettings.change(action, context),
+      ),
+      removeAccount: (account) => channelSettings.removeAccount(account),
     },
 
     githubWatch,

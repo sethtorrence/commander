@@ -22,16 +22,20 @@ import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
+import { ChannelsGroup } from './ChannelsGroup';
 import { SummariseButton, SummaryPanel, WaitingNote } from './ChatAres';
 import { ChatFilterBar } from './ChatFilterBar';
 import { ChatRow } from './ChatRow';
 import { ChatView } from './ChatView';
 import { ReplySuggestionCard, TodoSuggestionCard } from './ChatWork';
+import type { ChannelPost, ChannelPostsClient } from './channel-posts';
 import { type ChatSummariser, useChatSummary } from './chat-summary';
 import { type ChatWorkClient, useChatWork } from './chat-work';
 import type { Chat } from './chats';
+import { PostView } from './PostView';
 import { inReplyBox, ReplyBox } from './ReplyBox';
 import { type ChatLink, checkLine, type TeamsAccountsClient, type TeamsChats } from './teams-chats';
+import { useChannelPosts } from './use-channel-posts';
 import { useTeams } from './use-teams';
 
 // Enter opens the selected Chat, except on a control that Enter presses (a button, a link).
@@ -113,9 +117,12 @@ export function TeamsSheet({
   changes,
   summariser,
   work,
+  channelPosts,
 }: {
   chats: TeamsChats;
   accounts: TeamsAccountsClient;
+  /** Channel posts (#111): the Channels group, once an Account syncs them; without it, none. */
+  channelPosts?: ChannelPostsClient;
   changes?: ItemChanges;
   /** Ares's Summarise (#109); without it, the Chat view offers none. */
   summariser?: ChatSummariser;
@@ -127,15 +134,26 @@ export function TeamsSheet({
   const filtered = projects.find((project) => project.id === filter);
   const now = useNow(60_000);
   const state = useTeams({ chats: client, accounts, changes, include });
-  const { selected, open, setOpen } = state;
+  const { selected, open: chatOpen, setOpen } = state;
+  const posts = useChannelPosts({
+    client: channelPosts ?? null,
+    chats: client,
+    accounts: state.accounts,
+    changes,
+    include,
+    apply: state.apply,
+  });
+  const post = posts.open;
+  // A Chat or a Channel post open in the pane beside the list.
+  const open = chatOpen || post !== null;
   const badges = useBadgePicker(state.apply, state.undo);
   const openSection = useOpenSection();
   const [excluding, setExcluding] = useState<Chat | null>(null);
   // Each Chat's unsent reply, kept while moving between Chats.
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const several = state.accounts.length > 1;
-  const summary = useChatSummary(summariser, open ? (selected?.id ?? null) : null);
-  const chatWork = useChatWork(work, open ? (selected?.id ?? null) : null);
+  const summary = useChatSummary(summariser, chatOpen ? (selected?.id ?? null) : null);
+  const chatWork = useChatWork(work, chatOpen ? (selected?.id ?? null) : null);
 
   // "Not waiting on you": a correction, undone from the toast or with Ctrl+Z.
   const notWaiting = async (chat: Chat) => {
@@ -149,27 +167,49 @@ export function TeamsSheet({
   useTabCount(state.loaded ? state.unreadCount : null);
   useRefreshWhenOpened(state.refresh, state.reload);
 
-  const file = () =>
-    selected &&
+  const file = () => {
+    const target = post ?? selected;
+    if (!target) return;
     badges.open({
-      id: selected.id,
-      title: selected.title,
-      filing: selected.filing,
-      filingSuggestion: selected.filingSuggestion,
+      id: target.id,
+      title: target.title,
+      filing: target.filing,
+      filingSuggestion: target.filingSuggestion,
     });
+  };
+
+  // Opening a Channel post closes any open Chat, and the other way round.
+  const openPost = (itemId: string, messageId?: string) => {
+    setOpen(false);
+    posts.openPost(itemId, messageId);
+  };
+  const closePane = () => {
+    posts.openPost(null);
+    setOpen(false);
+  };
+  const meOfPost = (each: ChannelPost) =>
+    state.accounts.find((account) => account.id === each.account)?.user?.id ?? null;
 
   const openLink = ({ other }: ChatLink) => {
     if (other.kind === 'project') return openPage?.(other.id);
     if (other.deletedAt !== null) return;
     const section = sectionFor(other.kind);
     if (section && section !== 'teams') openSection(section);
-    else if (other.kind === 'chat') state.reveal(other.id);
+    else if (other.kind === 'chat') {
+      posts.openPost(null);
+      state.reveal(other.id);
+    } else if (other.kind === 'channel-post') openPost(other.id);
   };
 
-  const draftOf = (chat: Chat | null) => (chat ? (drafts[chat.id] ?? '') : '');
+  const draftOf = (chat: Chat | ChannelPost | null) => (chat ? (drafts[chat.id] ?? '') : '');
   const setDraft = (chatId: string, text: string) => setDrafts((now) => ({ ...now, [chatId]: text }));
 
   const sendReply = async () => {
+    if (post) {
+      const text = draftOf(post).trim();
+      if (text && (await posts.reply(post, text))) setDraft(post.id, '');
+      return;
+    }
     const chat = selected;
     const text = draftOf(chat).trim();
     if (!chat || !text) return;
@@ -221,6 +261,7 @@ export function TeamsSheet({
   };
 
   const openChat = (itemId: string) => {
+    posts.openPost(null);
     state.select(itemId);
     setOpen(true);
   };
@@ -228,12 +269,20 @@ export function TeamsSheet({
   useShortcuts([
     { keys: 'j', label: 'Next chat', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous chat', run: () => state.moveSelection(-1) },
-    { keys: 'Enter', label: 'Open the chat', when: () => !onPressable(), run: () => setOpen(true) },
+    {
+      keys: 'Enter',
+      label: 'Open the chat',
+      when: () => !onPressable(),
+      run: () => {
+        posts.openPost(null);
+        setOpen(true);
+      },
+    },
     {
       keys: 'Escape',
       label: 'Back to the chat list',
       when: () => open && !excluding,
-      run: () => setOpen(false),
+      run: closePane,
     },
     { keys: 'b', label: 'File under a Project', run: () => file() },
     {
@@ -253,10 +302,27 @@ export function TeamsSheet({
   ]);
   // From the palette: open a Chat it found, whatever the filters were hiding; from the Dashboard, at
   // the message that put it there.
-  useReveal('teams', (itemId, messageId) => state.reveal(itemId, messageId));
+  // A Channel post (#111) opens in the post view; anything else is a Chat.
+  useReveal('teams', (itemId, messageId) => {
+    if (!channelPosts) return state.reveal(itemId, messageId);
+    channelPosts.kindOf(itemId).then(
+      (kind) => {
+        if (kind === 'channel-post') openPost(itemId, messageId);
+        else {
+          posts.openPost(null);
+          state.reveal(itemId, messageId);
+        }
+      },
+      () => state.reveal(itemId, messageId),
+    );
+  });
 
   const status = checkLine(state.accounts, now);
   const checking = state.accounts.some((account) => account.sync?.activity === 'syncing');
+  const postAccountName = (each: ChannelPost) =>
+    several && each.account
+      ? (state.accounts.find((account) => account.id === each.account)?.name ?? null)
+      : null;
   const accountName = (chat: Chat | null) =>
     several && chat?.account
       ? (state.accounts.find((account) => account.id === chat.account)?.name ?? null)
@@ -302,7 +368,7 @@ export function TeamsSheet({
                       chat={chat}
                       number={index + 1}
                       me={state.meIn(chat)}
-                      selected={chat.id === selected?.id}
+                      selected={!post && chat.id === selected?.id}
                       onOpen={() => openChat(chat.id)}
                     />
                   ))}
@@ -314,8 +380,40 @@ export function TeamsSheet({
                   </p>
                 )
               )}
+              {posts.shown && (
+                <ChannelsGroup
+                  groups={posts.groups}
+                  meOf={meOfPost}
+                  selectedId={post?.id ?? null}
+                  onOpen={(each) => openPost(each.id)}
+                />
+              )}
             </div>
-            {open && (
+            {post && (
+              <PostView
+                post={post}
+                me={meOfPost(post)}
+                focus={posts.focus}
+                accountName={postAccountName(post)}
+                links={posts.links}
+                history={posts.history}
+                outgoing={state.outgoingFor(post)}
+                waiting={state.waitingFor(post)}
+                onFile={file}
+                onClose={closePane}
+                onOpenLink={openLink}
+                onRetry={() => state.retry(post)}
+                reply={
+                  <ReplyBox
+                    to={`the post in ${post.detail.channel.name}`}
+                    draft={draftOf(post)}
+                    onDraft={(text) => setDraft(post.id, text)}
+                    onSend={() => void sendReply()}
+                  />
+                }
+              />
+            )}
+            {chatOpen && !post && (
               <ChatView
                 chat={selected}
                 me={selected ? state.meIn(selected) : null}

@@ -7,6 +7,7 @@
 import {
   type AccountSyncStatus,
   type CoreAccountRefused,
+  type CoreChannelPostsRefused,
   type CoreSyncAccounts,
   type CoreSyncStatus,
   coreSyncAccounts,
@@ -53,7 +54,7 @@ export type KnownAccount = {
 };
 
 export type SyncOptions = {
-  send: (message: CoreSyncStatus | CoreAccountRefused) => void;
+  send: (message: CoreSyncStatus | CoreAccountRefused | CoreChannelPostsRefused) => void;
   accessTokens: Pick<AccessTokens, 'request'>;
   // For tests: stands in for the Linear adapter.
   linearSource?: (options: LinearSourceOptions) => SourceAdapter;
@@ -146,6 +147,7 @@ export function setUpSync(
     watchOf: (account, source) =>
       source === 'github' && githubWatch ? githubWatch(account, githubApiUrl) : null,
     onSignInRefused: (account) => send({ type: 'account-refused', account }),
+    onChannelPostsRefused: (account) => send({ type: 'channel-posts-refused', account }),
     random,
     log,
   });

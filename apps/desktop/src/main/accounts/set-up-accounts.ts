@@ -121,6 +121,7 @@ export function setUpAccounts({
       gmail: googleSettings.gmailUrl,
     },
     onRefused: (account) => void accounts.reportRefused(account),
+    onChannelPostsRefused: (account) => void accounts.channelPostsRefused(account),
   });
   // Each Account with when it was connected (Gmail downloads the 30 days before).
   const syncAccounts = async () => {

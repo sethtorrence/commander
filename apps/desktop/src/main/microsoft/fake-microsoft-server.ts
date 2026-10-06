@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createFakeOutlookMail, type FakeOutlookMail } from './fake-outlook-mail';
+import { createFakeTeamsChannels, type FakeTeamsChannels } from './fake-teams-channels';
 
 // A stand-in for the Microsoft identity platform (a single-tenant app's authority) and Microsoft
 // Graph, for tests only (unit and end-to-end). It behaves like Microsoft where Commander depends on
@@ -27,7 +28,8 @@ import { createFakeOutlookMail, type FakeOutlookMail } from './fake-outlook-mail
 // extended property's value (Commander's marker), `GET /me/events/{id}/calendar`, and `PATCH` and
 // `DELETE /me/events/{id}`, each change returned by the next delta (with `transactionId`, but never
 // extended properties, which delta can't expand); and for Outlook mail (#136), each user's mailbox
-// (fake-outlook-mail.ts). Nothing here talks to the real Microsoft.
+// (fake-outlook-mail.ts); and for Channel posts (#111), teams, channels, posts and replies, readable
+// only with ChannelMessage.Read.All (fake-teams-channels.ts). Nothing here talks to the real Microsoft.
 
 export type FakeMicrosoftUser = { id: string; displayName: string; userPrincipalName: string };
 
@@ -139,6 +141,11 @@ export type FakeMicrosoft = {
   expireDeltaLinks(): void;
   // Outlook mail (#136): each user's mailbox, its folders and messages (fake-outlook-mail.ts).
   mail: FakeOutlookMail;
+  // Channel posts (#111): teams, channels, posts and replies (fake-teams-channels.ts).
+  channels: FakeTeamsChannels;
+  // Refreshes asking for any of these scopes are refused as not consented to (AADSTS65001), as after
+  // an administrator withdrew them. null accepts every scope again.
+  refuseRefreshScopes(scopes: string[] | null): void;
   // The Prefer header of every calendar request.
   calendarPrefers: string[];
   // Every answer to an invitation Commander sent, oldest first.
@@ -221,6 +228,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
   let nextUser: FakeMicrosoftUser | 'decline' = options.user ?? SAM;
   let adminConsent: { code: AdminConsentCode; where: 'redirect' | 'token' } | null = null;
   let grantable: Set<string> | null = null;
+  let unconsented: Set<string> | null = null;
   const codes = new Map<
     string,
     { challenge: string; redirectUri: string; user: FakeMicrosoftUser; scope: string }
@@ -280,6 +288,9 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     },
     limitGrantedScopes: (scopes) => {
       grantable = scopes && new Set(scopes);
+    },
+    refuseRefreshScopes: (scopes) => {
+      unconsented = scopes && new Set(scopes);
     },
     revoke: (userId) => {
       for (let i = grants.length - 1; i >= 0; i--) if (grants[i]?.user.id === userId) grants.splice(i, 1);
@@ -343,6 +354,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       fake.mail.expireDeltaLinks();
     },
     mail: createFakeOutlookMail(() => fake.graphUrl),
+    channels: createFakeTeamsChannels(() => fake.graphUrl, tenantId),
     calendarPrefers: [],
     rsvps: [],
     calendarWrites: [],
@@ -454,6 +466,8 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       if (refreshDelay) await new Promise((resolve) => setTimeout(resolve, refreshDelay));
       if (refreshFailing) return json(response, 503, { error: 'temporarily_unavailable' });
       if (!form.scope) return tokenError(response, 400, 'invalid_request', 900144, "'scope' is required.");
+      if (form.scope.split(' ').some((scope) => unconsented?.has(scope)))
+        return tokenError(response, 400, 'invalid_grant', 65001, ADMIN_CONSENT_TEXT.AADSTS65001);
       const index = grants.findIndex((g) => g.refreshToken === form.refresh_token);
       const old = grants[index];
       if (!old)
@@ -979,9 +993,10 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
   function graph(request: IncomingMessage, url: URL, response: ServerResponse) {
     if (request.method === 'GET') fake.graphRequests.push(decodeURIComponent(url.pathname + url.search));
     const authorization = request.headers.authorization ?? '';
-    const user = authorization.startsWith('Bearer ')
-      ? grants.find((g) => g.accessToken === authorization.slice('Bearer '.length))?.user
+    const granted = authorization.startsWith('Bearer ')
+      ? grants.find((g) => g.accessToken === authorization.slice('Bearer '.length))
       : undefined;
+    const user = granted?.user;
     if (!user) {
       return json(response, 401, {
         error: { code: 'InvalidAuthenticationToken', message: 'Access token is empty or invalid.' },
@@ -997,6 +1012,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       return;
     }
     if (fake.mail.handles(request, url)) return void fake.mail.handle(request, url, response, user);
+    if (fake.channels.handles(url)) return fake.channels.handle(request, url, response, user, granted.scope);
     if (isCalendarWrite(request, url)) return void calendarWrite(user, request, url, response);
     if (request.method === 'POST') {
       if (url.pathname.startsWith('/v1.0/chats/')) return void chatAction(request, url, response, user);

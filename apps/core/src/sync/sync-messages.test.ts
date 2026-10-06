@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { CoreAccountRefused, CoreSyncStatus } from '@commander/domain';
+import type { CoreAccountRefused, CoreChannelPostsRefused, CoreSyncStatus } from '@commander/domain';
 import { SignInRefused, type SourceAdapter } from '@commander/sources';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AccessTokenUnavailable } from '../access-tokens';
@@ -18,7 +18,7 @@ const endpoints = { linear: 'http://127.0.0.1:9/graphql', graph: 'http://127.0.0
 
 let dir: string;
 let store: ItemStore;
-let sent: (CoreSyncStatus | CoreAccountRefused)[];
+let sent: (CoreSyncStatus | CoreAccountRefused | CoreChannelPostsRefused)[];
 let endpointsSeen: string[];
 let refuse: boolean;
 let tokenGone: boolean;

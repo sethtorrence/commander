@@ -84,6 +84,7 @@ export async function signInWithMicrosoft({
   app,
   scopes,
   sourceName,
+  adminPermissions,
   ...options
 }: {
   app: MicrosoftApp;
@@ -91,6 +92,8 @@ export async function signInWithMicrosoft({
   scopes: readonly string[];
   // The Source being connected, for the admin consent explanation ("Teams").
   sourceName: string;
+  // The permissions an administrator is asked to approve, when not every scope (Channel posts' own).
+  adminPermissions?: readonly string[];
   openBrowser: (url: string) => Promise<void>;
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -106,13 +109,16 @@ export async function signInWithMicrosoft({
         `Your organisation needs an administrator to approve Commander before you can connect ${sourceName}. Ask your Microsoft 365 administrator to grant these permissions, using the admin consent link, then connect again.`,
         {
           sourceError: error.sourceError,
-          adminConsent: { permissions: [...scopes], url: adminConsentUrl(app) },
+          adminConsent: { permissions: [...(adminPermissions ?? scopes)], url: adminConsentUrl(app) },
         },
       );
     }
     throw error;
   }
 }
+
+// Microsoft's answers when a refresh asks for a permission no longer consented to.
+export const CONSENT_REFUSED = /\bAADSTS(65001|90094|65004|70011)\b/;
 
 export function refreshMicrosoftTokens({
   app,

@@ -22,15 +22,41 @@ const status: AccountSyncStatus = {
 function channel() {
   const sent: unknown[] = [];
   const refused: string[] = [];
+  const channelsRefused: string[] = [];
   const sync = createCoreSyncChannel({
     send: (message) => sent.push(message),
     endpoints,
     onRefused: (account) => refused.push(account),
+    onChannelPostsRefused: (account) => channelsRefused.push(account),
   });
-  return { sync, sent, refused };
+  return { sync, sent, refused, channelsRefused };
 }
 
 describe('the Core sync channel', () => {
+  it('tells the Core to sync a Teams Account’s Channel posts only once granted and switched on (#111)', () => {
+    const { sync, sent } = channel();
+    const teams = (id: string, channelPosts: { granted: boolean; enabled: boolean }) => ({
+      id,
+      source: 'teams' as const,
+      status: 'connected' as const,
+      user: null,
+      channelPosts,
+    });
+    sync.setAccounts([
+      teams('teams:t:a', { granted: true, enabled: true }),
+      teams('teams:t:b', { granted: true, enabled: false }),
+      teams('teams:t:c', { granted: false, enabled: true }),
+    ]);
+    const accounts = (sent[0] as { accounts: { channelPosts?: boolean }[] }).accounts;
+    expect(accounts.map((account) => account.channelPosts)).toEqual([true, false, false]);
+  });
+
+  it('hears the Core say Microsoft refused an Account’s channel messages', () => {
+    const { sync, channelsRefused } = channel();
+    expect(sync.handle({ type: 'channel-posts-refused', account: 'teams:t:a' })).toBe(true);
+    expect(channelsRefused).toEqual(['teams:t:a']);
+  });
+
   it('sends the Accounts to sync, with whether each needs reconnecting, who the User is there and its name', () => {
     const { sync, sent } = channel();
     sync.setAccounts([

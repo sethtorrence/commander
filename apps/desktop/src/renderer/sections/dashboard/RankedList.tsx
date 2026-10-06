@@ -392,6 +392,16 @@ function Marker({ row, onTick }: { row: FeedRow; onTick: () => void }) {
         <ChatTypeGlyph type={item.detail.chatType} className="w-6" />
       </span>
     );
+  // A Channel post (#111): nothing to tick (it is answered in the Teams Section).
+  if (item.detail?.kind === 'channel-post')
+    return (
+      <span
+        className="grid h-[22px] place-items-center font-mono text-label-lg font-semibold text-muted"
+        title={`Channel post in ${item.detail.team.name} / ${item.detail.channel.name}`}
+      >
+        #
+      </span>
+    );
   // An email thread: nothing to tick (it is answered, or sorted, in the Email Section).
   if (item.detail?.kind === 'email')
     return (
@@ -478,6 +488,8 @@ const barButton =
 function wordsOf(item: Item): string[] {
   if (item.detail?.kind === 'chat')
     return [item.title, ...item.detail.messages.map((message) => message.text)];
+  if (item.detail?.kind === 'channel-post')
+    return [item.title, item.detail.post.text, ...item.detail.replies.map((message) => message.text)];
   if (item.detail?.kind === 'pull-request') return [item.title, item.detail.body];
   if (item.detail?.kind !== 'linear-issue') return [item.title];
   const { description, comments } = item.detail;

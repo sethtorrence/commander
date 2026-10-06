@@ -5,6 +5,7 @@ import type {
   ActivityAction,
   AresBand,
   AutonomySection,
+  ChannelPostDetail,
   ChatDetail,
   DashboardBand,
   EmailDetail,
@@ -282,6 +283,39 @@ export const chatSettings = sqliteTable(
     updatedAt: integer('updated_at').notNull(),
   },
   (t) => [primaryKey({ columns: [t.account, t.chatId] })],
+);
+
+// Kind-specific detail for Channel posts (#111), as Teams sync reported them (see ChannelPostDetail):
+// the post and its replies as plain text, with its team and channel as columns for finding a
+// channel's posts.
+export const channelPostDetails = sqliteTable(
+  'channel_post_details',
+  {
+    itemId: text('item_id')
+      .primaryKey()
+      .references(() => items.id),
+    teamId: text('team_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    // The rest of the detail, without `kind`.
+    data: text('data', { mode: 'json' }).$type<Omit<ChannelPostDetail, 'kind'>>().notNull(),
+  },
+  (t) => [index('channel_post_details_channel').on(t.teamId, t.channelId)],
+);
+
+// The teams (`channel_id` '') and channels the User excluded from Commander (#111): their posts are
+// deleted from Commander and sync skips them until included again (the row goes). Kept by Account and
+// Teams ids, as the excluded posts' Items are deleted. A setting, not an Item change.
+export const channelSettings = sqliteTable(
+  'channel_settings',
+  {
+    account: text('account').notNull(),
+    teamId: text('team_id').notNull(),
+    channelId: text('channel_id').notNull(),
+    // The team's or channel's name when excluded, for Settings once the list no longer has it.
+    name: text('name').notNull(),
+    excludedAt: integer('excluded_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.account, t.teamId, t.channelId] })],
 );
 
 // Kind-specific detail for GitHub's Items (pull requests, issues, review requests and releases), as

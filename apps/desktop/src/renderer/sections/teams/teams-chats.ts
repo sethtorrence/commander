@@ -11,6 +11,8 @@ import {
   type OutgoingChange,
   type Project,
   READ_FIELD,
+  REPLY_FIELD,
+  SEEN_FIELD,
   syncedFieldsOf,
 } from '@commander/domain';
 import type { AccountSummary, AccountsState, TeamsAccountSummary } from '@commander/domain/ipc';
@@ -180,20 +182,23 @@ function whatItDid(entry: ActivityEntry, projects: readonly Project[]): [string,
   }
 }
 
-// What a change made in Commander did to a Chat's synced fields: replied (the reply's field), or
-// read it or marked it unread.
+// What a change made in Commander did to a Chat's (or a Channel post's) synced fields: replied (the
+// reply's field), read it or marked it unread, or (a post) saw it.
 export function chatEdit(
   changes: readonly ItemChange[],
-): { kind: 'reply'; field: string } | { kind: 'read'; read: boolean } | null {
+): { kind: 'reply'; field: string } | { kind: 'read'; read: boolean } | { kind: 'seen' } | null {
   const detail = changes.find((change) => change.field === 'detail');
   if (detail?.field !== 'detail') return null;
   const before = syncedFieldsOf(detail.before);
   const after = syncedFieldsOf(detail.after);
   if (!before || !after) return null;
   const added = Object.keys(after).find(
-    (field) => field.startsWith(MESSAGE_FIELD) && after[field] && !before[field],
+    (field) =>
+      (field.startsWith(MESSAGE_FIELD) || field.startsWith(REPLY_FIELD)) && after[field] && !before[field],
   );
   if (added) return { kind: 'reply', field: added };
+  if (detail.after?.kind === 'channel-post')
+    return before[SEEN_FIELD] !== after[SEEN_FIELD] ? { kind: 'seen' } : null;
   if (before[READ_FIELD] !== after[READ_FIELD]) return { kind: 'read', read: after[READ_FIELD] === true };
   return null;
 }
@@ -205,6 +210,7 @@ function whatChanged(changes: readonly ItemChange[], projects: readonly Project[
   if (edit?.kind === 'reply') return ['Replied', 'Reply'];
   if (edit?.kind === 'read')
     return edit.read ? ['Marked read', 'Mark as read'] : ['Marked unread', 'Mark as unread'];
+  if (edit?.kind === 'seen') return ['Seen', 'Seen'];
   if (changes.length === 1 && changes[0]?.field === 'title') return ['Renamed', 'Rename'];
   return ['Changed', 'Change'];
 }
@@ -215,6 +221,10 @@ function fromTeams(entry: ActivityEntry): string | null {
   if (messages?.added)
     return `${messages.added} new ${messages.added === 1 ? 'message' : 'messages'} in Teams`;
   if (messages && (messages.changed || messages.removed)) return 'Messages changed in Teams';
+  // A Channel post's replies (#111).
+  const replies = entry.summaries?.find((summary) => summary.field === 'replies');
+  if (replies?.added) return `${replies.added} new ${replies.added === 1 ? 'reply' : 'replies'} in Teams`;
+  if (replies && (replies.changed || replies.removed)) return 'Replies changed in Teams';
   // The User's read time moved: read there (or a change from here confirmed), or marked unread.
   const detail = entry.changes.find((change) => change.field === 'detail');
   if (detail?.field === 'detail' && detail.before?.kind === 'chat' && detail.after?.kind === 'chat') {

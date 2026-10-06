@@ -23,7 +23,7 @@ export function sectionCounts(items: readonly Pick<Item, 'kind' | 'status'>[]): 
   for (const { kind, status } of items) {
     if (kind === 'todo' && status === 'open') todos += 1;
     if (kind === 'block') notes += 1;
-    if (kind === 'chat') teams += 1;
+    if (kind === 'chat' || kind === 'channel-post') teams += 1;
     if ((kind === 'pull-request' || kind === 'github-issue') && status === 'open') github += 1;
   }
   return { todos, notes, teams, github };

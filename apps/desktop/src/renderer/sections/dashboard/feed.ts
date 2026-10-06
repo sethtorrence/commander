@@ -4,6 +4,8 @@ import {
   type ChatType,
   type ClearMark,
   changesRequested,
+  channelPlace,
+  channelPostAttention,
   chatAttention,
   checksFailing,
   clockOf,
@@ -57,6 +59,12 @@ export type ChatFocus = { messageId: string; at: number; why: ChatAttention['why
 export type ChatContext = { users: Readonly<Record<string, string>>; now: number };
 
 export function chatFocus(item: Item, { users, now }: ChatContext): ChatFocus | null {
+  // A Channel post (#111): the message mentioning the User that put it there.
+  if (item.detail?.kind === 'channel-post') {
+    const me = item.account ? (users[item.account] ?? null) : null;
+    const mention = channelPostAttention(item, me)?.message;
+    return mention ? { messageId: mention.id, at: mention.createdAt, why: 'mention' } : null;
+  }
   if (item.detail?.kind !== 'chat') return null;
   const me = item.account ? (users[item.account] ?? null) : null;
   const attention = chatAttention(item, me, now);
@@ -81,7 +89,8 @@ export function clearHolds(
   chats: ChatContext,
 ): boolean {
   if (!mark) return false;
-  if (item?.detail?.kind === 'chat') return (chatFocus(item, chats)?.at ?? 0) <= mark.at;
+  if (item?.detail?.kind === 'chat' || item?.detail?.kind === 'channel-post')
+    return (chatFocus(item, chats)?.at ?? 0) <= mark.at;
   return mark.band === band;
 }
 
@@ -217,6 +226,7 @@ export function sourceTag(item: Item, suggested = false): { stamp: string; text:
   if (item.detail?.kind === 'event')
     return { stamp: 'CAL', text: `${item.detail.calendar.name} · ${meetingTimes(item.detail)}` };
   if (item.detail?.kind === 'chat') return { stamp: 'TMS', text: `${CHAT_TYPES[item.detail.chatType]} chat` };
+  if (item.detail?.kind === 'channel-post') return { stamp: 'TMS', text: channelPlace(item.detail) };
   if (item.detail?.kind === 'linear-issue') return { stamp: 'LIN', text: item.detail.state.name };
   if (item.detail?.kind === 'review-request')
     return { stamp: 'GH', text: item.detail.direct ? 'Review requested' : 'Team review' };
@@ -244,7 +254,7 @@ export function rowMeta(row: FeedRow, now: number): [string, string] {
     if (now < start.at) return [`${Math.ceil((start.at - now) / 60_000)}M`, 'Starts'];
     return ['Now', `Ends ${clockOf(end.at)}`];
   }
-  if (item.detail?.kind === 'chat') {
+  if (item.detail?.kind === 'chat' || item.detail?.kind === 'channel-post') {
     if (!row.focus) return ['—', 'Teams'];
     return [shortAgo(row.focus.at, now), CHAT_WHY[row.focus.why]];
   }

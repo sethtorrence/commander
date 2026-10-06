@@ -120,12 +120,14 @@ export function dashboardIn(
       const today = dayKey(clock(), timeZone);
       const from = dayStart(today, timeZone);
       const to = dayStart(addDays(today, 2), timeZone);
-      const [todos, issues, events, chats, invitations, work, summaries, needsReply, waiting] =
+      const [todos, issues, events, chats, posts, invitations, work, summaries, needsReply, waiting] =
         await Promise.all([
           itemStore({ op: 'query', query: { kinds: ['todo'], statuses: ['open'], limit: MOST } }),
           itemStore({ op: 'query', query: { kinds: ['linear-issue'], statuses: ['open'], limit: MOST } }),
           itemStore({ op: 'events', query: { from, to, limit: MOST } }),
           itemStore({ op: 'query', query: { kinds: ['chat'], statuses: ['open'], limit: MOST } }),
+          // Channel posts (#111): the band rules put an unseen mention of the User in Today.
+          itemStore({ op: 'query', query: { kinds: ['channel-post'], statuses: ['open'], limit: MOST } }),
           // Invitations waiting for an answer, whenever they are (#129): the band rules put them in Today.
           itemStore({ op: 'invitations' }),
           // GitHub's open work (#116): reviews asked of the User, and pull requests (theirs are ranked).
@@ -148,6 +150,7 @@ export function dashboardIn(
         ...issues,
         ...events,
         ...chats,
+        ...posts,
         ...invitations.filter((item) => !shown.has(item.id)),
         ...work,
         ...summaries.summaries,

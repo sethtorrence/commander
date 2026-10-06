@@ -1,0 +1,413 @@
+[
+  {
+    "request": {
+      "path": "/me/chats?$expand=lastMessagePreview&$top=50"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())",
+        "value": []
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/teams/team-tl/channels/19:general-tl@thread.tacv2/messages?$top=20&$expand=replies"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "x",
+        "@odata.count": 3,
+        "value": [
+          {
+            "id": "1790990000000",
+            "replyToId": null,
+            "etag": "1790990000000",
+            "messageType": "message",
+            "createdDateTime": "2026-10-03T12:30:00.000Z",
+            "lastModifiedDateTime": "2026-10-03T12:30:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": "https://teams.microsoft.com/l/message/19:general-tl@thread.tacv2/1790990000000?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1790990000000",
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "id": "u-omar",
+                "displayName": "Omar Haddad",
+                "userIdentityType": "aadUser"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<p>Who is on call this weekend?</p>"
+            },
+            "channelIdentity": {
+              "teamId": "team-tl",
+              "channelId": "19:general-tl@thread.tacv2"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": [],
+            "messageHistory": [],
+            "replies": []
+          },
+          {
+            "id": "1790840000000",
+            "replyToId": null,
+            "etag": "1790840000000",
+            "messageType": "message",
+            "createdDateTime": "2026-10-01T12:00:00.000Z",
+            "lastModifiedDateTime": "2026-10-01T12:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": "Release 4.2",
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": "https://teams.microsoft.com/l/message/19:general-tl@thread.tacv2/1790840000000?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1790840000000",
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "id": "u-priya",
+                "displayName": "Priya Patel",
+                "userIdentityType": "aadUser"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<script>alert(\"x\")</script><p>Release 4.2 is <b>out</b>.</p><img src=\"x\" onerror=\"alert(1)\"><p><a href=\"javascript:alert(1)\">notes</a> and <a href=\"https://example.test/notes\">the notes</a></p><style>p{}</style><iframe src=\"https://evil.test\"></iframe>"
+            },
+            "channelIdentity": {
+              "teamId": "team-tl",
+              "channelId": "19:general-tl@thread.tacv2"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": [],
+            "messageHistory": [],
+            "replies": [
+              {
+                "id": "1790990000003",
+                "replyToId": "1790840000000",
+                "etag": "1790990000003",
+                "messageType": "message",
+                "createdDateTime": "2026-10-03T12:20:00.000Z",
+                "lastModifiedDateTime": "2026-10-03T12:20:00.000Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19:general-tl@thread.tacv2/1790990000003?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1790840000000",
+                "policyViolation": null,
+                "eventDetail": null,
+                "from": {
+                  "application": null,
+                  "device": null,
+                  "user": {
+                    "id": "u-priya",
+                    "displayName": "Priya Patel",
+                    "userIdentityType": "aadUser"
+                  }
+                },
+                "body": {
+                  "contentType": "html",
+                  "content": "<p><at id=\"0\">Sam Rivera</at> one more thing</p>"
+                },
+                "channelIdentity": {
+                  "teamId": "team-tl",
+                  "channelId": "19:general-tl@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [
+                  {
+                    "id": 0,
+                    "mentionText": "Sam Rivera",
+                    "mentioned": {
+                      "application": null,
+                      "device": null,
+                      "conversation": null,
+                      "user": {
+                        "id": "u-sam",
+                        "displayName": "Sam Rivera",
+                        "userIdentityType": "aadUser"
+                      }
+                    }
+                  }
+                ],
+                "reactions": [],
+                "messageHistory": []
+              },
+              {
+                "id": "1790850000002",
+                "replyToId": "1790840000000",
+                "etag": "1790850000002",
+                "messageType": "message",
+                "createdDateTime": "2026-10-01T13:00:00.000Z",
+                "lastModifiedDateTime": "2026-10-01T13:00:00.000Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19:general-tl@thread.tacv2/1790850000002?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1790840000000",
+                "policyViolation": null,
+                "eventDetail": null,
+                "from": {
+                  "application": null,
+                  "device": null,
+                  "user": {
+                    "id": "u-omar",
+                    "displayName": "Omar Haddad",
+                    "userIdentityType": "aadUser"
+                  }
+                },
+                "body": {
+                  "contentType": "html",
+                  "content": "<p><at id=\"0\">Releases</at> heads up, and <at id=\"1\">Sam Rivera</at> can you check the notes?</p>"
+                },
+                "channelIdentity": {
+                  "teamId": "team-tl",
+                  "channelId": "19:general-tl@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [
+                  {
+                    "id": 0,
+                    "mentionText": "Releases",
+                    "mentioned": {
+                      "application": null,
+                      "device": null,
+                      "user": null,
+                      "conversation": {
+                        "id": "19:releases@thread.tacv2",
+                        "displayName": "Releases",
+                        "conversationIdentityType": "channel"
+                      }
+                    }
+                  },
+                  {
+                    "id": 1,
+                    "mentionText": "Sam Rivera",
+                    "mentioned": {
+                      "application": null,
+                      "device": null,
+                      "conversation": null,
+                      "user": {
+                        "id": "u-sam",
+                        "displayName": "Sam Rivera",
+                        "userIdentityType": "aadUser"
+                      }
+                    }
+                  }
+                ],
+                "reactions": [],
+                "messageHistory": []
+              },
+              {
+                "id": "1790850000001",
+                "replyToId": "1790840000000",
+                "etag": "1790850000001",
+                "messageType": "message",
+                "createdDateTime": "2026-10-01T12:30:00.000Z",
+                "lastModifiedDateTime": "2026-10-01T12:30:00.000Z",
+                "lastEditedDateTime": null,
+                "deletedDateTime": null,
+                "subject": null,
+                "summary": null,
+                "chatId": null,
+                "importance": "normal",
+                "locale": "en-us",
+                "webUrl": "https://teams.microsoft.com/l/message/19:general-tl@thread.tacv2/1790850000001?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1790840000000",
+                "policyViolation": null,
+                "eventDetail": null,
+                "from": {
+                  "application": null,
+                  "device": null,
+                  "user": {
+                    "id": "u-priya",
+                    "displayName": "Priya Patel",
+                    "userIdentityType": "aadUser"
+                  }
+                },
+                "body": {
+                  "contentType": "html",
+                  "content": "<p>Looks good to me.</p>"
+                },
+                "channelIdentity": {
+                  "teamId": "team-tl",
+                  "channelId": "19:general-tl@thread.tacv2"
+                },
+                "attachments": [],
+                "mentions": [],
+                "reactions": [],
+                "messageHistory": []
+              }
+            ]
+          },
+          {
+            "id": "1789000000000",
+            "replyToId": null,
+            "etag": "1789000000000",
+            "messageType": "message",
+            "createdDateTime": "2026-09-10T08:00:00.000Z",
+            "lastModifiedDateTime": "2026-09-10T08:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": "https://teams.microsoft.com/l/message/19:general-tl@thread.tacv2/1789000000000?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1789000000000",
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "id": "u-sam",
+                "displayName": "Sam Rivera",
+                "userIdentityType": "aadUser"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<p>An old post</p>"
+            },
+            "channelIdentity": {
+              "teamId": "team-tl",
+              "channelId": "19:general-tl@thread.tacv2"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": [],
+            "messageHistory": [],
+            "replies": []
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/teams/team-tl/channels/19:releases@thread.tacv2/messages?$top=20&$expand=replies"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "x",
+        "@odata.count": 2,
+        "value": [
+          {
+            "id": "1790950000000",
+            "replyToId": null,
+            "etag": "1790950000000",
+            "messageType": "message",
+            "createdDateTime": "2026-10-02T13:00:00.000Z",
+            "lastModifiedDateTime": "2026-10-03T12:10:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": "2026-10-03T12:10:00.000Z",
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": "https://teams.microsoft.com/l/message/19:releases@thread.tacv2/1790950000000?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1790950000000",
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "id": "u-sam",
+                "displayName": "Sam Rivera",
+                "userIdentityType": "aadUser"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": ""
+            },
+            "channelIdentity": {
+              "teamId": "team-tl",
+              "channelId": "19:releases@thread.tacv2"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": [],
+            "messageHistory": [],
+            "replies": []
+          },
+          {
+            "id": "1789000000000",
+            "replyToId": null,
+            "etag": "1789000000000",
+            "messageType": "message",
+            "createdDateTime": "2026-09-10T08:00:00.000Z",
+            "lastModifiedDateTime": "2026-09-10T08:00:00.000Z",
+            "lastEditedDateTime": null,
+            "deletedDateTime": null,
+            "subject": null,
+            "summary": null,
+            "chatId": null,
+            "importance": "normal",
+            "locale": "en-us",
+            "webUrl": "https://teams.microsoft.com/l/message/19:general-tl@thread.tacv2/1789000000000?groupId=team-tl&tenantId=fake-tenant&parentMessageId=1789000000000",
+            "policyViolation": null,
+            "eventDetail": null,
+            "from": {
+              "application": null,
+              "device": null,
+              "user": {
+                "id": "u-sam",
+                "displayName": "Sam Rivera",
+                "userIdentityType": "aadUser"
+              }
+            },
+            "body": {
+              "contentType": "html",
+              "content": "<p>An old post</p>"
+            },
+            "channelIdentity": {
+              "teamId": "team-tl",
+              "channelId": "19:general-tl@thread.tacv2"
+            },
+            "attachments": [],
+            "mentions": [],
+            "reactions": [],
+            "messageHistory": [],
+            "replies": []
+          }
+        ]
+      }
+    }
+  }
+]

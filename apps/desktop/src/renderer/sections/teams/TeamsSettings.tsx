@@ -3,6 +3,8 @@ import { Button, toast } from '@commander/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SettingsGroup } from '../../settings/parts';
 import { whenShort } from '../todos/when';
+import { ChannelPostsSettings } from './ChannelPostsSettings';
+import { type ChannelPostsClient, channelPostsIn } from './channel-posts';
 import { type TeamsChats, teamsChatsIn } from './teams-chats';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -48,15 +50,17 @@ function SettingList({
 }
 
 /**
- * Settings → Teams: the Chats the User muted (Unmute) or excluded from Commander (Include again,
- * which asks the Account for a light sync so the Chat comes back at once). Mute and exclude are
- * Commander settings only: nothing changes in Teams. `shown` while Settings is on screen: the list is
- * read again each time it comes back, for Chats muted or excluded in the Teams Section meanwhile.
+ * Settings → Teams: Channel posts (#111, ChannelPostsSettings), then the Chats the User muted
+ * (Unmute) or excluded from Commander (Include again, which asks the Account for a light sync so the
+ * Chat comes back at once). Mute and exclude are Commander settings only: nothing changes in Teams.
+ * `shown` while Settings is on screen: the lists are read again each time it comes back, for Chats
+ * muted or excluded in the Teams Section meanwhile.
  */
 export function TeamsSettings({
   no,
   shown = true,
   chats: given,
+  channelPosts: givenChannelPosts,
   syncNow = async (accountId) => {
     await window.commander.accounts({ op: 'sync-now', accountId });
   },
@@ -64,9 +68,19 @@ export function TeamsSettings({
   no: string;
   shown?: boolean;
   chats?: TeamsChats;
+  /** Channel posts (#111); without it (and without the window's bridge), none show. */
+  channelPosts?: ChannelPostsClient;
   syncNow?: (accountId: string) => Promise<void>;
 }) {
   const chats = useMemo(() => given ?? teamsChatsIn(window.commander.itemStore), [given]);
+  const channelPosts = useMemo(
+    () =>
+      givenChannelPosts ??
+      ('onAccountsChanged' in (window.commander ?? {})
+        ? channelPostsIn(window.commander, window.commander.itemStore)
+        : null),
+    [givenChannelPosts],
+  );
   const [settings, setSettings] = useState<ChatSetting[] | null>(null);
 
   const reload = useCallback(() => {
@@ -95,7 +109,12 @@ export function TeamsSettings({
   const muted = (settings ?? []).filter((setting) => setting.muted && setting.excludedAt === null);
 
   return (
-    <SettingsGroup no={no} title="Teams" note="Muted and excluded chats · nothing changes in Teams">
+    <SettingsGroup
+      no={no}
+      title="Teams"
+      note="Channel posts, muted and excluded chats · nothing changes in Teams"
+    >
+      {channelPosts && <ChannelPostsSettings client={channelPosts} shown={shown} />}
       {settings && !excluded.length && !muted.length && (
         <p className="hatch m-0 border-b border-line2 py-3 pr-5 pl-13 text-heading text-faint">
           No muted or excluded chats. Mute or exclude one from its Chat view in the Teams Section.

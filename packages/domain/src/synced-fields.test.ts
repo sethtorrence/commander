@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EventDetail } from './calendar';
+import type { ChannelPostDetail } from './channel-posts';
 import type { EmailDetail } from './email';
 import type { LinearIssueDetail } from './linear';
 import {
@@ -436,5 +437,55 @@ describe('an Outlook email’s synced fields (#136)', () => {
     const trashed = withSyncedFields(mail, { ...syncedFieldsOf(mail), trash: true });
     expect(trashed).toMatchObject({ inTrash: true, folder: inbox, inInbox: true });
     expect(statusFromDetail(trashed, 'open')).toBe('archived');
+  });
+});
+
+describe('a Channel post’s synced fields (#111)', () => {
+  const at = Date.UTC(2026, 9, 3, 9);
+  const root = {
+    id: 'p1',
+    from: { userId: 'u-priya', name: 'Priya' },
+    event: null,
+    createdAt: at,
+    modifiedAt: at,
+    deleted: false,
+    text: 'Release 4.2 is out',
+    mentions: [],
+    reactions: [],
+    attachments: [],
+    replyTo: null,
+  };
+  const post: ChannelPostDetail = {
+    kind: 'channel-post',
+    team: { id: 't1', name: 'Titanlink' },
+    channel: { id: 'c1', name: 'releases' },
+    subject: null,
+    post: root,
+    replies: [],
+    webUrl: null,
+    mentionsMe: false,
+    lastActivityAt: at,
+  };
+  const reply: ChatReply = { clientId: 'c-1', text: 'Thanks!', createdAt: at + 1 };
+
+  it('is a seen mark of Commander’s own and one reply:<clientId> per reply on its way', () => {
+    expect(syncedFieldsOf(post)).toEqual({ seen: null });
+    const sending = withSyncedFields(post, { seen: at, 'reply:c-1': reply });
+    expect(sending).toEqual({ ...post, seenAt: at, pending: [reply] });
+    expect(syncedFieldsOf(sending)).toEqual({ seen: at, 'reply:c-1': reply });
+    expect(withSyncedFields(sending, { seen: null, 'reply:c-1': null })).toEqual(post);
+  });
+
+  it('keeps the seen mark local, and a sent reply can’t be taken back', () => {
+    expect(['seen', 'reply:c-1', 'reply:', 'replies'].map((f) => isSyncedField('channel-post', f))).toEqual([
+      true,
+      true,
+      false,
+      false,
+    ]);
+    expect(isLocalField('channel-post', 'seen')).toBe(true);
+    expect(isLocalField('channel-post', 'reply:c-1')).toBe(false);
+    expect(isUnrecallableField('channel-post', 'reply:c-1')).toBe(true);
+    expect(isUnrecallableField('channel-post', 'seen')).toBe(false);
   });
 });

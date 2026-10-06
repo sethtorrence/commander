@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 import {
   type AccessToken,
   RateLimited,
@@ -27,14 +27,32 @@ export type GraphOptions = {
   timeoutMs?: number;
 };
 
-// Graph refused one Chat's resource (403 or 404: no longer allowed to read it, or gone).
+// Graph refused one Chat's (or channel's) resource (403 or 404: no longer allowed to read it, or
+// gone). `said`: Graph's own error message, which tells a missing permission from a closed door.
 export class ChatUnreadable extends Error {
   override name = 'ChatUnreadable';
   constructor(
     message: string,
     readonly status: number,
+    readonly said: string | null = null,
   ) {
     super(message);
+  }
+}
+
+const graphError = z.object({
+  error: z.object({ code: z.string().nullish(), message: z.string().nullish() }),
+});
+
+// Graph's error message from a refusal's body, if it has one.
+async function errorSaid(response: Response): Promise<string | null> {
+  try {
+    const parsed = graphError.safeParse(await response.json());
+    return parsed.success
+      ? [parsed.data.error.code, parsed.data.error.message].filter(Boolean).join(': ')
+      : null;
+  } catch {
+    return null;
   }
 }
 
@@ -64,7 +82,8 @@ export function connectGraph({ graphUrl, fetch, now, sleep, accessToken, signal,
   }
 
   // Sends a request to a path under Graph's base (or a nextLink Graph gave) and checks the answer.
-  // `chatId`: the Chat the request is about, for pacing and for treating a refusal as that Chat's alone.
+  // `chatId`: the Chat the request is about, for pacing and for treating a refusal as that Chat's alone
+  // (a channel's requests name it as `channel:<id>`, a team's as `team:<id>`).
   async function send(
     method: 'GET' | 'POST',
     pathOrLink: string,
@@ -105,8 +124,9 @@ export function connectGraph({ graphUrl, fetch, now, sleep, accessToken, signal,
     }
     if ((response.status === 403 || response.status === 404) && chatId) {
       throw new ChatUnreadable(
-        `Teams wouldn’t share chat ${chatId} (HTTP ${response.status}).`,
+        `Teams wouldn’t share ${chatId} (HTTP ${response.status}).`,
         response.status,
+        await errorSaid(response),
       );
     }
     if (response.status === 403) {
