@@ -1209,6 +1209,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     }
   }
 
+  // The User's own message joining a thread (new, sent, or no longer deleted) takes the thread's
+  // Bucket as it stands (emails.joiningBucket), whichever way it got there: so every path keeps it.
+  function withThreadBucket(id: string, account: string | null, held: Item | null, state: ItemState) {
+    if (state.detail?.kind !== 'email' || state.deletedAt !== null) return state;
+    const was =
+      held?.deletedAt === null && held.detail?.kind === 'email' && !held.detail.draft ? held.detail : null;
+    const detail = emails.joiningBucket(id, account, was, state.detail);
+    return detail === state.detail ? state : { ...state, detail };
+  }
+
   // Inserts a new Item, under the caller's id if it chose one, and returns the id and the state as stored.
   function insertItem(
     identity: Pick<Item, 'kind' | 'source' | 'account' | 'externalId'>,
@@ -1219,7 +1229,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (chosenId && readItem(chosenId))
       throw new ItemStoreError('invalid', `The id ${chosenId} is already taken`);
     const id = chosenId ?? randomUUID();
-    const state = checked(id, identity.kind, blockFiling.settled(id, identity.kind, input));
+    const state = checked(
+      id,
+      identity.kind,
+      withThreadBucket(id, identity.account, null, blockFiling.settled(id, identity.kind, input)),
+    );
     db.insert(schema.items)
       .values({ id, ...identity, ...itemColumns(state), createdAt: at, updatedAt: at })
       .run();
@@ -1230,7 +1244,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
   // Writes an Item's new state and returns it as stored.
   function writeState(item: Item, input: ItemState, at: number): ItemState {
-    const state = checked(item.id, item.kind, input);
+    const state = checked(item.id, item.kind, withThreadBucket(item.id, item.account, item, input));
     db.update(schema.items)
       .set({ ...itemColumns(state), updatedAt: at })
       .where(eq(schema.items.id, item.id))
@@ -2325,8 +2339,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           warnings.check(existing, at, null, bodyWords(existing));
           continue;
         }
-        writeState(existing, after, at);
-        const logged = log({ by, why: batch.why, action: 'update', itemId: existing.id, before, after }, at);
+        const stored = writeState(existing, after, at);
+        const logged = log(
+          { by, why: batch.why, action: 'update', itemId: existing.id, before, after: stored },
+          at,
+        );
         // A Commander label changed at the Source moves the email's Bucket, as the User (#142).
         if (!mirrorQueued) mirror.correct(requireItem(existing.id), before.detail, incoming.detail, at);
         applyRules(existing.id, at);

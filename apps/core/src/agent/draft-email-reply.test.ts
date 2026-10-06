@@ -13,7 +13,15 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Gate, openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
 import { draftEmailRepliesJob, draftEmailReply, EmailDraftFailed } from './draft-email-reply';
-import { allowCloudMail, deliver, GMAIL, HOUR, type MailInput, moveThread } from './fixtures/emails';
+import {
+  allowCloudMail,
+  bucketOf,
+  deliver,
+  GMAIL,
+  HOUR,
+  type MailInput,
+  moveThread,
+} from './fixtures/emails';
 import { createJobRunner, type JobRunner } from './runner';
 
 // "Draft replies" (#143), through the runner and on request: mail saved as Gmail sync saves it, in a
@@ -315,6 +323,39 @@ describe('Draft replies, when a thread enters Needs reply', () => {
     await due();
     expect(calls).toHaveLength(0);
     expect(suggestionOn(ids.mine as string)).toBeNull();
+  });
+
+  it('once the User replies, the thread stays in Needs reply with nothing offered for their message', async () => {
+    gate.setLevel({ scope: 'action', action: DRAFT_REPLIES }, 'ask');
+    const ids = danasQuestion();
+    moveThread(store, ids.offsite as string, NEEDS_REPLY);
+    expect(suggestionOn(ids.offsite as string)).toMatchObject({ state: 'offered' });
+
+    clock += HOUR;
+    const more = send([
+      {
+        id: 'answer',
+        from: ME,
+        to: [DANA],
+        sentByMe: true,
+        inReplyTo: '<offsite@mail.test>',
+        references: ['<offsite@mail.test>'],
+        sourceThreadId: 'g-offsite',
+        subject: 'Re: Q4 offsite dates',
+        text: 'Thursday works.',
+        sentAt: clock,
+        read: true,
+        inInbox: false,
+        labels: [{ id: 'SENT', name: 'Sent' }],
+      },
+    ]);
+    const answer = more.answer as string;
+    expect(threadOf(answer)?.messages.at(-1)?.item.id).toBe(answer);
+    expect(bucketOf(store, answer)).toEqual({ bucketId: NEEDS_REPLY, sortedBy: 'user' });
+    expect(suggestionOn(answer)).toBeNull();
+    gate.setLevel({ scope: 'action', action: DRAFT_REPLIES }, 'auto');
+    await due();
+    expect(calls).toHaveLength(0);
   });
 });
 

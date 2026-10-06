@@ -119,6 +119,8 @@ export function emailSortingIn(
   // Records the User's answer to Ares's sorting, if this change is one.
   function answer(item: Item, before: ItemState, after: ItemState, entry: ActivityEntry, at: number) {
     if (item.kind !== 'email' || entry.by.kind !== 'user') return;
+    // The User's own message only took its thread's Bucket (a reply): he never sorted it.
+    if (item.detail?.kind === 'email' && item.detail.sentByMe) return;
     const was = bucketOfState(before);
     const now = bucketOfState(after);
     if (was?.sortedBy === 'user') return;

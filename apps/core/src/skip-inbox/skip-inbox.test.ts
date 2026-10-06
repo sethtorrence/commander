@@ -182,6 +182,31 @@ describe('Skip the inbox for a Rule’s or Ares’s sort', () => {
     skip.consider([idOf('u1')]);
     expect(suggestions()).toEqual([]);
   });
+
+  it('offers nothing for the User’s own reply, which only took its thread’s Bucket', () => {
+    store.changeRule({ type: 'create', rule });
+    save([email('n1')]);
+    skipping('newsletters');
+    // Their reply, sent to themselves too, so its copy lands in the inbox.
+    const me = { name: 'Alex Kim', address: 'alex@gmail.test' };
+    save([
+      email('s1', me.address, {
+        from: me,
+        sentByMe: true,
+        inReplyTo: '<n1@mail.test>',
+        references: ['<n1@mail.test>'],
+        sourceThreadId: 'n1',
+        sentAt: T,
+      }),
+    ]);
+    const reply = store.get(idOf('s1'))?.item.detail as EmailDetail;
+    expect(reply.bucket).toEqual({ bucketId: 'newsletters', sortedBy: 'rule' });
+    expect(reply.inInbox).toBe(true);
+
+    skip.consider([idOf('s1')]);
+    expect(suggestions()).toEqual([]);
+    expect(inInbox('s1')).toBe(true);
+  });
 });
 
 describe('switching a Bucket’s Skip the inbox on', () => {
