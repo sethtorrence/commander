@@ -20,6 +20,8 @@ export interface ComposeClient {
   open(mode: ComposeMode, itemId?: string, account?: string): Promise<ComposeState>;
   /** A draft, in the composer. */
   openDraft(itemId: string): Promise<ComposeState>;
+  /** Ares's suggested reply to a message (#143), in the composer: saved at once as an ordinary draft. */
+  openSuggested(itemId: string): Promise<ComposeState>;
   /** Saves the draft (to Gmail's or Outlook's Drafts too). */
   save(draft: ComposeDraft): Promise<{ itemId: string }>;
   /** Sends it, held for the Undo time: when it goes comes back. */
@@ -48,6 +50,7 @@ export function composeIn(bridge: ComposeBridge): ComposeClient {
     open: (mode, itemId, account) =>
       compose({ op: 'open', mode, ...(itemId ? { itemId } : {}), ...(account ? { account } : {}) }),
     openDraft: (itemId) => compose({ op: 'open-draft', itemId }),
+    openSuggested: (itemId) => compose({ op: 'open-suggested', itemId }),
     save: (draft) => compose({ op: 'save', draft }),
     send: (draft) => compose({ op: 'send', draft }),
     undoSend: (itemId) => compose({ op: 'undo-send', itemId }),
@@ -74,6 +77,7 @@ const unavailable = () => Promise.reject(new Error('Writing email isn’t availa
 export const noCompose: ComposeClient = {
   open: unavailable,
   openDraft: unavailable,
+  openSuggested: unavailable,
   save: unavailable,
   send: unavailable,
   undoSend: unavailable,

@@ -1,6 +1,7 @@
 import {
   type CloudMailAnswer,
   FILE_INTO_PROJECTS,
+  LEARN_WRITING_STYLE,
   MODEL_COMPANIES,
   SORT_INTO_BUCKETS,
 } from '@commander/domain';
@@ -49,7 +50,7 @@ export function CloudMailRow() {
     setProblem(null);
     setAnswers(response.result.cloudMail ?? {});
     if (choice === 'allowed') {
-      for (const job of [SORT_INTO_BUCKETS, FILE_INTO_PROJECTS])
+      for (const job of [SORT_INTO_BUCKETS, FILE_INTO_PROJECTS, LEARN_WRITING_STYLE])
         await window.commander.autonomy({ op: 'run-job', job }).catch(() => {});
     }
   }
@@ -58,7 +59,7 @@ export function CloudMailRow() {
   return (
     <SettingRow
       label="Gmail and the cloud"
-      description={`To sort a Gmail Account’s mail into Buckets and file it into Projects, Ares sends each email’s sender, subject and text (never attachments) to ${MODEL_COMPANIES.zai}. Until you allow it for an Account, he leaves its mail to your Rules and to you.`}
+      description={`To sort a Gmail Account’s mail into Buckets, file it into Projects and draft your replies, Ares sends each email’s sender, subject and text (never attachments) to ${MODEL_COMPANIES.zai}. Until you allow it for an Account, he leaves its mail to your Rules and to you.`}
     >
       <ul className="m-0 grid max-w-[560px] list-none gap-2 p-0" data-testid="cloud-mail-settings">
         {accounts.map((account) => {

@@ -5,6 +5,8 @@ import {
   type ComposeBody,
   type ComposeState,
   isBodyEmpty,
+  settleAresLink,
+  unkeptLinks,
 } from '@commander/domain';
 import { Button, cn, Kbd, toast } from '@commander/ui';
 import { type DragEvent, type KeyboardEvent, useCallback, useEffect, useRef, useState } from 'react';
@@ -20,6 +22,10 @@ import { RichEditor } from './RichEditor';
   35 MB together), and a reply's quoted history folded below, as text. After a pause in typing the
   draft is saved (to Gmail's or Outlook's Drafts too). Send (Ctrl+Enter) hands it to the Core, which
   holds it for the Undo time; Discard throws the draft away. It never shows anyone's HTML.
+
+  Opened from Ares's suggested reply (#143), it is an ordinary draft. A link he added that is in neither
+  the thread nor the User's sent mail stays marked "Ares added this link", with Keep and Remove: until
+  kept it is left out of the draft Gmail or Outlook holds, and Send asks the User to decide first.
 */
 
 // The pause in typing after which the draft is saved.
@@ -141,10 +147,20 @@ export function Composer({
     }
   };
 
+  // Keep or Remove on a link Ares added: the body is drawn again with it settled.
+  const settleLink = (link: string, keep: boolean) => {
+    change({ body: settleAresLink(latest.current.body, link, keep) });
+    setEditorKey((key) => key + 1);
+  };
+
   const send = async () => {
     const current = latest.current;
     if (!current.to.length && !current.cc.length && !current.bcc.length) {
       setProblem('Add someone to send this to.');
+      return;
+    }
+    if (unkeptLinks(current.body).length) {
+      setProblem('Keep or remove the link Ares added first: it isn’t sent unless you keep it.');
       return;
     }
     const tooLarge = attachmentsProblem(current.attachments);
@@ -376,6 +392,34 @@ export function Composer({
         onFiles={(files) => void attach(files)}
         className={placement === 'sheet' ? 'flex-1' : ''}
       />
+      {unkeptLinks(state.body).length > 0 && (
+        <ul
+          aria-label="Links Ares added"
+          className="m-0 list-none border-t border-line2 bg-signal-focus px-4 py-1"
+          data-testid="compose-ares-links"
+        >
+          {unkeptLinks(state.body).map((link) => (
+            <li key={link} className="flex items-center gap-3 py-1">
+              <span className="min-w-0 flex-1 text-note text-ink">
+                <b className="font-mono text-label font-semibold uppercase tracking-label">
+                  Ares added this link
+                </b>{' '}
+                <span className="break-all font-mono text-label">{link}</span>
+                <span className="text-muted">
+                  {' '}
+                  · in neither the thread nor your sent mail, so it isn’t sent unless you keep it
+                </span>
+              </span>
+              <Button aria-label={`Keep ${link}`} onClick={() => settleLink(link, true)}>
+                Keep
+              </Button>
+              <Button aria-label={`Remove ${link}`} onClick={() => settleLink(link, false)}>
+                Remove
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
       {state.quote !== null && (
         <div className="border-t border-line2 px-4 py-2">
           <button

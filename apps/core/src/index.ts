@@ -274,6 +274,8 @@ updates = setUpUpdates({
   summariseGitHub: (request) => agent.githubSummaries.ask(request),
   // Refresh on a People card (#122).
   refreshPersonParagraph: (request) => agent.githubSummaries.refreshPerson(request),
+  // Draft a reply (#143) looks Memory up by meaning too.
+  meaning: (text) => meaning?.queryVector(text, 'embed-lookup') ?? Promise.resolve(null),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.

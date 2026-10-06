@@ -1174,3 +1174,30 @@ export const conversationTurns = sqliteTable(
   },
   (t) => [index('conversation_turns_conversation').on(t.conversationId, t.id)],
 );
+
+// Ares's suggested reply to each email thread (#143): his own record beside the thread, never an Item
+// and never at the Source, one row per thread he drafted for or the User dismissed. `answering`: the
+// message it replies to (the thread's latest when it was written); a row whose message is no longer
+// the latest no longer counts. `body`: his draft as plain text (empty for a dismissed offer);
+// `addedLinks`: the links in it that are in neither the thread nor the User's sent mail. `status`:
+// `ready` (waiting at the end of the thread), `dismissed` (by the User, until a new message), or
+// `opened` (in the composer, as the draft `draftItemId`).
+export const suggestedReplies = sqliteTable(
+  'suggested_replies',
+  {
+    account: text('account').notNull(),
+    threadKey: text('thread_key').notNull(),
+    answering: text('answering').notNull(),
+    body: text('body').notNull(),
+    addedLinks: text('added_links', { mode: 'json' }).$type<string[]>().notNull(),
+    confidence: real('confidence').notNull(),
+    status: text('status').$type<'ready' | 'dismissed' | 'opened'>().notNull(),
+    draftItemId: text('draft_item_id'),
+    at: integer('at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.account, t.threadKey] }),
+    index('suggested_replies_answering').on(t.answering),
+  ],
+);

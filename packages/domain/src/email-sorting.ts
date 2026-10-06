@@ -105,7 +105,7 @@ export function mayReadMail(
 /** The consent question for a Gmail Account, in plain words naming the model's company. */
 export function cloudMailQuestion(address: string, provider: ModelProvider = 'zai'): string {
   const company = MODEL_COMPANIES[provider];
-  return `Let Ares read mail from ${address}? To sort it into Buckets and file it into Projects, Commander sends each email’s sender, subject and text (never attachments) to ${company}, the company that runs Ares’s model. Until you allow it, Ares leaves this Account’s mail to your Rules and to you.`;
+  return `Let Ares read mail from ${address}? To sort it into Buckets, file it into Projects and draft your replies, Commander sends each email’s sender, subject and text (never attachments) to ${company}, the company that runs Ares’s model. Until you allow it, Ares leaves this Account’s mail to your Rules and to you.`;
 }
 
 // ---------------------------------------------------------------------------------------------

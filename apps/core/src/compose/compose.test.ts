@@ -5,6 +5,7 @@ import {
   COMPOSE_MESSAGES,
   type ComposeDraft,
   type ComposeState,
+  DRAFT_FIELD,
   type EmailDetail,
   type OutgoingMessage,
   SEND_FIELD,
@@ -390,6 +391,78 @@ describe('address suggestions', () => {
       'wendy@x.test',
       'fran@x.test',
     ]);
+  });
+});
+
+describe('Ares’s suggested reply (#143)', () => {
+  it('opens as an ordinary draft: a reply from the right Account, with the signature and threading; nothing reaches Gmail before', async () => {
+    save(email('m1', { messageId: '<m1@northwind.test>', references: ['<m0@northwind.test>'] }));
+    const message = idOf('m1');
+    const detail = store.get(message)?.item.detail as EmailDetail;
+    store.compose.signatures.save(ACCOUNT, [{ type: 'paragraph', runs: [{ text: 'Sam Rivera' }] }]);
+    store.suggestedReplies.save({
+      account: ACCOUNT,
+      threadKey: detail.threadKey,
+      answering: message,
+      body: 'Hi Dana,\n\nThursday works. Slots: https://cal.example/sam\n\nSam',
+      addedLinks: ['https://cal.example/sam'],
+      confidence: 0.9,
+    });
+    // Waiting at the end of the thread: no draft, nothing queued for Gmail.
+    expect(store.compose.drafts()).toEqual([]);
+    expect(store.outgoing.list()).toEqual([]);
+
+    const state = (await compose().answer({ op: 'open-suggested', itemId: message })) as ComposeState;
+
+    expect(state).toMatchObject({
+      mode: 'reply',
+      account: ACCOUNT,
+      replyToItemId: message,
+      to: [dana],
+      subject: 'Re: Q4 offsite dates',
+      from: { name: 'Sam Rivera', address: me },
+    });
+    expect(state.itemId).toBeTruthy();
+    // His words, the link he added still marked, then the signature.
+    expect(state.body).toEqual([
+      { type: 'paragraph', runs: [{ text: 'Hi Dana,' }] },
+      { type: 'paragraph', runs: [] },
+      {
+        type: 'paragraph',
+        runs: [{ text: 'Thursday works. Slots: ' }, { text: 'https://cal.example/sam', aresLink: true }],
+      },
+      { type: 'paragraph', runs: [] },
+      { type: 'paragraph', runs: [{ text: 'Sam' }] },
+      { type: 'paragraph', runs: [] },
+      { type: 'paragraph', runs: [{ text: '-- ' }] },
+      { type: 'paragraph', runs: [{ text: 'Sam Rivera' }] },
+    ]);
+    // An ordinary draft, saved to Gmail's Drafts through the outgoing queue: threaded, without the link.
+    expect(store.compose.drafts().map((each) => each.itemId)).toEqual([state.itemId]);
+    const queued = store.outgoing.forItem(state.itemId as string);
+    expect(queued.map((row) => row.field)).toEqual([DRAFT_FIELD]);
+    const outgoing = queued[0]?.value as OutgoingMessage;
+    expect(outgoing).toMatchObject({
+      from: { name: 'Sam Rivera', address: me },
+      to: [dana],
+      subject: 'Re: Q4 offsite dates',
+      inReplyTo: '<m1@northwind.test>',
+      references: ['<m0@northwind.test>', '<m1@northwind.test>'],
+      sourceThreadId: 'g-thread',
+    });
+    expect(outgoing.text).toContain('Thursday works.');
+    expect(outgoing.text).toContain('Sam Rivera');
+    expect(outgoing.text).not.toContain('cal.example');
+    expect(outgoing.html).not.toContain('cal.example');
+    expect(store.outgoing.forItem(state.itemId as string).some((row) => row.field === SEND_FIELD)).toBe(
+      false,
+    );
+
+    // Opened, it has left the thread's end; opening again finds nothing waiting.
+    expect(store.emailThread(ACCOUNT, detail.threadKey)?.suggestedReply ?? null).toBeNull();
+    await expect(compose().answer({ op: 'open-suggested', itemId: message })).rejects.toThrow(
+      'no longer waiting',
+    );
   });
 });
 

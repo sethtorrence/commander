@@ -47,6 +47,7 @@ import {
 } from './email';
 import { actionToast } from './organising';
 import { type EmailReaderClient, textOnlyReader } from './reader';
+import { SuggestedReplyCard } from './SuggestedReply';
 import {
   SkipInboxMark,
   SkipInboxOffer,
@@ -89,6 +90,7 @@ const KEYS: [ReactNode, string][] = [
     </>,
     'Write · Reply',
   ],
+  [<Kbd key="d">D</Kbd>, 'Draft (Ares)'],
   [<Kbd key="slash">/</Kbd>, 'Search'],
   [<Kbd key="b">B</Kbd>, 'Project'],
   [<Kbd key="esc">Esc</Kbd>, 'Close'],
@@ -484,6 +486,47 @@ export function EmailSheet({
     setOpen(true);
     void writing.open(mode, selected.latest.id);
   };
+  // Ares's drafts (#143): the threads he is drafting a reply for now, asked for here.
+  const [drafting, setDrafting] = useState<ReadonlySet<string>>(new Set());
+  const draftFor = async (thread: EmailThreadSummary | null, instruction?: string) => {
+    if (!thread) return;
+    const id = threadId(thread);
+    setDrafting((now) => new Set([...now, id]));
+    try {
+      await client.draftReply(thread.latest.id, instruction);
+      state.reload();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDrafting((now) => new Set([...now].filter((each) => each !== id)));
+    }
+  };
+  // Draft a reply (`d`, and the thread's Draft button): the thread opens with his draft at its end.
+  const draftSelected = () => {
+    if (!selected) return;
+    setSpecial(null);
+    setOpen(true);
+    void draftFor(selected);
+  };
+  // Open in composer: his draft becomes an ordinary draft, in the composer below the thread.
+  const openSuggested = async () => {
+    const suggestion = state.thread?.suggestedReply;
+    if (suggestion?.state !== 'ready') return;
+    setSpecial(null);
+    setOpen(true);
+    await writing.openSuggested(suggestion.answering);
+    state.reload();
+  };
+  const dismissSuggested = async () => {
+    const suggestion = state.thread?.suggestedReply;
+    if (!suggestion) return;
+    try {
+      await client.dismissSuggestedReply(suggestion.answering);
+      state.reload();
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error));
+    }
+  };
   const several = state.accounts.length > 1 && state.account === 'all';
   const accountName = useCallback(
     (accountId: string) => {
@@ -675,6 +718,7 @@ export function EmailSheet({
     { keys: 'r', label: 'Reply', when: () => !!selected, run: () => write('reply') },
     { keys: 'Shift+R', label: 'Reply all', when: () => !!selected, run: () => write('reply-all') },
     { keys: 'f', label: 'Forward', when: () => !!selected, run: () => write('forward') },
+    { keys: 'd', label: 'Draft a reply (Ares)', when: () => !!selected, run: draftSelected },
   ]);
 
   const status = emailSyncLine(state.accounts, now);
@@ -868,7 +912,17 @@ export function EmailSheet({
                     onState={writing.track}
                     {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
                   />
-                ) : null
+                ) : (
+                  <SuggestedReplyCard
+                    key={selected ? threadId(selected) : 'none'}
+                    suggestion={state.thread?.suggestedReply ?? null}
+                    drafting={!!selected && drafting.has(threadId(selected))}
+                    sources={(state.thread?.messages ?? []).flatMap(({ body }) => (body ? [body.text] : []))}
+                    onDraft={(instruction) => void draftFor(selected, instruction)}
+                    onOpen={() => void openSuggested()}
+                    onDismiss={() => void dismissSuggested()}
+                  />
+                )
               }
               notice={
                 selectedSkips.length > 0 && <SkipInboxSuggestion found={selectedSkips} suggestions={skips} />
@@ -892,6 +946,15 @@ export function EmailSheet({
                       }}
                       onBucket={() => openBuckets()}
                     />
+                    <button
+                      type="button"
+                      title="Draft a reply in your style (D): you edit and send it"
+                      onClick={draftSelected}
+                      disabled={drafting.has(threadId(selected))}
+                      className="flex flex-none cursor-pointer items-center border-0 border-r border-line2 bg-transparent px-3.5 font-mono text-label leading-none font-semibold uppercase tracking-caps whitespace-nowrap text-ink hover:bg-raise disabled:cursor-default disabled:text-faint"
+                    >
+                      Draft a reply
+                    </button>
                     <ThreadSuggestions
                       thread={selected}
                       bucketName={nameOf}

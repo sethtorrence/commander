@@ -14,6 +14,7 @@ import {
   autonomyTarget,
   BUCKET_FIELD,
   createdIn,
+  DRAFT_FIELD,
   decide,
   HARD_LIMITS,
   isAllowed,
@@ -25,6 +26,7 @@ import {
   proposal as proposalSchema,
   type RegisteredAction,
   registeredAction,
+  SEND_FIELD,
   type StepTarget,
 } from '@commander/domain';
 import type { ItemStore } from '../item-store';
@@ -148,6 +150,26 @@ export function openGate({
       const syncedChanges = Object.keys(step.changes).filter((field) => field !== 'filing');
       if (fromSource && syncedChanges.length) refuse('changes an Item at its Source', 'tidy-sources');
     }
+  }
+
+  // Ares never writes or sends a message (#11, #138, #143): only the User does, pressing Send in the
+  // composer. Sending is Act for you, capped at Ask, but no Suggestion carries it either: his drafts are
+  // text the User opens in the composer. So a proposal that would save or send a message (the outgoing
+  // changes `draft` and `send`), make an email, or touch one of the User's drafts is refused outright,
+  // whatever its Action kind and whatever the Autonomy settings say.
+  function writesAMessage(steps: ProposalRecord['itemActions']): boolean {
+    const isDraft = (target: StepTarget) => {
+      if (typeof target !== 'string') return false;
+      const detail = itemStore.get(target)?.item.detail;
+      return detail?.kind === 'email' && !!detail.draft;
+    };
+    return steps.some((step) => {
+      if (step.type === 'create') return step.item.kind === 'email';
+      if (step.type === 'edit-fields' && (DRAFT_FIELD in step.fields || SEND_FIELD in step.fields))
+        return true;
+      if ('itemId' in step && isDraft(step.itemId)) return true;
+      return 'from' in step && (isDraft(step.from) || isDraft(step.to));
+    });
   }
 
   // Filing precedence (#62, #71): the User's filing, then a Rule's, then Ares's (or inheritance). The
@@ -381,6 +403,12 @@ export function openGate({
         throw new GateError(
           'invalid',
           `"${action.name}" is ${ACTION_KIND_NAMES[action.actionKind]}, not ${ACTION_KIND_NAMES[parsed.actionKind]}`,
+        );
+      }
+      if (writesAMessage(parsed.itemActions)) {
+        throw new GateError(
+          'invalid',
+          'Ares never writes or sends a message: only you do, from the composer',
         );
       }
       checkSteps(parsed);

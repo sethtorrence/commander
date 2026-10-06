@@ -236,6 +236,9 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.emailLabels(request.account) };
       case 'email-sorting':
         return { ok: true, result: store.emailSorting.progress() };
+      case 'dismiss-suggested-reply':
+        store.suggestedReplies.dismiss(request.itemId);
+        return { ok: true, result: null };
       case 'memories':
         return { ok: true, result: store.memory.list(request.query) };
       case 'change-memory':

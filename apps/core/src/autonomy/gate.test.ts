@@ -14,6 +14,8 @@ const user: ActionContext = { by: { kind: 'user' } };
 // The actions the fake proposer's jobs register.
 const ACTIONS: RegisteredAction[] = [
   { action: 'suggest-todos', actionKind: 'organise', name: 'Suggest Todos' },
+  { action: 'draft-replies', actionKind: 'organise', name: 'Draft replies' },
+  { action: 'send-email', actionKind: 'act-for-you', name: 'Send email' },
   { action: 'file-into-projects', actionKind: 'organise', name: 'File into Projects' },
   { action: 'archive-email', actionKind: 'tidy-sources', name: 'Archive email' },
   { action: 'move-hold', actionKind: 'tidy-sources', name: 'Move your calendar holds' },
@@ -288,6 +290,92 @@ describe('propose', () => {
     );
     expect(store.get(email)?.item.deletedAt).toBeNull();
     expect(gate.activity()).toEqual([]);
+  });
+
+  it('refuses every proposal by Ares to write or send a message, at every level and in every Action kind (#143)', () => {
+    const { itemId: draft } = store.compose.save(
+      {
+        mode: 'reply',
+        account: 'me@example.com',
+        replyToItemId: email,
+        to: [{ name: 'Dana', address: 'dana@example.com' }],
+        cc: [],
+        bcc: [],
+        subject: 'Re: the meeting',
+        body: [{ type: 'paragraph', runs: [{ text: 'Works for me.' }] }],
+        attachments: [],
+      },
+      { by: { kind: 'user' }, source: 'gmail', from: { name: null, address: 'me@example.com' }, quote: null },
+    );
+    const queued = store.outgoing.list().length;
+    const message = { commanderId: draft, to: [{ name: null, address: 'dana@example.com' }] };
+    const proposals: Proposal[] = [
+      // Sending, as Act for you would (capped at Ask): still refused, never even a suggestion.
+      {
+        actionKind: 'act-for-you',
+        action: 'send-email',
+        section: 'email',
+        itemId: email,
+        itemActions: [{ type: 'edit-fields', itemId: email, fields: { send: message } }],
+        confidence: 1,
+        reason: 'Dana asked',
+      },
+      // Sending his own draft of a reply, or saving it to Drafts, from Organise ("Draft replies").
+      {
+        actionKind: 'organise',
+        action: 'draft-replies',
+        section: 'email',
+        itemId: draft,
+        itemActions: [{ type: 'edit-fields', itemId: draft, fields: { send: message } }],
+        confidence: 1,
+        reason: 'Dana asked',
+      },
+      {
+        actionKind: 'tidy-sources',
+        action: 'archive-email',
+        section: 'email',
+        itemId: email,
+        itemActions: [{ type: 'edit-fields', itemId: email, fields: { draft: message } }],
+        confidence: 1,
+        reason: 'Dana asked',
+      },
+      // Making an email.
+      {
+        actionKind: 'organise',
+        action: 'draft-replies',
+        section: 'email',
+        itemId: email,
+        itemActions: [{ type: 'create', item: { kind: 'email', title: 'Re: the meeting' } }],
+        confidence: 1,
+        reason: 'Dana asked',
+      },
+      // Changing or throwing away the User's draft.
+      {
+        actionKind: 'act-for-you',
+        action: 'send-email',
+        section: 'email',
+        itemId: draft,
+        itemActions: [{ type: 'update', itemId: draft, changes: { title: 'Re: the meeting, again' } }],
+        confidence: 1,
+        reason: 'Dana asked',
+      },
+      { ...deleteEmail(), itemId: draft, itemActions: [{ type: 'delete', itemId: draft }] },
+    ];
+    for (const level of ['off', 'ask', 'auto-when-sure', 'auto'] as const) {
+      store.autonomy.saveSettings({
+        everywhere: { organise: level, 'tidy-sources': level, 'act-for-you': level, delete: level },
+        sections: { email: { organise: level, 'tidy-sources': level, 'act-for-you': level, delete: level } },
+        actions: { 'send-email': level, 'draft-replies': level },
+      });
+      for (const proposal of proposals) {
+        expect(() => gate.propose(proposal), `${proposal.action} at ${level}`).toThrow(
+          /never writes or sends a message/,
+        );
+      }
+    }
+    expect(gate.activity()).toEqual([]);
+    expect(store.outgoing.list()).toHaveLength(queued);
+    expect(store.get(draft)?.item.deletedAt).toBeNull();
   });
 
   it('keeps Organise inside Commander: it may file an outside Item, but not change it at its Source', () => {

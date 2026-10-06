@@ -184,6 +184,7 @@ import { type ListChange, rulesIn } from './rules';
 import { type SchedulingSettingsStore, schedulingSettingsIn } from './scheduling-settings';
 import * as schema from './schema';
 import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
+import { type SuggestedReplyStore, suggestedRepliesIn } from './suggested-replies';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
 import {
   editedState,
@@ -472,6 +473,9 @@ export type ItemStore = {
   // Ares's sorting of email (#141, email-sorting.ts): the mail his to sort, and the User's corrections
   // and confirmations, recorded whenever the User moves an email he sorted or suggested a Bucket for.
   emailSorting: EmailSortingStore;
+  // Ares's suggested replies to email threads (#143, suggested-replies.ts): his own record beside each
+  // thread (decorating it as `suggestedReply`), and the User's sent mail as his drafting reads it.
+  suggestedReplies: SuggestedReplyStore;
   filing: FilingFeedbackStore & {
     // The User turned down his suggestion for an Item without filing it (Unfiled): a correction.
     decline(itemId: string, suggestedProjectId: string, context: ActionContext): ActivityEntry;
@@ -712,6 +716,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     now,
     search: () => search,
     suggested: (itemIds) => new Set(sortingAnswers.suggestions(itemIds).keys()),
+  });
+  // Ares's suggested replies (#143): his drafts beside their threads, and the User's sent mail.
+  const suggestedReplies = suggestedRepliesIn(db, {
+    now,
+    withDetails: (rows) => withDetails(rows),
+    readItem: (itemId) => readItem(itemId),
+    messagesOf: (threads) => emails.messagesOf(threads),
+    autonomy: () => autonomy.settings(),
+    models: () => models.settings(),
   });
   // Ares's GitHub summaries (github-summaries.ts): their detail, and when the User first opened each.
   const summaries = githubSummariesIn(db, { now, withDetails: (rows) => withDetails(rows) });
@@ -2571,6 +2584,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     updates: openUpdateStore(db),
     conversations: openConversationStore(db, now),
     emailSorting: sortingAnswers.store,
+    suggestedReplies,
     filing: {
       ...filing.store,
       decline: sqlite.transaction((itemId: string, suggestedProjectId: string, rawContext: ActionContext) => {
@@ -2700,7 +2714,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     linearTodosLeft: (after) => linearTodos.leftSince(after),
     externalIds: ({ source, account }) => emails.externalIds(source, account),
     emailThreads: (query) => emails.threads(query),
-    emailThread: (account, threadKey) => emails.threadView(account, threadKey),
+    emailThread(account, threadKey) {
+      const thread = emails.threadView(account, threadKey);
+      return thread && { ...thread, suggestedReply: suggestedReplies.forThread(thread) };
+    },
     emailBody: (itemId) => emails.readBody(itemId),
     compose: composeApi,
     emailViews: (query) => emails.viewCounts(query),

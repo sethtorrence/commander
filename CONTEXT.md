@@ -102,6 +102,10 @@ _Avoid_: Conversation (that's with Ares), chain
 A message being written, in Commander or in Gmail or Outlook, kept in its Account's Drafts folder so it can be finished in either; never part of a Thread or a view until it is sent.
 _Avoid_: Unsent message, compose (as a noun)
 
+**Suggested reply**:
+Ares's draft of the User's reply to a Thread, in their own style, waiting at the Thread's end (or, at Ask, offered) until the User opens it in the composer, where it becomes a Draft they edit and send, or dismisses it; nothing of it reaches Gmail or Outlook before then, and Ares never sends it.
+_Avoid_: Auto-reply, smart reply, canned response, draft (alone: that's the message in the composer)
+
 **Undo send**:
 The few seconds (10 by default, up to 60) every message the User sends waits in the Core before it really goes, with Undo putting it back in the composer.
 _Avoid_: Send delay, send later (that's scheduling a send)

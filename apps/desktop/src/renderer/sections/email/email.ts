@@ -11,9 +11,15 @@ import type {
   ItemAction,
   MessageFields,
   OutgoingChange,
+  ReadyReply,
   SortingProgress,
 } from '@commander/domain';
-import { type CloudMailAnswer, FILE_INTO_PROJECTS, SORT_INTO_BUCKETS } from '@commander/domain';
+import {
+  type CloudMailAnswer,
+  FILE_INTO_PROJECTS,
+  LEARN_WRITING_STYLE,
+  SORT_INTO_BUCKETS,
+} from '@commander/domain';
 import type {
   AccountSummary,
   AccountsState,
@@ -75,12 +81,20 @@ export interface EmailClient {
   cloudMail(): Promise<Record<string, CloudMailAnswer>>;
   /** Saves an Account's answer; allowed, Ares starts sorting its mail at once. */
   answerCloudMail(account: string, answer: CloudMailAnswer): Promise<void>;
+  /**
+   * Draft a reply (#143): Ares drafts the User's reply to a thread (by any of its messages), with what
+   * they want said when given; it waits at the end of the thread as his suggested reply.
+   */
+  draftReply(itemId: string, instruction?: string): Promise<ReadyReply>;
+  /** Dismiss on Ares's suggested reply (by the message it answers): away until a new message arrives. */
+  dismissSuggestedReply(itemId: string): Promise<void>;
 }
 
-/** The window's channels to Ares (his suggestions, his jobs) and his settings. */
+/** The window's channels to Ares (his suggestions, his jobs, his Skills) and his settings. */
 type Bridges = {
   autonomy: () => Window['commander']['autonomy'];
   models: () => Window['commander']['models'];
+  updates?: () => Window['commander']['updates'];
 };
 
 export function emailIn(
@@ -133,8 +147,17 @@ export function emailIn(
       const response = await bridges.models()({ op: 'set-cloud-mail', account, answer });
       if (!response.ok) throw new Error(response.error);
       if (answer !== 'allowed') return;
-      for (const job of [SORT_INTO_BUCKETS, FILE_INTO_PROJECTS])
+      for (const job of [SORT_INTO_BUCKETS, FILE_INTO_PROJECTS, LEARN_WRITING_STYLE])
         await bridges.autonomy()({ op: 'run-job', job });
+    },
+    draftReply: (itemId, instruction) =>
+      (bridges.updates?.() ?? window.commander.updates)({
+        op: 'draft-email-reply',
+        itemId,
+        ...(instruction?.trim() ? { instruction } : {}),
+      }),
+    async dismissSuggestedReply(itemId) {
+      await itemStore({ op: 'dismiss-suggested-reply', itemId });
     },
   };
 }

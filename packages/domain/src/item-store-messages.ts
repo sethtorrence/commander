@@ -229,6 +229,9 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('email-labels'), account: z.string().min(1).optional() }),
   // How far Ares has got sorting the mail in scope (#141), for the Email status line.
   z.object({ op: z.literal('email-sorting') }),
+  // Dismiss on Ares's suggested reply (#143), by the message it answers: it stays away from the thread
+  // until a new message arrives.
+  z.object({ op: z.literal('dismiss-suggested-reply'), itemId: z.string().min(1) }),
   // Ares's meeting preps (#130) for these events: at most one each.
   z.object({ op: z.literal('meeting-preps'), eventIds: z.array(z.string().min(1)).max(500) }),
   // The oversight summary (#119): the summary for a range, over everything, one Project (its id) or
@@ -350,6 +353,7 @@ export type ItemStoreResults = {
   'email-search': EmailSearchResult;
   'email-labels': EmailLabel[];
   'email-sorting': SortingProgress;
+  'dismiss-suggested-reply': null;
   'meeting-preps': Item[];
   'github-oversight': OversightSummary;
   'github-oversight-settings': OversightSettings;
@@ -425,6 +429,7 @@ export const itemStoreResult = {
   'email-search': emailSearchResult,
   'email-labels': emailLabelList,
   'email-sorting': sortingProgress,
+  'dismiss-suggested-reply': z.null(),
   'meeting-preps': z.array(item),
   'github-oversight': oversightSummarySchema,
   'github-oversight-settings': oversightSettings,

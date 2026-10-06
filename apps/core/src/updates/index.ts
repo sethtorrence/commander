@@ -33,6 +33,7 @@ import {
   createSkillRegistry,
   DRAFT_REPLIES,
   DRAFT_SKILL,
+  type DraftEmailRequest,
   decide,
   type GitHubSummaryAnswer,
   type GivenUpdate,
@@ -44,6 +45,7 @@ import {
   presenceReport,
   type QueuedAction,
   type QueuedLine,
+  type ReadyReply,
   type RowAction,
   type SkillRegistry,
   type SnoozeChoice,
@@ -60,7 +62,9 @@ import {
 } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import { z } from 'zod';
+import { draftEmailReply } from '../agent/draft-email-reply';
 import { draftReply } from '../agent/draft-reply';
+import type { MeaningLookup } from '../agent/memory-context';
 import { summariseChat } from '../agent/summarise-chat';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
@@ -109,6 +113,8 @@ export type UpdatesOptions = {
   summariseGitHub?: (request: SummaryRequest) => Promise<GitHubSummaryAnswer>;
   // Refresh on a People card: Ares writes one Person's paragraph again (#122).
   refreshPersonParagraph?: (request: PersonParagraphRequest) => Promise<PersonParagraphAnswer>;
+  // Search by meaning (#73): what a draft of an email reply looks Memory up by, embedded.
+  meaning?: MeaningLookup;
   // Items the Update's steering flag marked.
   onItemsChanged?: (itemIds: string[]) => void;
   // Replies to the window's requests (through the main process).
@@ -131,6 +137,8 @@ export type Updates = {
   summarise(itemId: string, range: SummaryRange): Promise<ChatSummary>;
   // The Draft Skill: Ares drafts a reply to a Chat, for the User to edit and send.
   draft(itemId: string): Promise<ChatDraft>;
+  // Draft a reply (#143): Ares drafts the User's reply to an email thread, kept as its suggested reply.
+  draftEmail(request: DraftEmailRequest): Promise<ReadyReply>;
   history(limit?: number): UpdateSummary[];
   past(id: number): UpdateView;
   act(queuedId: number, action: QueuedAction, snooze?: SnoozeChoice): QueuedLine;
@@ -516,13 +524,30 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     });
   }
 
+  function draftEmail(request: DraftEmailRequest): Promise<ReadyReply> {
+    return draftEmailReply(itemStore, request, {
+      client: options.client,
+      now,
+      meaning: options.meaning,
+      secrets: options.secrets,
+      injectionWarnings: itemStore.injectionWarnings,
+      onItemsChanged: options.onItemsChanged,
+    });
+  }
+
   const skills = createSkillRegistry();
   skills.register({ ...UPDATE_SKILL, run: () => asked() });
   skills.register<{ itemId: string; range: SummaryRange }, ChatSummary>({
     ...SUMMARISE_SKILL,
     run: ({ itemId, range }) => summarise(itemId, range),
   });
-  skills.register<{ itemId: string }, ChatDraft>({ ...DRAFT_SKILL, run: ({ itemId }) => draft(itemId) });
+  // Draft takes an Item and, for an email, what the User wants said (#143): a Chat gets a draft for its
+  // reply box, an email thread its suggested reply. M7's Conversations call it this way.
+  skills.register<{ itemId: string; instruction?: string }, ChatDraft | ReadyReply>({
+    ...DRAFT_SKILL,
+    run: ({ itemId, instruction }) =>
+      item(itemId)?.kind === 'email' ? draftEmail({ itemId, instruction }) : draft(itemId),
+  });
 
   async function answer(raw: unknown): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
     const parsed = updatesRequest.safeParse(raw);
@@ -539,6 +564,11 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
           return { ok: true, result: await summarise(request.itemId, request.range) };
         case 'draft-reply':
           return { ok: true, result: await draft(request.itemId) };
+        case 'draft-email-reply':
+          return {
+            ok: true,
+            result: await draftEmail({ itemId: request.itemId, instruction: request.instruction }),
+          };
         case 'summarise-github':
           if (!options.summariseGitHub) return { ok: false, error: 'Ares isn’t running' };
           return { ok: true, result: await options.summariseGitHub(request.request) };
@@ -571,6 +601,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     give,
     summarise,
     draft,
+    draftEmail,
     history,
     past,
     act,
