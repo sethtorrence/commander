@@ -35,10 +35,10 @@ import type { MessageFocus } from './use-teams';
 
 const isWebAddress = (url: string | null): url is string => !!url && /^https?:\/\//i.test(url);
 
-const action =
+export const action =
   'flex cursor-pointer items-center gap-[9px] border-0 border-r border-line2 bg-transparent px-3.5 font-mono text-label-lg leading-none font-semibold uppercase tracking-label whitespace-nowrap text-ink no-underline hover:bg-raise [&_kbd]:h-[18px] [&_kbd]:text-label';
 
-function Message({
+export function Message({
   message,
   me,
   webUrl,
@@ -164,7 +164,7 @@ function Message({
 }
 
 /** A reply written here that Teams doesn't have yet: on its way, waiting, or Couldn't sync with Retry. */
-function Reply({
+export function Reply({
   reply,
   change,
   waiting,
@@ -213,7 +213,7 @@ function Reply({
 }
 
 /** Couldn't sync with Retry, for a change made here that Teams won't take. */
-function CouldntSync({ change, onRetry }: { change: OutgoingChange; onRetry: () => void }) {
+export function CouldntSync({ change, onRetry }: { change: OutgoingChange; onRetry: () => void }) {
   return (
     <div
       role="alert"

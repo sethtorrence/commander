@@ -100,6 +100,17 @@ export type TeamsAccountSummary = AccountSummaryBase & {
   source: 'teams';
   // The work account signed in with (its user principal name, usually its email address).
   userPrincipalName: string;
+  // Channel posts (#111): whether the sign-in carries `ChannelMessage.Read.All` (an administrator
+  // approved it and the User asked for it), and whether the User switched Sync Channel posts on (only
+  // a granted one can be). While not granted: the permissions to approve and the tenant's admin
+  // consent page for Commander's app (null when this build doesn't know the app).
+  channelPosts?: ChannelPostsAccess;
+};
+export type ChannelPostsAccess = {
+  granted: boolean;
+  enabled: boolean;
+  permissions: string[];
+  adminConsentUrl: string | null;
 };
 export type GitHubAccountSummary = AccountSummaryBase & {
   source: 'github';
@@ -209,7 +220,11 @@ export type AccountsRequest =
   // Minutes between the Account's syncs, from its Source's choices.
   | { op: 'set-sync-cadence'; accountId: string; minutes: number }
   // Teams: whether to also check whenever another Source syncs.
-  | { op: 'set-sync-also-after-other-sources'; accountId: string; enabled: boolean };
+  | { op: 'set-sync-also-after-other-sources'; accountId: string; enabled: boolean }
+  // Teams (#111): signs in to the Account again asking for the Channel post permissions too
+  // (incremental consent), and switches Sync Channel posts on or off (only once granted).
+  | { op: 'request-channel-access'; accountId: string }
+  | { op: 'set-channel-posts'; accountId: string; enabled: boolean };
 export type AccountsResponse =
   | { ok: true; state: AccountsState }
   // `source`: the Source the failure is about, when it is about one. `adminConsent`: the sign-in

@@ -22,13 +22,15 @@
 // Source's Account finishes syncing: a moment later, so syncs finishing together cause one check,
 // never within 5 minutes of the Account's last sync, never while it is backing off, and not at all
 // when the User switches it off.
-import type {
-  AccountSyncStatus,
-  Source,
-  SyncActivity,
-  SyncOutcomeKind,
-  SyncProblem,
-  SyncTrigger,
+import {
+  type AccountSyncStatus,
+  isChannelExcluded,
+  type Source,
+  type SourceItem,
+  type SyncActivity,
+  type SyncOutcomeKind,
+  type SyncProblem,
+  type SyncTrigger,
 } from '@commander/domain';
 import {
   CursorExpired,
@@ -95,6 +97,8 @@ export type SyncAccount = {
   needsReconnect: boolean;
   me?: string | null;
   connectedAt?: number | null;
+  // Teams (#111): whether to sync Channel posts too (granted and switched on).
+  channelPosts?: boolean;
 } & ({ source: Source } | { sources: readonly Source[] });
 export const sourcesOf = (account: SyncAccount): readonly Source[] =>
   'sources' in account ? account.sources : [account.source];
@@ -109,6 +113,8 @@ export type SyncEngineOptions = {
   accessTokens: { request(account: string): Promise<AccessToken> };
   // The Source refused an Account's sign-in: the main process checks it and may mark it Reconnect.
   onSignInRefused?: (account: string) => void;
+  // Teams refused an Account's channel messages for want of permission: Channel posts go off.
+  onChannelPostsRefused?: (account: string) => void;
   // What a GitHub Account watches (Settings → GitHub), read before each of its syncs.
   watchOf?: (account: string, source: Source) => Promise<SyncWatch | null> | SyncWatch | null;
   now?: () => number;
@@ -189,11 +195,21 @@ function takeTurn<T>(entry: Entry, task: () => Promise<T>): Promise<T> {
 
 type WriteOutcome = 'written' | 'next' | 'stop';
 
+// Whether a Channel post (#111) is from a team or channel the User excluded.
+function inExcludedChannel(
+  item: Pick<SourceItem, 'detail'>,
+  excluded: readonly { teamId: string; channelId: string | null }[],
+): boolean {
+  const { detail } = item;
+  return detail?.kind === 'channel-post' && isChannelExcluded(excluded, detail.team.id, detail.channel.id);
+}
+
 export function createSyncEngine({
   store,
   adapters,
   accessTokens,
   onSignInRefused = () => {},
+  onChannelPostsRefused = () => {},
   watchOf,
   now = Date.now,
   random = Math.random,
@@ -435,6 +451,12 @@ export function createSyncEngine({
             accessToken: () => accessTokens.request(account),
             recheck,
             excluded: store.chatSettings.excluded(account),
+            channelPosts: entry.account.channelPosts
+              ? { excluded: store.channelSettings.excluded(account) }
+              : null,
+            channelPostsRefused: () => {
+              if (!signal.aborted) onChannelPostsRefused(account);
+            },
             ...(watch !== undefined ? { watch } : {}),
             catalog: store.syncState.sourceCatalog(account),
             saveCatalog(catalog) {
@@ -442,12 +464,15 @@ export function createSyncEngine({
             },
             save(page) {
               if (signal.aborted) throw new Error('The sync was stopped');
-              // Read now: the User may have excluded a Chat since the sync started.
+              // Read now: the User may have excluded a Chat, team or channel since the sync started.
               const excluded = new Set(store.chatSettings.excluded(account));
+              const channels = store.channelSettings.excluded(account);
               const outcome = store.saveFromSource({
                 source,
                 account,
-                items: page.items.filter((item) => !excluded.has(item.externalId)),
+                items: page.items.filter(
+                  (item) => !excluded.has(item.externalId) && !inExcludedChannel(item, channels),
+                ),
                 deleted: page.deleted,
                 me: entry.account.me ?? null,
               });
@@ -823,6 +848,8 @@ export function createSyncEngine({
           entries.set(account.id, entry);
         }
         const reconnected = entry.account.needsReconnect && !account.needsReconnect;
+        // Channel posts switched on or off (#111): a sync at once brings them, or takes them away.
+        const channelsChanged = !isNew && !!entry.account.channelPosts !== !!account.channelPosts;
         entry.account = account;
         // Sources switched off (or no longer carried) stop; those switched on start.
         const wanted = new Set(adapters.map((adapter) => adapter.source));
@@ -842,7 +869,7 @@ export function createSyncEngine({
         } else if (account.needsReconnect) {
           clearTimers(entry);
           clearWriteTimer(entry);
-        }
+        } else if (channelsChanged) void runAll(entry, 'refresh');
         if (isNew || reconnected || added.length > 0) kickWrites(entry);
       }
       emit();

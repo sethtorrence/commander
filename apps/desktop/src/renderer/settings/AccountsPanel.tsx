@@ -297,7 +297,7 @@ const Note = ({ children }: { children: ReactNode }) => (
 );
 
 // The organisation needs an administrator to approve Commander: the permissions, and the link.
-function AdminConsent({ needed }: { needed: AdminConsentNeeded }) {
+export function AdminConsent({ needed }: { needed: AdminConsentNeeded }) {
   const link = useRef<HTMLInputElement>(null);
   const copy = async () => {
     try {

@@ -1,5 +1,6 @@
 import { BUCKET_FIELD, type EmailBucket } from './buckets';
 import type { EventDetail, EventResponse } from './calendar';
+import type { ChannelPostDetail, ChannelReply } from './channel-posts';
 import {
   type EmailDetail,
   type EmailFolder,
@@ -27,6 +28,10 @@ import { type ChatDetail, type ChatReply, latestFromOthers } from './teams';
 // per reply written in Commander that Teams doesn't have yet (the reply, or null once cancelled).
 // Once Teams has a reply it is one of the Chat's messages, under Teams's id, and no longer a synced
 // field: a message that reached other people can't be recalled (see isUnrecallableField).
+//
+// Channel posts (#111): `seen`, Commander's own mark of how far the User has seen the thread (a
+// local field: Teams keeps no read state for channels), and one `reply:<clientId>` per reply written
+// in Commander that Teams doesn't have yet, which can't be recalled once sent, as a Chat's.
 //
 // Calendar events (#129): only an invitation (an event the User is a guest of, not its organiser)
 // has synced fields: `response`, the User's answer, and for an instance of a series `seriesResponse`,
@@ -124,6 +129,32 @@ function withChatFields(detail: ChatDetail, fields: SyncedFields): ChatDetail {
 
 const isChatField = (field: string) =>
   field === READ_FIELD || (field.startsWith(MESSAGE_FIELD) && field.length > MESSAGE_FIELD.length);
+
+export const SEEN_FIELD = 'seen';
+export const REPLY_FIELD = 'reply:';
+
+function channelPostFields(detail: ChannelPostDetail): SyncedFields {
+  const fields: SyncedFields = { [SEEN_FIELD]: detail.seenAt ?? null };
+  for (const reply of detail.pending ?? []) fields[`${REPLY_FIELD}${reply.clientId}`] = reply;
+  return fields;
+}
+
+function withChannelPostFields(detail: ChannelPostDetail, fields: SyncedFields): ChannelPostDetail {
+  const { seenAt: _seenAt, pending: _pending, ...rest } = detail;
+  const next: ChannelPostDetail = rest;
+  const seen = fields[SEEN_FIELD];
+  if (typeof seen === 'number') next.seenAt = seen;
+  const pending: ChannelReply[] = [];
+  for (const [field, value] of Object.entries(fields)) {
+    if (field.startsWith(REPLY_FIELD) && value) pending.push(value as ChannelReply);
+  }
+  if (pending.length)
+    next.pending = pending.sort((a, b) => a.createdAt - b.createdAt || a.clientId.localeCompare(b.clientId));
+  return next;
+}
+
+const isChannelPostField = (field: string) =>
+  field === SEEN_FIELD || (field.startsWith(REPLY_FIELD) && field.length > REPLY_FIELD.length);
 
 const RESPONSE_FIELD = 'response';
 const SERIES_RESPONSE_FIELD = 'seriesResponse';
@@ -264,6 +295,7 @@ const isEmailField = (field: string) =>
 /** Whether `field` names one of a detail kind's synced fields. */
 export function isSyncedField(kind: ItemDetail['kind'], field: string): boolean {
   if (kind === 'chat') return isChatField(field);
+  if (kind === 'channel-post') return isChannelPostField(field);
   if (kind === 'email') return isEmailField(field);
   if (kind === 'event') return field === RESPONSE_FIELD || field === SERIES_RESPONSE_FIELD;
   if (kind !== 'linear-issue') return false;
@@ -279,6 +311,7 @@ export function isSyncedField(kind: ItemDetail['kind'], field: string): boolean 
  * a Teams Chat has reached other people. Until then (queued, or Couldn't sync) undo cancels it.
  */
 export function isUnrecallableField(kind: ItemKind, field: string): boolean {
+  if (kind === 'channel-post') return field.startsWith(REPLY_FIELD) && isChannelPostField(field);
   return kind === 'chat' && field.startsWith(MESSAGE_FIELD) && isChatField(field);
 }
 
@@ -287,6 +320,7 @@ export function isUnrecallableField(kind: ItemKind, field: string): boolean {
  * field like the others, kept through syncs, but never queued for the Source.
  */
 export function isLocalField(kind: ItemKind, field: string): boolean {
+  if (kind === 'channel-post') return field === SEEN_FIELD;
   return kind === 'email' && LOCAL_EMAIL_FIELDS.has(field);
 }
 
@@ -303,6 +337,7 @@ export function syncedFieldsOf(detail: ItemDetail | null): SyncedFields | null {
   if (detail?.kind === 'email') return emailFields(detail);
   if (detail?.kind === 'linear-issue') return linearIssueFields(detail);
   if (detail?.kind === 'chat') return chatFields(detail);
+  if (detail?.kind === 'channel-post') return channelPostFields(detail);
   if (detail?.kind === 'event') return eventFields(detail);
   return null;
 }
@@ -314,6 +349,7 @@ export function syncedFieldsOf(detail: ItemDetail | null): SyncedFields | null {
 export function withSyncedFields<D extends ItemDetail>(detail: D, fields: SyncedFields): D {
   if (detail.kind === 'linear-issue') return withLinearIssueFields(detail, fields) as D;
   if (detail.kind === 'chat') return withChatFields(detail, fields) as D;
+  if (detail.kind === 'channel-post') return withChannelPostFields(detail, fields) as D;
   if (detail.kind === 'event') return withEventFields(detail, fields) as D;
   if (detail.kind === 'email') return withEmailFields(detail, fields) as D;
   return detail;

@@ -82,6 +82,12 @@ export type SyncRequest = {
   // External ids the User excluded from Commander (Teams Chats): fetch nothing for them, and hand
   // none of them over. Not deletions: an excluded Chat comes back once the User includes it again.
   excluded?: string[];
+  // Teams (#111): Channel posts, when Microsoft shares them and the User switched them on, with the
+  // teams (`channelId` null) and channels the User excluded. Absent or null: off, so any posts still
+  // held are handed back as deleted.
+  channelPosts?: { excluded: { teamId: string; channelId: string | null }[] } | null;
+  // Teams: Microsoft refused to share channel messages for want of permission (consent withdrawn).
+  channelPostsRefused?(): void;
   // Aborted when the sync is no longer wanted (the Account was removed).
   signal: AbortSignal;
 };

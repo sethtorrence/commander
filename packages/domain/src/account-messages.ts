@@ -69,6 +69,9 @@ export const accountsRequest = z.union([
     accountId: z.string().min(1),
     enabled: z.boolean(),
   }),
+  // Teams (#111): Request access to Channel posts, and Sync Channel posts on or off.
+  z.object({ op: z.literal('request-channel-access'), accountId: z.string().min(1) }),
+  z.object({ op: z.literal('set-channel-posts'), accountId: z.string().min(1), enabled: z.boolean() }),
 ]);
 // The zod-free AccountsRequest type in ipc.ts (for the preload) must match the schema.
 type _RequestMatches = [AccountsRequest] extends [z.infer<typeof accountsRequest>]

@@ -17,6 +17,8 @@ import type { ItemDetail, ItemKind } from './items';
 // an email's detail (headers, snippet, labels) is small and logged whole.
 const SUMMARISED: Partial<Record<ItemKind, readonly string[]>> = {
   chat: ['messages'],
+  // A Channel post's replies (#111), as a Chat's messages.
+  'channel-post': ['replies'],
 };
 
 /** The detail fields of this kind the log keeps only in summary. */

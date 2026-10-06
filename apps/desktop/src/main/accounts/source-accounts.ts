@@ -47,6 +47,9 @@ export type AccountIdentity = {
   // For an Account carrying several Sources: which the sign-in granted (see AccountRecord.sources).
   // Absent: as the Account already had them.
   sources?: { source: CarriedSource['source']; granted: boolean }[];
+  // Teams (#111): whether the sign-in carries the permission to read Channel posts. Absent: as the
+  // Account already had it.
+  channelPosts?: { granted: boolean };
 };
 
 // What one Source brings to its Accounts. `S` is what its browser sign-in hands back: the tokens,
@@ -64,8 +67,13 @@ export type AccountSourceDefinition<S extends TokenSet = TokenSet> = {
       now: () => number;
       // For a device sign-in (GitHub): shows the User the code to enter at the Source.
       showCode: (prompt: DeviceCodePrompt) => void;
+      // The Account being reconnected, if any, as Commander keeps it.
+      record: AccountRecord | null;
+      // Ask for the Source's optional permissions too (Teams: Channel posts, #111).
+      extra: boolean;
     }): Promise<S>;
-    refresh(refreshToken: string, now: () => number): Promise<TokenSet>;
+    // `record`: the Account as Commander keeps it (what it was granted decides what to ask for again).
+    refresh(refreshToken: string, now: () => number, record: AccountRecord): Promise<TokenSet>;
   } | null;
   notConfigured: string;
   // Whether a personal API key can connect an Account instead.
@@ -114,8 +122,9 @@ export type SourceAccounts = {
   // The code a device sign-in waits for the User to enter, while it does.
   readonly deviceCode: DeviceCodePrompt | null;
   list(): Promise<AccountSummary[]>;
-  // `reconnect`: the Account being reconnected; the sign-in must be for the same identity.
-  connectWithBrowser(options?: { reconnect?: string }): Promise<AccountSummary>;
+  // `reconnect`: the Account being reconnected; the sign-in must be for the same identity. `extra`:
+  // ask for the Source's optional permissions too (Teams: Channel posts).
+  connectWithBrowser(options?: { reconnect?: string; extra?: boolean }): Promise<AccountSummary>;
   connectWithApiKey(apiKey: string, options?: { reconnect?: string }): Promise<AccountSummary>;
   connectWithCli(options?: { reconnect?: string }): Promise<AccountSummary>;
   cancelSignIn(): void;
@@ -134,8 +143,21 @@ export type SourceAccounts = {
   // The Source refused the Account's token during a sync (e.g. an API key revoked). An API key
   // Account is marked Reconnect; an OAuth one is refreshed, and marked Reconnect if that fails for good.
   reportRefused(accountId: string): Promise<void>;
+  // Changes what Commander keeps of an Account beside its sign-in (Teams: whether Channel posts are
+  // granted and on), and tells listeners. `change` returns the record to keep, or null for no change.
+  updateRecord(accountId: string, change: (record: AccountRecord) => AccountRecord | null): Promise<void>;
   // Called whenever the list of Accounts or their status changes.
   onChange(listener: () => void): () => void;
+  // Teams (#111): Channel posts, for the Sources that have them.
+  channelPosts?: {
+    // Signs in again asking for the Channel post permissions too. Rejects with a SignInError (with
+    // the admin consent link) when Microsoft didn't grant reading them.
+    request(accountId: string): Promise<void>;
+    // Switches Sync Channel posts on or off; rejects for an Account not granted them.
+    set(accountId: string, enabled: boolean): Promise<void>;
+    // Microsoft refused to share them: back to not granted (off), until asked for again.
+    refused(accountId: string): Promise<void>;
+  };
 };
 
 export type SourceAccountsOptions = {
@@ -243,6 +265,18 @@ export function createSourceAccounts<S extends TokenSet>(
     };
     const sources = carriedAfterSignIn(identity.sources, existing?.sources);
     if (sources) record.sources = sources;
+    // Channel posts (#111): granted as the sign-in says; on only if the User had them on while granted
+    // (a new grant starts off, for the User to switch on).
+    const channels = identity.channelPosts
+      ? {
+          granted: identity.channelPosts.granted,
+          enabled:
+            identity.channelPosts.granted &&
+            !!existing?.channelPosts?.granted &&
+            existing.channelPosts.enabled,
+        }
+      : existing?.channelPosts;
+    if (channels) record.channelPosts = channels;
     await store.put(record);
     changed();
     return definition.summarize(record);
@@ -266,7 +300,7 @@ export function createSourceAccounts<S extends TokenSet>(
     }
     let tokens: TokenSet;
     try {
-      tokens = await oauth.refresh(credential.refreshToken, now);
+      tokens = await oauth.refresh(credential.refreshToken, now, record);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (error instanceof RefreshError && error.permanent) {
@@ -342,7 +376,7 @@ export function createSourceAccounts<S extends TokenSet>(
       return (await store.list()).filter((record) => record.source === source).map(definition.summarize);
     },
 
-    async connectWithBrowser({ reconnect } = {}) {
+    async connectWithBrowser({ reconnect, extra = false } = {}) {
       if (!oauth) throw new SignInError('not-configured', definition.notConfigured);
       requireKeyring();
       // A new sign-in replaces one still waiting (a fixed port can only listen for one).
@@ -357,7 +391,15 @@ export function createSourceAccounts<S extends TokenSet>(
         changed();
       };
       try {
-        const signingIn = oauth.signIn({ openBrowser, signal: controller.signal, now, showCode });
+        const record = reconnect !== undefined ? await store.get(reconnect) : null;
+        const signingIn = oauth.signIn({
+          openBrowser,
+          signal: controller.signal,
+          now,
+          showCode,
+          record,
+          extra,
+        });
         signInEnded = signingIn.catch(() => {});
         const signedIn = await signingIn;
         const { accessToken, refreshToken, expiresAt } = signedIn;
@@ -483,6 +525,15 @@ export function createSourceAccounts<S extends TokenSet>(
       // A refused OAuth token may only have been revoked early: a refresh tells. A refresh refused
       // for good marks the Account Reconnect inside refresh().
       await refreshOnce(record, true).catch(() => {});
+    },
+
+    async updateRecord(id, change) {
+      const record = await store.get(id);
+      if (!record || record.source !== source) throw new Error(`No ${label} Account ${id}`);
+      const next = change(record);
+      if (!next) return;
+      await store.put(next);
+      changed();
     },
 
     onChange(listener) {

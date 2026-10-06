@@ -1,8 +1,10 @@
+import type { ChannelPostDetail } from './channel-posts';
 import type { RuleField, RuleFieldValue } from './rules';
 import type { ChatDetail, ChatType } from './teams';
 
 // Teams' Rule fields (#108): what a Chat can be filed by. "person in Chat is Omar Haddad → TL",
-// "Chat is TL eng → TL". Team and channel fields join with Channel posts.
+// "Chat is TL eng → TL". And what a Channel post can be filed by (#111): its team and its channel,
+// "team is Titanlink → TL" filing every post in that team.
 
 type Readable = Parameters<RuleField['read']>[0];
 
@@ -16,6 +18,9 @@ export function teamsUserOf(account: string | null | undefined): string | null {
 
 const chatOf = (item: Readable): ChatDetail | null =>
   item.source === 'teams' && item.detail?.kind === 'chat' ? item.detail : null;
+
+const postOf = (item: Readable): ChannelPostDetail | null =>
+  item.source === 'teams' && item.detail?.kind === 'channel-post' ? item.detail : null;
 
 const CHAT_TYPE_WORDS: Record<ChatType, string> = {
   'one-on-one': 'one-to-one',
@@ -85,5 +90,28 @@ export const teamsRuleFields: readonly RuleField[] = [
     label: 'Chat name',
     ops: ['contains'],
     read: (item) => (chatOf(item) ? [{ value: item.title, label: item.title }] : []),
+  },
+  {
+    id: 'teams.team',
+    name: 'team',
+    label: 'Team',
+    ops: choices,
+    read: (item) => {
+      const post = postOf(item);
+      return post ? [{ value: post.team.id, label: post.team.name }] : [];
+    },
+  },
+  {
+    // Named by team and channel id together: the same channel name ("General") is in every team.
+    id: 'teams.channel',
+    name: 'channel',
+    label: 'Channel',
+    ops: choices,
+    read: (item) => {
+      const post = postOf(item);
+      return post
+        ? [{ value: `${post.team.id}/${post.channel.id}`, label: `${post.team.name} / ${post.channel.name}` }]
+        : [];
+    },
   },
 ];

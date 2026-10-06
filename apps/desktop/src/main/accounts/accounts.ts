@@ -31,6 +31,11 @@ export type Accounts = {
   deviceCode(): (DeviceCodePrompt & { source: AccountSource }) | null;
   // Cancels any browser sign-in waiting for the User.
   cancelSignIn(): void;
+  // Teams (#111): Request access to Channel posts, Sync Channel posts on or off, and Microsoft
+  // refusing to share them. Reject for an Account whose Source has no Channel posts.
+  requestChannelAccess(accountId: string): Promise<void>;
+  setChannelPosts(accountId: string, enabled: boolean): Promise<void>;
+  channelPostsRefused(accountId: string): Promise<void>;
   onChange(listener: () => void): () => void;
 };
 
@@ -38,6 +43,12 @@ export function combineAccounts(sources: readonly SourceAccounts[]): Accounts {
   const bySource = new Map(sources.map((accounts) => [accounts.source, accounts]));
   const owner = (accountId: string) =>
     bySource.get(accountId.slice(0, accountId.indexOf(':')) as AccountSource);
+
+  const channelPostsOf = (accountId: string) => {
+    const found = owner(accountId)?.channelPosts;
+    if (!found) throw new Error('Only Teams Accounts have Channel posts.');
+    return found;
+  };
 
   return {
     sources,
@@ -95,6 +106,18 @@ export function combineAccounts(sources: readonly SourceAccounts[]): Accounts {
 
     cancelSignIn() {
       for (const accounts of sources) accounts.cancelSignIn();
+    },
+
+    async requestChannelAccess(accountId) {
+      await channelPostsOf(accountId).request(accountId);
+    },
+
+    async setChannelPosts(accountId, enabled) {
+      await channelPostsOf(accountId).set(accountId, enabled);
+    },
+
+    async channelPostsRefused(accountId) {
+      await owner(accountId)?.channelPosts?.refused(accountId);
     },
 
     onChange(listener) {

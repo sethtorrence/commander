@@ -1,0 +1,102 @@
+[
+  {
+    "request": {
+      "path": "/me/chats?$expand=lastMessagePreview&$top=50"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "@odata.context": "https://graph.microsoft.com/v1.0/$metadata#chats(lastMessagePreview())",
+        "value": []
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/me/joinedTeams?$select=id,displayName"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "value": [
+          {
+            "id": "team-tl",
+            "displayName": "Titanlink"
+          },
+          {
+            "id": "team-ops",
+            "displayName": "Ops"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/teams/team-tl/channels?$select=id,displayName,membershipType"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "value": [
+          {
+            "id": "19:general-tl@thread.tacv2",
+            "displayName": "General",
+            "membershipType": "standard"
+          },
+          {
+            "id": "19:releases@thread.tacv2",
+            "displayName": "releases",
+            "membershipType": "standard"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/teams/team-ops/channels?$select=id,displayName,membershipType"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "value": [
+          {
+            "id": "19:general-ops@thread.tacv2",
+            "displayName": "General",
+            "membershipType": "standard"
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
+      "path": "/teams/team-tl/channels/19:general-tl@thread.tacv2/messages?$top=20&$expand=replies"
+    },
+    "response": {
+      "status": 403,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "error": {
+          "code": "Forbidden",
+          "message": "Missing scope permissions on the request. API requires one of 'ChannelMessage.Read.All, Group.Read.All, Group.ReadWrite.All'. Scopes on the request 'Chat.ReadWrite ChatMessage.Send Team.ReadBasic.All Channel.ReadBasic.All User.Read'"
+        }
+      }
+    }
+  }
+]

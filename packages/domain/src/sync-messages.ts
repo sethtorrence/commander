@@ -96,6 +96,8 @@ const syncAccountBase = {
   // Who the User is in the Account, as People know them (#117): their own handles there (see the
   // domain's people.ts, ownHandles) and the name the Account has for them.
   own: z.object({ handles: z.array(z.string().min(1)), name: z.string().nullable() }).optional(),
+  // Teams (#111): whether to sync Channel posts too (granted and switched on).
+  channelPosts: z.boolean().optional(),
 };
 export const coreSyncAccounts = z.object({
   type: z.literal('sync-accounts'),
@@ -156,3 +158,12 @@ export type CoreSyncStatus = z.infer<typeof coreSyncStatus>;
 // Linear). The main process checks it and marks the Account Reconnect when it is gone for good.
 export const coreAccountRefused = z.object({ type: z.literal('account-refused'), account: accountId });
 export type CoreAccountRefused = z.infer<typeof coreAccountRefused>;
+
+// Core → main process: Microsoft refused to share a Teams Account's channel messages for want of
+// `ChannelMessage.Read.All` (consent withdrawn, or never really given): Channel posts go back to off,
+// with Request access, until the sign-in carries it again.
+export const coreChannelPostsRefused = z.object({
+  type: z.literal('channel-posts-refused'),
+  account: accountId,
+});
+export type CoreChannelPostsRefused = z.infer<typeof coreChannelPostsRefused>;

@@ -54,6 +54,7 @@
 //   other instances follow that one's filing (series-filing.ts). Filed in the Calendar Section.
 import {
   type AutonomySection,
+  type ChannelPostDetail,
   type ChatDetail,
   chatPeople,
   decide,
@@ -87,7 +88,7 @@ const MAX_REASON_CHARS = 140;
 export const CHAT_MESSAGES = 10;
 const MAX_MESSAGE = 240;
 // The kinds of Item Ares files.
-const KINDS = ['linear-issue', 'chat'] as const;
+const KINDS = ['linear-issue', 'chat', 'channel-post'] as const;
 const CHAT_TYPES: Record<ChatDetail['chatType'], string> = {
   'one-on-one': 'one-to-one chat',
   group: 'group chat',
@@ -125,6 +126,7 @@ const INSTRUCTIONS = `You are Ares. You file the User's incoming Items into thei
 The data holds the User's Projects (each with its two-letter code and name, and the Rules that already file Items into it), then the Item to file, labelled with its reference (I1) and what it is, with its facts:
 - a Linear issue: title, people, where it comes from in its Source (workspace, team, Linear project, labels), and some of its content;
 - a Teams Chat: its name and type, the people in it (with where the User filed other Chats with them), and its latest messages;
+- a Teams channel post: its team and channel (with where the User filed other posts there), who posted, the post and its latest replies;
 - a calendar event: its title, the calendar it is on, its organiser and attendees, and some of its description;
 - a GitHub pull request, issue or release: its repo and org, title, labels, author (with where the User filed the author's other GitHub Items), and some of its body or release notes;
 and the Projects of Items linked to it.
@@ -171,6 +173,9 @@ const issueOf = (item: Item): LinearIssueDetail | null =>
 const chatOf = (item: Item): ChatDetail | null =>
   item.source === 'teams' && item.detail?.kind === 'chat' ? item.detail : null;
 
+const postOf = (item: Item): ChannelPostDetail | null =>
+  item.source === 'teams' && item.detail?.kind === 'channel-post' ? item.detail : null;
+
 const eventOf = (item: Item): EventDetail | null => (item.detail?.kind === 'event' ? item.detail : null);
 
 const githubOf = githubFiledDetail;
@@ -202,7 +207,7 @@ const personText = (person: EventPerson) =>
 
 // The Autonomy Section an Item is filed in.
 const sectionOf = (item: Item): AutonomySection =>
-  chatOf(item) ? 'teams' : eventOf(item) ? 'calendar' : githubOf(item) ? 'github' : 'linear';
+  chatOf(item) || postOf(item) ? 'teams' : eventOf(item) ? 'calendar' : githubOf(item) ? 'github' : 'linear';
 
 // A Chat's messages that say something: no system events, nothing deleted.
 const spoken = (chat: ChatDetail) => chat.messages.filter((message) => message.from && !message.deleted);
@@ -222,6 +227,13 @@ export function filingFingerprint(item: Item): string {
   if (chat) {
     const people = chatPeople(item).map((person) => person.value);
     return JSON.stringify([title, item.account, chat.chatType, people.sort(), chatGrowth(chat)]);
+  }
+  const post = postOf(item);
+  if (post) {
+    // Its place, and how far its thread has grown (none, a few replies, many).
+    const replies = post.replies.filter((reply) => reply.from && !reply.deleted).length;
+    const growth = replies >= CHAT_MESSAGES ? 2 : replies >= 3 ? 1 : 0;
+    return JSON.stringify([title, item.account, post.team.id, post.channel.id, growth]);
   }
   const event = eventOf(item);
   if (event) {
@@ -324,7 +336,8 @@ export function fileIntoProjectsJob(
     return (
       !!item &&
       (githubInScope(item) ||
-        ((item.kind === 'linear-issue' || !!chatOf(item) || eventInScope(item)) && item.status === 'open')) &&
+        ((item.kind === 'linear-issue' || !!chatOf(item) || !!postOf(item) || eventInScope(item)) &&
+          item.status === 'open')) &&
       item.deletedAt === null &&
       item.filing === null &&
       !pending.has(item.id) &&
@@ -451,6 +464,51 @@ export function fileIntoProjectsJob(
     ].join('\n');
   }
 
+  // Where the User (or a Rule) filed other posts from the same team and channel. Codes and counts only.
+  function placesProjects(item: Item, post: ChannelPostDetail): string[] {
+    const inTeam = new Map<string, number>();
+    const inChannel = new Map<string, number>();
+    for (const other of itemStore.query({ kinds: ['channel-post'], source: 'teams', limit: 1000 })) {
+      const filedBy = other.filing?.filedBy;
+      const there = postOf(other);
+      if (other.id === item.id || !there || (filedBy !== 'user' && filedBy !== 'rule')) continue;
+      if (there.team.id !== post.team.id) continue;
+      const code = codeOf(other.filing?.projectId);
+      if (!code) continue;
+      inTeam.set(code, (inTeam.get(code) ?? 0) + 1);
+      if (there.channel.id === post.channel.id) inChannel.set(code, (inChannel.get(code) ?? 0) + 1);
+    }
+    const counted = (counts: Map<string, number>) =>
+      [...counts]
+        .sort((a, b) => b[1] - a[1])
+        .map(([code, n]) => `${code} (${n})`)
+        .join(', ');
+    return [
+      ...(inChannel.size ? [`Where other posts in this channel are filed: ${counted(inChannel)}`] : []),
+      ...(inTeam.size ? [`Where other posts in this team are filed: ${counted(inTeam)}`] : []),
+    ];
+  }
+
+  function postFacts(item: Item, post: ChannelPostDetail): string {
+    const me = teamsUserOf(item.account);
+    const who = (userId: string | null | undefined, name: string | undefined) =>
+      me !== null && userId === me ? 'the User' : (name ?? 'someone');
+    const replies = post.replies
+      .filter((reply) => reply.from && !reply.deleted)
+      .slice(-CHAT_MESSAGES)
+      .map((reply) => `${who(reply.from?.userId, reply.from?.name)}: ${cut(reply.text, MAX_MESSAGE)}`);
+    const linked = linkedProjects(item);
+    return [
+      `Team: ${post.team.name}`,
+      `Channel: ${post.channel.name}`,
+      ...(post.subject ? [`Subject: ${post.subject}`] : []),
+      ...placesProjects(item, post),
+      `Posted by ${who(post.post.from?.userId, post.post.from?.name)}: ${post.post.deleted ? '(deleted)' : cut(post.post.text, MAX_DESCRIPTION)}`,
+      ...(replies.length ? ['Latest replies (oldest first):', ...replies] : ['No replies yet']),
+      ...(linked.length ? [`Linked Items’ Projects: ${linked.join(', ')}`] : []),
+    ].join('\n');
+  }
+
   function eventFacts(item: Item, event: EventDetail): string {
     const people = event.attendees.filter((attendee) => !attendee.resource);
     const shown = people.slice(0, MAX_ATTENDEES).map(personText);
@@ -472,6 +530,8 @@ export function fileIntoProjectsJob(
   function factsOf(item: Item): string {
     const chat = chatOf(item);
     if (chat) return chatFacts(item, chat);
+    const post = postOf(item);
+    if (post) return postFacts(item, post);
     const event = eventOf(item);
     if (event) return eventFacts(item, event);
     const github = githubOf(item);
@@ -517,6 +577,7 @@ export function fileIntoProjectsJob(
 
   function labelOf(ref: string, item: Item): string {
     if (chatOf(item)) return `${ref} · Teams Chat`;
+    if (postOf(item)) return `${ref} · Teams channel post`;
     if (eventOf(item)) return `${ref} · Calendar event`;
     const github = githubOf(item);
     if (github) return `${ref} · ${githubName(github)}`;
@@ -533,7 +594,7 @@ export function fileIntoProjectsJob(
       action: FILE_INTO_PROJECTS,
       actionKind: 'organise',
       section: null,
-      hint: 'Linear issues, Teams Chats, calendar events and GitHub pull requests, issues and releases no Rule files, into the Project they belong to',
+      hint: 'Linear issues, Teams Chats and channel posts, calendar events and GitHub pull requests, issues and releases no Rule files, into the Project they belong to',
     },
     triggers: { 'items-arrived': true, idle: true },
 

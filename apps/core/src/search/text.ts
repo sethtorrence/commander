@@ -55,6 +55,15 @@ export function searchTextOf(item: SearchableItem): SearchText | null {
       .filter((message) => !message.deleted && message.text)
       .map((message) => message.text)
       .join('\n');
+  } else if (detail?.kind === 'channel-post') {
+    // A Channel post (#111): where it was posted, the post and its latest replies.
+    body = [
+      detail.team.name,
+      detail.channel.name,
+      ...[detail.post, ...detail.replies.slice(-CHAT_MESSAGES_SEARCHED)]
+        .filter((message) => !message.deleted && message.text)
+        .map((message) => message.text),
+    ].join('\n');
   } else if (detail?.kind === 'email') {
     // Who it's from and to, its attachments' names and its text (the subject is its title).
     const addresses = [detail.from, ...detail.to, ...detail.cc].flatMap((address) =>

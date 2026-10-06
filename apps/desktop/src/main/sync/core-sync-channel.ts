@@ -8,6 +8,7 @@ import {
   type CoreSyncCommand,
   type CoreSystemState,
   coreAccountRefused,
+  coreChannelPostsRefused,
   coreSyncStatus,
   ownHandles,
   SOURCES_OF_ACCOUNT,
@@ -18,17 +19,20 @@ import { z } from 'zod';
 
 export type CoreSyncMessage = CoreSyncAccounts | CoreSyncCommand | CoreSystemState;
 
-const isSyncReport = z.object({ type: z.enum(['sync-status', 'account-refused']) });
+const isSyncReport = z.object({ type: z.enum(['sync-status', 'account-refused', 'channel-posts-refused']) });
 
 export function createCoreSyncChannel({
   send,
   endpoints,
   onRefused,
+  onChannelPostsRefused = () => {},
 }: {
   send: (message: CoreSyncMessage) => void;
   endpoints: CoreSyncAccounts['endpoints'];
   // The Source refused an Account's sign-in during a sync.
   onRefused: (account: string) => void;
+  // Teams refused an Account's channel messages for want of permission (#111).
+  onChannelPostsRefused?: (account: string) => void;
 }) {
   // The Core's statuses, one per Source of each Account (most Accounts carry one).
   let latest: AccountSyncStatus[] = [];
@@ -48,6 +52,8 @@ export function createCoreSyncChannel({
         sources?: CarriedSource[];
         // When the User connected it (Gmail downloads the 30 days before).
         connectedAt?: number | null;
+        // Teams (#111): Channel posts granted, and whether the User switched them on.
+        channelPosts?: { granted: boolean; enabled: boolean };
         // Who signed in, by Source (GitHub's login, Google's address, Microsoft's principal name):
         // the User's own handles, so the User is one Person across their Accounts.
         login?: string;
@@ -58,7 +64,7 @@ export function createCoreSyncChannel({
       send({
         type: 'sync-accounts',
         accounts: accounts.flatMap((summary): CoreSyncAccounts['accounts'] => {
-          const { id, name, source, status, user, sources, connectedAt } = summary;
+          const { id, name, source, status, user, sources, connectedAt, channelPosts } = summary;
           const handles = ownHandles(summary);
           const account = {
             id,
@@ -67,6 +73,7 @@ export function createCoreSyncChannel({
             ...(name ? { name } : {}),
             ...(connectedAt ? { connectedAt } : {}),
             ...(handles.length ? { own: { handles, name: user?.name ?? null } } : {}),
+            ...(channelPosts ? { channelPosts: channelPosts.granted && channelPosts.enabled } : {}),
           };
           const [only, ...others] = SOURCES_OF_ACCOUNT[source];
           if (!sources && only && others.length === 0) return [{ ...account, source: only }];
@@ -114,6 +121,11 @@ export function createCoreSyncChannel({
     handle(raw: unknown): boolean {
       const header = isSyncReport.safeParse(raw);
       if (!header.success) return false;
+      if (header.data.type === 'channel-posts-refused') {
+        const refused = coreChannelPostsRefused.safeParse(raw);
+        if (refused.success) onChannelPostsRefused(refused.data.account);
+        return true;
+      }
       if (header.data.type === 'account-refused') {
         const refused = coreAccountRefused.safeParse(raw);
         if (refused.success) onRefused(refused.data.account);

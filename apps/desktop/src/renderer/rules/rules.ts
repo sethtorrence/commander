@@ -65,7 +65,10 @@ export function rulesIn(itemStore: ItemStoreClient): RulesClient {
     buckets: () => itemStore({ op: 'buckets' }),
     async items() {
       const [others, github, emails] = await Promise.all([
-        itemStore({ op: 'query', query: { kinds: ['linear-issue', 'event', 'chat'], limit: 1000 } }),
+        itemStore({
+          op: 'query',
+          query: { kinds: ['linear-issue', 'event', 'chat', 'channel-post'], limit: 1000 },
+        }),
         itemStore({
           op: 'query',
           query: { kinds: ['pull-request', 'github-issue', 'github-release'], limit: 1000 },

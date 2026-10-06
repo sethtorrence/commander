@@ -98,6 +98,14 @@ export async function answerAccountsRequest(
       case 'set-sync-also-after-other-sources':
         sync.setAlsoAfterOtherSources(request.accountId, request.enabled);
         break;
+      case 'request-channel-access':
+        source = sourceOf(accounts, request.accountId);
+        await accounts.requestChannelAccess(request.accountId);
+        break;
+      case 'set-channel-posts':
+        source = sourceOf(accounts, request.accountId);
+        await accounts.setChannelPosts(request.accountId, request.enabled);
+        break;
     }
   } catch (error) {
     // Cancelling is the User's own choice, not a failure to explain.

@@ -64,6 +64,14 @@ export function aboutItem(item: Item): AboutItem {
       ? `The Teams Chat with ${listed(more > 0 ? [...shown, `${more} more`] : shown)}`
       : 'A Teams Chat';
     words.push(...others.flatMap((member) => [member.name, member.email ?? '']));
+  } else if (detail?.kind === 'channel-post') {
+    // A Channel post (#111) by where it was posted and who posted, never its text.
+    subject = `The Teams post in ${detail.team.name} / ${detail.channel.name}`;
+    words.push(
+      detail.team.name,
+      detail.channel.name,
+      ...[detail.post, ...detail.replies].flatMap((message) => (message.from ? [message.from.name] : [])),
+    );
   } else if (detail?.kind === 'event') {
     const organiser = detail.organiser;
     const by = organiser ? ` organised by ${organiser.name?.trim() || organiser.email}` : '';

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { eventDetail } from './calendar';
+import { channelPostDetail } from './channel-posts';
 import { emailBody, emailDetail } from './email';
 import { githubIssueDetail, githubReleaseDetail, pullRequestDetail, reviewRequestDetail } from './github';
 import { githubSummaryDetail } from './github-summary';
@@ -111,6 +112,7 @@ export const itemDetail = z.discriminatedUnion('kind', [
   blockDetail,
   linearIssueDetail,
   chatDetail,
+  channelPostDetail,
   eventDetail,
   pullRequestDetail,
   githubIssueDetail,

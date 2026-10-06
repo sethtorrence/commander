@@ -94,6 +94,11 @@ export function identitiesOf(item: {
         if (message.from?.userId) add(`teams:${message.from.userId}`, null, message.from.name);
       }
       break;
+    case 'channel-post':
+      for (const message of [detail.post, ...detail.replies]) {
+        if (message.from?.userId) add(`teams:${message.from.userId}`, null, message.from.name);
+      }
+      break;
     case 'event':
       for (const each of [detail.organiser, ...detail.attendees.filter((one) => !one.resource)]) {
         if (each) add(each.email, each.email, each.name);

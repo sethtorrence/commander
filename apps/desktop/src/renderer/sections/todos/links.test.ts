@@ -45,7 +45,8 @@ describe('the Item at the other end', () => {
     expect(sectionFor('review-request')).toBe('github');
     expect(sectionFor('block')).toBe('notes');
     expect(sectionFor('chat')).toBe('teams');
-    expect(sectionFor('channel-post')).toBeNull();
+    expect(sectionFor('channel-post')).toBe('teams');
+    expect(sectionFor('project')).toBeNull();
   });
 
   it('says where it was deleted, if it was', () => {

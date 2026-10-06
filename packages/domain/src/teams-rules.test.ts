@@ -89,6 +89,8 @@ describe('Teams Rule fields', () => {
       'teams.person',
       'teams.chat-type',
       'teams.title',
+      'teams.team',
+      'teams.channel',
     ]);
     for (const field of teamsRuleFields) expect(RULE_FIELDS.get(field.id)).toBe(field);
   });
@@ -118,6 +120,67 @@ describe('Teams Rule fields', () => {
         terms: [{ field: 'teams.chat', op: 'is', value: '19:tl-eng@thread.v2', label: 'TL eng' }],
       }),
     ).toBe('Chat is TL eng');
+  });
+});
+
+function post(team = 'Titanlink', channel = 'releases'): Item {
+  const message = {
+    id: 'p1',
+    from: { userId: 'u-priya', name: 'Priya' },
+    event: null,
+    createdAt: 1,
+    modifiedAt: 1,
+    deleted: false,
+    text: 'Shipped',
+    mentions: [],
+    reactions: [],
+    attachments: [],
+    replyTo: null,
+  };
+  return {
+    id: 'item-2',
+    kind: 'channel-post',
+    source: 'teams',
+    account: ACCOUNT,
+    externalId: 'team-tl/19:releases@thread.tacv2/p1',
+    title: 'Shipped',
+    detail: {
+      kind: 'channel-post',
+      team: { id: 'team-tl', name: team },
+      channel: { id: '19:releases@thread.tacv2', name: channel },
+      subject: null,
+      post: message,
+      replies: [],
+      webUrl: null,
+      mentionsMe: false,
+      lastActivityAt: 1,
+    },
+  } as unknown as Item;
+}
+
+describe('Teams Rule fields for Channel posts (#111)', () => {
+  it('read the team and the channel, labelled with their names', () => {
+    expect(read('teams.team', post())).toEqual([{ value: 'team-tl', label: 'Titanlink' }]);
+    expect(read('teams.channel', post())).toEqual([
+      { value: 'team-tl/19:releases@thread.tacv2', label: 'Titanlink / releases' },
+    ]);
+  });
+
+  it('read nothing of a Chat, and a Chat’s fields read nothing of a post', () => {
+    expect(read('teams.team', chat())).toEqual([]);
+    expect(read('teams.channel', chat())).toEqual([]);
+    expect(read('teams.chat', post())).toEqual([]);
+    expect(read('teams.person', post())).toEqual([]);
+  });
+
+  it('file every post in a team: “team is Titanlink”', () => {
+    const titanlink: RuleWhen = {
+      join: 'and',
+      terms: [{ field: 'teams.team', op: 'is', value: 'team-tl', label: 'Titanlink' }],
+    };
+    expect(ruleMatches(titanlink, post())).toBe(true);
+    expect(ruleMatches(titanlink, chat())).toBe(false);
+    expect(describeRule(titanlink)).toBe('team is Titanlink');
   });
 });
 

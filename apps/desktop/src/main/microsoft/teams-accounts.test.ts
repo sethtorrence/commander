@@ -87,6 +87,96 @@ describe('a build without Commander’s Microsoft app', () => {
   });
 });
 
+describe('Channel posts (#111)', () => {
+  const channelScopes = 'ChannelMessage.Read.All ChannelMessage.Send';
+
+  it('starts off and not granted, with the permissions to approve and the admin consent link', async () => {
+    const account = await start().connectWithBrowser();
+    expect(account).toMatchObject({
+      channelPosts: {
+        granted: false,
+        enabled: false,
+        permissions: ['ChannelMessage.Read.All', 'ChannelMessage.Send'],
+      },
+    });
+  });
+
+  it('Request access signs in again asking for the Channel post scopes too, granted but still off', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    await accounts.channelPosts?.request(samId);
+
+    expect(microsoft.authorizeRequests.at(-1)?.scope).toBe(`${TEAMS_SCOPES.join(' ')} ${channelScopes}`);
+    const [account] = await accounts.list();
+    expect(account).toMatchObject({ channelPosts: { granted: true, enabled: false } });
+
+    await accounts.channelPosts?.set(samId, true);
+    expect((await accounts.list())[0]).toMatchObject({ channelPosts: { granted: true, enabled: true } });
+  });
+
+  it('shows the admin consent link when the tenant needs an administrator’s approval first', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    microsoft.requireAdminConsent('AADSTS65001');
+
+    const refused = accounts.channelPosts?.request(samId);
+    await expect(refused).rejects.toMatchObject({
+      reason: 'admin-consent',
+      adminConsent: {
+        permissions: ['ChannelMessage.Read.All', 'ChannelMessage.Send'],
+        url: `${microsoft.loginUrl}/${microsoft.tenantId}/adminconsent?client_id=${microsoft.clientId}`,
+      },
+    });
+    expect((await accounts.list())[0]).toMatchObject({ channelPosts: { granted: false } });
+  });
+
+  it('stays not granted when Microsoft leaves out reading channels, saying an administrator must approve it', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    microsoft.limitGrantedScopes([...TEAMS_SCOPES, 'ChannelMessage.Send']);
+
+    await expect(accounts.channelPosts?.request(samId)).rejects.toMatchObject({ reason: 'admin-consent' });
+    expect((await accounts.list())[0]).toMatchObject({ channelPosts: { granted: false, enabled: false } });
+    await expect(accounts.channelPosts?.set(samId, true)).rejects.toThrow(/Request access first/);
+  });
+
+  it('keeps them through a reconnect, and asks for them again on refresh', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    await accounts.channelPosts?.request(samId);
+    await accounts.channelPosts?.set(samId, true);
+
+    await accounts.connectWithBrowser({ reconnect: samId });
+    expect(microsoft.authorizeRequests.at(-1)?.scope).toContain('ChannelMessage.Read.All');
+    expect((await accounts.list())[0]).toMatchObject({ channelPosts: { granted: true, enabled: true } });
+
+    clock += 2 * HOUR;
+    await accounts.accessToken(samId);
+    expect(microsoft.tokenRequests.at(-1)?.scope).toContain('ChannelMessage.Read.All');
+  });
+
+  it('still refreshes the Chats’ sign-in when Microsoft no longer consents to Channel posts', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    await accounts.channelPosts?.request(samId);
+    microsoft.refuseRefreshScopes(['ChannelMessage.Read.All']);
+
+    clock += 2 * HOUR;
+    await expect(accounts.accessToken(samId)).resolves.toMatchObject({ kind: 'oauth' });
+    expect(microsoft.tokenRequests.at(-1)?.scope).toBe(TEAMS_SCOPES.join(' '));
+    expect((await accounts.list())[0]).toMatchObject({ status: 'connected' });
+  });
+
+  it('goes back to not granted and off when Microsoft refuses to share them', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    await accounts.channelPosts?.request(samId);
+    await accounts.channelPosts?.set(samId, true);
+    await accounts.channelPosts?.refused(samId);
+    expect((await accounts.list())[0]).toMatchObject({ channelPosts: { granted: false, enabled: false } });
+  });
+});
+
 describe('connecting Teams through the browser', () => {
   it('asks for the Teams scopes, and nothing that needs an admin', async () => {
     await start().connectWithBrowser();
@@ -110,6 +200,12 @@ describe('connecting Teams through the browser', () => {
       method: 'oauth',
       status: 'connected',
       user: { id: SAM.id, name: 'Sam Rivera' },
+      channelPosts: {
+        granted: false,
+        enabled: false,
+        permissions: ['ChannelMessage.Read.All', 'ChannelMessage.Send'],
+        adminConsentUrl: `${microsoft.loginUrl}/${microsoft.tenantId}/adminconsent?client_id=${microsoft.clientId}`,
+      },
     };
     expect(account).toEqual(expected);
     expect(await accounts.list()).toEqual([expected]);

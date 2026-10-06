@@ -29,7 +29,7 @@ const KINDS: Record<string, { tag: string; section: string | null }> = {
   // Ares's GitHub summary (#121) opens at the top of the GitHub Section.
   'github-summary': { tag: 'GH', section: 'github' },
   chat: { tag: 'TMS', section: 'teams' },
-  'channel-post': { tag: 'TMS', section: null },
+  'channel-post': { tag: 'TMS', section: 'teams' },
   todo: { tag: 'TDO', section: 'todos' },
   block: { tag: 'DN', section: 'notes' },
   'daily-note': { tag: 'DN', section: 'notes' },
@@ -42,7 +42,7 @@ export function kindTag(kind: string): string {
   return KINDS[kind]?.tag ?? kind.slice(0, 3).toUpperCase();
 }
 
-/** The id of the Section that holds Items of this kind, or null while none does (Channel posts). */
+/** The id of the Section that holds Items of this kind, or null when none does (a Project). */
 export function sectionFor(kind: string): string | null {
   return KINDS[kind]?.section ?? null;
 }

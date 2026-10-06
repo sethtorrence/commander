@@ -8,6 +8,7 @@ export * from './block-links';
 export * from './block-projects';
 export * from './buckets';
 export * from './calendar';
+export * from './channel-posts';
 export * from './clashes';
 export * from './commander-events';
 export * from './core-messages';

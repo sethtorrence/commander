@@ -19,6 +19,7 @@ export type DailyNoteDetailRow = typeof schema.dailyNoteDetails.$inferSelect;
 export type BlockDetailRow = typeof schema.blockDetails.$inferSelect;
 export type LinearIssueDetailRow = typeof schema.linearIssueDetails.$inferSelect;
 export type ChatDetailRow = typeof schema.chatDetails.$inferSelect;
+export type ChannelPostDetailRow = typeof schema.channelPostDetails.$inferSelect;
 export type EventDetailRow = typeof schema.eventDetails.$inferSelect;
 export type GitHubDetailRow = typeof schema.githubDetails.$inferSelect;
 export type MeetingPrepDetailRow = typeof schema.meetingPrepDetails.$inferSelect;
@@ -68,6 +69,11 @@ export const linearIssueDetailOf = (issue: LinearIssueDetailRow): ItemDetail => 
 });
 
 export const chatDetailOf = (chat: ChatDetailRow): ItemDetail => ({ kind: 'chat', ...chat.data });
+
+export const channelPostDetailOf = (post: ChannelPostDetailRow): ItemDetail => ({
+  kind: 'channel-post',
+  ...post.data,
+});
 
 export const eventDetailOf = (event: EventDetailRow): ItemDetail => ({ kind: 'event', ...event.data });
 export const githubDetailOf = (row: GitHubDetailRow): ItemDetail => row.data;

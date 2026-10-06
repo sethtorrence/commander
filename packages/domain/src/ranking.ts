@@ -1,4 +1,5 @@
 import { NEEDS_REPLY, WAITING_ON_OTHERS } from './buckets';
+import { channelPlace, channelPostAttention } from './channel-posts';
 import { addressName, type EmailAddress } from './email';
 import { isReviewRequestItem, placeOpenWork } from './github-open-work';
 import { isGitHubSummary, summaryPlacement } from './github-summary';
@@ -289,6 +290,19 @@ function placeChat(chat: Chat, context: RankingContext): Placed | null {
   return { item: chat, band: 'today', reason, at };
 }
 
+// A Channel post (#111): in Today while a message in it the User hasn't seen mentions them by name.
+function placeChannelPost(item: Item, context: RankingContext): Placed | null {
+  if (item.detail?.kind !== 'channel-post') return null;
+  const me = item.account ? (context.users[item.account] ?? null) : null;
+  const attention = channelPostAttention(item, me);
+  if (!attention) return null;
+  const { message } = attention;
+  const who = firstName(message.from?.name ?? '');
+  const at = message.createdAt;
+  const reason = `${who} mentioned you in ${channelPlace(item.detail)} · ${sentAt(at, context.now)}`;
+  return { item, band: 'today', reason, at };
+}
+
 // An invitation still waiting for the User's answer (#129), until they answer it.
 function placeInvitation(item: Item, now: number): Placed | null {
   return awaitingAnswer(item, now)
@@ -334,6 +348,7 @@ function place(item: Item, context: RankingContext, today: string): Placed | nul
   if (item.kind === 'email') return placeEmail(item, context.now);
   if (item.kind === 'event') return placeMeeting(item, context.now) ?? placeInvitation(item, context.now);
   if (isChat(item)) return placeChat(item, context);
+  if (item.kind === 'channel-post') return placeChannelPost(item, context);
   if (item.source === 'github') {
     const found = placeOpenWork(
       item,
@@ -411,6 +426,8 @@ export function dashboardCandidates(items: readonly Item[], muted?: ReadonlySet<
  * - **Today:** Todos due today, Linear Todos in progress or in their team's current cycle, and
  *   invitations still waiting for the User's answer ("Dana invited you to Pricing review, Thu 15:00").
  * - **FYI:** Linear issues the User created, assigned to someone else, that changed in the last day.
+ * - **Today**, too: Channel posts with a message the User hasn't seen that mentions them by name
+ *   ("Priya mentioned you in TL / releases · 14:20"); team and channel mentions never.
  * - **Today**, too: Chats Ares flagged as waiting on the User (with his reason), Chats with an unread
  *   message mentioning the User, and one-to-one Chats the User hasn't answered (chatAttention), one
  *   row per Chat. Muted Chats never; busy group Chats only

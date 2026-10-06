@@ -60,18 +60,18 @@ export interface TeamsState {
   meIn(chat: Chat): string | null;
   /** Mutes, unmutes or excludes a Chat; mute and unmute can be undone here. */
   changeSetting(chat: Chat, change: Exclude<ChatSettingChangeKind, 'include'>): Promise<void>;
-  /** The changes made here still on their way to Teams (or that couldn't sync), for one Chat. */
-  outgoingFor(chat: Chat): OutgoingChange[];
-  /** Why changes on their way can't go yet (offline, needs reconnecting), for a Chat's Account. */
-  waitingFor(chat: Chat): string | null;
+  /** The changes made here still on their way to Teams (or that couldn't sync), for one Chat (or post). */
+  outgoingFor(chat: TeamsItem): OutgoingChange[];
+  /** Why changes on their way can't go yet (offline, needs reconnecting), for a Chat's (or post's) Account. */
+  waitingFor(chat: TeamsItem): string | null;
   /** Replies to a Chat; resolves with whether the reply was taken (shown at once, sent in the background). */
   reply(chat: Chat, text: string): Promise<boolean>;
   /** Whether the Chat can be marked unread: it is read, and someone else has written in it. */
   canMarkUnread(chat: Chat): boolean;
   /** Marks a Chat read or unread (undoable here). Opening an unread Chat marks it read by itself. */
   setRead(chat: Chat, read: boolean): Promise<ActivityEntry | null>;
-  /** Sends a Chat's changes that couldn't sync again. */
-  retry(chat: Chat): void;
+  /** Sends a Chat's (or post's) changes that couldn't sync again. */
+  retry(chat: TeamsItem): void;
   /** Makes a change through another module (filing), so it reloads and can be undone here. */
   apply(change: () => Promise<ActivityEntry>): Promise<ActivityEntry | null>;
   /** Undoes one change made here: the given entry, or the latest not yet undone. */
@@ -80,6 +80,9 @@ export interface TeamsState {
   /** Asks every connected Teams Account for a light sync now (the sync engine's refresh). */
   refresh(): void;
 }
+
+/** A Chat or a Channel post, as far as its changes on their way to Teams go. */
+type TeamsItem = Pick<Item, 'id' | 'account'>;
 
 /** A message to show in a Chat; `nonce` tells one ask from the next. */
 export type MessageFocus = { chatId: string; messageId: string; nonce: number };
@@ -332,12 +335,12 @@ export function useTeams({
   );
 
   const outgoingFor = useCallback(
-    (chat: Chat) => outgoing.filter((change) => change.itemId === chat.id),
+    (chat: TeamsItem) => outgoing.filter((change) => change.itemId === chat.id),
     [outgoing],
   );
 
   const waitingFor = useCallback(
-    (chat: Chat) => {
+    (chat: TeamsItem) => {
       const account = accounts.find((each) => each.id === chat.account);
       if (account?.status === 'needs-reconnect' || account?.sync?.activity === 'needs-reconnect')
         return 'Waiting · reconnect this Teams Account in Settings → Accounts';
@@ -375,7 +378,7 @@ export function useTeams({
   );
 
   const retry = useCallback(
-    (chat: Chat) => {
+    (chat: TeamsItem) => {
       client.retry(chat.id).then(reload, report);
     },
     [client, reload],

@@ -106,6 +106,7 @@ export function TodosSheet({
       const from = fromMessageOf(selected);
       requestReveal('teams', other.id, from?.itemId === other.id ? from.messageId : undefined);
     }
+    if (other.kind === 'channel-post') requestReveal('teams', other.id);
     if (section) openSection(section);
   };
 

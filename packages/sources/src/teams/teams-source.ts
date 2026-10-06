@@ -1,6 +1,8 @@
-import type { ChatMember, ChatMessage, SourceItem } from '@commander/domain';
+import { type ChatMember, type ChatMessage, parseChannelPostId, type SourceItem } from '@commander/domain';
 import { z } from 'zod';
 import type { Cadence, SourceAdapter, StoredItem, SyncRequest, WriteRequest } from '../source';
+import { writeChannelPost } from './channel-write';
+import { type ChannelsCursor, channelsCursor, syncChannels } from './channels';
 import { ChatUnreadable, connectGraph, type Graph } from './graph';
 import {
   chatsPage,
@@ -33,6 +35,10 @@ import { writeChat } from './write';
 //   the last-message preview misses edits, deletions and reactions in quiet Chats. A light sync
 //   (refresh, and the check after every other Source's sync) never does.
 // - At most one request a second per Chat; 429s, and 503s with Retry-After, stop the sync at once.
+//
+// Channel posts (#111, channels.ts): the posts and replies in the channels of the User's teams, once
+// Microsoft shares them and the User switched them on, read after the Chats; replies to them go back
+// through the outgoing queue as a Chat's do (channel-write.ts).
 //
 // Two-way sync (#106, write.ts): replies to a Chat and its read state go back to Teams, one Chat's
 // queued changes at a time, each request given up after 30 seconds so a stuck answer can't hold up
@@ -71,7 +77,7 @@ const chatMark = z.object({
   seen: z.number(),
 });
 export type ChatMark = z.infer<typeof chatMark>;
-const teamsCursor = z.object({ chats: z.record(z.string(), chatMark) });
+const teamsCursor = z.object({ chats: z.record(z.string(), chatMark), channels: channelsCursor.optional() });
 export type TeamsCursor = z.infer<typeof teamsCursor>;
 
 const sleepFor = (ms: number, signal: AbortSignal) =>
@@ -244,8 +250,25 @@ export function createTeamsSource({
       const left = Object.keys(marks).filter((id) => !listed.has(id));
       if (left.length) request.save({ items: [], deleted: left });
 
-      const cursor: TeamsCursor = { chats: next };
-      return { cursor, cost: graph.cost };
+      // Channel posts (#111) only once the Chats are saved and their place kept, so polling channels
+      // (or a rate limit while doing it) never holds Chats up.
+      const before = previous.success ? (previous.data.channels ?? null) : null;
+      const withChannels = (channels: ChannelsCursor | null): TeamsCursor => ({
+        chats: next,
+        ...(channels ? { channels } : {}),
+      });
+      if (request.channelPosts) request.checkpoint?.(withChannels(before));
+      const channels = await syncChannels({
+        graph,
+        request,
+        mode: request.mode,
+        me,
+        now,
+        sleep,
+        previous: before,
+        progress: (progress) => request.checkpoint?.(withChannels(progress)),
+      });
+      return { cursor: withChannels(channels), cost: graph.cost };
     },
 
     async write(request: WriteRequest) {
@@ -258,7 +281,10 @@ export function createTeamsSource({
         signal: request.signal,
         timeoutMs: WRITE_TIMEOUT_MS,
       });
-      const result = await writeChat(graph, request, messagesPerChat);
+      // A Channel post's reply (#111), or a Chat's changes.
+      const result = parseChannelPostId(request.externalId)
+        ? await writeChannelPost(graph, request)
+        : await writeChat(graph, request, messagesPerChat);
       return { ...result, cost: graph.cost };
     },
   };
