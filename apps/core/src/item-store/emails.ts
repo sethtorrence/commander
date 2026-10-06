@@ -48,7 +48,8 @@ import * as schema from './schema';
 // Item (never in its detail or the activity log), and the Email Section's reads (a view's threads,
 // each view's counts, Section search, the labels to pick from, and one thread with its bodies), and
 // the snoozes due (#135). Which view a thread is in is the domain's rule (flagsInView), over flags
-// aggregated here per thread; so is its Bucket and Project (#137), its latest message's. Threading runs as mail is saved: whatever order mail
+// aggregated here per thread; so is its Bucket and Project (#137), its latest message's (the User's
+// own reply takes the thread's Bucket as it joins, joiningBucket). Threading runs as mail is saved: whatever order mail
 // comes in (the first sync downloads newest first, so replies before their parents), each email is
 // threaded among the Account's live mail it is connected to, and mail already held that a new
 // message joins to another thread moves to it (domain threadMessages).
@@ -347,6 +348,27 @@ export function emailsIn(
   }
 
   const detailOfItem = (item: Item) => item.detail as EmailDetail;
+
+  /**
+   * One of the User's own messages joining a thread (a reply sent from Commander, or synced in as
+   * sent by them) takes the thread's Bucket as it stands, with who sorted it, so replying never moves
+   * the thread: a thread's Bucket is its latest message's. An Unsorted thread stays Unsorted. `held`:
+   * the message as it already was in a thread, or null (new, deleted, or a draft).
+   */
+  function joiningBucket(
+    itemId: string,
+    account: string | null,
+    held: EmailDetail | null,
+    detail: EmailDetail,
+  ): EmailDetail {
+    if (!account || detail.draft || !detail.sentByMe || detail.bucket) return detail;
+    if (held && held.threadKey === detail.threadKey) return detail;
+    const latest = messagesOf([{ account, threadKey: detail.threadKey }])
+      .filter((message) => message.id !== itemId)
+      .at(-1);
+    const bucket = latest ? detailOfItem(latest).bucket : undefined;
+    return bucket ? { ...detail, bucket } : detail;
+  }
 
   function summaryOf(account: string, threadKey: string, messages: Item[]): EmailThreadSummary | null {
     const ordered = [...messages].sort(
@@ -697,6 +719,7 @@ export function emailsIn(
     threadView,
     externalIds,
     messagesOf,
+    joiningBucket,
     viewCounts,
     searchThreads,
     labelsOf,

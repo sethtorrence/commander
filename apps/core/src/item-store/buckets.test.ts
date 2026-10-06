@@ -16,7 +16,7 @@ import {
   UNSORTED,
 } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { type ItemStore, openItemStore } from '.';
+import { type ComposeContext, type ItemStore, openItemStore } from '.';
 
 // Buckets in the Item store (#137), on a real database, with mail arriving through saveFromSource as
 // Gmail sync saves it: the starter set on a fresh install, Settings → Buckets' changes, an email's
@@ -488,5 +488,188 @@ describe('the Email Section’s Buckets', () => {
     );
     expect(store.emailThreads({ bucket: 'receipts' }).threads).toHaveLength(1);
     expect(store.emailThreads({ bucket: 'receipts', view: 'archive' }).threads).toHaveLength(1);
+  });
+});
+
+// The User's reply (#137): their own message becomes the thread's latest, and a thread's Bucket is its
+// latest message's, so the reply takes the thread's Bucket as it stands, sorter and all.
+describe('A thread keeps its Bucket after the User replies', () => {
+  const ALEX_ADDRESS = { name: 'Alex Kim', address: 'alex@gmail.test' };
+  const DANA = { name: 'Dana Whitfield', address: 'dana@northwind.test' };
+  const composer: ComposeContext = { by: { kind: 'user' }, source: 'gmail', from: ALEX_ADDRESS };
+
+  // A reply sent from Commander's composer.
+  const replyFromCommander = (externalId: string) =>
+    store.compose.send(
+      {
+        mode: 'reply',
+        account: ALEX,
+        replyToItemId: itemOf(externalId).id,
+        to: [DANA],
+        cc: [],
+        bcc: [],
+        subject: `Re: Subject ${externalId}`,
+        body: [{ type: 'paragraph', runs: [{ text: 'Thursday works.' }] }],
+        attachments: [],
+      },
+      composer,
+      clock,
+    ).itemId;
+
+  // A reply the User sent in Gmail, as its sync brings it.
+  const sentInGmail = (id: string, to: string, fields: Partial<EmailDetail> = {}) =>
+    email(id, {
+      from: ALEX_ADDRESS,
+      to: [DANA],
+      sentByMe: true,
+      inReplyTo: `<${to}@mail.test>`,
+      references: [`<${to}@mail.test>`],
+      sourceThreadId: `g-${to}`,
+      subject: `Re: Subject ${to}`,
+      sentAt: clock,
+      read: true,
+      inInbox: false,
+      labels: [{ id: 'SENT', name: 'Sent' }],
+      ...fields,
+    });
+
+  const summaryOf = (externalId: string) =>
+    store.emailThreads().threads.find((thread) => thread.itemIds.includes(itemOf(externalId).id));
+  const detailOfId = (itemId: string) => store.get(itemId)?.item.detail as EmailDetail | undefined;
+  const bucketOfId = (itemId: string) => detailOfId(itemId)?.bucket ?? null;
+
+  it('a reply sent from the composer keeps the Bucket the User sorted the thread into', () => {
+    save([email('d1')]);
+    moveThread('d1', 'fyi');
+    clock += HOUR;
+    const sent = replyFromCommander('d1');
+
+    expect(bucketOfId(sent)).toEqual({ bucketId: 'fyi', sortedBy: 'user' });
+    const thread = summaryOf('d1');
+    expect(thread?.latest.id).toBe(sent);
+    expect(thread?.bucket).toEqual({ bucketId: 'fyi', sortedBy: 'user' });
+    expect(store.emailThreads({ bucket: 'fyi' }).threads.map((each) => each.latest.id)).toEqual([sent]);
+    expect(store.emailThreads({ bucket: UNSORTED }).threads).toEqual([]);
+
+    // Its sync (the Source's copy of the sent message) leaves it there.
+    const synced = sentInGmail('s1', 'd1', {
+      messageId: detailOfId(sent)?.messageId ?? null,
+    });
+    store.saveFromSource({
+      source: 'gmail',
+      account: ALEX,
+      items: [{ ...synced, commanderItemId: sent }],
+      deleted: [],
+    });
+    expect(bucketOfId(sent)).toEqual({ bucketId: 'fyi', sortedBy: 'user' });
+  });
+
+  it('keeps a Rule’s or Ares’s sort as theirs, so the precedence still holds', () => {
+    store.changeRule({ type: 'create', rule: bucketRule('receipts', 'gmail.domain', 'stripe.com') });
+    save([stripe('r1'), email('d1')]);
+    store.record(
+      {
+        type: 'edit-fields',
+        itemId: itemOf('d1').id,
+        fields: { bucket: { bucketId: 'fyi', sortedBy: 'ares' } },
+      },
+      { by: { kind: 'ares' } },
+    );
+    clock += HOUR;
+    const toStripe = replyFromCommander('r1');
+    const toDana = replyFromCommander('d1');
+
+    expect(bucketOfId(toStripe)).toEqual({ bucketId: 'receipts', sortedBy: 'rule' });
+    expect(bucketOfId(toDana)).toEqual({ bucketId: 'fyi', sortedBy: 'ares' });
+    expect(summaryOf('r1')?.bucket).toEqual({ bucketId: 'receipts', sortedBy: 'rule' });
+    expect(summaryOf('d1')?.bucket).toEqual({ bucketId: 'fyi', sortedBy: 'ares' });
+  });
+
+  it('a reply synced in as sent by the User keeps the thread’s Bucket too', () => {
+    store.changeRule({ type: 'create', rule: bucketRule('receipts', 'gmail.domain', 'stripe.com') });
+    save([stripe('r1')]);
+    clock += HOUR;
+    save([sentInGmail('s1', 'r1')]);
+
+    expect(bucketOf('s1')).toEqual({ bucketId: 'receipts', sortedBy: 'rule' });
+    expect(summaryOf('r1')?.latest.externalId).toBe('s1');
+    expect(store.emailThreads({ bucket: 'receipts' }).threads).toHaveLength(1);
+  });
+
+  it('an Unsorted thread stays Unsorted, and one the User took out of its Bucket stays out', () => {
+    save([email('d1'), email('d2')]);
+    moveThread('d2', 'fyi');
+    moveThread('d2', null);
+    clock += HOUR;
+    save([sentInGmail('s1', 'd1')]);
+    const sent = replyFromCommander('d2');
+
+    expect(bucketOf('s1')).toBeNull();
+    expect(bucketOfId(sent)).toEqual({ bucketId: null, sortedBy: 'user' });
+    expect(store.emailThreads({ bucket: UNSORTED }).threads).toHaveLength(2);
+  });
+
+  it('a new message of the User’s own, in no thread, has no Bucket', () => {
+    save([email('d1')]);
+    moveThread('d1', 'fyi');
+    save([email('s1', { from: ALEX_ADDRESS, to: [DANA], sentByMe: true, inInbox: false, labels: [] })]);
+    expect(bucketOf('s1')).toBeNull();
+  });
+
+  it('moving the thread after a reply moves it all, and Undo brings it back', () => {
+    save([email('d1')]);
+    moveThread('d1', 'fyi');
+    clock += HOUR;
+    const sent = replyFromCommander('d1');
+
+    const moved = moveThread('d1', 'receipts');
+    expect(bucketOf('d1')).toEqual({ bucketId: 'receipts', sortedBy: 'user' });
+    expect(bucketOfId(sent)).toEqual({ bucketId: 'receipts', sortedBy: 'user' });
+    expect(summaryOf('d1')?.bucket).toEqual({ bucketId: 'receipts', sortedBy: 'user' });
+
+    store.recordAll(
+      [...moved].reverse().map((entry): ItemAction => ({ type: 'undo', entryId: entry.id })),
+      user,
+    );
+    expect(bucketOfId(sent)).toEqual({ bucketId: 'fyi', sortedBy: 'user' });
+    expect(summaryOf('d1')?.bucket).toEqual({ bucketId: 'fyi', sortedBy: 'user' });
+  });
+
+  it('replying never archives the thread, even in a Bucket that skips the inbox', () => {
+    save([email('d1')]);
+    moveThread('d1', 'fyi');
+    store.changeBucket({ type: 'update', bucketId: 'fyi', bucket: { skipInbox: true } });
+    clock += HOUR;
+    const sent = replyFromCommander('d1');
+    // Sent to herself too: the copy that lands in the inbox stays there.
+    save([sentInGmail('s1', 'd1', { inInbox: true, labels: [{ id: 'INBOX', name: 'Inbox' }] })]);
+
+    expect(bucketOfId(sent)).toEqual({ bucketId: 'fyi', sortedBy: 'user' });
+    expect(bucketOf('s1')).toEqual({ bucketId: 'fyi', sortedBy: 'user' });
+    expect((itemOf('d1').detail as EmailDetail).inInbox).toBe(true);
+    expect((itemOf('s1').detail as EmailDetail).inInbox).toBe(true);
+    expect(store.emailThreads({ view: 'inbox', bucket: 'fyi' }).threads).toHaveLength(1);
+  });
+
+  it('Ares learns nothing from the User’s own reply when they move a thread he sorted', () => {
+    save([email('d1')]);
+    store.record(
+      {
+        type: 'edit-fields',
+        itemId: itemOf('d1').id,
+        fields: { bucket: { bucketId: 'fyi', sortedBy: 'ares' } },
+      },
+      { by: { kind: 'ares' } },
+    );
+    clock += HOUR;
+    save([sentInGmail('s1', 'd1')]);
+    expect(bucketOf('s1')).toEqual({ bucketId: 'fyi', sortedBy: 'ares' });
+
+    moveThread('d1', 'receipts');
+    expect(
+      store.emailSorting
+        .feedback()
+        .map(({ itemId, kind, suggested, chosen }) => ({ itemId, kind, suggested, chosen })),
+    ).toEqual([{ itemId: itemOf('d1').id, kind: 'correction', suggested: 'fyi', chosen: 'receipts' }]);
   });
 });

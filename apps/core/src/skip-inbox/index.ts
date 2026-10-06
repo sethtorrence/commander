@@ -128,7 +128,11 @@ export function setUpSkipInbox({
         const bucket = sorted?.bucketId ? skipping.get(sorted.bucketId) : undefined;
         // The User's own sort was archived with it, or they took it back to the inbox since.
         if (!bucket || sorted?.sortedBy === 'user') continue;
-        const cause = sortEntry(item.id, bucket.id)?.id;
+        const entry = sortEntry(item.id, bucket.id);
+        // The User's own message took its thread's Bucket as it joined (a reply): no Rule or Ares
+        // sorted it, and replying never archives anything.
+        if (detail.sentByMe && entry?.by.kind !== 'rule' && entry?.by.kind !== 'ares') continue;
+        const cause = entry?.id;
         if (offered(item.id, cause)) continue;
         if (propose(item, bucket.name, cause, false)) changed.push(item.id);
       }

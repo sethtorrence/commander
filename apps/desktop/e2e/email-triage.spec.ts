@@ -221,8 +221,15 @@ test('Triage Needs reply → reply and send → archive → snooze → Todo → 
   await window.keyboard.press('Escape');
   await expect(section.getByTestId('triage')).toHaveCount(0);
   const strip = section.getByRole('tablist', { name: 'Bucket' });
-  await expect(strip.getByRole('tab', { name: /^Needs reply/ })).toHaveText(/^Needs reply[12]$/);
+  // The thread replied to stays in Needs reply, its sent copy back from Gmail too; the Todo's stays.
+  await expect(strip.getByRole('tab', { name: /^Needs reply/ })).toHaveText('Needs reply2');
   await expect(strip.getByRole('tab', { name: /^FYI/ })).toHaveText('FYI1');
+  await strip.getByRole('tab', { name: /^Needs reply/ }).click();
+  const replied = section.getByTestId('email-thread').filter({ hasText: 'Re: Q4 offsite dates' });
+  await expect(replied).toHaveCount(1);
+  await expect(replied).toContainText('Dana Reyes, me');
+  await strip.getByRole('tab', { name: /^Unsorted/ }).click();
+  await expect(section.getByTestId('email-thread')).toHaveCount(0);
 
   // The Todo, from email, in the Todos Section; its Link opens the thread.
   await tab(window, 'Todos').click();
