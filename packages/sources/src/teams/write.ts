@@ -18,6 +18,7 @@ import {
   graphMessage,
   mergeMessages,
   messagesPage,
+  readAtOf,
   toChatItem,
   toMessage,
 } from './shapes';
@@ -49,7 +50,6 @@ export function teamsUserOf(account: string, me: string | null | undefined) {
   return { id: me || match[2], tenantId: match[1] };
 }
 
-const at = (iso: string | null | undefined) => (iso ? Date.parse(iso) : null);
 const iso = (time: number) => new Date(time).toISOString();
 const encode = (chatId: string) => encodeURIComponent(chatId);
 
@@ -64,13 +64,15 @@ const previewFromOthers = (chat: GraphChat, me: string): Preview | null => {
 // Whether Teams has the Chat read for the User: no message from anyone else after their read time,
 // among the messages Commander holds and the latest one Teams lists.
 function readInTeams(chat: GraphChat, stored: ChatDetail | null, me: string): boolean {
-  const readAt = at(chat.viewpoint?.lastMessageReadDateTime);
+  const readAt = readAtOf(chat.viewpoint?.lastMessageReadDateTime);
   const preview = previewFromOthers(chat, me);
   if (preview && (readAt === null || Date.parse(preview.createdDateTime) > readAt)) return false;
   return !stored || chatFlags({ messages: stored.messages, lastReadAt: readAt }, me).unreadCount === 0;
 }
 
 // Where marking the Chat unread starts: just before the latest message someone else sent.
+const at = (iso: string | null | undefined) => (iso ? Date.parse(iso) : null);
+
 function unreadFrom(chat: GraphChat, stored: ChatDetail | null, me: string): number | null {
   const times = [
     latestFromOthers(stored?.messages ?? [], me)?.createdAt ?? null,
@@ -148,7 +150,7 @@ export async function writeChat(
   for (const change of request.changes) {
     if (change.field === READ_FIELD) {
       if (typeof change.value !== 'boolean' || readInTeams(chat, stored, user.id) === change.value) continue;
-      const readAt = at(chat.viewpoint?.lastMessageReadDateTime);
+      const readAt = readAtOf(chat.viewpoint?.lastMessageReadDateTime);
       if (readAt !== null && readAt > change.madeAt) {
         superseded.push({ field: change.field, by: null, at: readAt });
         continue;

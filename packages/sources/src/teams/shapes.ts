@@ -75,6 +75,14 @@ export const messagesPage = page(graphMessage);
 
 const at = (iso: string) => Date.parse(iso);
 
+// When the User last read a Chat, or null if never. Graph reports a never-read Chat as
+// 0001-01-01T00:00:00Z, which would parse to a time long before 1970.
+export function readAtOf(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const time = Date.parse(iso);
+  return Number.isFinite(time) && time >= 0 ? time : null;
+}
+
 const CHAT_TYPES: Record<string, ChatType> = { oneOnOne: 'one-on-one', group: 'group', meeting: 'meeting' };
 
 const isWebLink = (url: string | null | undefined): url is string => !!url && /^https?:\/\//i.test(url);
@@ -157,8 +165,7 @@ export function toChatItem(
     if (member.userId) people.push(`teams:${member.userId}`);
     if (member.email) people.push(member.email.toLowerCase());
   }
-  const read = chat.viewpoint?.lastMessageReadDateTime;
-  const lastReadAt = read ? at(read) : null;
+  const lastReadAt = readAtOf(chat.viewpoint?.lastMessageReadDateTime);
   const detail: ChatDetail = {
     kind: 'chat',
     chatType: CHAT_TYPES[chat.chatType] ?? 'group',

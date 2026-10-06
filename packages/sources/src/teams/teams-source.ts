@@ -8,6 +8,7 @@ import {
   membersPage,
   mergeMessages,
   messagesPage,
+  readAtOf,
   toChatItem,
   toMember,
   toMessage,
@@ -94,7 +95,7 @@ function markOf(chat: GraphChat, seen: number): ChatMark {
     updated: Date.parse(chat.lastUpdatedDateTime),
     last: at(chat.lastMessagePreview?.createdDateTime),
     lastId: chat.lastMessagePreview?.id ?? null,
-    read: at(chat.viewpoint?.lastMessageReadDateTime),
+    read: readAtOf(chat.viewpoint?.lastMessageReadDateTime),
     hidden: chat.viewpoint?.isHidden ?? false,
     seen,
   };
