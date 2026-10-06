@@ -142,7 +142,9 @@ describe('Linear issues taken off the User’s list', () => {
         issues: [{ itemId: idOf(418), identifier: 'ENG-418', why: 'ENG-418 was reassigned to Priya Patel' }],
       },
     });
-    expect(await texts()).toEqual(['ENG-418 was reassigned to Priya Patel.']);
+    expect(await texts()).toEqual([
+      'ENG-418 “Fix the export” in Linear was reassigned to Priya Patel, so it’s off your Todos. Nothing to do, unless it should still be yours.',
+    ]);
   });
 
   it('several merge into one line, across syncs, until the User acts on it', async () => {
@@ -155,7 +157,9 @@ describe('Linear issues taken off the User’s list', () => {
     expect(queued()).toHaveLength(1);
     const [line] = queued();
     expect(line?.itemIds).toEqual([idOf(1), idOf(2), idOf(3)]);
-    expect(await texts()).toEqual(['3 of your Linear issues were reassigned.']);
+    expect(await texts()).toEqual([
+      '3 of your Linear issues were reassigned, so they’re off your Todos: ENG-1, ENG-2 and ENG-3. Nothing to do, unless one should still be yours.',
+    ]);
 
     // Looked at again: nothing is queued twice.
     updates.sweep();
@@ -170,14 +174,18 @@ describe('Linear issues taken off the User’s list', () => {
     sync(issue(4, { state: CANCELED, updatedAt: clock }));
     expect(queued()).toHaveLength(1);
     expect(queued()[0]?.itemIds).toEqual([idOf(4)]);
-    expect(await texts()).toEqual(['ENG-4 was cancelled.']);
+    expect(await texts()).toEqual([
+      'ENG-4 “Issue 4” in Linear was cancelled, so it’s off your Todos. Nothing to do, unless it should still be yours.',
+    ]);
   });
 
   it('a mix of reasons says they left the list', async () => {
     sync(issue(1), issue(2));
     clock += MINUTE;
     sync(issue(1, { assignee: priya, updatedAt: clock }), issue(2, { state: CANCELED, updatedAt: clock }));
-    expect(await texts()).toEqual(['2 of your Linear issues left your list.']);
+    expect(await texts()).toEqual([
+      '2 of your Linear issues left your list, so they’re off your Todos: ENG-1 and ENG-2. Nothing to do, unless one should still be yours.',
+    ]);
   });
 
   it('not when the User reassigned it themselves in Commander', () => {
@@ -245,7 +253,9 @@ describe('an Account that needs reconnecting', () => {
       itemIds: [],
       about: { kind: 'reconnect', account: ACME, sourceName: 'Linear', name: 'Acme' },
     });
-    expect(await texts()).toEqual(['Linear (Acme) needs you to sign in again; syncing is paused.']);
+    expect(await texts()).toEqual([
+      'Linear (Acme) needs you to sign in again, so I’ve paused syncing it and its issues may be out of date. Sign in again from Settings → Accounts.',
+    ]);
 
     accounts = [acme(false)];
     updates.sweep();
@@ -278,7 +288,9 @@ describe('an Account that needs reconnecting', () => {
     ];
     updates.sweep();
     expect(queued()[0]?.section).toBe('email');
-    expect(await texts()).toEqual(['Your Google Account needs you to sign in again; syncing is paused.']);
+    expect(await texts()).toEqual([
+      'Your Google Account needs you to sign in again, so I’ve paused syncing it and its mail and calendar may be out of date. Sign in again from Settings → Accounts.',
+    ]);
     accounts = [];
     updates.sweep();
     expect(queued()).toEqual([]);
@@ -316,14 +328,18 @@ describe('stuck Linear issues', () => {
     updates.queue.enqueue(stuckLine(402));
     updates.queue.enqueue(stuckLine(403));
     expect(queued()).toHaveLength(1);
-    expect(await texts()).toEqual(['2 of your Engineering issues look stuck.']);
+    expect(await texts()).toEqual([
+      '2 of your Engineering issues in Linear haven’t moved in at least 4 days: ENG-402 and ENG-403. Each is below with why; open one to move it along, or tick it if it’s done.',
+    ]);
 
     // A new comment on ENG-402 is a change: it leaves the line.
     clock += MINUTE;
     const comment = { id: 'c1', author: priya, body: 'Looking now', createdAt: clock, updatedAt: clock };
     sync(issue(402, { ...stale, comments: [comment] }, 'Rate limiter'));
     expect(queued()[0]?.itemIds).toEqual([idOf(403)]);
-    expect(await texts()).toEqual(['ENG-403 has sat in review for 4 days; Priya hasn’t looked at it yet.']);
+    expect(await texts()).toEqual([
+      'ENG-403 “Retry queue” in Linear looks stuck. It has sat in review for 4 days; Priya hasn’t looked at it yet. Open it to move it along, or tick it if it’s done.',
+    ]);
 
     clock += MINUTE;
     sync(issue(403, { state: REVIEW, updatedAt: clock }, 'Retry queue'));

@@ -31,6 +31,7 @@ const INTERNAL_WORDING: RegExp[] = [
   /\bmy (?:system prompt|instructions|rules)\b/,
   /\bmaterial to work on\b/,
   /\b(?:block|ref) u\d+\b/,
+  /\bin "steering"/,
 ];
 
 // Whether a sentence uses the internal wording. Words the material itself holds don't count: the

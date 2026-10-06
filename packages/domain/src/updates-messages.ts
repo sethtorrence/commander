@@ -8,6 +8,7 @@ import {
   type QueuedLine,
   queuedAction,
   queuedLine,
+  rowAction,
   snoozeChoice,
   type UpdateSummary,
   type UpdatesState,
@@ -60,6 +61,9 @@ export const updatesRequest = z.discriminatedUnion('op', [
     action: queuedAction,
     snooze: snoozeChoice.optional(),
   }),
+  // One Item of a line (#186): accept or dismiss its suggestion, tick it, dismiss it from the line, or
+  // say what it held is not an instruction (which clears its warning mark).
+  z.object({ op: z.literal('act-row'), queuedId: id, itemId: z.string().min(1), action: rowAction }),
 ]);
 export type UpdatesRequest = z.input<typeof updatesRequest>;
 export type UpdatesOp = UpdatesRequest['op'];
@@ -74,6 +78,7 @@ export type UpdatesResults = {
   history: UpdateSummary[];
   past: UpdateView;
   act: QueuedLine;
+  'act-row': QueuedLine;
 };
 
 export const updatesResult = {
@@ -86,6 +91,7 @@ export const updatesResult = {
   history: z.array(updateSummary),
   past: updateView,
   act: queuedLine,
+  'act-row': queuedLine,
 } satisfies Record<UpdatesOp, z.ZodType>;
 
 export type UpdatesResponse<Op extends UpdatesOp = UpdatesOp> =

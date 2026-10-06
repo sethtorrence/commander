@@ -648,6 +648,11 @@ export const injectionWarnings = sqliteTable('injection_warnings', {
   found: text('found', { mode: 'json' }).$type<string[]>().notNull(),
   // A fingerprint (SHA-256) of the Item's words when it was marked.
   contentHash: text('content_hash').notNull(),
+  // When the User said it holds no instruction (Not an instruction, #186): the mark stays cleared
+  // while the Item's words stay the same. Null while it stands.
+  clearedAt: integer('cleared_at'),
+  // That correction's activity entry.
+  clearEntryId: integer('clear_entry_id').references((): AnySQLiteColumn => activity.id),
 });
 
 // Ares's latest ranking of the Dashboard (#72): one row per Item he ranked (or pending suggestion,

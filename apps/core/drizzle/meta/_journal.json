@@ -302,6 +302,13 @@
       "when": 1791267102653,
       "tag": "0042_channel_posts",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1791270001828,
+      "tag": "0043_injection_warning_cleared",
+      "breakpoints": true
     }
   ]
 }

@@ -26,6 +26,7 @@ const TIMEOUTS: Record<UpdatesOp, number> = {
   history: 10_000,
   past: 10_000,
   act: 10_000,
+  'act-row': 10_000,
 };
 
 const reply = z.object({

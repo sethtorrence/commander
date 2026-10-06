@@ -85,3 +85,32 @@ export function findSteering(text: string): string[] {
   }
   return [...found];
 }
+
+// The model's half (#186): a job's steering flag marks an Item only with the exact passage it took as
+// an instruction, found in that Item's own text. Spacing, case, lookalike letters and quotation marks
+// around it don't matter; a quote too short to mean anything (a word or two) doesn't count.
+const MIN_QUOTE = 8;
+const QUOTE_MARKS = /^["'“”‘’«»]+|["'“”‘’«»]+$/g;
+
+const folded = (quote: string) => foldForMatching(quote.replace(/‹/g, '<')).replace(QUOTE_MARKS, '').trim();
+
+/** Whether a quote is in the text word for word, and long enough to mean something. */
+export function quotedIn(text: string, quote: string): boolean {
+  const wanted = folded(quote);
+  if (wanted.length < MIN_QUOTE || !wanted.includes(' ')) return false;
+  return foldForMatching(text).includes(wanted);
+}
+
+const MAX_PASSAGE = 200;
+
+/**
+ * The sentence (or line) of the text holding what was found, as the User wrote it, so a warning can
+ * quote it; the snippet itself when no one sentence holds it.
+ */
+export function passageOf(text: string, snippet: string): string {
+  const wanted = folded(snippet);
+  const sentences = text.split(/(?<=[.!?])\s+|\n+/);
+  const found = wanted ? sentences.find((each) => foldForMatching(each).includes(wanted)) : undefined;
+  const passage = (found ?? snippet).replace(/\s+/g, ' ').trim().replace(/[.]+$/, '');
+  return passage.length > MAX_PASSAGE ? `${passage.slice(0, MAX_PASSAGE - 1).trimEnd()}…` : passage;
+}

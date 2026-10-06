@@ -206,7 +206,7 @@ test('a meeting 30 minutes away → prep under its chip → U says it is ready �
   await page.keyboard.press('u');
   const panel = page.getByTestId('update-panel');
   await expect(panel.getByTestId('update-line').filter({ hasText: 'Prep for' })).toContainText(
-    `Prep for “Weekly sync with Priya” at ${clock(start)} is ready.`,
+    new RegExp(`Prep for “Weekly sync with Priya” at ${clock(start)} (today|tomorrow) is ready`),
   );
   await expect(panel).toContainText('Needs you now');
   await page.keyboard.press('Escape');

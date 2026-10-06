@@ -177,19 +177,32 @@ export function createProducers({
     }
   }
 
+  // Outside Items whose text read like an instruction to Ares, while their mark stands: one the User
+  // said is not an instruction (or whose words changed) leaves its line, and a line left with none
+  // is resolved.
   function injectionWarnings() {
+    const standing = (itemId: string) => itemStore.injectionWarnings.warning(itemId) !== null;
+    for (const line of store.lines(['queued'])) {
+      if (line.about.kind !== 'injection-warnings') continue;
+      const itemIds = line.itemIds.filter(standing);
+      if (!itemIds.length) queue.resolve(line.id);
+      else if (itemIds.length < line.itemIds.length) queue.revise(line.id, { about: line.about, itemIds });
+    }
     const cursor = store.state().warningsCursor;
     const entries: ActivityEntry[] = itemStore.injectionWarnings.since(cursor);
     if (!entries.length) return;
-    const itemIds = [...new Set(entries.map((entry) => entry.itemId))];
-    queue.enqueue({
-      group: 'fyi',
-      mergeKey: 'injection-warnings',
-      about: { kind: 'injection-warnings', entryIds: entries.map((entry) => entry.id) },
-      itemIds,
-      section: sectionOfItem(itemIds[0]),
-      importance: IMPORTANCE.warnings,
-    });
+    const marked = entries.filter((entry) => standing(entry.itemId));
+    const itemIds = [...new Set(marked.map((entry) => entry.itemId))];
+    if (marked.length) {
+      queue.enqueue({
+        group: 'fyi',
+        mergeKey: 'injection-warnings',
+        about: { kind: 'injection-warnings', entryIds: marked.map((entry) => entry.id) },
+        itemIds,
+        section: sectionOfItem(itemIds[0]),
+        importance: IMPORTANCE.warnings,
+      });
+    }
     store.saveState({ warningsCursor: entries.at(-1)?.id ?? cursor });
   }
 

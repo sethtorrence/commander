@@ -5,7 +5,7 @@ import { type ActionContext, type Project, ruleSuggestionDraft } from '@commande
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { issue, pullRequest, syncGitHub } from '../agent/testing/github-fixtures';
 import { type ItemStore, openItemStore } from '../item-store';
-import { templateText } from './compose';
+import { lineTemplate } from './kinds';
 import { createUpdateQueue, type UpdateQueue } from './queue';
 import { createRuleSuggestions } from './rule-suggestions';
 
@@ -82,8 +82,8 @@ describe('Rule suggestions for GitHub Items', () => {
       section: 'github',
       about: { field: 'github.repo', value: 'R_api', label: 'acme/titanlink-api', code: 'TL', count: 5 },
     });
-    expect(templateText(line as never, () => null)).toBe(
-      'You filed 5 GitHub Items from acme/titanlink-api under TL. Always file acme/titanlink-api under TL?',
+    expect(lineTemplate(line as never, {} as never)).toBe(
+      'You filed 5 GitHub Items from acme/titanlink-api under TL. Always file acme/titanlink-api under TL? A Rule would do it for you from now on: make the Rule, or dismiss this and I won’t ask again.',
     );
     // Accepting makes the repo Rule, which then files the next pull request from it.
     store.changeRule({ type: 'create', rule: ruleSuggestionDraft(line?.about as never) });
@@ -96,8 +96,8 @@ describe('Rule suggestions for GitHub Items', () => {
     suggestions.sweep();
     const [line] = queue.list().filter((each) => each.about.kind === 'rule-suggestion');
     expect(line?.about).toMatchObject({ field: 'github.org', value: 'acme', label: 'acme', count: 6 });
-    expect(templateText(line as never, () => null)).toBe(
-      'You filed 6 GitHub Items from org acme under TL. Always file GitHub org acme under TL?',
+    expect(lineTemplate(line as never, {} as never)).toBe(
+      'You filed 6 GitHub Items from org acme under TL. Always file GitHub org acme under TL? A Rule would do it for you from now on: make the Rule, or dismiss this and I won’t ask again.',
     );
   });
 });

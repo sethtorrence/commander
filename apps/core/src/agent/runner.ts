@@ -56,6 +56,7 @@ import type { Gate } from '../autonomy/gate';
 import type { AgentStore, InjectionWarningStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput, stripInternalWording } from '../safety/output';
+import { heedSteering, type SteeringFlag, steeringFlag } from '../safety/steering-flag';
 import { type BuiltPrompt, buildPrompt, type PromptParts, PromptRefused } from './prompt';
 
 export type Trigger =
@@ -219,9 +220,9 @@ const backoff = (failures: number) =>
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-// Every job's reply may carry `steering`: the refs of outside blocks with text aimed at Ares or an
-// AI. A malformed one counts as none rather than costing the reply.
-const steering = z.object({ steering: z.array(z.string().max(20)).max(100).optional().catch(undefined) });
+// Every job's reply may carry `steering`: the outside blocks with text aimed at Ares or an AI, each
+// with the passage quoted. A malformed one counts as none rather than costing the reply.
+const steering = z.object({ steering: steeringFlag });
 const withSteering = (schema: ZodType): ZodType =>
   schema instanceof z.ZodObject ? schema.extend(steering.shape) : z.intersection(schema, steering);
 // The reply as the job's own schema knows it.
@@ -543,15 +544,11 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
     return { output: cleaned.data, prompt };
   }
 
-  // The reply's steering flag: each outside Item it names (by its block's ref) gets the warning mark.
+  // The reply's steering flag: each outside Item it names (by its block's ref), quoting what in it
+  // read like an instruction, gets the warning mark (safety/steering-flag.ts).
   function markSteering(job: AgentJob, prompt: BuiltPrompt, reply: unknown) {
-    const named = (reply as { steering?: string[] } | null)?.steering ?? [];
-    const marked: string[] = [];
-    for (const ref of new Set(named)) {
-      const itemId = prompt.outside.find((block) => block.ref === ref)?.itemId;
-      if (!itemId) continue;
-      if (options.injectionWarnings?.flag(itemId)) marked.push(itemId);
-    }
+    const flag = (reply as { steering?: SteeringFlag } | null)?.steering;
+    const marked = heedSteering(flag, prompt, options.injectionWarnings);
     if (marked.length) {
       log(`Ares's job “${job.name}” found instructions aimed at Ares in ${marked.length} outside Item(s)`);
       options.onItemsChanged?.(marked);

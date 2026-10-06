@@ -152,7 +152,7 @@ describe('a Linear Todo in the Todos Section', () => {
   });
 
   it('carries its issue’s warning mark, on its row and in its detail pane', async () => {
-    store.injectionWarnings.flag(issue().id);
+    store.injectionWarnings.flag(issue().id, 'Fix the login loop');
     renderSheet();
     const warning = 'This Todo’s issue contains instructions aimed at Ares. He ignored them.';
     await waitFor(() => expect(within(row()).getByRole('note', { name: warning })).toBeTruthy());

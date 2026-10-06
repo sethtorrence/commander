@@ -38,7 +38,7 @@ const SOCIAL = '19:social@thread.v2';
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const REASON = 'Omar asked whether you can sign off the TL release today';
-const SUMMARY = 'They settled on Friday for the offsite, and Lee wants your vote on the venue.';
+const SUMMARY = 'Omar and Lee traded venue ideas, and nobody is waiting on you.';
 const CHECK = '/v1.0/me/chats?$expand=lastMessagePreview&$top=50';
 
 type Message = { role: string; content: string };
@@ -202,7 +202,7 @@ test('a question arrives → a Dashboard row with Ares’s reason → reply → 
   const panel = window.getByTestId('update-panel');
   const fyi = panel.getByRole('region', { name: 'For your information' });
   await expect(fyi.getByTestId('update-line').filter({ hasText: 'Social' })).toHaveText(
-    new RegExp(`Social: 7 messages\\. ${SUMMARY.replace(/[.]/g, '\\.')}`),
+    new RegExp(`“Social” in Teams: 7 messages since your last Update\\. ${SUMMARY.replace(/[.]/g, '\\.')}`),
     { timeout: 30_000 },
   );
   // Made then, by one Deep call at high thinking under Summarise Chat.
@@ -214,7 +214,7 @@ test('a question arrives → a Dashboard row with Ares’s reason → reply → 
   await fyi
     .getByTestId('update-line')
     .filter({ hasText: 'Social' })
-    .getByRole('button', { name: 'Open' })
+    .getByRole('button', { name: 'Open', exact: true })
     .click();
   await expect(panel).toHaveCount(0);
   await expect(

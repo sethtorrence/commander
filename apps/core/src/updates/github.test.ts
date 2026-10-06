@@ -116,7 +116,7 @@ describe('the GitHub summary in the Update', () => {
     ]);
     const update = await updates.give();
     expect(update?.lines.find((line) => line.kind === 'github-summary')?.text).toBe(
-      'GitHub summary · since yesterday: Retries: Webhook retries landed. Nothing on fire.',
+      'GitHub summary · since yesterday: 1 shipped, and nothing on fire. Nothing needs you; open it when you want the detail.',
     );
   });
 

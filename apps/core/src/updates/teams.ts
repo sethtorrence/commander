@@ -6,8 +6,11 @@
 //   if that was later (the last day, before any Update). It queues one For your information line,
 //   merged per Chat: the count goes up as more arrive, and it opens the Chat.
 // - Ares summarises it when the Update is put together, never ahead of time (`summaries`, with
-//   agent/summarise-chat.ts); the line then reads "Titanlink eng: 46 messages. They settled on
-//   shipping Friday, and Omar wants your sign-off." If he can't, it keeps the plain sentence.
+//   agent/summarise-chat.ts); the line then reads "“Titanlink eng” in Teams: 46 messages since your
+//   last Update. They settled on shipping Friday, and Omar wants your sign-off." His summary is
+//   checked against the Chat's messages like any Update line (grounding.ts): a name, number or date
+//   they don't hold, and the line keeps its plain sentence (kinds/teams.ts), as it does when he
+//   can't summarise it at all.
 // - A Chat muted, excluded or deleted since leaves the queue (resolved). Muted Chats never queue.
 import {
   busyChatThreshold,
@@ -22,6 +25,7 @@ import type { ModelClient } from '@commander/models';
 import { summariseForUpdate } from '../agent/summarise-chat';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
+import { checkGrounded } from './grounding';
 import type { UpdateQueue } from './queue';
 
 export const chatSummaryKey = (itemId: string) => `chat-summary:${itemId}`;
@@ -145,7 +149,22 @@ export async function summaries(
             onItemsChanged,
             signal: controller.signal,
           });
-          written.set(line.id, `${oneLine(chat.title)}: ${line.about.count} messages. ${summary}`);
+          // What the summary may rest on: the Chat's name, the count, and its messages and who sent them.
+          const handed = [
+            chat.title,
+            `${line.about.count} messages`,
+            ...messages.map((message) => `${message.from?.name ?? ''}: ${message.text}`),
+          ].join('\n');
+          const grounded = checkGrounded(summary, handed);
+          if (!grounded.ok) {
+            log(`Summarise Chat kept the plain sentence: Ares’s summary had ${grounded.why}`);
+            return;
+          }
+          const count = `${line.about.count} message${line.about.count === 1 ? '' : 's'}`;
+          written.set(
+            line.id,
+            `“${oneLine(chat.title)}” in Teams: ${count} since your last Update. ${summary}`,
+          );
         } catch (error) {
           log(`Summarise Chat kept the plain sentence: ${error instanceof Error ? error.message : error}`);
         }

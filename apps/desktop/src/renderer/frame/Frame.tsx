@@ -241,7 +241,7 @@ export function Frame() {
         return;
       }
       openSection(target.sectionId);
-      if (target.kind === 'item') requestReveal(target.sectionId, target.itemId);
+      if (target.kind === 'item') requestReveal(target.sectionId, target.itemId, target.focus);
     },
     [openSettings, openSection],
   );

@@ -223,10 +223,39 @@ export const givenUpdate = z.object({
 });
 export type GivenUpdate = z.infer<typeof givenUpdate>;
 
+// What the User can do to one Item of a line, right there in the Update (#186). Open and Reply open
+// it where it lives (Reply at the message waiting on them); the rest the Core carries out.
+export const updateRowActions = ['open', 'reply', 'accept', 'dismiss', 'tick', 'not-an-instruction'] as const;
+export const updateRowAction = z.enum(updateRowActions);
+export type UpdateRowAction = z.infer<typeof updateRowAction>;
+export const rowActions = ['accept', 'dismiss', 'tick', 'not-an-instruction'] as const;
+export const rowAction = z.enum(rowActions);
+export type RowAction = z.infer<typeof rowAction>;
+
+// One Item of a line, as the Update lists it under the line (#186): named, with a few words on where
+// it stands and its own actions, opening in its own Section.
+export const updateRow = z.object({
+  itemId,
+  // The Source's short name for it, when it has one (ENG-418, acme/api#12).
+  label: z.string().nullable(),
+  title: z.string(),
+  section: updateSection,
+  // A few words on where it stands: "Reassigned to Priya Patel", "In Review · unchanged for 12 days".
+  state: z.string(),
+  // What in it read like an instruction to Ares (an injection warning), word for word.
+  quote: z.string().nullable(),
+  // Where Reply opens it: the message waiting on the User.
+  focus: z.string().nullable(),
+  actions: z.array(updateRowAction),
+  // What became of it once it was dealt with ("Not an instruction", "Dismissed"), else null.
+  settled: z.string().nullable(),
+});
+export type UpdateRow = z.infer<typeof updateRow>;
+
 // An Update as the panel shows it: each line with where its queued line stands now, so lines acted
-// on show as such and only the rest offer Done, Dismiss, Snooze, Open and Accept.
+// on show as such and only the rest offer Done, Dismiss, Snooze, Open and Accept, and with its Items.
 export const updateView = givenUpdate.extend({
-  lines: z.array(updateLine.extend({ queued: queuedLine.nullable() })),
+  lines: z.array(updateLine.extend({ queued: queuedLine.nullable(), rows: z.array(updateRow) })),
 });
 export type UpdateView = z.infer<typeof updateView>;
 export type UpdateViewLine = UpdateView['lines'][number];

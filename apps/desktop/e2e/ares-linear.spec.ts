@@ -162,14 +162,18 @@ test('sync → a reassignment and a stuck issue, both in the Update; Reconnect q
   const panel = page.getByTestId('update-panel');
   const fyi = panel.getByRole('region', { name: 'For your information' });
   await expect(fyi.getByTestId('update-line')).toHaveCount(2);
-  await expect(fyi).toContainText('ENG-1 was reassigned to Priya Patel.');
-  await expect(fyi).toContainText(`${STUCK_REASON}.`);
+  await expect(fyi).toContainText(
+    'ENG-1 “Fix the export” in Linear was reassigned to Priya Patel, so it’s off your Todos. Nothing to do, unless it should still be yours.',
+  );
+  await expect(fyi).toContainText(
+    'ENG-2 “Rate limiter” in Linear looks stuck. It has sat in review for 5 days; Priya hasn’t looked at it yet. Open it to move it along, or tick it if it’s done.',
+  );
 
   // Open on the reassignment: the Linear Section, at ENG-1.
   await fyi
     .getByTestId('update-line')
-    .filter({ hasText: 'ENG-1 was reassigned' })
-    .getByRole('button', { name: 'Open' })
+    .filter({ hasText: 'reassigned to Priya Patel' })
+    .getByRole('button', { name: 'Open', exact: true })
     .click();
   await expect(panel).toHaveCount(0);
   const issue = page.getByTestId('section-linear').getByRole('region', { name: 'Issue detail' });
@@ -185,11 +189,11 @@ test('sync → a reassignment and a stuck issue, both in the Update; Reconnect q
   await page.keyboard.press('u');
   const now = panel.getByRole('region', { name: 'Needs you now' });
   await expect(now.getByTestId('update-line')).toHaveText([
-    /Linear \(Acme\) needs you to sign in again; syncing is paused\./,
+    /Linear \(Acme\) needs you to sign in again, so I’ve paused syncing it and its issues may be out of date\./,
   ]);
 
   // Open goes to Settings → Accounts; reconnecting clears the line by itself.
-  await now.getByRole('button', { name: 'Open' }).click();
+  await now.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(panel).toHaveCount(0);
   await expect(accounts).toBeInViewport();
   linear.addApiKey(NEW_KEY, ACME);

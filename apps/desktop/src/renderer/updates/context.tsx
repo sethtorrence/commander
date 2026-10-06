@@ -2,7 +2,9 @@ import type {
   CoreMessage,
   Presence,
   QueuedAction,
+  RowAction,
   SnoozeChoice,
+  UpdateRow,
   UpdateSummary,
   UpdateView,
   UpdateViewLine,
@@ -151,10 +153,24 @@ export function UpdatesProvider({
     [client, panel, refresh],
   );
 
+  // One of a line's Items, acted on in place; the Update shown is read again after.
+  const actRow = useCallback(
+    async (line: UpdateViewLine, row: UpdateRow, action: RowAction) => {
+      if (!client || panel.mode !== 'update' || !panel.view) return;
+      try {
+        await client({ op: 'act-row', queuedId: line.queuedId, itemId: row.itemId, action });
+      } catch (error) {
+        report(error);
+      }
+      await refresh(panel.view, panel.past).catch(report);
+    },
+    [client, panel, refresh],
+  );
+
   const open = useCallback(
-    (line: UpdateViewLine, itemId?: string) => {
+    (line: UpdateViewLine, row?: UpdateRow, reply?: boolean) => {
       close();
-      onOpen(openTarget(line, itemId));
+      onOpen(openTarget(line, row, { reply }));
     },
     [close, onOpen],
   );
@@ -185,6 +201,7 @@ export function UpdatesProvider({
         onClose={close}
         onAct={act}
         onOpen={open}
+        onActRow={actRow}
         onShowHistory={showHistory}
         onReopen={reopen}
       />

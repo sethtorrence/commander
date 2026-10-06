@@ -19,6 +19,7 @@ import { z } from 'zod';
 import type { InjectionWarningStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput } from '../safety/output';
+import { heedSteering, steeringFlag } from '../safety/steering-flag';
 import { type Chat, chatBlock, isChat, longDay, numbered, spokenIn } from './chat-material';
 import { buildPrompt, type PromptParts, PromptRefused } from './prompt';
 
@@ -27,7 +28,7 @@ const MAX_MESSAGES = 30;
 
 export const OUTPUT = z.object({ draft: z.string().trim().min(1).max(MAX_REPLY_LENGTH) });
 const REPLY = OUTPUT.extend({
-  steering: z.array(z.string().max(20)).max(100).optional().catch(undefined),
+  steering: steeringFlag,
 });
 
 const instructions = (
@@ -124,11 +125,7 @@ export async function draftReply(item: Item, options: DraftOptions): Promise<Cha
           : String(error);
     throw new DraftFailed(`Ares couldn’t draft a reply: ${why}`);
   }
-  const marked: string[] = [];
-  for (const ref of new Set(reply.steering ?? [])) {
-    const itemId = prompt.outside.find((block) => block.ref === ref)?.itemId;
-    if (itemId && options.injectionWarnings?.flag(itemId)) marked.push(itemId);
-  }
+  const marked = heedSteering(reply.steering, prompt, options.injectionWarnings);
   if (marked.length) options.onItemsChanged?.(marked);
   const text = cleanDraft(cleanOutput(reply.draft, prompt.material));
   if (!text) throw new DraftFailed('Ares couldn’t draft a reply: his reply didn’t make sense');
