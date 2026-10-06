@@ -66,6 +66,8 @@ export const AGENT_JOB_NAMES: Record<string, string> = {
   // Email (#141).
   'sort-into-buckets': 'Sort into Buckets',
   'suggest-buckets': 'Suggest new Buckets',
+  // Conversations with Ares (#191).
+  conversation: 'Conversations',
   // Search by meaning (#73): the local embedding model's calls.
   'embed-index': 'Embed Items for search',
   'embed-query': 'Embed searches',

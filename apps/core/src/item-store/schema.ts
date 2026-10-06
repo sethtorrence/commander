@@ -48,6 +48,8 @@ import type {
   SyncProblem,
   SyncTrigger,
   TodoOrigin,
+  TurnAuthor,
+  TurnStatus,
   UpdateGroup,
   UpdateLine,
   UpdateSection,
@@ -1132,3 +1134,43 @@ export const emailSignatures = sqliteTable('email_signatures', {
   body: text('body', { mode: 'json' }).$type<ComposeBody>().notNull(),
   updatedAt: integer('updated_at').notNull(),
 });
+
+// Conversations with Ares (#191, conversations.ts). Not Items: a Conversation is the User's thread
+// with Ares, written only through the Item store. `daily_of`: the day it is that day's own
+// Conversation (made on the first open of the day); null for one started with New Conversation.
+export const conversations = sqliteTable(
+  'conversations',
+  {
+    id: text('id').primaryKey(),
+    title: text('title'),
+    day: text('day').notNull(),
+    dailyOf: text('daily_of'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('conversations_daily_of').on(t.dailyOf),
+    index('conversations_updated').on(t.updatedAt),
+  ],
+);
+
+// Each Conversation's turns, the User's and Ares's, oldest first. Each of Ares's answers one of the
+// User's (`reply_to`).
+export const conversationTurns = sqliteTable(
+  'conversation_turns',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    conversationId: text('conversation_id')
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    by: text('by').$type<TurnAuthor>().notNull(),
+    text: text('text').notNull(),
+    at: integer('at').notNull(),
+    status: text('status').$type<TurnStatus>().notNull(),
+    replyTo: integer('reply_to'),
+    ownKnowledge: integer('own_knowledge', { mode: 'boolean' }).notNull().default(false),
+    problem: text('problem'),
+    endedAt: integer('ended_at'),
+  },
+  (t) => [index('conversation_turns_conversation').on(t.conversationId, t.id)],
+);

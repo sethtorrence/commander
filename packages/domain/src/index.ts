@@ -12,6 +12,7 @@ export * from './calendar';
 export * from './channel-posts';
 export * from './clashes';
 export * from './commander-events';
+export * from './conversations';
 export * from './core-messages';
 export * from './daily-template';
 export * from './email';

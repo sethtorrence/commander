@@ -10,6 +10,7 @@ import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { setUpBusyCopies } from './busy-copies';
 import { composeFiles, setUpCompose } from './compose';
+import { setUpConversations } from './conversations';
 import { setUpEmailReader } from './email-reader';
 import { workerSanitiser } from './email-reader/sanitiser';
 import { setUpGitHubDiscussion } from './github-discussion';
@@ -278,6 +279,18 @@ updates = setUpUpdates({
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
 sync.engine.onSynced(() => updates?.sweep());
 
+// Conversations with Ares (#191): the User's messages answered on the Deep tier, streamed to the window
+// as he writes. The end-to-end tests may treat their fake model (on this machine) as a cloud one, so
+// two Conversations answer at once.
+const conversations = setUpConversations({
+  store: itemStore.conversations,
+  client: models.client,
+  settings: () => itemStore.models.settings(),
+  secrets,
+  send: (message) => port.postMessage(message),
+  oneAtATime: testHooks && process.argv.includes('--test-model-in-cloud') ? () => false : undefined,
+});
+
 // Today's meetings (#128): the meeting chips in today's Daily Note follow each calendar sync, and the
 // opt-in heads-up comes 2 minutes before a meeting (shown by the main process) while someone is there.
 const meetings = setUpMeetings({
@@ -325,6 +338,7 @@ port.on('message', ({ data }) => {
   if (sync.handle(data)) return;
   if (markdownCopy.handle(data)) return;
   if (updates?.handle(data)) return;
+  if (conversations.handle(data)) return;
   if (githubWatch.handle(data)) return;
   if (emailReader.handle(data)) return;
   if (compose.handle(data)) return;
@@ -404,6 +418,7 @@ const closeStore = () => {
   if (closed) return;
   closed = true;
   agent.stop();
+  conversations.stop();
   meetings.stop();
   snooze.stop();
   updates?.stop();
