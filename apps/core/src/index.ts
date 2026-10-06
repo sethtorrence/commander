@@ -193,7 +193,8 @@ updates = setUpUpdates({
   secrets,
   accounts: () => sync.accounts(),
   me: (account) => sync.me(account),
-  // Asking for an Update checks every Teams Account first (a light sync), for up to 5 seconds.
+  // Asking for an Update checks every Teams Account first (a light sync), for up to 2 seconds, unless
+  // Teams was checked in the last 2 minutes.
   refreshTeams: () =>
     Promise.all(
       sync

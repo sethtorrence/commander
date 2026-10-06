@@ -229,7 +229,30 @@ describe('asking for an Update checks Teams first', () => {
     expect(update?.lines.map((each) => each.kind)).toContain('chat-summary');
   });
 
-  it('goes on with what’s there after 5 seconds if Teams is slow', async () => {
+  it('skips the check when Teams was checked in the last 2 minutes, so reopening is instant', async () => {
+    await updates.skills.run('update', undefined);
+    expect(refreshes).toBe(1);
+    clock += 90_000;
+    refresh = () => new Promise(() => {});
+    const started = Date.now();
+    await updates.skills.run('update', undefined);
+    expect(refreshes).toBe(1);
+    expect(Date.now() - started).toBeLessThan(500);
+    clock += 60_000;
+    refresh = () => Promise.resolve();
+    await updates.skills.run('update', undefined);
+    expect(refreshes).toBe(2);
+  });
+
+  it('goes on with what’s there after 2 seconds by default if Teams is slow', async () => {
+    setUp();
+    refresh = () => new Promise(() => {});
+    const started = Date.now();
+    await updates.skills.run('update', undefined);
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  it('goes on with what’s there after the wait if Teams is slow', async () => {
     setUp(50);
     sync(chat('19:titanlink@thread.v2', 'Titanlink eng', 'group', [OMAR, LEE], busy(21)));
     refresh = () => new Promise(() => {});

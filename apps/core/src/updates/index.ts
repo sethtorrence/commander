@@ -72,8 +72,11 @@ export type { UpdateQueue } from './queue';
 // After more than 8 hours away, the five most important things lead and the rest fold.
 const LEAD = 5;
 const SWEEP_EVERY_MS = 60_000;
-// How long asking for an Update waits on the light Teams sync before going on with what's there.
-const REFRESH_WAIT_MS = 5_000;
+// How long asking for an Update waits on the light Teams sync before going on with what's there
+// (the sync carries on, and what it finds is for the next Update).
+const REFRESH_WAIT_MS = 2_000;
+// Teams checked this recently is fresh enough: asking again (reopening the Update) doesn't wait.
+const REFRESH_FRESH_MS = 2 * 60_000;
 
 export type UpdatesOptions = {
   itemStore: ItemStore;
@@ -87,7 +90,7 @@ export type UpdatesOptions = {
   me?: (account: string) => string | null;
   // A light sync of every Teams Account, run when the User asks for an Update (#109).
   refreshTeams?: () => Promise<unknown>;
-  // How long asking waits on it before going on (5 seconds; tests shorten it).
+  // How long asking waits on it before going on (2 seconds; tests shorten it).
   refreshWaitMs?: number;
   // The quiet count or the User's presence changed.
   onState?: (state: UpdatesState) => void;
@@ -375,9 +378,15 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     return view(update);
   }
 
-  // Asking for an Update: a light sync of every Teams Account first, waited on for up to 5 seconds.
+  // When asking last started a light Teams sync, so asking again soon doesn't wait on another.
+  let refreshedAt: number | null = null;
+
+  // Asking for an Update: a light sync of every Teams Account first, waited on for up to 2 seconds,
+  // unless Teams was checked in the last 2 minutes.
   async function asked(): Promise<UpdateView | null> {
-    if (options.refreshTeams) {
+    const fresh = refreshedAt !== null && now() - refreshedAt < REFRESH_FRESH_MS;
+    if (options.refreshTeams && !fresh) {
+      refreshedAt = now();
       let timer: ReturnType<typeof setTimeout> | undefined;
       const waited = new Promise<void>((resolve) => {
         timer = setTimeout(resolve, options.refreshWaitMs ?? REFRESH_WAIT_MS);
