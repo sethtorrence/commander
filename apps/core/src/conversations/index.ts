@@ -98,6 +98,10 @@ export function servedOnThisMachine(baseUrl: string): boolean {
   );
 }
 
+/** Why an answer a stopped Core was writing failed (#200), in Ares's voice. */
+export const UNFINISHED_PROBLEM =
+  'Commander’s core stopped while I was answering, so I didn’t finish. Send this again.';
+
 /** Why an answer failed, in Ares's voice. Never the provider's own words. */
 export function problemFor(error: unknown): string {
   if (error instanceof PromptRefused) {
@@ -183,8 +187,9 @@ export function setUpConversations(options: ConversationsOptions): Conversations
     { conversation: RemovedConversation; timer: ReturnType<typeof setTimeout> }
   >();
 
-  // Answers Commander was closed in the middle of: stopped, as far as he got.
-  store.settleUnfinished();
+  // Answers the last Core was writing when it stopped without closing (#200; closing stops them
+  // itself): failed, so the User can send their message again.
+  store.settleUnfinished(UNFINISHED_PROBLEM);
 
   const push = (message: CoreMessage) => options.send(message);
   const changed = (turn: ConversationTurn) => push({ type: 'conversation-turn', turn });

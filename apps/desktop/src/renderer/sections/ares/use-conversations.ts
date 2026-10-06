@@ -112,9 +112,15 @@ export function useConversations(
                 : each,
             ),
           );
+        } else if (message.type === 'core-restarted') {
+          // A new Core settled any answer the old one was writing when it stopped (#200).
+          setLive(new Map());
+          void reload();
+          const conversationId = openId.current;
+          if (conversationId) void client({ op: 'open', conversationId }).then(show, () => {});
         }
       }),
-    [onCoreMessage],
+    [onCoreMessage, client, reload, show],
   );
 
   const open = useCallback(

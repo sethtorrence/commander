@@ -53,6 +53,11 @@ const meetingHeadsUp = z.object({
 // How the Markdown copy of the Daily Notes stands changed (markdown-copy-messages.ts): Settings shows it.
 const markdownCopyChanged = z.object({ type: z.literal('markdown-copy-status'), status: markdownCopyStatus });
 
+// A new Core is running after one stopped (#200). Sent by the main process, not the Core: views
+// holding what the Core pushes as it changes (Ares working, the quiet count, an answer being written)
+// ask again, since the old Core's word may never have come.
+const coreRestarted = z.object({ type: z.literal('core-restarted'), at: z.number().int().nonnegative() });
+
 // Conversations (#191, conversations.ts): Ares's answer as he writes it, and his turn as it changes.
 export const coreMessage = z.discriminatedUnion('type', [
   heartbeat,
@@ -60,6 +65,7 @@ export const coreMessage = z.discriminatedUnion('type', [
   aresStatusChanged,
   conversationTokens,
   conversationTurnChanged,
+  coreRestarted,
   dashboardRanked,
   aresUpdates,
   itemsChanged,

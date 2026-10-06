@@ -32,6 +32,7 @@ import {
   type AccountsRequest,
   type AccountsResponse,
   type AccountsState,
+  type CoreStatus,
   type Diagnostics,
   ipc,
   type ModelKeyStatus,
@@ -45,9 +46,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 // What the window must save before Commander quits (see onSaveBeforeQuit).
 const savers = new Set<() => Promise<void>>();
+const saveAll = () => Promise.allSettled([...savers].map((save) => save()));
 ipcRenderer.on(ipc.saveBeforeQuit, async (_event, id: number) => {
-  await Promise.allSettled([...savers].map((save) => save()));
+  await saveAll();
   ipcRenderer.send(ipc.savedBeforeQuit, id);
+});
+// The same savers run once a new Core is running after one stopped (#200): edits held while it was
+// down are saved now.
+ipcRenderer.on(ipc.coreMessage, (_event, message: CoreMessage) => {
+  if (message?.type === 'core-restarted') void saveAll();
 });
 
 // The only bridge between the renderer and the app.
@@ -60,6 +67,16 @@ const commander = {
     };
   },
   diagnostics: (): Promise<Diagnostics> => ipcRenderer.invoke(ipc.diagnostics),
+  // Whether the Core is running (#200), and as it changes; Try again, once Commander stopped trying.
+  coreStatus: (): Promise<CoreStatus> => ipcRenderer.invoke(ipc.coreStatus),
+  onCoreStatus(listener: (status: CoreStatus) => void) {
+    const handler = (_event: unknown, status: CoreStatus) => listener(status);
+    ipcRenderer.on(ipc.coreStatusChanged, handler);
+    return () => {
+      ipcRenderer.off(ipc.coreStatusChanged, handler);
+    };
+  },
+  restartCore: (): Promise<void> => ipcRenderer.invoke(ipc.restartCore),
   // Only the status of secret storage crosses to the window; secrets themselves never do.
   secretStorageStatus: (): Promise<SecretStorageStatus> => ipcRenderer.invoke(ipc.secretStorageStatus),
   // The window's only way to read or change Items. Rejects with the reason when the request fails.
@@ -158,7 +175,8 @@ const commander = {
     };
   },
   // Runs `save` when Commander quits, before the Core stops, so edits held back (typing saved after a
-  // pause) reach the Item store. Returns the function that stops it.
+  // pause) reach the Item store; and when a new Core is running after one stopped, for edits held
+  // while it was down. Returns the function that stops it.
   onSaveBeforeQuit(save: () => Promise<void>) {
     savers.add(save);
     return () => {

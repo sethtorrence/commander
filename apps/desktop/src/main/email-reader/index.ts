@@ -45,14 +45,20 @@ export function setUpEmailReader({
   window,
   send,
   testHooks = false,
+  whileCoreRuns = (run) => run(),
 }: {
   window: BrowserWindow;
   send: (message: unknown) => void;
   testHooks?: boolean;
+  // Asks the Core only while it runs (#200; core-supervisor.ts).
+  whileCoreRuns?: <R>(run: () => Promise<R>) => Promise<R | { ok: false; error: string }>;
 }) {
   let nextId = 1;
   const pending = new Map<number, { resolve: (response: CoreResponse) => void; timer: NodeJS.Timeout }>();
   function ask(request: CoreEmailRequest): Promise<CoreResponse> {
+    return whileCoreRuns(() => askCore(request));
+  }
+  function askCore(request: CoreEmailRequest): Promise<CoreResponse> {
     const id = nextId++;
     return new Promise((resolve) => {
       const timer = setTimeout(() => {

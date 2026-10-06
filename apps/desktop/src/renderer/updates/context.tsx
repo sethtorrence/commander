@@ -102,17 +102,24 @@ export function UpdatesProvider({
 
   useEffect(() => {
     let heard = false;
+    const ask = () =>
+      client?.({ op: 'state' }).then(
+        (next) => {
+          if (!heard) setState(next);
+        },
+        () => {},
+      );
     const stop = onCoreMessage?.((message) => {
+      // A new Core after one stopped (#200): asked again.
+      if (message.type === 'core-restarted') {
+        heard = false;
+        void ask();
+      }
       if (message.type !== 'ares-updates') return;
       heard = true;
       setState({ queued: message.queued, presence: message.presence });
     });
-    client?.({ op: 'state' }).then(
-      (next) => {
-        if (!heard) setState(next);
-      },
-      () => {},
-    );
+    void ask();
     return stop;
   }, [client, onCoreMessage]);
 

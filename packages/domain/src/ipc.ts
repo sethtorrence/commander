@@ -53,7 +53,47 @@ export const ipc = {
   emailLinkHover: 'email-link-hover',
   // Writing email (#138); see email-compose.ts for the validated contract.
   compose: 'compose',
+  // Whether the Core is running (#200), as a CoreStatus: the window reads it (coreStatus), main
+  // pushes it as it changes (coreStatusChanged), and the banner's Try again starts the Core again
+  // once Commander has stopped retrying (restartCore).
+  coreStatus: 'core-status',
+  coreStatusChanged: 'core-status-changed',
+  restartCore: 'restart-core',
 } as const;
+
+// Why the Core last stopped: it exited (crashed, or was killed) or stopped answering (its heartbeat
+// went missing, so main ended it). `code`: its exit code, when it exited by itself.
+export type CoreStop = { at: number; reason: 'exited' | 'unresponsive'; code: number | null };
+
+// Where the Core stands (#200).
+// - running: requests go to it.
+// - restarting: it stopped, and a new one starts at `restartAt` (or has started and isn't answering
+//   yet); requests fail at once meanwhile, with CORE_DOWN's reason.
+// - stopped: it stopped too often in a short time, so Commander stopped starting it until the User
+//   asks (Try again).
+export type CoreStatus = {
+  state: 'running' | 'restarting' | 'stopped';
+  restartAt: number | null;
+  // How many times a new Core was started since Commander started.
+  restarts: number;
+  lastStop: CoreStop | null;
+};
+
+// The plain reasons requests fail with while the Core is down: `restarting` and `stopped` for those
+// that never reached it, `answering` for one it was answering when it stopped (which may or may not
+// have been done).
+export const CORE_DOWN = {
+  restarting: 'Commander’s core stopped. Starting it again…',
+  stopped: 'Commander’s core keeps stopping, so it wasn’t started again.',
+  answering: 'Commander’s core stopped before it answered.',
+} as const;
+
+// Whether a request failed without ever reaching the Core, so it can safely be made again once the
+// Core is back (the window's held-back saves are).
+export function reachedNoCore(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return message === CORE_DOWN.restarting || message === CORE_DOWN.stopped;
+}
 
 // An Item to show in its Section: the Calendar Section and the event, for a meeting's heads-up.
 export type OpenItem = { sectionId: string; itemId: string };

@@ -19,7 +19,7 @@ import { createOutlookAccounts } from '../microsoft/outlook-accounts';
 import { createTeamsAccounts } from '../microsoft/teams-accounts';
 import type { Secrets } from '../secrets';
 import { type CoreSyncMessage, createCoreSyncChannel } from '../sync/core-sync-channel';
-import { watchSystemState } from '../sync/system-state';
+import { type SystemState, watchSystemState } from '../sync/system-state';
 import { createAccountStore } from './account-store';
 import { combineAccounts } from './accounts';
 import { accountsState, answerAccountsRequest } from './accounts-requests';
@@ -35,6 +35,7 @@ export function setUpAccounts({
   secrets,
   sendToCore,
   testHooks = false,
+  whileCoreRuns = (run) => run(),
 }: {
   secrets: Secrets;
   sendToCore: (
@@ -49,8 +50,12 @@ export function setUpAccounts({
   // End-to-end tests (COMMANDER_TEST_HOOKS=1) may take the machine offline: COMMANDER_TEST_OFFLINE=1
   // starts Commander offline, and the returned setOnline switches it (checked every half second).
   testHooks?: boolean;
+  // Runs a request relayed to the Core only while it runs (#200; core-supervisor.ts).
+  whileCoreRuns?: <R>(run: () => Promise<R>) => Promise<R | { ok: false; error: string }>;
 }): {
   fromCore: (raw: unknown) => boolean;
+  // A new Core started after one stopped (#200): it hears the Accounts and the machine's state again.
+  coreRestarted: () => void;
   setOnline: (online: boolean) => void;
   // Test hooks only: saves pull requests in the Core as GitHub sync will.
   saveGitHubItems: (account: string, items: CoreGitHubTestItems['items']) => void;
@@ -140,20 +145,28 @@ export function setUpAccounts({
   void accounts.refreshDetails();
   // Syncing pauses while the machine is asleep or offline.
   let testOffline = testHooks && process.env.COMMANDER_TEST_OFFLINE === '1';
+  let systemState: SystemState | null = null;
   watchSystemState({
     powerMonitor,
     isOnline: () => !testOffline && net.isOnline(),
-    onChange: (state) => sync.systemState(state),
+    onChange: (state) => {
+      systemState = state;
+      sync.systemState(state);
+    },
     pollMs: testHooks ? 500 : undefined,
   });
 
   ipcMain.handle(ipc.accounts, (_event, request: unknown) => answerAccountsRequest(accounts, request, sync));
   // Settings → GitHub: the Core lists what each GitHub Account reaches, with the token it borrows.
   const githubWatch = createGitHubWatchChannel({ apiUrl: githubSettings.apiUrl, send: sendToCore });
-  ipcMain.handle(ipc.githubWatch, (_event, request: unknown) => githubWatch.request(request));
+  ipcMain.handle(ipc.githubWatch, (_event, request: unknown) =>
+    whileCoreRuns(() => githubWatch.request(request)),
+  );
   // The GitHub Section: the Core fetches a pull request's or issue's discussion when it is opened.
   const githubDiscussion = createGitHubDiscussionChannel({ apiUrl: githubSettings.apiUrl, send: sendToCore });
-  ipcMain.handle(ipc.githubDiscussion, (_event, request: unknown) => githubDiscussion.request(request));
+  ipcMain.handle(ipc.githubDiscussion, (_event, request: unknown) =>
+    whileCoreRuns(() => githubDiscussion.request(request)),
+  );
   // Status changes (an Account needing reconnecting, a sync finishing) happen without the window asking.
   const broadcast = async () => {
     const state = await accountsState(accounts, sync);
@@ -170,6 +183,10 @@ export function setUpAccounts({
       core.handle(raw) || sync.handle(raw) || githubWatch.settle(raw) || githubDiscussion.settle(raw),
     setOnline: (online) => {
       if (testHooks) testOffline = !online;
+    },
+    coreRestarted: () => {
+      void syncAccounts();
+      if (systemState) sync.systemState(systemState);
     },
     saveGitHubItems: (account, items) => {
       if (testHooks) sendToCore({ type: 'github-test-items', account, items });

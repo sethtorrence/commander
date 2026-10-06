@@ -31,6 +31,7 @@ import { isTypingTarget } from '../shortcuts/registry';
 import { UpdatesProvider, useUpdates } from '../updates/context';
 import type { OpenTarget } from '../updates/updates';
 import { CheatSheet } from './CheatSheet';
+import { CoreBanner } from './CoreBanner';
 import { Header } from './Header';
 import { NotebookTabs } from './NotebookTabs';
 import { RulerCursor } from './RulerCursor';
@@ -399,6 +400,8 @@ export function Frame() {
           <section className="grid grid-cols-8" hidden={open !== SETTINGS} aria-label="Settings">
             <SettingsScreen open={open === SETTINGS} />
           </section>
+          {/* Within the frame's controls: its Diagnostics link opens that Settings page. */}
+          <CoreBanner />
         </FrameControlsProvider>
       </main>
       <CheatSheet open={cheatSheet} onOpenChange={setCheatSheet} />

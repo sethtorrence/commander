@@ -1,5 +1,5 @@
 import type { ItemStore } from '@commander/core/src/item-store';
-import { attachmentMarkdown, defaultDailyTemplate } from '@commander/domain';
+import { attachmentMarkdown, CORE_DOWN, defaultDailyTemplate } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
@@ -285,6 +285,41 @@ describe('writing', () => {
     await notebook.flush();
 
     expect(store.get(id as string)?.item.title).toBe('Draft that must not be lost');
+  });
+
+  it('holds edits made while Commander’s core is down, and saves them in order once it is back', async () => {
+    // The window's bridge while the Core is down: requests fail at once, never reaching it (#200).
+    let down = false;
+    const bridge = ((request) =>
+      down ? Promise.reject(new Error(CORE_DOWN.restarting)) : client(request)) as ItemStoreClient;
+    const notebook = createNotebook(dailyNotesIn(bridge), {
+      today: '2026-10-03',
+      onError: (message) => errors.push(message),
+    });
+    notebooks.push(notebook);
+    await notebook.start();
+    const [first] = write(notebook, '2026-10-03', 'Before');
+    await notebook.flush();
+
+    down = true;
+    notebook.type('2026-10-03', first as string, 'Before the stop');
+    const below = notebook.enter('2026-10-03', first as string, 15, 15);
+    notebook.type('2026-10-03', below?.id as string, 'Typed while stopped');
+    notebook.indent('2026-10-03', below?.id as string, 0);
+    await notebook.flush();
+    expect(errors).toEqual([]);
+    expect(blockItems().map((item) => item.title)).toEqual(['Before']);
+    expect(lines(notebook, '2026-10-03')).toEqual(['Before the stop', '  Typed while stopped']);
+
+    down = false;
+    await notebook.flush();
+    expect(errors).toEqual([]);
+    expect(
+      blockItems()
+        .map((item) => item.title)
+        .sort(),
+    ).toEqual(['Before the stop', 'Typed while stopped']);
+    expect(store.get(below?.id as string)?.item.detail).toMatchObject({ parentId: first });
   });
 
   it('records each structural change in the activity log as the User’s', async () => {

@@ -48,11 +48,16 @@ class FakeWindow extends EventEmitter {
 
 class FakeCore extends EventEmitter {
   killed = false;
+  exited = false;
+  running() {
+    return !this.exited;
+  }
   kill() {
     this.killed = true;
     return true;
   }
   exit(code = 0) {
+    this.exited = true;
     this.emit('exit', code);
   }
 }
@@ -99,6 +104,34 @@ describe('stopCoreOnQuit', () => {
 
     app.quit();
     expect(core.killed).toBe(false);
+    expect(app.quitCount).toBe(1);
+  });
+
+  it('quits straight away, without saving first, while a stopped Core waits to start again', () => {
+    const app = new FakeApp();
+    const core = new FakeCore();
+    const beforeStop = vi.fn(async () => {});
+    stopCoreOnQuit(app, core, { beforeStop });
+    core.exit(1);
+
+    app.quit();
+    expect(beforeStop).not.toHaveBeenCalled();
+    expect(core.killed).toBe(false);
+    expect(app.quitCount).toBe(1);
+  });
+
+  it('waits for a Core started again after an earlier one stopped', () => {
+    const app = new FakeApp();
+    const core = new FakeCore();
+    stopCoreOnQuit(app, core);
+    // The first Core stopped, and a new one is running (the supervisor stands for both).
+    core.exit(1);
+    core.exited = false;
+
+    app.quit();
+    expect(core.killed).toBe(true);
+    expect(app.quitCount).toBe(0);
+    core.exit();
     expect(app.quitCount).toBe(1);
   });
 

@@ -52,4 +52,22 @@ describe('useAresStatus', () => {
     act(() => listener({ type: 'heartbeat', beats: 1, at: 1 }));
     expect(result.current).toEqual({ working: false, running: [] });
   });
+
+  it('asks again when a new Core is running, whose jobs ended with the old one', async () => {
+    let listener: (message: CoreMessage) => void = () => {};
+    let working = true;
+    const client = async () => ({
+      jobs: [],
+      status: working ? { working: true, running: ['Suggest Todos'] } : { working: false, running: [] },
+    });
+    const onCoreMessage = (next: (message: CoreMessage) => void) => {
+      listener = next;
+      return () => {};
+    };
+    const { result } = renderHook(() => useAresStatus(client, onCoreMessage));
+    await waitFor(() => expect(result.current.working).toBe(true));
+    working = false;
+    act(() => listener({ type: 'core-restarted', at: 1 }));
+    await waitFor(() => expect(result.current).toEqual({ working: false, running: [] }));
+  });
 });

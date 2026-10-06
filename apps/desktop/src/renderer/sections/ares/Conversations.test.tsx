@@ -4,6 +4,7 @@ import { writeBlock } from '@commander/core/src/agent/testing/meeting-fixtures';
 import {
   type Conversations as CoreConversations,
   setUpConversations,
+  UNFINISHED_PROBLEM,
 } from '@commander/core/src/conversations';
 import type { ItemStore } from '@commander/core/src/item-store';
 import { createFindSkill } from '@commander/core/src/skills/find';
@@ -193,6 +194,30 @@ describe('Conversations in the Ares Section', () => {
     refuse = null;
     fireEvent.click(screen.getByRole('button', { name: 'Send again' }));
     await waitFor(() => expect(calls).toHaveLength(1));
+    expect(screen.queryByTestId('ares-problem')).toBeNull();
+  });
+
+  it('ends an answer with a plain failure when the Core stops while writing it, keeping the User’s message (#200)', async () => {
+    // The window's channel outlives the Core: it reaches whichever Core is running.
+    render(
+      <Conversations
+        client={((request) => client(request)) as ConversationsClient}
+        shown
+        onCoreMessage={onCoreMessage}
+      />,
+    );
+    await type('Tell me a long story');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    act(() => calls[0]?.write('[general]\nOnce upon a time'));
+    await waitFor(() => expect(screen.getByTestId('ares-answer').textContent).toBe('Once upon a time'));
+
+    // The Core stops without closing, a new one starts on the same database, and main says so.
+    boot();
+    for (const listener of listeners) act(() => listener({ type: 'core-restarted', at: 1 }));
+    await waitFor(() => expect(screen.getByTestId('ares-problem').textContent).toBe(UNFINISHED_PROBLEM));
+    expect(within(thread()).getAllByTestId('conversation-turn')[0]?.textContent).toBe('Tell me a long story');
+    fireEvent.click(screen.getByRole('button', { name: 'Send again' }));
+    await waitFor(() => expect(calls).toHaveLength(2));
     expect(screen.queryByTestId('ares-problem')).toBeNull();
   });
 
