@@ -366,7 +366,8 @@ export function emailsIn(
     const live = details.filter((detail) => !detail.inTrash);
     const labels = new Map<string, EmailLabel>();
     for (const detail of live)
-      for (const label of detail.labels) if (isPickableLabel(label.id)) labels.set(label.id, label);
+      for (const label of detail.labels)
+        if (isPickableLabel(label.id, label.name)) labels.set(label.id, label);
     const returned = details.flatMap((detail) => (detail.snooze?.returned ? [detail.snooze.until] : []));
     return {
       account,
@@ -529,7 +530,7 @@ export function emailsIn(
       const gmail = gmailCatalog.safeParse(row.catalog);
       if (gmail.success) {
         for (const label of gmail.data.labels)
-          if (!label.system && isPickableLabel(label.id))
+          if (!label.system && isPickableLabel(label.id, label.name))
             found.set(label.id, { id: label.id, name: label.name });
         continue;
       }
@@ -548,7 +549,7 @@ export function emailsIn(
       .where(and(isNull(items.deletedAt), account ? eq(items.account, account) : undefined))
       .all();
     for (const label of carried) {
-      if (label.id && label.name !== null && isPickableLabel(label.id) && !found.has(label.id))
+      if (label.id && label.name !== null && isPickableLabel(label.id, label.name) && !found.has(label.id))
         found.set(label.id, { id: label.id, name: label.name });
     }
     return [...found.values()].sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));

@@ -1,0 +1,353 @@
+{
+  "mirror": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": ["Blue category"],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=",
+        "body": {
+          "categories": ["Blue category", "Commander: FYI"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD9\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": ["Blue category", "Commander: FYI"],
+          "lastModifiedDateTime": "2026-10-07T09:01:00Z"
+        }
+      }
+    }
+  ],
+  "mirrorMove": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": ["Commander: FYI", "Commander: Newsletters", "Blue category"],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=",
+        "body": {
+          "categories": ["Blue category", "Commander: Receipts"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD9\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": ["Blue category", "Commander: Receipts"],
+          "lastModifiedDateTime": "2026-10-07T09:01:00Z"
+        }
+      }
+    }
+  ],
+  "mirrorOff": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": ["Blue category", "Commander: FYI"],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=",
+        "body": {
+          "categories": ["Blue category"]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD9\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": ["Blue category"],
+          "lastModifiedDateTime": "2026-10-07T09:01:00Z"
+        }
+      }
+    }
+  ],
+  "mirrorSuperseded": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": ["Commander: Newsletters"],
+          "lastModifiedDateTime": "2026-10-07T09:30:00Z"
+        }
+      }
+    }
+  ],
+  "plan": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/outlook/masterCategories"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/outlook/masterCategories",
+          "value": [
+            {
+              "id": "cat-blue",
+              "displayName": "Blue category",
+              "color": "preset7"
+            },
+            {
+              "id": "cat-news",
+              "displayName": "Commander: Newsletters",
+              "color": "preset3"
+            },
+            {
+              "id": "cat-junk",
+              "displayName": "Commander: Junk",
+              "color": "preset6"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/outlook/masterCategories",
+        "body": {
+          "displayName": "Commander: News",
+          "color": "preset3"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/outlook/masterCategories/$entity",
+          "id": "cat-news-2",
+          "displayName": "Commander: News",
+          "color": "preset3"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/outlook/masterCategories/cat-news"
+      },
+      "response": {
+        "status": 204,
+        "headers": {},
+        "body": null
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/outlook/masterCategories",
+        "body": {
+          "displayName": "Commander: FYI",
+          "color": "preset2"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/outlook/masterCategories/$entity",
+          "id": "cat-fyi",
+          "displayName": "Commander: FYI",
+          "color": "preset2"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/outlook/masterCategories/cat-junk"
+      },
+      "response": {
+        "status": 204,
+        "headers": {},
+        "body": null
+      }
+    }
+  ],
+  "planWraps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/outlook/masterCategories"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/outlook/masterCategories",
+          "value": [
+            {
+              "id": "cat-blue",
+              "displayName": "Blue category",
+              "color": "preset7"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/outlook/masterCategories",
+        "body": {
+          "displayName": "Commander: Travel",
+          "color": "preset1"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/outlook/masterCategories/$entity",
+          "id": "cat-travel",
+          "displayName": "Commander: Travel",
+          "color": "preset1"
+        }
+      }
+    }
+  ],
+  "planWithoutPermission": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/outlook/masterCategories"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorAccessDenied",
+            "message": "Access is denied. Check credentials and try again."
+          }
+        }
+      }
+    }
+  ]
+}

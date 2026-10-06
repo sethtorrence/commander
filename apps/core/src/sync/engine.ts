@@ -179,6 +179,8 @@ type Entry = {
   writeAbort: AbortController | null;
   // No writes before this (a rate limit, or a refused sign-in being checked).
   writesHeldUntil: number | null;
+  // Mirror Buckets (#142): the label plan's failures in a row.
+  planFailures: number;
 };
 
 const backoff = (failures: number) =>
@@ -678,7 +680,9 @@ export function createSyncEngine({
   function scheduleWrites(entry: Entry) {
     clearWriteTimer(entry);
     if (!canWrite(entry) || entry.writing) return;
-    const due = store.outgoing.nextDueAt(entry.account.id);
+    // A label plan waiting (Mirror Buckets, #142) is due as soon as nothing holds it.
+    const due =
+      store.outgoing.nextDueAt(entry.account.id) ?? (store.bucketMirror.plan(entry.account.id) ? 0 : null);
     if (due === null) return;
     const at = Math.max(due, entry.writesHeldUntil ?? 0);
     entry.writeTimer = setTimeout(
@@ -690,9 +694,59 @@ export function createSyncEngine({
     );
   }
 
+  // Mirror Buckets (#142): the Account's label plan (labels to make, rename and delete), carried out
+  // before its writes so they find the labels they name. Resolves false when the writes must wait.
+  async function carryOutPlan(entry: Entry): Promise<boolean> {
+    const lane = [...entry.lanes.values()].find((each) => each.adapter.mirrorBuckets);
+    const { id: account } = entry.account;
+    const plan = lane ? store.bucketMirror.plan(account) : null;
+    if (!lane?.adapter.mirrorBuckets || !plan) return true;
+    const abort = new AbortController();
+    entry.writeAbort = abort;
+    try {
+      const result = await lane.adapter.mirrorBuckets({
+        account,
+        plan,
+        accessToken: () => accessTokens.request(account),
+        signal: abort.signal,
+      });
+      if (abort.signal.aborted || !isCurrent(entry)) return false;
+      for (const problem of result.problems) log(`Mirror Buckets for ${account}: ${problem}`);
+      store.bucketMirror.planDone(account, plan);
+      entry.planFailures = 0;
+      return true;
+    } catch (error) {
+      if (abort.signal.aborted || !isCurrent(entry)) return false;
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Commander couldn’t make or change its Bucket labels for ${account}: ${message}`);
+      if (error instanceof WriteRejected) {
+        // Trying again won't help: the plan is set aside, and the writes go on.
+        store.bucketMirror.planDone(account, plan);
+        return true;
+      }
+      if (error instanceof AccessTokenUnavailable && error.reason === 'needs-reconnect') {
+        entry.account = { ...entry.account, needsReconnect: true };
+        return false;
+      }
+      if (error instanceof SignInRefused) onSignInRefused(account);
+      entry.planFailures += 1;
+      const wait =
+        error instanceof RateLimited
+          ? Math.max(error.retryAfterMs ?? 0, WRITE_BACKOFF_BASE_MS)
+          : writeBackoff(entry.planFailures);
+      entry.writesHeldUntil = now() + wait;
+      return false;
+    } finally {
+      entry.writeAbort = null;
+    }
+  }
+
   // Resolves with the Sources it wrote to, to refresh.
   async function sendDue(entry: Entry): Promise<Set<Source>> {
     const wrote = new Set<Source>();
+    if (!canWrite(entry)) return wrote;
+    if (entry.writesHeldUntil !== null && entry.writesHeldUntil > now()) return wrote;
+    if (!(await carryOutPlan(entry))) return wrote;
     for (;;) {
       if (!canWrite(entry)) return wrote;
       if (entry.writesHeldUntil !== null && entry.writesHeldUntil > now()) return wrote;
@@ -828,6 +882,11 @@ export function createSyncEngine({
     if (entry) kickWrites(entry);
     emit();
   });
+  // An Account's Bucket labels to make, rename or delete (#142), with or without writes queued.
+  const stopMirrorListening = store.bucketMirror.onChange((account) => {
+    const entry = entries.get(account);
+    if (entry) kickWrites(entry);
+  });
 
   return {
     setAccounts(accounts) {
@@ -848,6 +907,7 @@ export function createSyncEngine({
             writeTimer: null,
             writeAbort: null,
             writesHeldUntil: null,
+            planFailures: 0,
           };
           entries.set(account.id, entry);
         }
@@ -959,6 +1019,7 @@ export function createSyncEngine({
 
     stop() {
       stopListening();
+      stopMirrorListening();
       for (const entry of entries.values()) {
         clearTimers(entry);
         for (const lane of entry.lanes.values()) lane.abort?.abort();

@@ -24,6 +24,7 @@ import { setUpMeetings } from './meetings';
 import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
 import { setUpScheduler } from './scheduling';
+import { setUpSkipInbox } from './skip-inbox';
 import { setUpSnooze } from './snooze';
 import { setUpSync } from './sync';
 import { setUpUpdates, type Updates } from './updates';
@@ -186,7 +187,21 @@ const gate = openGate({
     // A suggested (or added) Todo is ranked on the Dashboard.
     agent.aresChanged();
     updates?.sweep();
+    // Mail Ares sorted into a Bucket that skips the inbox (#142). Read once the gate is set up.
+    if (itemIds.length) queueMicrotask(() => skipInboxConsider(itemIds));
   },
+});
+
+// Skip the inbox (#142): mail a Rule or Ares sorts into a Bucket set to skip the inbox is offered for
+// archiving through the gate (Tidy your Sources, Ask by default), as it arrives or is sorted. Mirror
+// Buckets is registered there too; the Item store writes the labels for Accounts that mirror.
+const skipInbox = setUpSkipInbox({ store: itemStore, gate });
+const skipInboxConsider = (itemIds: string[]) => {
+  const offered = skipInbox.consider(itemIds);
+  if (offered.length) port.postMessage({ type: 'items-changed', itemIds: offered } satisfies CoreMessage);
+};
+sync.engine.onSynced(({ source, itemIds }) => {
+  if (source === 'gmail' || source === 'outlook') skipInboxConsider(itemIds);
 });
 
 // Ares's jobs, on their triggers. The end-to-end tests may shorten the pause after typing.
@@ -331,6 +346,8 @@ port.on('message', ({ data }) => {
     answerItemStoreRequest(itemStore, data, (itemIds) => {
       changed = { type: 'items-changed', itemIds };
       changedIds = itemIds;
+      // Mail a re-sort put in a Bucket that skips the inbox (#142).
+      skipInboxConsider(itemIds);
       // The window's changes are the User's: typing in a Daily Note, say.
       agent.userChanged(itemIds);
     }) ??
@@ -353,6 +370,21 @@ port.on('message', ({ data }) => {
   }
   // A snooze set or undone: the next one may be due sooner.
   if (changedIds.length) snooze.changed();
+  // A Bucket set to skip the inbox (#142): its mail still in the inbox is offered for archiving.
+  const bucketChange = (
+    request as { action?: { type?: string; bucketId?: string; bucket?: { skipInbox?: boolean } } }
+  )?.action;
+  if (
+    reply?.type === 'item-store-reply' &&
+    reply.response.ok &&
+    request?.op === 'change-bucket' &&
+    bucketChange?.type === 'update' &&
+    bucketChange.bucket?.skipInbox === true &&
+    bucketChange.bucketId
+  ) {
+    const offered = skipInbox.bucketSwitchedOn(bucketChange.bucketId);
+    if (offered.length) port.postMessage({ type: 'items-changed', itemIds: offered } satisfies CoreMessage);
+  }
   // A GitHub summary opened: its Update line goes.
   if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'github-summary-seen')
     updates?.sweep();

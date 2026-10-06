@@ -36,6 +36,8 @@ export type Accounts = {
   requestChannelAccess(accountId: string): Promise<void>;
   setChannelPosts(accountId: string, enabled: boolean): Promise<void>;
   channelPostsRefused(accountId: string): Promise<void>;
+  // Outlook (#142): Grant access for Mirror Buckets' categories. Rejects for any other Account.
+  grantMailboxSettings(accountId: string): Promise<void>;
   onChange(listener: () => void): () => void;
 };
 
@@ -118,6 +120,12 @@ export function combineAccounts(sources: readonly SourceAccounts[]): Accounts {
 
     async channelPostsRefused(accountId) {
       await owner(accountId)?.channelPosts?.refused(accountId);
+    },
+
+    async grantMailboxSettings(accountId) {
+      const found = owner(accountId)?.mailboxSettings;
+      if (!found) throw new Error('Only Outlook Accounts make Bucket categories.');
+      await found.request(accountId);
     },
 
     onChange(listener) {

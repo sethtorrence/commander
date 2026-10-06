@@ -92,7 +92,10 @@ test('Connect Google signs in through the browser; the Account lists Gmail and G
 
   await expect(section.getByTestId('account-name')).toHaveText(['Google · alex@gmail.test']);
   await expect(section.getByTestId('account-status')).toHaveText('Connected');
-  await expect(section.getByRole('switch', { name: 'Gmail' })).toHaveAttribute('aria-checked', 'true');
+  await expect(section.getByRole('switch', { name: 'Gmail', exact: true })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
   await expect(section.getByRole('switch', { name: 'Google Calendar' })).toHaveAttribute(
     'aria-checked',
     'true',

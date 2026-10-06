@@ -106,6 +106,10 @@ export async function answerAccountsRequest(
         source = sourceOf(accounts, request.accountId);
         await accounts.setChannelPosts(request.accountId, request.enabled);
         break;
+      case 'grant-mailbox-settings':
+        source = sourceOf(accounts, request.accountId);
+        await accounts.grantMailboxSettings(request.accountId);
+        break;
     }
   } catch (error) {
     // Cancelling is the User's own choice, not a failure to explain.

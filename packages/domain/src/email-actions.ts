@@ -1,3 +1,4 @@
+import { bucketOfLabel, GMAIL_MIRROR_PREFIX } from './bucket-mirror';
 import { BUCKET_FIELD } from './buckets';
 import type { EmailDetail, EmailFolder, EmailLabel } from './email';
 import { EMAIL_VIEWS, type EmailFixedView, type EmailListView } from './email-threads';
@@ -322,6 +323,13 @@ export function emailSnoozeChoices(now: number): EmailSnoozeChoice[] {
   return choices;
 }
 
-/** Whether a label is one the User picks (`l`): theirs and Gmail's categories, not a flag like INBOX. */
-export const isPickableLabel = (labelId: string) =>
-  isEmailLabelField(labelId) && !labelId.startsWith('CATEGORY_') && labelId !== 'IMPORTANT';
+/**
+ * Whether a label is one the User picks (`l`): theirs and Gmail's categories, not a flag like INBOX,
+ * nor one of Commander's Bucket labels (#142), which follow the email's Bucket.
+ */
+export const isPickableLabel = (labelId: string, name?: string) =>
+  isEmailLabelField(labelId) &&
+  !labelId.startsWith('CATEGORY_') &&
+  labelId !== 'IMPORTANT' &&
+  !labelId.startsWith(GMAIL_MIRROR_PREFIX) &&
+  (name === undefined || bucketOfLabel({ name }) === null);

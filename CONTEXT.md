@@ -79,7 +79,7 @@ _Avoid_: Uncategorised, inbox, misc
 ## Email
 
 **Bucket**:
-What to do with an email (e.g. Needs reply, FYI, Newsletters), defined by the User with a plain description; each email sits in exactly one Bucket, independent of its Project. A dashed one on an Unsorted email is Ares's suggested Bucket, waiting for the User to Confirm or Change it.
+What to do with an email (e.g. Needs reply, FYI, Newsletters), defined by the User with a plain description; each email sits in exactly one Bucket, independent of its Project. A dashed one on an Unsorted email is Ares's suggested Bucket, waiting for the User to Confirm or Change it. Buckets stay in Commander unless the User asks: a Bucket set to **skip the inbox** has its mail archived at the Source, and an Account that **mirrors Buckets** shows each email's Bucket there as a Commander label (Gmail) or category (Outlook).
 _Avoid_: Folder, label, category, tab
 
 **Unsorted**:

@@ -99,6 +99,10 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.resort(request.itemIds) };
       case 'undo-resort':
         return { ok: true, result: store.undoResort(request.entryIds) };
+      case 'bucket-mirroring':
+        return { ok: true, result: store.bucketMirror.list() };
+      case 'set-bucket-mirroring':
+        return { ok: true, result: store.bucketMirror.set(request.change) };
       case 'undo-refile':
         return { ok: true, result: store.undoRefile(request.entryIds) };
       case 'search':

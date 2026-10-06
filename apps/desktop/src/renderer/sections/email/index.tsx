@@ -22,9 +22,17 @@ function EmailSection() {
       reader={reader}
       compose={compose}
       onSaveBeforeQuit={window.commander.onSaveBeforeQuit}
+      autonomy={window.commander.autonomy}
+      onAresActivity={onAresActivity}
     />
   );
 }
+
+// Ares did or suggested something: his Skip the inbox suggestions are read again (#142).
+const onAresActivity = (listener: () => void) =>
+  window.commander.onCoreMessage((message) => {
+    if (message.type === 'ares-activity') listener();
+  });
 
 export const email: SectionDefinition = {
   id: 'email',

@@ -1,3 +1,12 @@
+import {
+  BUCKET_MIRROR_FIELD,
+  bucketOfCategory,
+  bucketOfLabel,
+  GMAIL_MIRROR_PREFIX,
+  mirroredBucketNames,
+  mirrorLabelName,
+  namesOf,
+} from './bucket-mirror';
 import { BUCKET_FIELD, type EmailBucket } from './buckets';
 import type { EventDetail, EventResponse } from './calendar';
 import type { ChannelPostDetail, ChannelReply } from './channel-posts';
@@ -45,6 +54,11 @@ import { type ChatDetail, type ChatReply, latestFromOthers } from './teams';
 // others, kept through syncs, but never queued for the Source. Outlook's mail (#136) has `folder` (the
 // folder it is filed in) instead of labels: `inbox` is the Inbox folder, `trash` Deleted Items,
 // `starred` its flag.
+//
+// Mirrored Buckets (#142): `bucket-mirror`, the Bucket an email shows at its Source (a `Commander/<Bucket>`
+// label in Gmail, a "Commander: <Bucket>" category in Outlook), absent while it shows none. Commander's
+// labels are never `label:<id>` fields. It writes back to the Source, but the Item store only ever sets
+// (and queues) it for an Account that mirrors its Buckets.
 
 export type SyncedFields = Record<string, unknown>;
 
@@ -218,12 +232,15 @@ function emailFields(detail: EmailDetail): SyncedFields {
     [SNOOZE_FIELD]: detail.snooze ?? null,
     [BUCKET_FIELD]: detail.bucket ?? null,
   };
+  const mirrored = mirroredBucketNames(detail);
+  if (mirrored !== null) fields[BUCKET_MIRROR_FIELD] = mirrored;
   if (isOutlookEmail(detail)) {
     fields[FOLDER_FIELD] = folderValue(detail.folder);
     return fields;
   }
   for (const label of detail.labels)
-    if (isEmailLabelField(label.id)) fields[`${LABEL_FIELD}${label.id}`] = { id: label.id, name: label.name };
+    if (isEmailLabelField(label.id) && bucketOfLabel(label) === null)
+      fields[`${LABEL_FIELD}${label.id}`] = { id: label.id, name: label.name };
   return fields;
 }
 
@@ -239,6 +256,11 @@ function withOutlookFields(detail: EmailDetail, fields: SyncedFields): EmailDeta
     folder,
     labels: folder && !isSystemFolder(folder) ? [{ id: folder.id, name: folder.name }] : [],
   };
+  // The User's own categories stay as Outlook has them; Commander's follow `bucket-mirror`.
+  const wanted = namesOf(fields[BUCKET_MIRROR_FIELD]);
+  const own = (detail.categories ?? []).filter((each) => bucketOfCategory(each) === null);
+  const categories = [...own, ...wanted.map((name) => mirrorLabelName('outlook', name))];
+  if (detail.categories !== undefined || categories.length) next.categories = categories;
   return withTrashAndLocal(next, fields);
 }
 
@@ -274,6 +296,13 @@ function withEmailFields(detail: EmailDetail, fields: SyncedFields): EmailDetail
     const label = value as EmailLabel;
     wanted.set(label.id, { id: label.id, name: label.name });
   }
+  // Commander's Bucket labels follow `bucket-mirror`: the ones it names stay, and one Gmail hasn't made
+  // yet stands in by its name (its id once Gmail answers the write).
+  for (const name of namesOf(fields[BUCKET_MIRROR_FIELD])) {
+    const held = detail.labels.find((label) => bucketOfLabel(label) === name);
+    const label = held ?? { id: `${GMAIL_MIRROR_PREFIX}${name}`, name: mirrorLabelName('gmail', name) };
+    wanted.set(label.id, label);
+  }
   // Labels it had keep their place (so an unchanged set compares equal); new ones go after.
   const kept = detail.labels.filter((label) => wanted.has(label.id)).map((label) => wanted.get(label.id));
   const added = [...wanted.values()].filter((label) => !detail.labels.some((each) => each.id === label.id));
@@ -290,6 +319,7 @@ function withEmailFields(detail: EmailDetail, fields: SyncedFields): EmailDetail
 const isEmailField = (field: string) =>
   EMAIL_FLAGS.includes(field) ||
   field === FOLDER_FIELD ||
+  field === BUCKET_MIRROR_FIELD ||
   (field.startsWith(LABEL_FIELD) && field.length > LABEL_FIELD.length);
 
 /** Whether `field` names one of a detail kind's synced fields. */

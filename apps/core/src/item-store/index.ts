@@ -14,6 +14,7 @@ import {
   type BlockIssue,
   type BlockTodo,
   type BlockTodoQuery,
+  BUCKET_MIRROR_FIELD,
   type Bucket,
   type BucketAction,
   type BucketChange,
@@ -123,6 +124,7 @@ import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
 import { blockFilingIn } from './block-filing';
+import { type BucketMirrorStore, bucketMirrorIn, type MirrorPlan } from './bucket-mirror';
 import { bucketSortingIn } from './bucket-sorting';
 import { bucketsIn } from './buckets';
 import { type CalendarSettingsStore, calendarSettingsIn } from './calendar-settings';
@@ -196,6 +198,7 @@ export type { LearnedMemory, MemoryLookup, MemoryStore, RecalledMemory } from '.
 export type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector, Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
+export type { BucketMirrorStore, MirrorPlan } from './bucket-mirror';
 export type { CalendarSettingsStore } from './calendar-settings';
 export type { CalendarStore, ListedCalendar } from './calendars';
 export type { ChannelSettingsStore } from './channel-settings';
@@ -305,6 +308,9 @@ export type ItemStore = {
   // reordering them, or restoring a removed one (Undo).
   buckets(): Bucket[];
   changeBucket(action: BucketAction): BucketChange;
+  // Mirror Buckets (#142, bucket-mirror.ts): each email Account's switch (off unless the User switches
+  // it on), and the label work the sync engine carries out at the Source before the Account's writes.
+  bucketMirror: BucketMirrorStore;
   // The Daily Note for a calendar day (YYYY-MM-DD), made (and recorded) if there isn't one yet. With
   // `fromTemplate` (the day is being made as today), a new one starts with copies of the daily
   // template's Blocks, made in the same transaction. One that already exists does only if it has
@@ -654,6 +660,18 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     sourceItems: () => sourceItems(),
     editFields: (item, fields, entry, at) => editFields(item, fields, entry, at),
     undo: (entryId, entry, at) => undo(entryId, entry, at),
+  });
+  // Mirror Buckets (bucket-mirror.ts): the `bucket-mirror` field following each email's Bucket while
+  // its Account mirrors, the Source's changes to Commander's labels taken as corrections.
+  const mirror = bucketMirrorIn({
+    db,
+    now,
+    invalid: (message) => new ItemStoreError('invalid', message),
+    buckets,
+    outgoing,
+    autonomy: openAutonomyStore(db, now),
+    liveEmails: (source, account) => liveSourceItems(source, account).filter((item) => item.kind === 'email'),
+    editFields: (item, fields, entry, at) => editFields(item, fields, entry, at, { skipInbox: false }),
   });
   // Ares's filing suggestions on Items, and the User's answers to his filing.
   const filing = filingFeedbackIn(db, (entry, at) => log({ ...entry, why: null }, at));
@@ -1478,19 +1496,24 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   }
 
   // Changes some of a Source Item's synced fields, as `edit-fields` does.
+  // `skipInbox`: the User's sort into a Bucket that skips the inbox archives the email too (#142),
+  // unless it came from the Source (a correction).
   function editFields(
     item: Item,
     fields: Record<string, unknown>,
     entry: Pick<NewEntry, 'by' | 'why' | 'causedBy'>,
     at: number,
+    { skipInbox = true }: { skipInbox?: boolean } = {},
   ): ActivityEntry {
     const before = stateOf(item);
+    const normalised = sorting.normalise(item, fields, entry.by);
     const edited = editedState(
       item,
-      sorting.normalise(item, fields, entry.by),
+      skipInbox ? sorting.skipping(item, normalised, entry.by) : normalised,
       (message) => new ItemStoreError('invalid', message),
     );
-    const after = writeState(item, edited, at);
+    // The Bucket label follows the Bucket while the Account mirrors (and only then).
+    const after = writeState(item, mirror.follow(item, before, edited), at);
     const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
     sortingAnswers.answer(item, before, after, logged, at);
     afterChange(item, before, after, logged);
@@ -1540,6 +1563,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         return Object.keys(rest).length ? update(requireItem(item.id), rest, said, at) : filed;
       }
       case 'edit-fields':
+        // An email's Bucket label is Commander's to keep, following its Bucket (#142).
+        if (BUCKET_MIRROR_FIELD in action.fields)
+          throw new ItemStoreError(
+            'invalid',
+            'Commander keeps an email’s Bucket label itself, from its Bucket',
+          );
         return editFields(requireItem(action.itemId), action.fields, entry, at);
       case 'delete': {
         const item = requireItem(action.itemId);
@@ -1662,6 +1691,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       // A Source Item's synced fields go back one by one, so nothing changed since is lost.
       const detail = undoneDetail(current.detail, before.detail, after.detail);
       if (detail) restored = { ...restored, detail, status: statusFromDetail(detail, restored.status) };
+      restored = mirror.follow(item, current, restored);
     }
     const settled = writeState(item, blockFiling.settled(item.id, item.kind, restored), at);
     const logged = logAndQueue(item, { ...undoEntry, before: current, after: settled }, at);
@@ -1712,7 +1742,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     );
     if (refusal) throw new ItemStoreError('invalid', refusal);
     const logged = log(entry, at);
-    queueChanges(outgoing, item, entry.before as ItemState, entry.after as ItemState, logged);
+    queueChanges(outgoing, item, entry.before as ItemState, entry.after as ItemState, logged, (account) =>
+      mirror.mirrors(account),
+    );
     queueCommanderEventChanges(outgoing, item, entry.before as ItemState, entry.after as ItemState, logged);
     return logged;
   }
@@ -2203,6 +2235,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       }
       if (existing) {
         const before = stateOf(existing);
+        // Commander's own Bucket label still on its way: the Source's labels aren't a correction (#142).
+        const mirrorQueued = existing.kind === 'email' && outgoing.queued(existing.id, BUCKET_MIRROR_FIELD);
         const after: ItemState = {
           ...before,
           title: incoming.title,
@@ -2235,6 +2269,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         }
         writeState(existing, after, at);
         const logged = log({ by, why: batch.why, action: 'update', itemId: existing.id, before, after }, at);
+        // A Commander label changed at the Source moves the email's Bucket, as the User (#142).
+        if (!mirrorQueued) mirror.correct(requireItem(existing.id), before.detail, incoming.detail, at);
         applyRules(existing.id, at);
         follow(existing.id, before, logged.id);
         warnings.check(requireItem(existing.id), at, logged.id, bodyWords(existing));
@@ -2476,6 +2512,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] => {
       chatSettings.removeAccount(account);
       channelSettings.removeAccount(account);
+      mirror.removeAccount(account);
       return removeItems(liveSourceItems(source, account), actionContext.parse(rawContext));
     },
   );
@@ -2830,7 +2867,23 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
     buckets: () => buckets.list(),
 
-    changeBucket: sqlite.transaction((action: BucketAction): BucketChange => sorting.change(action)),
+    changeBucket: sqlite.transaction((action: BucketAction): BucketChange => {
+      const was = action.type === 'update' ? buckets.get(action.bucketId) : undefined;
+      const change = sorting.change(action);
+      // A renamed Bucket's label is renamed at the Source; a removed (or restored) one's follows (#142).
+      if (was && change.bucket && change.bucket.name !== was.name) mirror.renamed(was.id, change.bucket.name);
+      if (action.type === 'delete' || action.type === 'restore') mirror.touched();
+      return change;
+    }),
+    bucketMirror: {
+      list: () => mirror.list(),
+      set: sqlite.transaction((change: Parameters<BucketMirrorStore['set']>[0]) => mirror.set(change)),
+      mirrors: (account) => mirror.mirrors(account),
+      plan: (account) => mirror.plan(account),
+      planDone: sqlite.transaction((account: string, plan: MirrorPlan) => mirror.planDone(account, plan)),
+      removeAccount: sqlite.transaction((account: string) => mirror.removeAccount(account)),
+      onChange: (listener) => mirror.onChange(listener),
+    },
 
     undoRefile: sqlite.transaction((entryIds: number[]): ActivityEntry[] =>
       undoFilings(entryIds, 'Undid re-filing by Rules', true),

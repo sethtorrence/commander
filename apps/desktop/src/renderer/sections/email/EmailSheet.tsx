@@ -18,6 +18,7 @@ import { BadgePicker, type PickerTarget } from '../../projects/BadgePicker';
 import { ItemBadge, SectionProjectFilter, useAccentBar, waitingSuggestion } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
+import type { AutonomyClient } from '../ares/activity';
 import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
 import { CloudMailQuestions } from './CloudMail';
 import { Composer } from './compose/Composer';
@@ -46,6 +47,13 @@ import {
 } from './email';
 import { actionToast } from './organising';
 import { type EmailReaderClient, textOnlyReader } from './reader';
+import {
+  SkipInboxMark,
+  SkipInboxOffer,
+  SkipInboxSuggestion,
+  suggestionsOn,
+  useSkipSuggestions,
+} from './skip-inbox';
 import { ThreadReader } from './ThreadReader';
 import { threadId, useEmail } from './use-email';
 import { useAresSorting } from './use-sorting';
@@ -229,12 +237,15 @@ function ThreadRow({
   suggestedBucket,
   onConfirmBucket,
   onChangeBucket,
+  suggested = false,
   onOpen,
   onFile,
 }: {
   thread: EmailThreadSummary;
   number: number;
   selected: boolean;
+  /** Ares suggests archiving it (Skip the inbox, #142). */
+  suggested?: boolean;
   /** The Account's address, when threads of several Accounts are listed. */
   account: string | null;
   /** Its Bucket's name, or null while Unsorted (#137). */
@@ -332,6 +343,7 @@ function ThreadRow({
         ) : (
           <BucketChip faint={bucket === null}>{bucket ?? 'Unsorted'}</BucketChip>
         )}
+        {suggested && <SkipInboxMark />}
         {account && (
           <span className="inline-flex h-5 max-w-[180px] flex-none items-center border border-line bg-sheet px-[7px] font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted">
             <span className="truncate normal-case">{account}</span>
@@ -414,6 +426,8 @@ export function EmailSheet({
   reader = textOnlyReader,
   compose = noCompose,
   onSaveBeforeQuit,
+  autonomy,
+  onAresActivity,
 }: {
   client: EmailClient;
   accounts: EmailAccountsClient;
@@ -424,6 +438,10 @@ export function EmailSheet({
   compose?: ComposeClient;
   /** Saves the composer's draft when Commander quits (the window's bridge). */
   onSaveBeforeQuit?: (save: () => Promise<void>) => () => void;
+  /** The gate (the window's bridge), for Ares's Skip the inbox suggestions (#142); none without it. */
+  autonomy?: AutonomyClient;
+  /** Hears whenever Ares did or suggested something. */
+  onAresActivity?: (listener: () => void) => () => void;
 }) {
   const { include } = useProjectFilter();
   const { projectOf, projectById, settleFiling } = useProjects();
@@ -432,6 +450,16 @@ export function EmailSheet({
   // Ares's sorting (#141): his progress, and the Gmail Accounts waiting for the User's answer.
   const sorting = useAresSorting({ client, accounts: state.accounts, changes });
   const { selected, open, setOpen } = state;
+  // Skip the inbox (#142): Ares's suggestions to archive, on their emails and grouped by Bucket.
+  const skips = useSkipSuggestions(autonomy, changes, onAresActivity, state.reload);
+  const skipBucket = state.buckets.find((each) => each.id === state.bucket) ?? null;
+  const offered = skipBucket
+    ? state.threads.filter(
+        (thread) =>
+          thread.bucket?.bucketId === skipBucket.id && suggestionsOn(skips.byItem, thread.itemIds).length > 0,
+      )
+    : [];
+  const selectedSkips = selected ? suggestionsOn(skips.byItem, selected.itemIds) : [];
   const [picking, setPicking] = useState<{ target: PickerTarget; anchor: HTMLElement | null } | null>(null);
   // The label or snooze picker open on a thread (#135), and the Account's labels for the first.
   const [organising, setOrganising] = useState<
@@ -526,16 +554,20 @@ export function EmailSheet({
     try {
       const entries = await state.act(action, thread);
       if (!entries.length) return;
-      toast(
-        actionToast(
-          action,
-          thread.subject,
-          Date.now(),
-          (bucketId) => nameOf(bucketId) ?? 'Unsorted',
-          providerFor(thread),
-        ),
-        { action: { label: 'Undo', onClick: () => void state.undo(entries) } },
+      // Into a Bucket that skips the inbox (#142): archived too, in the same change.
+      const skipping =
+        action.type === 'bucket' &&
+        state.buckets.some((each) => each.id === action.bucketId && each.skipInbox);
+      const said = actionToast(
+        action,
+        thread.subject,
+        Date.now(),
+        (bucketId) => nameOf(bucketId) ?? 'Unsorted',
+        providerFor(thread),
       );
+      toast(skipping ? `${said} (archived: it skips the inbox)` : said, {
+        action: { label: 'Undo', onClick: () => void state.undo(entries) },
+      });
     } catch (error) {
       toast(error instanceof Error ? error.message : String(error));
     }
@@ -720,6 +752,16 @@ export function EmailSheet({
         ))}
       />
       <SectionProjectFilter items={state.forProjectFilter} />
+      {skipBucket && offered.length > 0 && (
+        <SkipInboxOffer
+          bucket={skipBucket.name}
+          threads={offered.length}
+          proposalIds={offered.flatMap((thread) =>
+            suggestionsOn(skips.byItem, thread.itemIds).map((each) => each.id),
+          )}
+          suggestions={skips}
+        />
+      )}
       {noAccounts ? (
         <EmptySheet>
           No email Account connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).
@@ -768,6 +810,7 @@ export function EmailSheet({
                       state.select(threadId(thread));
                       openBuckets(thread);
                     }}
+                    suggested={suggestionsOn(skips.byItem, thread.itemIds).length > 0}
                     onOpen={() => {
                       state.select(threadId(thread));
                       setOpen(true);
@@ -826,6 +869,9 @@ export function EmailSheet({
                     {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
                   />
                 ) : null
+              }
+              notice={
+                selectedSkips.length > 0 && <SkipInboxSuggestion found={selectedSkips} suggestions={skips} />
               }
               toolbar={
                 selected && (

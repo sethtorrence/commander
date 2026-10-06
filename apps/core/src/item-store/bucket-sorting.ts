@@ -174,6 +174,20 @@ export function bucketSortingIn(deps: {
     },
 
     /**
+     * Skip the inbox (#142): the User's own sort into a Bucket that skips the inbox archives the email
+     * in the same change (undone with it), when it is in the inbox. A Rule's or Ares's sort never does
+     * here: that is a suggestion through the gate (skip-inbox in the Core).
+     */
+    skipping(item: Item, fields: Record<string, unknown>, by: Actor): Record<string, unknown> {
+      if (by.kind !== 'user' || item.detail?.kind !== 'email' || 'inbox' in fields) return fields;
+      const sorted = fields[BUCKET_FIELD] as EmailBucket | null | undefined;
+      const bucket = sorted?.bucketId ? buckets.get(sorted.bucketId) : undefined;
+      const detail = item.detail;
+      if (!bucket?.skipInbox || !detail.inInbox || detail.inTrash) return fields;
+      return { ...fields, inbox: false, ...(detail.snooze ? { snooze: null } : {}) };
+    },
+
+    /**
      * Settings → Buckets' changes. Removing a Bucket makes its emails Unsorted (one entry each, by the
      * User) and deletes the Rules sorting into it; restoring it (Undo) brings it back at its place,
      * with its Rules and the emails not sorted elsewhere since. Call in a transaction.

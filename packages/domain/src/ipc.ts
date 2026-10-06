@@ -152,6 +152,9 @@ export type OutlookAccountSummary = AccountSummaryBase & {
   // A personal Microsoft account (outlook.com), whose Outlook on the web is outlook.live.com rather
   // than a work or school account's outlook.office.com.
   personal?: boolean;
+  // Mirror Buckets (#142): present once the sign-in carries MailboxSettings.ReadWrite (Grant access),
+  // which making "Commander: <Bucket>" categories needs.
+  mailboxSettings?: { granted: boolean };
 };
 export type AccountSummary =
   | LinearAccountSummary
@@ -226,7 +229,10 @@ export type AccountsRequest =
   // Teams (#111): signs in to the Account again asking for the Channel post permissions too
   // (incremental consent), and switches Sync Channel posts on or off (only once granted).
   | { op: 'request-channel-access'; accountId: string }
-  | { op: 'set-channel-posts'; accountId: string; enabled: boolean };
+  | { op: 'set-channel-posts'; accountId: string; enabled: boolean }
+  // Outlook (#142): signs in to the Account again asking for MailboxSettings.ReadWrite too (incremental
+  // consent), before Mirror Buckets is switched on.
+  | { op: 'grant-mailbox-settings'; accountId: string };
 export type AccountsResponse =
   | { ok: true; state: AccountsState }
   // `source`: the Source the failure is about, when it is about one. `adminConsent`: the sign-in

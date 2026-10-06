@@ -591,7 +591,35 @@ export const buckets = sqliteTable('buckets', {
   createdAt: integer('created_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
   deletedAt: integer('deleted_at'),
+  // Skip the inbox (#142): mail landing in it is archived at its Source. Off for every starter Bucket.
+  skipInbox: integer('skip_inbox', { mode: 'boolean' }).notNull().default(false),
 });
+
+// Mirror Buckets (#142), per email Account (Settings → Accounts): whether the User switched it on, and
+// whether they asked for Commander's labels or categories to be removed on switching it off. No row:
+// off, as every Account starts.
+export const bucketMirroring = sqliteTable('bucket_mirroring', {
+  account: text('account').primaryKey(),
+  source: text('source').$type<'gmail' | 'outlook'>().notNull(),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+  removing: integer('removing', { mode: 'boolean' }).notNull().default(false),
+  updatedAt: integer('updated_at').notNull(),
+});
+
+// The Bucket labels (Gmail) or categories (Outlook) Commander has asked for in each mirroring Account,
+// under the Bucket's name as last asked for: what to rename when a Bucket is renamed, and what to
+// delete when one is removed or the User asks for the labels to go. `ready`: made sure of at the
+// Source under that name.
+export const bucketMirrorLabels = sqliteTable(
+  'bucket_mirror_labels',
+  {
+    account: text('account').notNull(),
+    bucketId: text('bucket_id').notNull(),
+    name: text('name').notNull(),
+    ready: integer('ready', { mode: 'boolean' }).notNull().default(false),
+  },
+  (t) => [primaryKey({ columns: [t.account, t.bucketId] })],
+);
 
 // Settings → Notes → Markdown copy folder (#53): where the read-only Markdown copy of the Daily Notes
 // is written, in a single row; no row, or a null folder, while the copy is off.

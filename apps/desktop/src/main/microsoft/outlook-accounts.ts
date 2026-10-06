@@ -5,8 +5,10 @@ import {
   type SourceAccounts,
   type SourceAccountsOptions,
 } from '../accounts/source-accounts';
+import { RefreshError } from '../oauth/authorization-code';
 import { SignInError } from '../oauth/sign-in-error';
 import {
+  CONSENT_REFUSED,
   type MicrosoftConfig,
   type MicrosoftSignIn,
   microsoftApp,
@@ -43,6 +45,10 @@ export const OUTLOOK_SCOPES: readonly string[] = [
   ...OUTLOOK_SOURCES.flatMap((source) => OUTLOOK_SOURCE_SCOPES[source]),
 ];
 
+// Mirror Buckets (#142): making "Commander: <Bucket>" categories in the mailbox's master list. Asked for
+// with incremental consent (Grant access) when the User switches mirroring on, never at sign-in.
+export const MAILBOX_SETTINGS_SCOPE = 'MailboxSettings.ReadWrite';
+
 // Graph's scopes may come back in full ("https://graph.microsoft.com/Mail.Send") and in any case.
 const GRAPH_RESOURCE = 'https://graph.microsoft.com/';
 const normalised = (scope: string) => {
@@ -61,7 +67,22 @@ export function grantedOutlookSources(scope: string | undefined): OutlookSource[
   );
 }
 
+/**
+ * Whether a sign-in's token carries MailboxSettings.ReadWrite. A token response that doesn't say covers
+ * what was asked for.
+ */
+export function mailboxSettingsGranted(scope: string | undefined, asked: boolean): boolean {
+  if (scope === undefined) return asked;
+  return scope.split(/\s+/).some((each) => normalised(each) === normalised(MAILBOX_SETTINGS_SCOPE));
+}
+
+// What a sign-in or refresh asks for: mail and calendar, and MailboxSettings once asked for (or granted).
+const scopesFor = (withMailboxSettings: boolean): readonly string[] =>
+  withMailboxSettings ? [...OUTLOOK_SCOPES, MAILBOX_SETTINGS_SCOPE] : OUTLOOK_SCOPES;
+
 export type OutlookAccounts = SourceAccounts;
+
+type OutlookSignIn = MicrosoftSignIn & { askedForMailboxSettings: boolean };
 
 export type OutlookAccountsOptions = SourceAccountsOptions & { config: MicrosoftConfig };
 
@@ -70,22 +91,40 @@ export const PERSONAL_ACCOUNTS_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
 
 const upnOf = (record: AccountRecord | null) => record?.details.userPrincipalName ?? null;
 
-export function outlookSource(config: MicrosoftConfig): AccountSourceDefinition<MicrosoftSignIn> {
+export function outlookSource(config: MicrosoftConfig): AccountSourceDefinition<OutlookSignIn> {
   const app = microsoftApp(config);
   return {
     source: 'outlook',
     label: 'Outlook',
     oauth: app
       ? {
-          signIn: (options) =>
-            signInWithMicrosoft({
+          // Grant access (`extra`) asks for MailboxSettings.ReadWrite too, and so does reconnecting an
+          // Account that has it, so a reconnect never takes it away.
+          async signIn({ record, extra, ...options }) {
+            const askedForMailboxSettings = extra || !!record?.mailboxSettings?.granted;
+            const signedIn = await signInWithMicrosoft({
               app,
-              scopes: OUTLOOK_SCOPES,
-              sourceName: 'Outlook mail and calendar',
+              scopes: scopesFor(askedForMailboxSettings),
+              sourceName: extra ? 'Bucket categories in Outlook' : 'Outlook mail and calendar',
               ...options,
-            }),
-          refresh: (refreshToken, now) =>
-            refreshMicrosoftTokens({ app, scopes: OUTLOOK_SCOPES, refreshToken, now }),
+            });
+            return { ...signedIn, askedForMailboxSettings };
+          },
+          // An Account with MailboxSettings asks for it again; if Microsoft no longer consents to it,
+          // mail and calendar still refresh (and Commander's categories show without colours).
+          async refresh(refreshToken, now, record) {
+            if (!record.mailboxSettings?.granted)
+              return refreshMicrosoftTokens({ app, scopes: OUTLOOK_SCOPES, refreshToken, now });
+            try {
+              return await refreshMicrosoftTokens({ app, scopes: scopesFor(true), refreshToken, now });
+            } catch (error) {
+              if (
+                !(error instanceof RefreshError && CONSENT_REFUSED.test(error.sourceError?.description ?? ''))
+              )
+                throw error;
+              return refreshMicrosoftTokens({ app, scopes: OUTLOOK_SCOPES, refreshToken, now });
+            }
+          },
         }
       : null,
     notConfigured:
@@ -105,9 +144,16 @@ export function outlookSource(config: MicrosoftConfig): AccountSourceDefinition<
         ...(granted
           ? { sources: OUTLOOK_SOURCES.map((source) => ({ source, granted: granted.includes(source) })) }
           : {}),
+        ...(signIn
+          ? {
+              mailboxSettings: {
+                granted: mailboxSettingsGranted(signIn.scope, signIn.askedForMailboxSettings),
+              },
+            }
+          : {}),
       };
     },
-    summarize: ({ id, name, details, method, status, user, sources }) => ({
+    summarize: ({ id, name, details, method, status, user, sources, mailboxSettings }) => ({
       id,
       source: 'outlook',
       name,
@@ -117,6 +163,7 @@ export function outlookSource(config: MicrosoftConfig): AccountSourceDefinition<
       user,
       sources: sources ?? OUTLOOK_SOURCES.map((source) => ({ source, granted: false, enabled: false })),
       personal: details.tenantId === PERSONAL_ACCOUNTS_TENANT,
+      ...(mailboxSettings?.granted ? { mailboxSettings: { granted: true } } : {}),
     }),
     describe: (record) => `the Outlook Account for ${upnOf(record) ?? record.name}`,
     wrongIdentity: (signedIn, expected) => {
@@ -131,5 +178,26 @@ export function outlookSource(config: MicrosoftConfig): AccountSourceDefinition<
 }
 
 export function createOutlookAccounts({ config, ...options }: OutlookAccountsOptions): OutlookAccounts {
-  return createSourceAccounts(outlookSource(config), options);
+  const accounts = createSourceAccounts(outlookSource(config), options);
+  return {
+    ...accounts,
+    // The getters of the Source's Accounts stay live.
+    get signingIn() {
+      return accounts.signingIn;
+    },
+    get deviceCode() {
+      return accounts.deviceCode;
+    },
+    mailboxSettings: {
+      async request(accountId) {
+        await accounts.connectWithBrowser({ reconnect: accountId, extra: true });
+        const record = await options.store.get(accountId);
+        if (record?.mailboxSettings?.granted) return;
+        throw new SignInError(
+          'admin-consent',
+          `Microsoft didn’t grant ${MAILBOX_SETTINGS_SCOPE}, so Commander can’t make its categories in Outlook. If your organisation needs an administrator to approve it, ask them, then choose Grant access again.`,
+        );
+      },
+    },
+  };
 }

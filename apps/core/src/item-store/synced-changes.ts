@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import {
   type ActivityEntry,
   type Actor,
+  BUCKET_MIRROR_FIELD,
   type Item,
   type ItemDetail,
   type ItemState,
@@ -63,13 +64,17 @@ export function undoneDetail(
   return withSyncedFields(current, restored);
 }
 
-/** Queues each synced field a change made in Commander (not by the Source) changed on a Source Item. */
+/**
+ * Queues each synced field a change made in Commander (not by the Source) changed on a Source Item.
+ * An email's Bucket label (#142) only for an Account that `mirrors` its Buckets.
+ */
 export function queueChanges(
   queue: OutgoingQueue,
   item: Item,
   before: ItemState,
   after: ItemState,
   entry: ActivityEntry,
+  mirrors: (account: string) => boolean = () => false,
 ) {
   if (entry.by.kind === 'source' || !item.source || !item.account || !item.externalId) return;
   const was = syncedFieldsOf(before.detail);
@@ -80,6 +85,7 @@ export function queueChanges(
     const synced = was[field] ?? null;
     // Commander's own fields (an email's snooze) never go to the Source.
     if (isDeepStrictEqual(value, synced) || isLocalField(item.kind, field)) continue;
+    if (field === BUCKET_MIRROR_FIELD && !mirrors(item.account)) continue;
     queue.queue({
       account: item.account,
       source: item.source,

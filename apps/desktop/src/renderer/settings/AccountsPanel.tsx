@@ -27,6 +27,8 @@ import {
   toast,
 } from '@commander/ui';
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { BucketMirroringSetting } from '../buckets/BucketMirroring';
+import { windowMirroring } from '../buckets/mirroring';
 import { CalendarSwitches } from '../sections/calendar/CalendarSwitches';
 import { calendarSwitchesIn } from '../sections/calendar/calendar-events';
 import { composeIn } from '../sections/email/compose/compose';
@@ -147,6 +149,12 @@ function CarriedSources({
   );
 }
 
+// Mirror Buckets (#142): the Account's switch, kept by the Core.
+function MirrorBuckets({ account }: { account: GoogleAccountSummary | OutlookAccountSummary }) {
+  const client = useMemo(() => windowMirroring(), []);
+  return <BucketMirroringSetting account={account} client={client} />;
+}
+
 function RemoveAccount({ account, onRemove }: { account: AccountSummary; onRemove: () => Promise<boolean> }) {
   const [open, setOpen] = useState(false);
   const source = SOURCES[account.source];
@@ -226,7 +234,10 @@ function AccountRow({
       </div>
       {children}
       {(account.source === 'google' || account.source === 'outlook') && (
-        <CarriedSources account={account} busy={busy} onGrant={onReconnect} request={request} />
+        <>
+          <CarriedSources account={account} busy={busy} onGrant={onReconnect} request={request} />
+          <MirrorBuckets account={account} />
+        </>
       )}
       {(account.source === 'google' || account.source === 'outlook') && <Signature account={account.id} />}
       <AccountSync account={account} request={request} />

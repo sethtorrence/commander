@@ -27,7 +27,8 @@ import { googleError } from './shapes';
 // What each call costs in Gmail quota units (Gmail API quota reference; `messages.get` at the 2026
 // figure decision #2 records).
 // Writes (#135): a message's labels read back (`messages.get?format=minimal`), `messages.modify`,
-// `messages.trash` and `messages.untrash`, 5 units each.
+// `messages.trash` and `messages.untrash`, 5 units each. Mirror Buckets (#142): `labels.create`,
+// `labels.patch` and `labels.delete`, 5 units each.
 export const UNITS = {
   profile: 1,
   labels: 1,
@@ -47,6 +48,9 @@ export const UNITS = {
   'drafts.create': 10,
   'drafts.update': 15,
   'drafts.delete': 10,
+  createLabel: 5,
+  renameLabel: 5,
+  deleteLabel: 5,
 } as const;
 // The calls that write, or read for a write: Gmail refusing one refuses the change itself.
 const WRITE_CALLS = new Set<GmailCall>([
@@ -60,6 +64,7 @@ const WRITE_CALLS = new Set<GmailCall>([
 ]);
 // The draft calls whose 404 means the draft is gone (deleted, or sent, in Gmail).
 const DRAFT_CALLS = new Set<GmailCall>(['drafts.get', 'drafts.update', 'drafts.delete']);
+const LABEL_CALLS = new Set<GmailCall>(['createLabel', 'renameLabel', 'deleteLabel']);
 
 // The pace: up to BURST units at once, refilled at RATE units a minute.
 export const BURST_UNITS = 500;
@@ -117,6 +122,14 @@ export class DraftGone extends Error {
 // The most of a raw message sent as JSON (`raw`); larger ones go through Gmail's upload endpoint.
 export const JSON_RAW_MAX = 4 * 1024 * 1024;
 
+// A label Gmail no longer has (renamed or deleted by the User meanwhile), or one whose name is taken.
+export class LabelMissing extends Error {
+  override name = 'LabelMissing';
+}
+export class LabelTaken extends Error {
+  override name = 'LabelTaken';
+}
+
 export type GmailClientOptions = {
   // Gmail's base, like https://gmail.googleapis.com (a fake on this machine in tests).
   gmailUrl: string;
@@ -146,14 +159,14 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
   /**
    * Asks for a path under the User's mailbox (`/messages?…`), parsed with `shape`, as one `call`: a
    * GET, or a POST with a JSON body (`messages.modify`) or none (`messages.trash`); or another method
-   * (`drafts.update` PUTs, `drafts.delete` DELETEs). `upload`: a raw message for Gmail's upload
-   * endpoint, sent with the JSON body as its metadata (multipart/related).
+   * (`drafts.update` PUTs, `drafts.delete` and `labels.delete` DELETE, `labels.patch` PATCHes). `upload`:
+   * a raw message for Gmail's upload endpoint, sent with the JSON body as its metadata (multipart/related).
    */
   async function get<T>(
     call: GmailCall,
     path: string,
     shape: z.ZodType<T>,
-    post?: { body?: unknown; method?: 'POST' | 'PUT' | 'DELETE'; upload?: Uint8Array },
+    post?: { body?: unknown; method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE'; upload?: Uint8Array },
   ): Promise<T> {
     await pacer.take(UNITS[call], signal);
     const token = await accessToken();
@@ -216,6 +229,8 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
     if (response.status === 404 && (call === 'get' || call === 'attachment' || call === 'meta'))
       throw new MessageGone(path);
     if (response.status === 404 && DRAFT_CALLS.has(call)) throw new DraftGone(path);
+    if (LABEL_CALLS.has(call) && response.status === 404) throw new LabelMissing(path);
+    if (LABEL_CALLS.has(call) && response.status === 409) throw new LabelTaken(path);
     if (WRITE_CALLS.has(call) && response.status === 404)
       throw new WriteRejected('Gmail no longer has this message.');
     if (call === 'send' && (response.status === 400 || response.status === 413))
