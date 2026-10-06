@@ -176,6 +176,7 @@ test('mail arrives Unsorted → v to Receipts → a Bucket Rule → re-sort prev
   const certificate = today.getByTestId('dashboard-row').filter({ hasText: 'Staging certificate' });
   await expect(certificate).toBeVisible();
   await expect(certificate.getByTestId('row-reason')).toHaveText(
-    /^Priya’s waiting on your reply since \d\d:\d\d$/,
+    // A time today, or "yesterday" when the run is just after midnight (her email is hours old).
+    /^Priya’s waiting on your reply since (\d\d:\d\d|yesterday)$/,
   );
 });
