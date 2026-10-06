@@ -6,6 +6,8 @@
 //   gets a line of its own, naming its cause. A suggestion settled elsewhere (on the activity page,
 //   in a Daily Note's margin) leaves its line, and a line with none left is resolved.
 // - Injection warnings: outside Items that held instructions aimed at Ares, counted in one line.
+// - Refusals (#201): Items Ares sent to no model because they hold one of the User's keys or sign-in
+//   tokens, grouped in one line.
 // - The month's 80% cost-cap warning, once a month, expiring when the month does.
 // - Autonomy changes: once the User has accepted the last 20 suggestions of one action without
 //   changing any (none dismissed or undone), "Want me to just do them?". Only if the action's next
@@ -66,6 +68,7 @@ const IMPORTANCE = {
   suggestions: 0.6,
   autonomy: 0.5,
   warnings: 0.7,
+  refusals: 0.65,
   cap: 0.6,
   missed: 0.9,
 } as const;
@@ -212,6 +215,26 @@ export function createProducers({
     store.saveState({ warningsCursor: entries.at(-1)?.id ?? cursor });
   }
 
+  // Items Ares sent to no model because they hold a key or token: one line, the newer ones merged in.
+  function refusals() {
+    const cursor = store.state().refusalsCursor;
+    const entries: ActivityEntry[] = itemStore.refusals.since(cursor);
+    if (entries.length) {
+      const itemIds = [...new Set(entries.map((entry) => entry.itemId))];
+      queue.enqueue({
+        group: 'fyi',
+        mergeKey: 'refusals',
+        about: { kind: 'refusals', entryIds: entries.map((entry) => entry.id) },
+        itemIds,
+        section: sectionOfItem(itemIds[0]),
+        importance: IMPORTANCE.refusals,
+      });
+    }
+    // With none yet, from the newest entry of all: the next look reads only what came after.
+    const next = entries.at(-1)?.id ?? cursor ?? itemStore.activity({ limit: 1 })[0]?.id ?? null;
+    if (next !== cursor) store.saveState({ refusalsCursor: next });
+  }
+
   function capWarning() {
     const at = now();
     const month = monthKey(at);
@@ -309,6 +332,7 @@ export function createProducers({
       suggestions();
       settled();
       injectionWarnings();
+      refusals();
       capWarning();
       autonomyChanges();
       linear.sweep();

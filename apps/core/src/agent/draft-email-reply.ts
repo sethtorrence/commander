@@ -46,13 +46,14 @@ import {
 } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
-import type { InjectionWarningStore, ItemStore } from '../item-store';
+import type { InjectionWarningStore, ItemStore, RefusalStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput } from '../safety/output';
+import { heedRefusal } from '../safety/refusal';
 import { heedSteering, steeringFlag } from '../safety/steering-flag';
 import { longDay } from './chat-material';
 import { type MeaningLookup, recall } from './memory-context';
-import { buildPrompt, type PromptData, type PromptParts, PromptRefused } from './prompt';
+import { buildPrompt, type PromptData, type PromptParts, refusalOf } from './prompt';
 import type { AgentJob, JobInput } from './runner';
 import { ownLines, trimmedText } from './sort-into-buckets';
 
@@ -409,10 +410,16 @@ export type DraftEmailOptions = {
   meaning?: MeaningLookup;
   secrets?: KnownSecrets;
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
-  // Items the steering flag marked, or the thread that got its draft, so open views catch up.
+  // Where emails left unsent for holding a key or token are recorded as skipped (#201).
+  refusals?: Pick<RefusalStore, 'record'>;
+  // Items the steering flag marked (or noted as skipped), or the thread that got its draft, so open
+  // views catch up.
   onItemsChanged?: (itemIds: string[]) => void;
   signal?: AbortSignal;
 };
+
+// What the User knows this by, where an email it skipped says so.
+const DRAFT_EMAIL_NAME = 'Draft a reply';
 
 /** Ares couldn't draft a reply: the window says why, in plain words. */
 export class EmailDraftFailed extends Error {
@@ -454,13 +461,18 @@ export async function draftEmailReply(
     : null;
   if (!thread || !material) throw new EmailDraftFailed('There is nothing in this thread to reply to');
 
+  // Left unsent for holding one of the User's keys or tokens: the emails are noted as skipped (#201).
+  const refused = (error: unknown) => {
+    const refusal = refusalOf(error, material.parts, options.secrets);
+    if (!refusal) return null;
+    heedRefusal(refusal, DRAFT_EMAIL_NAME, options.refusals, options.onItemsChanged);
+    return new EmailDraftFailed(`Ares couldn’t draft a reply: ${refusal.message}`);
+  };
   let prompt: ReturnType<typeof buildPrompt>;
   try {
     prompt = buildPrompt(material.parts, { secrets: options.secrets });
   } catch (error) {
-    if (error instanceof PromptRefused)
-      throw new EmailDraftFailed(`Ares couldn’t draft a reply: ${error.message}`);
-    throw error;
+    throw refused(error) ?? error;
   }
   let reply: z.infer<typeof REPLY>;
   try {
@@ -474,6 +486,8 @@ export async function draftEmailReply(
     });
     reply = answer.json;
   } catch (error) {
+    const refusal = refused(error);
+    if (refusal) throw refusal;
     const why =
       error instanceof ModelError && error.kind === 'invalid-reply'
         ? 'his reply didn’t make sense'

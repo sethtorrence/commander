@@ -10,8 +10,9 @@
 //   each outside Item gets a block of its own, with a ref (U1, U2…) the model names in its
 //   `steering` flag.
 // - Nothing secret goes in: material holding a token or key from the secrets module is refused
-//   outright (PromptRefused: nothing is sent), and credential-like text is replaced with [removed]
-//   (safety/credentials.ts). Attachments are never included: pasted images, inline data and remote
+//   outright (PromptRefused: nothing is sent, and the refusal names the Items whose material held
+//   it, so the User can see what Ares skipped, #201), and credential-like text is replaced with
+//   [removed] (safety/credentials.ts). Attachments are never included: pasted images, inline data and remote
 //   images become words.
 // - Each block's text is normalised (hidden characters removed, lookalikes folded), any `<` that
 //   could open a tag is defused, and every line of an outside block is marked with "┆ ", so it
@@ -21,7 +22,7 @@
 // doing harm comes after: the reply checks in the runner and the gate (ADR 0004).
 import { randomBytes } from 'node:crypto';
 import type { Item } from '@commander/domain';
-import type { ChatMessage } from '@commander/models';
+import { type ChatMessage, ModelError } from '@commander/models';
 import { blankCredentials } from '../safety/credentials';
 import { createKnownSecrets, type KnownSecrets } from '../safety/known-secrets';
 import { normalise } from '../safety/text';
@@ -65,12 +66,47 @@ export type BuildOptions = {
 
 export type PromptBuilder = (parts: PromptParts, options?: BuildOptions) => BuiltPrompt;
 
-/** Material held one of the User's tokens or keys: nothing was sent. */
+/**
+ * Material held one of the User's tokens or keys: nothing was sent. `itemIds` are the Items whose
+ * material held it (#201); none when it was elsewhere (the instructions, the User's settings, their
+ * own words in a Conversation, background from Memory). It never carries the secret itself.
+ */
 export class PromptRefused extends Error {
   override name = 'PromptRefused';
-  constructor() {
+  readonly itemIds: readonly string[];
+  constructor(itemIds: readonly string[] = []) {
     super('Its material held one of your sign-in tokens or keys, so nothing was sent.');
+    this.itemIds = [...new Set(itemIds)];
   }
+}
+
+// Every word an Item holds: its title and each piece of text in its detail.
+function wordsIn(item: Item): string {
+  const words = [item.title];
+  const collect = (value: unknown) => {
+    if (typeof value === 'string') words.push(value);
+    else if (Array.isArray(value)) value.forEach(collect);
+    else if (value && typeof value === 'object') Object.values(value).forEach(collect);
+  };
+  collect(item.detail);
+  return words.join('\n');
+}
+
+// The Items behind data parts holding one of the User's tokens or keys: a part made from one Item
+// names it; one made of several names those whose own words hold it.
+function holdersOf(parts: readonly PromptData[], secrets: KnownSecrets): string[] {
+  return parts.flatMap(({ from }) => {
+    if (from === 'user-settings' || 'background' in from) return [];
+    const items: readonly Item[] = Array.isArray(from) ? from : [from as Item];
+    if (items.length === 1) return items.map((item) => item.id);
+    return items.filter((item) => secrets.foundIn(wordsIn(item))).map((item) => item.id);
+  });
+}
+
+// Refuses material holding one of the User's tokens or keys, naming the Items it came from.
+function refuseSecrets(instructions: string, data: readonly PromptData[], secrets: KnownSecrets) {
+  const holding = data.filter((part) => secrets.foundIn(`${part.label}\n${part.text}`));
+  if (holding.length || secrets.foundIn(instructions)) throw new PromptRefused(holdersOf(holding, secrets));
 }
 
 // Outside material longer than this is cut.
@@ -159,7 +195,8 @@ function dataBlocks(data: readonly PromptData[], nonce: string, secrets: KnownSe
   const background = new Set<string>();
   let hasBackground = false;
   const material: string[] = [];
-  const blocks = data.map(({ label, from, text, ref: chosen }) => {
+  const blocks = data.map((part) => {
+    const { label, from, text, ref: chosen } = part;
     const origin = trustOfOrigin(from, label);
     const untrusted = origin.trust !== 'trusted';
     if (origin.trust === 'background' && typeof from === 'object' && 'background' in from) {
@@ -171,7 +208,7 @@ function dataBlocks(data: readonly PromptData[], nonce: string, secrets: KnownSe
     let body = prepare(cut ? text.slice(0, MAX_OUTSIDE) : text);
     if (cut) body = `${body} [cut]`;
     // Normalising can join a token split by invisible characters: checked again as it will be sent.
-    if (secrets.foundIn(body)) throw new PromptRefused();
+    if (secrets.foundIn(body)) throw new PromptRefused(holdersOf([part], secrets));
     const attributes = [
       `label="${cleanLabel(label)}"`,
       `source="${origin.trust === 'trusted' ? 'the User' : origin.trust === 'background' ? 'background' : 'outside'}"`,
@@ -226,9 +263,7 @@ export function buildConversationPrompt(
   options: BuildOptions = {},
 ): BuiltPrompt {
   const secrets = options.secrets ?? createKnownSecrets();
-  if (secrets.foundIn(instructions) || data.some((part) => secrets.foundIn(`${part.label}\n${part.text}`))) {
-    throw new PromptRefused();
-  }
+  refuseSecrets(instructions, data, secrets);
   const material: string[] = [];
   const messages: ChatMessage[] = turns.map(({ by, text }) => {
     if (secrets.foundIn(text)) throw new PromptRefused();
@@ -255,9 +290,7 @@ export function buildConversationPrompt(
 export const buildPrompt: PromptBuilder = ({ instructions, data }, options = {}) => {
   const secrets = options.secrets ?? createKnownSecrets();
   const nonce = options.nonce ?? randomBytes(8).toString('hex');
-  if (secrets.foundIn(instructions) || data.some((part) => secrets.foundIn(`${part.label}\n${part.text}`))) {
-    throw new PromptRefused();
-  }
+  refuseSecrets(instructions, data, secrets);
   const { blocks, outside, background, material } = dataBlocks(data, nonce, secrets);
   return {
     messages: [
@@ -272,3 +305,21 @@ export const buildPrompt: PromptBuilder = ({ instructions, data }, options = {})
     material: material.join('\n\n'),
   };
 };
+
+/**
+ * Whether a prompt went unsent because it held one of the User's tokens or keys, and which Items held
+ * it (#201): the builder's own refusal, or the models wiring's (models/index.ts), which checks every
+ * message again against the tokens and keys known by then (the API key just borrowed among them) and
+ * fails the call as a bad request. Then the parts are checked again here, to say which Items. Null for
+ * any other failure.
+ */
+export function refusalOf(error: unknown, parts: PromptParts, secrets?: KnownSecrets): PromptRefused | null {
+  if (error instanceof PromptRefused) return error;
+  if (!secrets || !(error instanceof ModelError) || error.kind !== 'bad-request') return null;
+  try {
+    buildPrompt(parts, { secrets });
+  } catch (again) {
+    if (again instanceof PromptRefused) return again;
+  }
+  return null;
+}

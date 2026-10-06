@@ -337,6 +337,7 @@ const conversations = setUpConversations({
   skills,
   item: (itemId) => itemStore.get(itemId)?.item ?? null,
   injectionWarnings: itemStore.injectionWarnings,
+  refusals: itemStore.refusals,
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
 
@@ -449,8 +450,13 @@ port.on('message', ({ data }) => {
     const offered = skipInbox.bucketSwitchedOn(bucketChange.bucketId);
     if (offered.length) port.postMessage({ type: 'items-changed', itemIds: offered } satisfies CoreMessage);
   }
-  // A GitHub summary opened: its Update line goes.
-  if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'github-summary-seen')
+  // A GitHub summary opened: its Update line goes. So does a warning's, once Not an instruction
+  // clears its mark from where the Item is shown (#201).
+  if (
+    reply?.type === 'item-store-reply' &&
+    reply.response.ok &&
+    (request?.op === 'github-summary-seen' || request?.op === 'clear-injection-warning')
+  )
     updates?.sweep();
   // Today's Daily Note made (Notes opening, or the date passing midnight): its meeting chips go in.
   if (reply?.type === 'item-store-reply' && reply.response.ok && request?.op === 'daily-note')

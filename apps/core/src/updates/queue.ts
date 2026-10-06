@@ -47,7 +47,10 @@ function merged(was: QueuedAbout, next: QueuedAbout): QueuedAbout {
   if (was.kind === 'suggestions' && next.kind === 'suggestions') {
     return { ...next, proposalIds: union(was.proposalIds, next.proposalIds).sort((a, b) => a - b) };
   }
-  if (was.kind === 'injection-warnings' && next.kind === 'injection-warnings') {
+  if (
+    (was.kind === 'injection-warnings' && next.kind === 'injection-warnings') ||
+    (was.kind === 'refusals' && next.kind === 'refusals')
+  ) {
     return { ...next, entryIds: union(was.entryIds, next.entryIds).sort((a, b) => a - b) };
   }
   if (was.kind === 'linear-left' && next.kind === 'linear-left') {

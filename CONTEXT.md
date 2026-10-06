@@ -233,8 +233,16 @@ Something Ares has prepared and left on its Item for the User to accept or dismi
 _Avoid_: Recommendation, proposal (that's what Ares's jobs hand the gate), prompt, nudge
 
 **Warning mark**:
-The mark on an outside Item whose text tries to instruct Ares ("This issue contains instructions aimed at Ares. He ignored them."), shown wherever the Item is listed or opened and named in the Update with what read like an instruction; it changes nothing Ares may do, and the User's Not an instruction clears it.
+The mark on an outside Item whose text tries to instruct Ares ("This issue contains instructions aimed at Ares. He ignored them."), shown wherever the Item is listed or opened and named in the Update with what read like an instruction; it changes nothing Ares may do, and the User's Not an instruction (on the mark itself, in the Update or on Flagged Items) clears it, until they undo it.
 _Avoid_: Alert, flag, quarantine, spam
+
+**Flagged Items**:
+The Ares Section's list of every Item carrying a warning mark, newest first, with what read like an instruction, those the User cleared lately (with Undo), and the Items Ares skipped lately in a Refusal.
+_Avoid_: Quarantine, spam folder
+
+**Refusal**:
+Ares sending an Item to no model because it holds what looks like one of the User's keys or sign-in tokens: an Activity log entry ("Ares skipped Dana's email…"), a line in the next Update and a small note on the Item, none of them ever showing the secret.
+_Avoid_: Block, redaction (that's blanking credential-like text, which still sends the rest)
 
 **Autonomy setting**:
 A User's choice, per Action kind and optionally per Section, of the Autonomy level the Agent works at.

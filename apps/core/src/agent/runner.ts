@@ -20,13 +20,18 @@
 //   model client retries once with the problem). A reply that still doesn't fit is discarded and
 //   logged, never acted on; so are proposals the job or the gate refuses.
 // - Batches: a job with more material than one call should carry splits its input (`batch`); each
-//   part is a prompt and a call of its own, and a failed part fails the run.
+//   part is a prompt and a call of its own, and a failed part fails the run. A part refused because
+//   its Items hold one of the User's keys or tokens is skipped instead (below).
 // - A job whose result is a view rather than a change to Items (ranking the Dashboard, a meeting's
 //   prep) `apply`s every part's reply at once: nothing goes to the gate, and it applies at any level
 //   above Off (ADR 0004's amendments). It may propose as well (the Todos a meeting asks for); those
 //   go to the gate as any proposal does, under the action they name if not the job's own.
 // - Prompt-injection defences (#69, ADR 0004): every prompt is built by the prompt builder
 //   (prompt.ts), which refuses material holding a token or key the Core holds (nothing is sent).
+//   The Items whose material held it are recorded as skipped (#201: an activity entry the Update
+//   counts, and a note on each), and a part about nothing else is left out of the run, so one email
+//   holding a key doesn't stop a job's other work; they are looked at again once their words change.
+//   A job that `apply`s a view, or a part about other Items too, fails as before.
 //   Every reply schema carries a `steering` flag: the outside Items the model says try to steer Ares
 //   get the warning mark. Every string in the reply is cleaned before the job sees it (the builder's
 //   internal wording stripped, URLs the model wasn't shown removed) and checked against the schema
@@ -53,11 +58,12 @@ import {
 import { type ModelClient, ModelError } from '@commander/models';
 import { type ZodType, z } from 'zod';
 import type { Gate } from '../autonomy/gate';
-import type { AgentStore, InjectionWarningStore } from '../item-store';
+import type { AgentStore, InjectionWarningStore, RefusalStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput, stripInternalWording } from '../safety/output';
+import { heedRefusal } from '../safety/refusal';
 import { heedSteering, type SteeringFlag, steeringFlag } from '../safety/steering-flag';
-import { type BuiltPrompt, buildPrompt, type PromptParts, PromptRefused } from './prompt';
+import { type BuiltPrompt, buildPrompt, type PromptParts, type PromptRefused, refusalOf } from './prompt';
 
 export type Trigger =
   // The User changed these Items; a job hears of it once the typing pauses.
@@ -179,7 +185,9 @@ export type JobRunnerOptions = {
   secrets?: KnownSecrets;
   // Where a reply's steering flag marks outside Items.
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
-  // Items the runner itself changed (a warning mark), so open views can catch up.
+  // Where Items left out of a prompt for holding a key or token are recorded as skipped (#201).
+  refusals?: Pick<RefusalStore, 'record'>;
+  // Items the runner itself changed (a warning mark, a skipped note), so open views can catch up.
   onItemsChanged?: (itemIds: string[]) => void;
   // Where problems go: job names, outcomes and plain messages only, never a prompt, reply or key.
   log?: (message: string) => void;
@@ -219,6 +227,8 @@ const backoff = (failures: number) =>
   failures < 2 ? 0 : Math.min(MINUTE * 2 ** (failures - 2), MAX_BACKOFF);
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+// A part left out of a run: its Items hold one of the User's tokens or keys.
+const SKIPPED = Symbol('skipped');
 
 // Every job's reply may carry `steering`: the outside blocks with text aimed at Ares or an AI, each
 // with the passage quoted. A malformed one counts as none rather than costing the reply.
@@ -432,11 +442,18 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
 
     const parts = job.batch?.(input).filter((part) => part.items.length || part.run) ?? [input];
     const answers: { output: unknown; input: JobInput; prompt: BuiltPrompt }[] = [];
+    let skipped = 0;
     for (const part of parts) {
       const answer = await ask(job, part);
       if (!answer) return;
+      if (answer === SKIPPED) {
+        skipped += 1;
+        continue;
+      }
       answers.push({ ...answer, input: part });
     }
+    if (skipped)
+      log(`Ares's job “${job.name}” skipped ${skipped} part(s) holding one of your tokens or keys`);
 
     const { action, actionKind, section } = job.action;
     const proposalIds = new Map<string, number>();
@@ -496,14 +513,15 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
   async function ask(
     job: AgentJob,
     input: JobInput,
-  ): Promise<{ output: unknown; prompt: BuiltPrompt } | null> {
+  ): Promise<{ output: unknown; prompt: BuiltPrompt } | typeof SKIPPED | null> {
+    const parts = await job.prompt(input);
     let prompt: BuiltPrompt;
     try {
-      prompt = buildPrompt(await job.prompt(input), { secrets });
+      prompt = buildPrompt(parts, { secrets });
     } catch (error) {
-      if (!(error instanceof PromptRefused)) throw error;
-      failed(job, 'failed', error.message, false);
-      return null;
+      const refusal = refusalOf(error, parts, secrets);
+      if (!refusal) throw error;
+      return refused(job, input, refusal);
     }
 
     let reply: unknown;
@@ -517,6 +535,9 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
       });
       reply = answer.json;
     } catch (error) {
+      // The models wiring refused it, holding a key it learned of only as the call was made.
+      const refusal = refusalOf(error, parts, secrets);
+      if (refusal) return refused(job, input, refusal);
       const kind = error instanceof ModelError ? error.kind : null;
       const outcome =
         kind === 'over-cap' ? 'over-cap' : kind === 'invalid-reply' ? 'invalid-reply' : 'failed';
@@ -542,6 +563,19 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
         `Ares's job “${job.name}” dropped ${cleaned.dropped} part of its reply that didn’t fit once cleaned`,
       );
     return { output: cleaned.data, prompt };
+  }
+
+  // A part whose material held one of the User's tokens or keys: its Items are recorded as skipped,
+  // and when the part is about nothing else (and the job's result isn't a view, made whole from every
+  // part), the run goes on without it. Otherwise (or with nowhere to record the skip, so it would go
+  // unseen) the run fails, as any refused call does.
+  function refused(job: AgentJob, input: JobInput, refusal: PromptRefused): typeof SKIPPED | null {
+    heedRefusal(refusal, job.name, options.refusals, options.onItemsChanged);
+    const named = new Set(refusal.itemIds);
+    const onlyThem = input.items.length > 0 && input.items.every((item) => named.has(item.itemId));
+    if (onlyThem && options.refusals && !job.apply && !input.run) return SKIPPED;
+    failed(job, 'failed', refusal.message, false);
+    return null;
   }
 
   // The reply's steering flag: each outside Item it names (by its block's ref), quoting what in it

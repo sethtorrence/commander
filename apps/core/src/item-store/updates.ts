@@ -19,6 +19,8 @@ export type UpdateState = {
   proposalsCursor: number | null;
   // The newest injection-warning activity entry they have counted.
   warningsCursor: number | null;
+  // The newest refusal activity entry they have counted (#201).
+  refusalsCursor: number | null;
   // When the User last did something, and the longest stretch without since the last Update.
   lastInputAt: number | null;
   longestGapMs: number;
@@ -48,6 +50,7 @@ export type UpdateStore = {
 const EMPTY: UpdateState = {
   proposalsCursor: null,
   warningsCursor: null,
+  refusalsCursor: null,
   lastInputAt: null,
   longestGapMs: 0,
   lastGivenAt: null,

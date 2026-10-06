@@ -9,6 +9,7 @@ import {
   useState,
 } from 'react';
 import { itemChangesFromCore } from '../item-store/changes';
+import { WarningActionsProvider, warningActionsIn } from '../links/ItemWarning';
 import { PaletteHost } from '../palette/PaletteHost';
 import { PeopleProvider, usePeople } from '../people/context';
 import { PERSON_PAGE_SCOPE, PersonPage } from '../people/PersonPage';
@@ -67,8 +68,8 @@ function SectionView({
 /**
  * What the whole window shares: the Projects with the one Project filter, People (who each handle
  * in an Item is, for every row and pane that shows people), the Dashboard's ranked
- * list (read by the Dashboard, the header's band meter and the Project pages), and Ares's Updates
- * (the quiet count, and the Update the User asks for).
+ * list (read by the Dashboard, the header's band meter and the Project pages), Ares's Updates
+ * (the quiet count, and the Update the User asks for), and Not an instruction on every warning mark.
  */
 function FrameProviders({
   projects,
@@ -88,6 +89,7 @@ function FrameProviders({
   children: ReactNode;
 }) {
   const people = useMemo(() => peopleIn(window.commander.itemStore), []);
+  const warnings = useMemo(() => warningActionsIn(window.commander.itemStore), []);
   return (
     <PeopleProvider client={people} changes={itemChangesFromCore} onOpenPerson={onOpenPerson}>
       <ProjectsProvider client={projects} onOpenPage={onOpenPage}>
@@ -98,7 +100,7 @@ function FrameProviders({
             onAskForUpdate={window.commander.onAskForUpdate}
             onOpen={onOpenUpdateLine}
           >
-            {children}
+            <WarningActionsProvider value={warnings}>{children}</WarningActionsProvider>
           </UpdatesProvider>
         </DashboardProvider>
       </ProjectsProvider>

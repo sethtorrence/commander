@@ -17,6 +17,7 @@ import {
 } from '@commander/domain';
 import type { AccountSummary, AccountsState, TeamsAccountSummary } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
+import { describeWarningEntry } from '../../links/warning-entries';
 import { describeFiling, describeFilingAnswer } from '../../projects/projects';
 import { clockTime } from '../../settings/account-sync';
 import { SOURCE_NAMES, type TodoLink } from '../todos/todos';
@@ -260,7 +261,9 @@ export function describeChatEntry(
   outgoing: readonly OutgoingChange[] = [],
 ): string {
   const who = entry.by.kind === 'rule' && entry.why ? `by ${entry.why}` : byWhom(entry.by);
-  if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
+  // A steering warning or a refusal says it in its own words (#69, #201), as does Not an instruction.
+  const warning = describeWarningEntry(entry, history);
+  if (warning) return warning;
   // The User's answer to Ares's filing (#108); a correction with no filing is "Not waiting on you" (#109).
   const filingAnswer = entry.changes.some((change) => change.field === 'filing');
   if ((entry.action === 'correction' || entry.action === 'confirmation') && filingAnswer)

@@ -59,6 +59,9 @@ export const queuedAbout = z.discriminatedUnion('kind', [
   }),
   // Outside Items that held instructions aimed at Ares (their injection-warning activity entries).
   z.object({ kind: z.literal('injection-warnings'), entryIds: z.array(id).min(1) }),
+  // Items Ares sent to no model because they hold one of the User's keys or sign-in tokens (#201):
+  // their refusal activity entries, merged into one line. Never the secret itself.
+  z.object({ kind: z.literal('refusals'), entryIds: z.array(id).min(1) }),
   // The month's model spend reached 80% of the cap.
   z.object({
     kind: z.literal('cap-warning'),

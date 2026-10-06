@@ -94,6 +94,7 @@ import {
   type RuleFieldValue,
   type RulePreview,
   type RulePreviewRequest,
+  refusalWhy,
   ruleMatches,
   rulePreviewRequest,
   rulesFor,
@@ -154,7 +155,12 @@ import { type GitHubOversightStore, githubOversightIn } from './github-oversight
 import { type GitHubSummaryStore, githubSummariesIn } from './github-summaries';
 import { githubTodosIn } from './github-todos';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
-import { InjectionWarningError, type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
+import {
+  type Flagged,
+  InjectionWarningError,
+  type InjectionWarningStore,
+  injectionWarningsIn,
+} from './injection-warnings';
 import { linearSendIn } from './linear-send';
 import { linearTodosIn } from './linear-todos';
 import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-copy-folder';
@@ -163,6 +169,7 @@ import { type ModelStore, openModelStore } from './models';
 import { type OutgoingStore, openOutgoingQueue } from './outgoing';
 import { type PeopleStore, peopleIn } from './people';
 import { projectsIn } from './projects';
+import { type RefusalStore, refusalsIn } from './refusals';
 import {
   actorColumns,
   blockDetailOf,
@@ -221,6 +228,7 @@ export type { InjectionWarningStore } from './injection-warnings';
 export type { MeetingChips, MeetingChipsChange } from './meeting-chips';
 export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { PeopleStore } from './people';
+export type { RefusalStore } from './refusals';
 export type { Snapshot } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
 export type { UpdateState, UpdateStore } from './updates';
@@ -424,6 +432,9 @@ export type ItemStore = {
   // Steering warnings (injection-warnings.ts): outside Items checked as they are saved from their
   // Source, and marked when they hold instructions aimed at Ares; a job's steering flag marks one too.
   injectionWarnings: InjectionWarningStore;
+  // Refusals (refusals.ts, #201): the Items Ares sent to no model because they hold one of the User's
+  // keys or sign-in tokens, each an activity entry the Update counts, and a note on the Item.
+  refusals: RefusalStore;
   // Global search over the live Items, kept current by every write here.
   search: Search;
   // Search by meaning (#73): the Items and memories whose embedding by a model is missing or out of
@@ -564,6 +575,11 @@ type NewEntry = {
 
 // How much of an email's body the steering check reads, from its start.
 const STEERING_BODY_CHECKED = 20_000;
+// The Flagged Items list (#201): marks cleared in the last week (at most 20 of them), with Undo, and
+// the last 20 Items Ares skipped.
+const CLEARED_SHOWN_MS = 7 * 24 * 60 * 60_000;
+const CLEARED_SHOWN = 20;
+const SKIPPED_SHOWN = 20;
 // How far ahead invitations awaiting an answer are looked for: calendar sync's window, and a little.
 const INVITATIONS_AHEAD_MS = 400 * 24 * 60 * 60_000;
 
@@ -642,6 +658,31 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         },
         at,
       ),
+    // Its undoing (#201): the mark back, as `after`.
+    undone: ({ itemId, undoes, entry }, at) =>
+      log(
+        {
+          by: entry.by,
+          action: 'undo',
+          itemId,
+          why: entry.why ?? null,
+          causedBy: entry.causedBy ?? null,
+          undoes,
+          before: null,
+          after: { injectionWarning: true },
+        },
+        at,
+      ),
+    toEntry,
+  });
+  // Refusals (#201): an Item Ares sent to no model, as his entry; its note goes when its words change.
+  const refusals = refusalsIn(db, {
+    now,
+    readItem: (itemId) => readItem(itemId),
+    extraOf: (item) =>
+      item.kind === 'email' ? (emails.readBody(item.id)?.text ?? '').slice(0, STEERING_BODY_CHECKED) : '',
+    record: ({ itemId, why, after }, at) =>
+      log({ by: { kind: 'ares' }, action: 'refusal', itemId, why, causedBy: null, before: null, after }, at),
     toEntry,
   });
   // Ares's waiting flags on Teams Chats; clearing one by hand is logged as the User's correction.
@@ -1046,6 +1087,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const bucketSuggested = sortingAnswers.suggestions(emailIds);
     // Ares's waiting flag on a Chat.
     const flags = waiting.standing(rows.filter((row) => row.kind === 'chat').map((row) => row.id));
+    // The note on an Item Ares sent to no model (#201).
+    const skipped = refusals.standing(rows.map((row) => row.id));
     return rows.map((row) => {
       const item = toItem(row, details.get(row.id) ?? null);
       const at = marked.get(row.id) ?? marked.get(backedBy(row.id) ?? '');
@@ -1054,9 +1097,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         .find((each) => each !== undefined);
       const flag = flags.get(row.id);
       const bucketSuggestion = bucketSuggested.get(row.id);
+      const refusedAt = skipped.get(row.id);
       return {
         ...item,
         ...(at !== undefined && { injectionWarning: { at } }),
+        ...(refusedAt !== undefined && { refusal: { at: refusedAt } }),
         ...(suggestion && { filingSuggestion: suggestion }),
         ...(bucketSuggestion && { bucketSuggestion }),
         ...(flag && { waiting: flag }),
@@ -1693,16 +1738,20 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (target.action === 'injection-warning') {
       throw new ItemStoreError('invalid', 'An injection warning records what Ares found; it can’t be undone');
     }
-    if (
-      target.action === 'correction' &&
-      typeof target.before === 'object' &&
-      target.before !== null &&
-      'injectionWarning' in target.before
-    ) {
-      throw new ItemStoreError(
-        'invalid',
-        'Not an instruction stands while the words do; the mark comes back if they change',
-      );
+    if (target.action === 'refusal') {
+      throw new ItemStoreError('invalid', 'A refusal records what Ares didn’t send; it can’t be undone');
+    }
+    // The User's Not an instruction (#201): the mark comes back, while the words are the same.
+    if (target.actor === 'user' && warnings.isClearing(target)) {
+      if (db.select().from(activity).where(eq(activity.undoes, entryId)).get()) {
+        throw new ItemStoreError('already-undone', `Activity entry ${entryId} is already undone`);
+      }
+      try {
+        return warnings.undo(target, entry, at);
+      } catch (error) {
+        if (error instanceof InjectionWarningError) throw new ItemStoreError('invalid', error.message);
+        throw error;
+      }
     }
     if (target.action === 'correction' || target.action === 'confirmation') {
       throw new ItemStoreError(
@@ -2337,6 +2386,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           follow(existing.id, before);
           // And still checked, so an Item saved before the steering check gets its mark.
           warnings.check(existing, at, null, bodyWords(existing));
+          refusals.check(existing, bodyWords(existing));
           continue;
         }
         const stored = writeState(existing, after, at);
@@ -2349,6 +2399,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         applyRules(existing.id, at);
         follow(existing.id, before, logged.id);
         warnings.check(requireItem(existing.id), at, logged.id, bodyWords(existing));
+        refusals.check(requireItem(existing.id), bodyWords(existing));
         result.updated.push(existing.id);
         continue;
       }
@@ -2657,13 +2708,50 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       since: (after) => warnings.since(after),
       warning: (itemId) => warnings.warning(itemId),
       clear: sqlite.transaction((itemId: string, rawContext: ActionContext) => {
+        // A Todo shows the mark of the Item behind it, so its Not an instruction clears that one.
+        const detail = readItem(itemId)?.detail;
+        const marked =
+          detail?.kind === 'todo' && detail.backedBy && !warnings.warning(itemId) ? detail.backedBy : itemId;
         try {
-          return warnings.clear(itemId, actionContext.parse(rawContext));
+          return warnings.clear(marked, actionContext.parse(rawContext));
         } catch (error) {
           if (error instanceof InjectionWarningError) throw new ItemStoreError('invalid', error.message);
           throw error;
         }
       }),
+      flaggedItems() {
+        const live = (itemId: string) => {
+          const item = readItem(itemId);
+          return item && item.deletedAt === null ? item : null;
+        };
+        const { marked, cleared } = warnings.flagged(now() - CLEARED_SHOWN_MS);
+        const withItem = (flagged: Flagged) => {
+          const item = live(flagged.itemId);
+          return item ? [{ ...flagged, item }] : [];
+        };
+        const skipped = refusals.recent(SKIPPED_SHOWN).flatMap(({ itemId, entryId, at, job }) => {
+          const item = live(itemId);
+          const { activity } = schema;
+          const why = db
+            .select({ why: activity.why })
+            .from(activity)
+            .where(eq(activity.id, entryId))
+            .get()?.why;
+          return item ? [{ item, entryId, at, job, why: why ?? refusalWhy(item) }] : [];
+        });
+        return {
+          marked: marked.flatMap(withItem),
+          cleared: cleared.slice(0, CLEARED_SHOWN).flatMap(withItem),
+          skipped,
+        };
+      },
+    },
+    refusals: {
+      record: sqlite.transaction((itemIds: readonly string[], job: string | null) =>
+        refusals.record(itemIds, job),
+      ),
+      since: (after) => refusals.since(after),
+      recent: (limit) => refusals.recent(limit),
     },
     search: { query: (query, meaning) => search.query(query, meaning) },
     // Memories first (few, and what Ares's jobs look up), then Items; a memory's key is marked as one.

@@ -6,6 +6,7 @@ import {
   type CoreItemStoreReply,
   decide,
   itemStoreRequest,
+  NOT_AN_INSTRUCTION,
   type SummaryWriterState,
   WRITE_GITHUB_SUMMARY,
 } from '@commander/domain';
@@ -142,6 +143,16 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.channelSettings.change(request.action, { by: { kind: 'user' } }) };
       case 'clear-chat-waiting':
         return { ok: true, result: store.chatWaiting.clearByUser(request.itemId, { by: { kind: 'user' } }) };
+      case 'clear-injection-warning':
+        return {
+          ok: true,
+          result: store.injectionWarnings.clear(request.itemId, {
+            by: { kind: 'user' },
+            why: NOT_AN_INSTRUCTION,
+          }),
+        };
+      case 'flagged-items':
+        return { ok: true, result: store.injectionWarnings.flaggedItems() };
       case 'events':
         return { ok: true, result: store.events(request.query) };
       case 'calendars':
@@ -285,6 +296,7 @@ const CHANGES = new Set([
   'change-chat-setting',
   'change-channel-setting',
   'clear-chat-waiting',
+  'clear-injection-warning',
   'refile',
   'undo-refile',
   'resort',
