@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { type ActionContext, type EventDetail, type Project, ruleSuggestionDraft } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ItemStore, openItemStore } from '../item-store';
-import { templateText } from './compose';
+import { lineTemplate } from './kinds';
 import { createUpdateQueue, type UpdateQueue } from './queue';
 import { createRuleSuggestions } from './rule-suggestions';
 
@@ -100,8 +100,8 @@ describe('Rule suggestions for events', () => {
         count: 5,
       },
     });
-    expect(templateText(line as never, () => null)).toBe(
-      'You filed 5 events in calendar Titanlink Standups under TL. Always file events in calendar Titanlink Standups under TL?',
+    expect(lineTemplate(line as never, {} as never)).toBe(
+      'You filed 5 events in calendar Titanlink Standups under TL. Always file events in calendar Titanlink Standups under TL? A Rule would do it for you from now on: make the Rule, or dismiss this and I won’t ask again.',
     );
     // Accepting makes the calendar Rule, which then files the next instance.
     const rule = store.changeRule({ type: 'create', rule: ruleSuggestionDraft(line?.about as never) });

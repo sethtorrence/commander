@@ -138,7 +138,7 @@ import { type GitHubOversightStore, githubOversightIn } from './github-oversight
 import { type GitHubSummaryStore, githubSummariesIn } from './github-summaries';
 import { githubTodosIn } from './github-todos';
 import { type GitHubWatchStore, githubWatchIn } from './github-watch';
-import { type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
+import { InjectionWarningError, type InjectionWarningStore, injectionWarningsIn } from './injection-warnings';
 import { linearSendIn } from './linear-send';
 import { linearTodosIn } from './linear-todos';
 import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-copy-folder';
@@ -540,9 +540,25 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const warnings = injectionWarningsIn(db, {
     now,
     readItem: (itemId) => readItem(itemId),
+    extraOf: (item) =>
+      item.kind === 'email' ? (emails.readBody(item.id)?.text ?? '').slice(0, STEERING_BODY_CHECKED) : '',
     record: ({ itemId, why, causedBy, after }, at) =>
       log(
         { by: { kind: 'ares' }, action: 'injection-warning', itemId, why, causedBy, before: null, after },
+        at,
+      ),
+    // Not an instruction: the User's correction, with the mark as `before` and nothing `after`.
+    correct: ({ itemId, context, before }, at) =>
+      log(
+        {
+          by: context.by,
+          action: 'correction',
+          itemId,
+          why: context.why ?? null,
+          causedBy: context.causedBy ?? null,
+          before,
+          after: null,
+        },
         at,
       ),
     toEntry,
@@ -1519,6 +1535,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     if (target.action === 'injection-warning') {
       throw new ItemStoreError('invalid', 'An injection warning records what Ares found; it can’t be undone');
     }
+    if (
+      target.action === 'correction' &&
+      typeof target.before === 'object' &&
+      target.before !== null &&
+      'injectionWarning' in target.before
+    ) {
+      throw new ItemStoreError(
+        'invalid',
+        'Not an instruction stands while the words do; the mark comes back if they change',
+      );
+    }
     if (target.action === 'correction' || target.action === 'confirmation') {
       throw new ItemStoreError(
         'invalid',
@@ -2285,8 +2312,17 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       }),
     },
     injectionWarnings: {
-      flag: sqlite.transaction((itemId: string) => warnings.flag(itemId)),
+      flag: sqlite.transaction((itemId: string, quote: string) => warnings.flag(itemId, quote)),
       since: (after) => warnings.since(after),
+      warning: (itemId) => warnings.warning(itemId),
+      clear: sqlite.transaction((itemId: string, rawContext: ActionContext) => {
+        try {
+          return warnings.clear(itemId, actionContext.parse(rawContext));
+        } catch (error) {
+          if (error instanceof InjectionWarningError) throw new ItemStoreError('invalid', error.message);
+          throw error;
+        }
+      }),
     },
     search: { query: (query, meaning) => search.query(query, meaning) },
     // Memories first (few, and what Ares's jobs look up), then Items; a memory's key is marked as one.

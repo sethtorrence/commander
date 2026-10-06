@@ -304,8 +304,8 @@ describe('a run', () => {
     ]);
     const given = await updates.give();
     expect(given?.lines.map((line) => line.text).sort()).toEqual([
-      '2 of your Engineering issues look stuck.',
-      'OPS-7 is overdue since last Friday.',
+      '2 of your Engineering issues in Linear haven’t moved in at least 2 days: ENG-402 and ENG-406. Each is below with why; open one to move it along, or tick it if it’s done.',
+      'OPS-7 “Rotate the keys” in Linear looks stuck. It is overdue since last Friday. Open it to move it along, or tick it if it’s done.',
     ]);
   });
 

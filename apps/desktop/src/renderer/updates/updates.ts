@@ -1,6 +1,8 @@
 import {
   type ActionKind,
   UPDATE_SECTION_NAMES,
+  type UpdateRow,
+  type UpdateRowAction,
   type UpdateSection,
   type UpdatesRequest,
   type UpdatesResults,
@@ -38,7 +40,8 @@ export function acceptLabel(line: UpdateViewLine): string | null {
 }
 
 export type OpenTarget =
-  | { kind: 'item'; sectionId: string; itemId: string }
+  // `focus`: where in the Item to open it (Reply: the Chat's message waiting on the User).
+  | { kind: 'item'; sectionId: string; itemId: string; focus?: string }
   | { kind: 'section'; sectionId: string }
   // `part`: where in Settings (Accounts, for an Account to reconnect).
   | { kind: 'settings'; part?: 'accounts' };
@@ -57,13 +60,19 @@ const OPENABLE: readonly UpdateSection[] = [
 const sectionOf = (section: UpdateSection) => (OPENABLE.includes(section) ? section : 'ares');
 
 /**
- * Where Open takes the User: the one Item a line is about, else where its Items are. `itemId`: one
- * of the line's Items in particular (an issue of a merged Linear line).
+ * Where Open takes the User: one of the line's Items where it lives (`row`; Reply opens a Chat at the
+ * message waiting on the User), else the one Item a line is about, else where its Items are.
  */
-export function openTarget(line: UpdateViewLine, itemId?: string): OpenTarget {
+export function openTarget(line: UpdateViewLine, row?: UpdateRow, { reply = false } = {}): OpenTarget {
   const about = line.queued?.about;
-  if (itemId && line.itemIds.includes(itemId))
-    return { kind: 'item', sectionId: sectionOf(line.section), itemId };
+  if (row) {
+    return {
+      kind: 'item',
+      sectionId: sectionOf(row.section),
+      itemId: row.itemId,
+      ...(reply && row.focus ? { focus: row.focus } : {}),
+    };
+  }
   if (about?.kind === 'cap-warning' || about?.kind === 'autonomy-change' || about?.kind === 'rule-suggestion')
     return { kind: 'settings' };
   if (about?.kind === 'reconnect') return { kind: 'settings', part: 'accounts' };
@@ -74,22 +83,26 @@ export function openTarget(line: UpdateViewLine, itemId?: string): OpenTarget {
   return { kind: 'section', sectionId: sectionOf(line.section) };
 }
 
-/**
- * The Linear issues a merged line is about, each with what Ares said of it (why it left the User's
- * list, or why it looks stuck), to open one by one. Empty for a line about one issue (Open opens it)
- * and once the line has been acted on.
- */
-export function lineIssues(line: UpdateViewLine): { itemId: string; identifier: string; text: string }[] {
-  if (!isQueued(line)) return [];
-  const about = line.queued?.about;
-  const issues =
-    about?.kind === 'linear-left'
-      ? about.issues.map(({ itemId, identifier, why }) => ({ itemId, identifier, text: why }))
-      : about?.kind === 'linear-stuck'
-        ? about.issues.map(({ itemId, identifier, reason }) => ({ itemId, identifier, text: reason }))
-        : [];
-  return issues.length > 1 ? issues : [];
+// A line with more Items than this shows them folded, under the line's own count.
+export const ROWS_SHOWN = 3;
+
+/** A line's Items as the panel lists them, and whether they start folded (when there are many). */
+export function lineRows(line: UpdateViewLine): { rows: UpdateRow[]; folded: boolean } {
+  const rows = line.rows ?? [];
+  return { rows, folded: rows.length > ROWS_SHOWN };
 }
+
+export const ROW_ACTION_LABELS: Record<UpdateRowAction, string> = {
+  open: 'Open',
+  reply: 'Reply',
+  accept: 'Accept',
+  dismiss: 'Dismiss',
+  tick: 'Tick',
+  'not-an-instruction': 'Not an instruction',
+};
+
+/** How a row names its Item: its Source's short name, or its title. */
+export const rowName = (row: UpdateRow) => row.label ?? row.title;
 
 /** "and 23 smaller things", with how many in each Section. */
 export function foldedSummary(lines: readonly UpdateViewLine[]) {

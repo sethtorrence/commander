@@ -1,6 +1,6 @@
-import type { QueuedLine, UpdateViewLine } from '@commander/domain';
+import type { QueuedLine, UpdateRow, UpdateViewLine } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
-import { acceptLabel, foldedSummary, lineIssues, lineStatus, openTarget } from './updates';
+import { acceptLabel, foldedSummary, lineRows, lineStatus, openTarget, rowName } from './updates';
 
 const queued = (overrides: Partial<QueuedLine> = {}): QueuedLine => ({
   id: 1,
@@ -38,9 +38,23 @@ const line = (overrides: Partial<QueuedLine> = {}, extra: Partial<UpdateViewLine
     folded: false,
     fresh: true,
     queued: q,
+    rows: [],
     ...extra,
   };
 };
+
+const row = (itemId: string, overrides: Partial<UpdateRow> = {}): UpdateRow => ({
+  itemId,
+  label: null,
+  title: itemId,
+  section: 'linear',
+  state: '',
+  quote: null,
+  focus: null,
+  actions: ['open'],
+  settled: null,
+  ...overrides,
+});
 
 describe('accepting in place', () => {
   it('offers Accept on one suggestion, Accept all on several Organise ones, and nothing on Act for you ones', () => {
@@ -179,7 +193,7 @@ describe('Ares watching Linear', () => {
     reassigned: true,
   });
 
-  it('a line about one issue opens it in Linear; one about several lists each, each opening its issue', () => {
+  it('a line about one issue opens it in Linear; one about several opens the Section, and each Item its own', () => {
     const one = line({
       group: 'fyi',
       about: { kind: 'linear-left', entryIds: [3], issues: [left(1)] },
@@ -187,7 +201,6 @@ describe('Ares watching Linear', () => {
       section: 'linear',
     });
     expect(openTarget(one)).toEqual({ kind: 'item', sectionId: 'linear', itemId: 'issue-1' });
-    expect(lineIssues(one)).toEqual([]);
 
     const several = line({
       group: 'fyi',
@@ -196,36 +209,11 @@ describe('Ares watching Linear', () => {
       section: 'linear',
     });
     expect(openTarget(several)).toEqual({ kind: 'section', sectionId: 'linear' });
-    expect(lineIssues(several)).toEqual([
-      { itemId: 'issue-1', identifier: 'ENG-1', text: 'ENG-1 was reassigned to Priya Patel' },
-      { itemId: 'issue-2', identifier: 'ENG-2', text: 'ENG-2 was reassigned to Priya Patel' },
-    ]);
-    expect(openTarget(several, 'issue-2')).toEqual({ kind: 'item', sectionId: 'linear', itemId: 'issue-2' });
-
-    const stuck = line({
-      group: 'fyi',
-      about: {
-        kind: 'linear-stuck',
-        team: { id: 'team-eng', key: 'ENG', name: 'Engineering' },
-        issues: [
-          {
-            itemId: 'issue-4',
-            identifier: 'ENG-4',
-            reason: 'ENG-4 has sat in review for 4 days',
-            changedAt: 1,
-          },
-          { itemId: 'issue-5', identifier: 'ENG-5', reason: 'ENG-5 is overdue', changedAt: 1 },
-        ],
-      },
-      itemIds: ['issue-4', 'issue-5'],
-      section: 'linear',
+    expect(openTarget(several, row('issue-2'))).toEqual({
+      kind: 'item',
+      sectionId: 'linear',
+      itemId: 'issue-2',
     });
-    expect(lineIssues(stuck).map((issue) => issue.text)).toEqual([
-      'ENG-4 has sat in review for 4 days',
-      'ENG-5 is overdue',
-    ]);
-    // Acted on, nothing to open from it.
-    expect(lineIssues(line({ ...stuck.queued, status: 'expired' } as QueuedLine))).toEqual([]);
   });
 
   it('Reconnect opens Settings at Accounts, with nothing to accept', () => {
@@ -237,5 +225,36 @@ describe('Ares watching Linear', () => {
     });
     expect(openTarget(reconnect)).toEqual({ kind: 'settings', part: 'accounts' });
     expect(acceptLabel(reconnect)).toBeNull();
+  });
+});
+
+describe('a line’s Items', () => {
+  it('each opens where it lives, whatever the line’s Section; Reply opens a Chat at the message waiting', () => {
+    const warning = line({ about: { kind: 'injection-warnings', entryIds: [1, 2] }, itemIds: ['i1', 'c1'] });
+    expect(openTarget(warning, row('c1', { section: 'teams', focus: 'm9' }))).toEqual({
+      kind: 'item',
+      sectionId: 'teams',
+      itemId: 'c1',
+    });
+    expect(openTarget(warning, row('c1', { section: 'teams', focus: 'm9' }), { reply: true })).toEqual({
+      kind: 'item',
+      sectionId: 'teams',
+      itemId: 'c1',
+      focus: 'm9',
+    });
+  });
+
+  it('a few are listed as they are; many start folded under the line’s own count', () => {
+    const rows = (n: number) => Array.from({ length: n }, (_, i) => row(`issue-${i}`));
+    expect(lineRows(line({}, { rows: rows(1) }))).toEqual({ rows: rows(1), folded: false });
+    expect(lineRows(line({}, { rows: rows(3) })).folded).toBe(false);
+    expect(lineRows(line({}, { rows: rows(12) })).folded).toBe(true);
+  });
+
+  it('are named by their Source’s short name, or their title', () => {
+    expect(rowName(row('i1', { label: 'ENG-418', title: 'Throttle bursts' }))).toBe('ENG-418');
+    expect(rowName(row('b1', { title: 'need to send Dana the Q3 numbers' }))).toBe(
+      'need to send Dana the Q3 numbers',
+    );
   });
 });

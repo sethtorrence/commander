@@ -10,7 +10,7 @@ import {
 } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ItemStore, openItemStore } from '../item-store';
-import { templateText } from './compose';
+import { lineTemplate } from './kinds';
 import { createUpdateQueue, type UpdateQueue } from './queue';
 import { createRuleSuggestions } from './rule-suggestions';
 
@@ -165,8 +165,8 @@ describe('Rule suggestions', () => {
       },
     });
     expect(line?.itemIds).toHaveLength(5);
-    expect(templateText(line as never, () => null)).toBe(
-      'You filed 5 Linear issues from team OPS under TX. Always file Linear team OPS under TX?',
+    expect(lineTemplate(line as never, {} as never)).toBe(
+      'You filed 5 Linear issues from team OPS under TX. Always file Linear team OPS under TX? A Rule would do it for you from now on: make the Rule, or dismiss this and I won’t ask again.',
     );
     // Accepting makes this Rule.
     expect(ruleSuggestionDraft(line?.about as never)).toEqual({
@@ -243,8 +243,8 @@ describe('Rule suggestions', () => {
         count: 5,
       },
     });
-    expect(templateText(lines[0] as never, () => null)).toBe(
-      'You filed 5 Chats with Omar Haddad under TL. Always file Chats with Omar Haddad under TL?',
+    expect(lineTemplate(lines[0] as never, {} as never)).toBe(
+      'You filed 5 Chats with Omar Haddad under TL. Always file Chats with Omar Haddad under TL? A Rule would do it for you from now on: make the Rule, or dismiss this and I won’t ask again.',
     );
     expect(ruleSuggestionDraft(lines[0]?.about as never).when.terms).toEqual([
       { field: 'teams.person', op: 'is', value: 'omar@titanlink.io', label: 'Omar Haddad' },

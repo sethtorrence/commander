@@ -189,7 +189,7 @@ What Ares has learned and keeps about the User's world (accepted rules, examples
 _Avoid_: Knowledge base, context, history, profile
 
 **Update**:
-Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it.
+Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it; each line names what it is about, says what happened, why it matters and what to do, and lists its Items, each with its own actions.
 _Avoid_: Notification, alert, briefing, digest
 
 **Oversight summary**:
@@ -205,7 +205,7 @@ Something Ares has prepared and left on its Item for the User to accept or dismi
 _Avoid_: Recommendation, proposal (that's what Ares's jobs hand the gate), prompt, nudge
 
 **Warning mark**:
-The mark on an outside Item whose text tries to instruct Ares ("This issue contains instructions aimed at Ares. He ignored them."), shown wherever the Item is listed or opened and counted in the Update; it changes nothing Ares may do.
+The mark on an outside Item whose text tries to instruct Ares ("This issue contains instructions aimed at Ares. He ignored them."), shown wherever the Item is listed or opened and named in the Update with what read like an instruction; it changes nothing Ares may do, and the User's Not an instruction clears it.
 _Avoid_: Alert, flag, quarantine, spam
 
 **Autonomy setting**:

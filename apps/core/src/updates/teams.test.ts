@@ -18,7 +18,7 @@ import { PUT_UPDATES_TOGETHER } from './compose';
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const user: ActionContext = { by: { kind: 'user' } };
-const SUMMARY = 'They settled on shipping Friday, and Omar wants your sign-off.';
+const SUMMARY = 'Omar and Lee went through their points, and Omar wants your sign-off.';
 
 let dir: string;
 let clock: number;
@@ -162,7 +162,7 @@ describe('busy Chats in the Update', () => {
     expect(line).toMatchObject({
       group: 'fyi',
       section: 'teams',
-      text: `Titanlink eng: 46 messages. ${SUMMARY}`,
+      text: `“Titanlink eng” in Teams: 46 messages since your last Update. ${SUMMARY}`,
       itemIds: [idOf('Titanlink eng')],
     });
     expect(update?.voice).toBe('ares');
@@ -186,7 +186,16 @@ describe('busy Chats in the Update', () => {
     summaries.push(new Error('Z.ai is down'), new Error('Z.ai is down'));
     const update = await updates.give();
     expect(update?.lines.find((each) => each.kind === 'chat-summary')?.text).toBe(
-      'Titanlink eng: 22 messages since your last Update.',
+      '“Titanlink eng” in Teams has been busy: 22 messages since your last Update, mostly from Omar Haddad and Lee Chen. I don’t see anyone waiting on you; open it if you want to catch up.',
+    );
+  });
+
+  it('keeps the plain sentence when Ares’s summary says something the messages don’t', async () => {
+    sync(chat('19:titanlink@thread.v2', 'Titanlink eng', 'group', [OMAR, LEE], busy(22)));
+    summaries.push('They settled on shipping Friday, and Dana wants your sign-off.');
+    const update = await updates.give();
+    expect(update?.lines.find((each) => each.kind === 'chat-summary')?.text).toMatch(
+      /^“Titanlink eng” in Teams has been busy: 22 messages since your last Update/,
     );
   });
 

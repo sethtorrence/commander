@@ -28,6 +28,7 @@ import { z } from 'zod';
 import type { InjectionWarningStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput } from '../safety/output';
+import { heedSteering, steeringFlag } from '../safety/steering-flag';
 import { buildPrompt, PromptRefused } from './prompt';
 
 // The newest messages a summary reads, each cut short.
@@ -38,7 +39,7 @@ const MAX_UPDATE_SUMMARY = 320;
 
 export const OUTPUT = z.object({ summary: z.string().trim().max(4000) });
 const REPLY = OUTPUT.extend({
-  steering: z.array(z.string().max(20)).max(100).optional().catch(undefined),
+  steering: steeringFlag,
 });
 
 const CHAT_TYPES: Record<ChatDetail['chatType'], string> = {
@@ -78,7 +79,9 @@ const forUpdate = `${VOICE}
 
 The User asked for their Update, and this Teams chat has been busy since the last one. The data block holds the chat's name and type and its messages since then, oldest first, each with when it was sent and who sent it; "the User" marks the User's own messages.
 
-Say in one or two short plain sentences what matters: what they settled, and anything someone is waiting on the User for, saying who. Don't repeat the chat's name or count the messages. Keep names, numbers and dates exactly as they are. Add nothing the messages don't say.
+Say in one or two short plain sentences what matters: what they settled, and anything someone is waiting on the User for, saying who. If nobody needs the User, say so plainly. Don't repeat the chat's name or count the messages. Keep names, numbers and dates exactly as they are. Add nothing the messages don't say: every name, number and date you write is checked against them. No hedging, no jargon.
+Good: "They settled on Friday for the offsite, and Lee wants your vote on the venue."
+Bad: "There was a lot of discussion about various topics." (What was settled? Does anyone need the User?)
 
 Reply with only this JSON object: {"summary":"…"}`;
 
@@ -157,11 +160,7 @@ async function ask(
           : String(error);
     throw new SummaryFailed(`Ares couldn’t summarise it: ${why}`);
   }
-  const marked: string[] = [];
-  for (const ref of new Set(reply.steering ?? [])) {
-    const itemId = prompt.outside.find((block) => block.ref === ref)?.itemId;
-    if (itemId && options.injectionWarnings?.flag(itemId)) marked.push(itemId);
-  }
+  const marked = heedSteering(reply.steering, prompt, options.injectionWarnings);
   if (marked.length) options.onItemsChanged?.(marked);
   const text = cleanOutput(reply.summary, prompt.material).replace(/\s+/g, ' ').trim();
   if (!text) throw new SummaryFailed('Ares couldn’t summarise it: his reply didn’t make sense');

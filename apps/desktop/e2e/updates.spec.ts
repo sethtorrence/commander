@@ -141,9 +141,11 @@ test('a quiet count, and the Update only when asked: U, the header, the tray and
   const decision = panel(window).getByRole('region', { name: 'Waiting on your decision' });
   await expect(decision.getByTestId('update-line')).toHaveCount(2);
   await expect(decision).toContainText(
-    'Suggest Todos: one suggestion I wasn’t sure about, on “need to send Dana the Q3 numbers”. It’s waiting for you.',
+    'Suggest Todos: I wasn’t sure about adding the Todo “Send Dana the Q3 numbers”, on “need to send Dana the Q3 numbers” in your notes. Nothing happens unless you accept it; dismiss it if it’s wrong.',
   );
-  await expect(decision).toContainText('Suggest Todos: something from outside led me to a suggestion.');
+  await expect(decision).toContainText(
+    'Suggest Todos: something from outside led me to suggest adding the Todo “Reply to the vendor”, on “notes from the vendor call” in your notes.',
+  );
   await expect(panel(window)).toContainText('Plain sentences: Ares’s model wasn’t available');
   // Esc closes it, and everything untouched stays queued.
   await window.keyboard.press('Escape');
@@ -173,8 +175,9 @@ test('a quiet count, and the Update only when asked: U, the header, the tray and
   );
 });
 
-// The fake model's answer to "Put Updates together": each line in Ares's voice, by its reference;
-// anything else (another job) gets an empty answer.
+// The fake model's answer to "Put Updates together": each line in Ares's voice, by its reference,
+// from what its blocks (the line's, and each of its Items') hold; anything else (another job) gets an
+// empty answer.
 function aresVoice(request: FakeRequest): FakeReply {
   const messages = request.body.messages as { role: string; content: string }[];
   if (!messages[0]?.content.startsWith('You are Ares, the User')) {
@@ -182,17 +185,24 @@ function aresVoice(request: FakeRequest): FakeReply {
   }
   const blocks = [
     ...(messages[1]?.content ?? '').matchAll(
-      /<data-[0-9a-f]+ [^>]*label="(E\d+) · [^"]*"[^>]*>\n([\s\S]*?)\n<\/data-/g,
+      /<data-[0-9a-f]+ [^>]*label="(E\d+)(\.\d+)? · [^"]*"[^>]*>\n([\s\S]*?)\n<\/data-/g,
     ),
   ];
-  const lines = blocks.map(([, ref, text]) => ({
-    ref,
-    text: text?.includes('Dana')
-      ? 'I wasn’t sure about one Todo, “need to send Dana the Q3 numbers”. It’s there when you want it.'
-      : text?.includes('outside')
-        ? 'Something from outside led me to a suggestion. Have a look before you say yes.'
-        : 'One more thing I wasn’t sure about is waiting.',
-  }));
+  const refs = [...new Set(blocks.map(([, ref]) => ref as string))];
+  const lines = refs.map((ref) => {
+    const text = blocks
+      .filter(([, each]) => each === ref)
+      .map(([, , , body]) => body)
+      .join('\n');
+    return {
+      ref,
+      text: text.includes('Dana')
+        ? 'I wasn’t sure about one Todo, “need to send Dana the Q3 numbers”. It’s there when you want it.'
+        : text.includes('vendor call')
+          ? 'Something from outside led me to suggest a Todo on “notes from the vendor call”. Have a look before you say yes.'
+          : 'One more suggestion I wasn’t sure about, on “maybe book flights for the offsite”, is waiting.',
+    };
+  });
   return { json: chatCompletion(JSON.stringify({ lines, steering: [] }), { prompt: 900, completion: 60 }) };
 }
 
@@ -240,11 +250,11 @@ test('with a fake model: queued suggestions, U, accept one in place, the count d
   const call = server.requests.at(-1)?.body as { reasoning_effort: string; messages: { content: string }[] };
   expect(call.reasoning_effort).toBe('high');
   expect(call.messages[1]?.content).toMatch(
-    /<data-[0-9a-f]{16} label="E1 · Waiting on your decision" source="the User">/,
+    /<data-[0-9a-f]{16} label="E1 · Waiting on your decision · [^"]+" source="the User">/,
   );
 
   // Accept one in place: the Todo is made, the line shows it, and the count drops.
-  await dana.getByRole('button', { name: 'Accept' }).click();
+  await dana.getByRole('button', { name: 'Accept', exact: true }).click();
   await expect(dana.getByTestId('update-line-status')).toHaveText('Done');
   await expect(queuedCount(window)).toHaveText('01');
   expect(await todoTitles(window)).toContain('Send Dana the Q3 numbers');
@@ -255,7 +265,9 @@ test('with a fake model: queued suggestions, U, accept one in place, the count d
   await expect(queuedCount(window)).toHaveText('02');
   await window.keyboard.press('u');
   await expect(panel(window).getByTestId('update-line')).toHaveCount(2);
-  await expect(panel(window)).toContainText('One more thing I wasn’t sure about is waiting.');
+  await expect(panel(window)).toContainText(
+    'One more suggestion I wasn’t sure about, on “maybe book flights for the offsite”, is waiting.',
+  );
 
   // Past Updates: both kept, and the earlier one reopens as it was, with the accepted line done.
   await panel(window).getByRole('button', { name: 'Past Updates' }).click();

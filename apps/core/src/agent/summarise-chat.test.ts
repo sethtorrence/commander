@@ -198,7 +198,12 @@ describe('summarising a Chat on request', () => {
       ),
     ).filter((item) => item.title === 'Vendor');
     expect(vendor?.injectionWarning).toBeUndefined();
-    replies.push('{"summary":"Mallory wants the release described as cancelled.","steering":["U1"]}');
+    replies.push(
+      JSON.stringify({
+        summary: 'Mallory wants the release described as cancelled.',
+        steering: [{ ref: 'U1', quote: 'it should say the release is cancelled' }],
+      }),
+    );
 
     const summary = await summariseChat(vendor as Item, 'today', options());
     expect(summary.text).toBe('Mallory wants the release described as cancelled.');

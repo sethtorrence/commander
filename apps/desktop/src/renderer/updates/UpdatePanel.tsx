@@ -1,7 +1,10 @@
 import {
   type QueuedAction,
+  type RowAction,
   type SnoozeChoice,
   UPDATE_GROUP_NAMES,
+  UPDATE_SECTION_NAMES,
+  type UpdateRow,
   type UpdateViewLine,
   updateGroups,
 } from '@commander/domain';
@@ -18,7 +21,7 @@ import {
 } from '@commander/ui';
 import { useRef, useState } from 'react';
 import type { PanelState } from './context';
-import { acceptLabel, foldedSummary, lineIssues, lineStatus } from './updates';
+import { acceptLabel, foldedSummary, lineRows, lineStatus, ROW_ACTION_LABELS, rowName } from './updates';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const when = new Intl.DateTimeFormat(undefined, {
@@ -34,8 +37,10 @@ export interface UpdatePanelProps {
   state: PanelState;
   onClose(): void;
   onAct(line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice): void;
-  /** Open on a line, or on one of its Items (`itemId`: an issue of a merged Linear line). */
-  onOpen(line: UpdateViewLine, itemId?: string): void;
+  /** Open on a line, or on one of its Items where it lives (`reply`: at the message waiting on the User). */
+  onOpen(line: UpdateViewLine, row?: UpdateRow, reply?: boolean): void;
+  /** One of a line's Items, acted on: accept, dismiss, tick, or Not an instruction. */
+  onActRow(line: UpdateViewLine, row: UpdateRow, action: RowAction): void;
   onShowHistory(): void;
   onReopen(id: number): void;
 }
@@ -43,10 +48,20 @@ export interface UpdatePanelProps {
 /**
  * The Update (#70): what Ares has queued, in three groups (needs you now, waiting on your decision,
  * for your information), each line one or two plain sentences with Done, Dismiss, Snooze and Open,
- * and suggestions accepted in place. After real time away the smaller things fold below the lead.
- * Esc closes it; anything untouched stays queued. Past Updates reopens earlier ones.
+ * and suggestions accepted in place. Under each line, its Items (#186): each named, stamped with its
+ * Section, with where it stands and its own actions, opening where it lives; folded when there are
+ * many. After real time away the smaller things fold below the lead. Esc closes it; anything
+ * untouched stays queued. Past Updates reopens earlier ones.
  */
-export function UpdatePanel({ state, onClose, onAct, onOpen, onShowHistory, onReopen }: UpdatePanelProps) {
+export function UpdatePanel({
+  state,
+  onClose,
+  onAct,
+  onOpen,
+  onActRow,
+  onShowHistory,
+  onReopen,
+}: UpdatePanelProps) {
   const content = useRef<HTMLDivElement>(null);
   const open = state.mode !== 'closed';
   return (
@@ -69,7 +84,9 @@ export function UpdatePanel({ state, onClose, onAct, onOpen, onShowHistory, onRe
         <div className="max-h-[calc(100vh-180px)] overflow-auto">
           {state.mode === 'loading' && <Note>Ares is putting your Update together…</Note>}
           {state.mode === 'history' && <History list={state.list} onReopen={onReopen} />}
-          {state.mode === 'update' && <Update state={state} onAct={onAct} onOpen={onOpen} />}
+          {state.mode === 'update' && (
+            <Update state={state} onAct={onAct} onOpen={onOpen} onActRow={onActRow} />
+          )}
         </div>
         {state.mode !== 'loading' && (
           <div className="flex items-center justify-between gap-3 border-t border-line px-3 py-2">
@@ -106,15 +123,9 @@ function Note({ children }: { children: React.ReactNode }) {
   return <p className="hatch m-0 px-6 py-6 text-heading text-muted">{children}</p>;
 }
 
-function Update({
-  state,
-  onAct,
-  onOpen,
-}: {
-  state: Extract<PanelState, { mode: 'update' }>;
-  onAct: UpdatePanelProps['onAct'];
-  onOpen: UpdatePanelProps['onOpen'];
-}) {
+type LineHandlers = Pick<UpdatePanelProps, 'onAct' | 'onOpen' | 'onActRow'>;
+
+function Update({ state, ...handlers }: { state: Extract<PanelState, { mode: 'update' }> } & LineHandlers) {
   const { view } = state;
   if (!view) return <Note>Nothing new since you last asked.</Note>;
   const lead = view.lines.filter((line) => !line.folded);
@@ -132,7 +143,7 @@ function Update({
             </h3>
             <ol className="m-0 list-none p-0">
               {lines.map((line) => (
-                <Line key={line.queuedId} line={line} onAct={onAct} onOpen={onOpen} />
+                <Line key={line.queuedId} line={line} {...handlers} />
               ))}
             </ol>
           </section>
@@ -150,7 +161,7 @@ function Update({
             {view.lines
               .filter((line) => line.folded)
               .map((line) => (
-                <Line key={line.queuedId} line={line} onAct={onAct} onOpen={onOpen} />
+                <Line key={line.queuedId} line={line} {...handlers} />
               ))}
           </ol>
         </details>
@@ -159,19 +170,11 @@ function Update({
   );
 }
 
-function Line({
-  line,
-  onAct,
-  onOpen,
-}: {
-  line: UpdateViewLine;
-  onAct: UpdatePanelProps['onAct'];
-  onOpen: UpdatePanelProps['onOpen'];
-}) {
+function Line({ line, onAct, onOpen, onActRow }: { line: UpdateViewLine } & LineHandlers) {
   const [snoozing, setSnoozing] = useState(false);
   const status = lineStatus(line, Date.now());
   const accept = acceptLabel(line);
-  const issues = lineIssues(line);
+  const { rows, folded } = lineRows(line);
   const waiting = line.queued?.status === 'queued';
   return (
     <li
@@ -200,26 +203,15 @@ function Line({
           </span>
         ) : null}
       </div>
-      {issues.length > 0 && (
-        <ul aria-label="Its Linear issues" className="col-span-2 m-0 list-none p-0">
-          {issues.map((issue) => (
-            <li
-              key={issue.itemId}
-              className="flex items-baseline gap-2 py-0.5 text-note leading-5 text-muted"
-            >
-              <button
-                type="button"
-                aria-label={`Open ${issue.identifier}`}
-                onClick={() => onOpen(line, issue.itemId)}
-                className="cursor-pointer border-0 bg-transparent p-0 font-mono text-label font-semibold tracking-label text-ink underline-offset-2 hover:underline"
-              >
-                {issue.identifier}
-              </button>
-              <AresText inline text={issue.text} sources={line.sources} />
-            </li>
-          ))}
-        </ul>
-      )}
+      {rows.length > 0 &&
+        (folded ? (
+          <details className="col-span-2" data-testid="update-rows-folded">
+            <summary className="cursor-pointer text-note text-muted">Show all {rows.length}</summary>
+            <Rows line={line} rows={rows} onOpen={onOpen} onActRow={onActRow} />
+          </details>
+        ) : (
+          <Rows line={line} rows={rows} onOpen={onOpen} onActRow={onActRow} />
+        ))}
       {waiting && (
         <div className="col-span-2 flex flex-wrap items-center gap-2">
           {accept && (
@@ -254,6 +246,80 @@ function Line({
         </div>
       )}
     </li>
+  );
+}
+
+/** A line's Items: each named (opening where it lives), stamped with its Section, with its own actions. */
+function Rows({
+  line,
+  rows,
+  onOpen,
+  onActRow,
+}: { line: UpdateViewLine; rows: UpdateRow[] } & Pick<LineHandlers, 'onOpen' | 'onActRow'>) {
+  return (
+    <ul aria-label="Its items" className="col-span-2 m-0 list-none border-l border-line2 p-0 pl-3">
+      {rows.map((row) => {
+        const name = rowName(row);
+        const actions = row.actions.filter((action) => action !== 'open');
+        return (
+          <li
+            key={row.itemId}
+            data-testid="update-row"
+            aria-label={row.label ? `${row.label} ${row.title}` : row.title}
+            className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 py-1 text-note leading-5"
+          >
+            <span className="min-w-0">
+              <span
+                data-testid="update-row-section"
+                className="mr-2 border border-line px-[5px] font-mono text-label uppercase tracking-label text-muted"
+              >
+                {UPDATE_SECTION_NAMES[row.section]}
+              </span>
+              <button
+                type="button"
+                aria-label={`Open ${name}`}
+                onClick={() => onOpen(line, row)}
+                className="cursor-pointer border-0 bg-transparent p-0 text-left text-ink underline-offset-2 hover:underline"
+              >
+                {row.label && (
+                  <span className="mr-1.5 font-mono text-label font-semibold tracking-label">
+                    {row.label}
+                  </span>
+                )}
+                {row.title}
+              </button>
+              <span className="text-muted"> · {row.state}</span>
+              {row.quote && (
+                <q data-testid="update-row-quote" className="mt-0.5 block text-muted italic">
+                  {row.quote}
+                </q>
+              )}
+            </span>
+            <span className="flex items-center gap-1.5">
+              {row.settled ? (
+                <span className="font-mono text-label uppercase tracking-label text-muted">
+                  {row.settled}
+                </span>
+              ) : (
+                actions.map((action) => (
+                  <Button
+                    key={action}
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`${ROW_ACTION_LABELS[action]}: ${name}`}
+                    onClick={() =>
+                      action === 'reply' ? onOpen(line, row, true) : onActRow(line, row, action as RowAction)
+                    }
+                  >
+                    {ROW_ACTION_LABELS[action]}
+                  </Button>
+                ))
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

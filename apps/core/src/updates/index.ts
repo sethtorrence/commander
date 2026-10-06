@@ -9,16 +9,21 @@
 // - Presence (presence.ts) follows what the main process reports of powerMonitor: it drives only
 //   "You're here / away" and having the Update ready on return (put together in the background
 //   when the User comes back), and tells the Agent the machine is idle for its catch-up work.
-// - The Update Skill gives an Update: the queued lines in order, in Ares's words (compose.ts), with
-//   the smaller things folded after more than 8 hours away (never after a busy day). Every Update
-//   given is kept, so the last one, or any earlier one, can be reopened. Asking for one first runs a
-//   light sync of every Teams Account, waiting up to 5 seconds before going on with what's there.
+// - The Update Skill gives an Update: the queued lines in order, each saying what it is, what
+//   happened, why it matters and what to do, in Ares's words (compose.ts) or the plain sentence of
+//   its kind (kinds/), with the smaller things folded after more than 8 hours away (never after a
+//   busy day). Every Update given is kept, so the last one, or any earlier one, can be reopened, and
+//   each line lists its Items (kinds/), each with its own actions. Asking for one first runs a light
+//   sync of every Teams Account, waiting up to 2 seconds before going on with what's there.
 // - The Summarise Skill (#109) summarises a Chat on request, over a range of its messages, and the
 //   Draft Skill (#110) drafts a reply to one, for the User to edit and send (never while "Draft
 //   replies" is Off).
 // - Acting on a line: Done and Dismiss take it out of the queue (Dismiss also dismisses the
 //   suggestions it is about), Snooze hides it until later, and Accept takes a suggestion in place,
 //   through the gate, or raises an action's Autonomy level one step (never past its hard limit).
+// - Acting on one of its Items (#186): Accept or Dismiss its suggestion, Tick its Linear Todo, Not
+//   an instruction (clears its warning mark), or Dismiss it from the line; the line goes once none
+//   of its Items is left.
 import {
   type AutonomyLevel,
   autonomyLevels,
@@ -39,6 +44,7 @@ import {
   presenceReport,
   type QueuedAction,
   type QueuedLine,
+  type RowAction,
   type SkillRegistry,
   type SnoozeChoice,
   SUMMARISE_SKILL,
@@ -59,7 +65,8 @@ import { summariseChat } from '../agent/summarise-chat';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
-import { compose, templateText } from './compose';
+import { compose } from './compose';
+import { type LineContext, lineRows, lineTemplate, lineWithout } from './kinds';
 import type { WatchedAccount } from './linear';
 import { AWAY_AFTER_MS, createPresence, type PresenceModel } from './presence';
 import { createProducers } from './producers';
@@ -127,6 +134,8 @@ export type Updates = {
   history(limit?: number): UpdateSummary[];
   past(id: number): UpdateView;
   act(queuedId: number, action: QueuedAction, snooze?: SnoozeChoice): QueuedLine;
+  // One of a line's Items, acted on in the Update.
+  actRow(queuedId: number, itemId: string, action: RowAction): QueuedLine;
   // A message from the main process (the window's requests, presence reports). True when it was ours.
   handle(message: unknown): boolean;
   stop(): void;
@@ -191,6 +200,32 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
 
   const item = (itemId: string) => itemStore.get(itemId)?.item ?? null;
 
+  // What the kinds of line read about their Items (kinds/), as things stand now.
+  function lineContext(): LineContext {
+    let todos: Map<string, string> | null = null;
+    return {
+      item,
+      proposal: (id) => itemStore.autonomy.proposal(id),
+      proposalsOn: (itemId) => itemStore.autonomy.proposals({ itemId, limit: 20 }),
+      projectCode: (projectId) =>
+        itemStore.projects({ includeArchived: true }).find((project) => project.id === projectId)?.code ??
+        null,
+      warning: (itemId) => itemStore.injectionWarnings.warning(itemId),
+      todoOf(issueId) {
+        todos ??= new Map(
+          itemStore
+            .query({ kinds: ['todo'], statuses: ['open'], limit: 1000 })
+            .flatMap((todo) =>
+              todo.detail?.kind === 'todo' && todo.detail.backedBy ? [[todo.detail.backedBy, todo.id]] : [],
+            ),
+        );
+        return todos.get(issueId) ?? null;
+      },
+      me: (account) => options.me?.(account) ?? null,
+      now: now(),
+    };
+  }
+
   // What Ares would say about these lines. The last one put together is reused while the queue
   // hasn't changed since (put together on the User's return, say).
   let prepared: { key: string; texts: Promise<Awaited<ReturnType<typeof compose>>> } | null = null;
@@ -215,17 +250,11 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
           }),
           compose(lines, {
             client: options.client,
-            item,
+            context: lineContext(),
             secrets: options.secrets,
             injectionWarnings: itemStore.injectionWarnings,
             onItemsChanged: options.onItemsChanged,
             log,
-            // A busy Chat's line is worded alongside; a GitHub summary's is Ares's own words already.
-            apart: new Set(
-              lines
-                .filter((line) => line.about.kind === 'chat-summary' || line.about.kind === 'github-summary')
-                .map((line) => line.id),
-            ),
           }),
         ]).then(([written, composed]) => ({
           texts: new Map([...composed.texts, ...written]),
@@ -263,8 +292,19 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     return [...titles, ...said];
   }
 
+  // An Update as the panel shows it: each line as its queued line stands now, with its Items.
   function view(update: GivenUpdate): UpdateView {
-    return { ...update, lines: update.lines.map((line) => ({ ...line, queued: store.line(line.queuedId) })) };
+    const context = lineContext();
+    return {
+      ...update,
+      lines: update.lines.map((line) => {
+        const queued = store.line(line.queuedId);
+        const rows = queued
+          ? lineRows(queued, line.itemIds, context, { waiting: queued.status === 'queued' })
+          : [];
+        return { ...line, queued, rows };
+      }),
+    };
   }
 
   async function give(): Promise<UpdateView | null> {
@@ -280,13 +320,13 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       return view(last);
     }
     const composed = await texts(worded);
-    const titleOf = (itemId: string) => item(itemId)?.title ?? null;
+    const context = lineContext();
     const lead = new Set(worded.map((line) => line.id));
     const given: UpdateLine[] = lines.map((line) => ({
       queuedId: line.id,
       group: line.group,
       kind: line.about.kind,
-      text: composed.texts.get(line.id) ?? templateText(line, titleOf),
+      text: composed.texts.get(line.id) ?? lineTemplate(line, context),
       itemIds: line.itemIds,
       section: line.section,
       sources: sourcesOf(line),
@@ -360,6 +400,49 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       case 'done':
         return queue.act(queuedId, 'done');
     }
+  }
+
+  // One of a line's Items, acted on in the Update (#186). The line loses it (and goes once none of its
+  // Items is left), unless the gate's change already took care of that.
+  function actRow(queuedId: number, itemId: string, action: RowAction): QueuedLine {
+    const line = store.line(queuedId);
+    if (!line) throw new Error(`No queued line ${queuedId}`);
+    if (line.status !== 'queued') throw new Error(`That line is no longer queued (${line.status})`);
+    if (!line.itemIds.includes(itemId)) throw new Error('That Item isn’t on this line any more');
+    const suggested = pendingOf(line).filter((id) => itemStore.autonomy.proposal(id)?.itemId === itemId);
+    switch (action) {
+      case 'accept':
+        if (!suggested.length) throw new Error('There is nothing to accept on that Item');
+        // One at a time: an Act for you suggestion is never accepted in bulk.
+        for (const id of suggested) gate.accept(id);
+        return withoutRow(queuedId, itemId, 'done');
+      case 'dismiss':
+        for (const id of suggested) gate.dismiss(id);
+        return withoutRow(queuedId, itemId, 'dismiss');
+      case 'tick': {
+        const todoId = lineContext().todoOf(itemId);
+        if (!todoId) throw new Error('That issue has no Todo to tick');
+        itemStore.record(
+          { type: 'update', itemId: todoId, changes: { status: 'done' } },
+          { by: { kind: 'user' }, why: 'Ticked in the Update' },
+        );
+        return withoutRow(queuedId, itemId, 'done');
+      }
+      case 'not-an-instruction':
+        itemStore.injectionWarnings.clear(itemId, {
+          by: { kind: 'user' },
+          why: 'Not an instruction aimed at Ares',
+        });
+        options.onItemsChanged?.([itemId]);
+        return withoutRow(queuedId, itemId, 'done');
+    }
+  }
+
+  function withoutRow(queuedId: number, itemId: string, last: 'done' | 'dismiss'): QueuedLine {
+    const line = store.line(queuedId) as QueuedLine;
+    if (line.status !== 'queued' || !line.itemIds.includes(itemId)) return line;
+    const next = lineWithout(line, itemId, lineContext());
+    return next ? queue.revise(queuedId, next) : queue.act(queuedId, last);
   }
 
   function history(limit = 50): UpdateSummary[] {
@@ -467,6 +550,8 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
           return { ok: true, result: past(request.id) };
         case 'act':
           return { ok: true, result: act(request.queuedId, request.action, request.snooze) };
+        case 'act-row':
+          return { ok: true, result: actRow(request.queuedId, request.itemId, request.action) };
       }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -488,6 +573,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     history,
     past,
     act,
+    actRow,
 
     handle(message) {
       const report = presenceReport.safeParse(message);
