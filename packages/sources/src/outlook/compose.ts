@@ -1,4 +1,5 @@
 import {
+  CANCEL_SEND_FIELD,
   DELETE_FIELD,
   DRAFT_FIELD,
   type EmailAttachment,
@@ -32,6 +33,13 @@ import { attachmentsPage, graphMessage } from './shapes';
 //   Account and files it in Sent Items; the copy there is handed back naming the Item, or (while Outlook
 //   is still filing it) the draft as sent, with its internetMessageId, which the next sync matches.
 // - `delete`: the draft deleted (one Outlook no longer has is already gone).
+// - Send later held by Microsoft (#139, decision #20): a `send` carrying `deferUntil` sets the
+//   deferred-send property (`PidTagDeferredSendTime`, `SystemTime 0x3FEF`) with the rest of the draft's
+//   fields before `send`, so Exchange keeps the message in the Outbox and sends it at its time, whether
+//   Commander is running or not. The copy in the Outbox is handed back still unsent (a draft, in no
+//   thread), naming the Item. `cancel-send` takes it back out of the Outbox (deleting it) before its
+//   time, ahead of anything else queued with it (its draft again, or a send at another time); one
+//   already in Sent Items went, so it is handed back as sent and nothing goes again.
 //
 // Never twice: Graph takes no idempotency key for a send, so a change whose earlier attempt has an
 // unknown outcome (`attemptedAt`) first looks for the message by Commander's id in Sent Items and the
@@ -41,6 +49,8 @@ import { attachmentsPage, graphMessage } from './shapes';
 // Commander's mark on a message it wrote: the Item's id, in the public strings property set.
 export const COMMANDER_MESSAGE_PROPERTY =
   'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage';
+// Send later (#139): when Exchange sends a message it holds in the Outbox (MAPI PidTagDeferredSendTime).
+export const DEFERRED_SEND_PROPERTY = 'SystemTime 0x3FEF';
 // Upload sessions take chunks in multiples of 320 KiB; 10 of those at a time.
 export const UPLOAD_CHUNK = 10 * 320 * 1024;
 
@@ -89,14 +99,22 @@ const recipient = (address: OutgoingMessage['to'][number]) => ({
   emailAddress: { address: address.address, ...(address.name ? { name: address.name } : {}) },
 });
 
-/** What a PATCH sets on the draft: its subject, recipients, body and Commander's mark. */
+/**
+ * What a PATCH sets on the draft: its subject, recipients, body and Commander's mark, and (send later
+ * held by Microsoft) when Exchange is to send it.
+ */
 const draftFields = (message: OutgoingMessage) => ({
   subject: message.subject,
   body: { contentType: 'html', content: message.html },
   toRecipients: message.to.map(recipient),
   ccRecipients: message.cc.map(recipient),
   bccRecipients: message.bcc.map(recipient),
-  singleValueExtendedProperties: [{ id: COMMANDER_MESSAGE_PROPERTY, value: message.commanderId }],
+  singleValueExtendedProperties: [
+    { id: COMMANDER_MESSAGE_PROPERTY, value: message.commanderId },
+    ...(message.deferUntil != null
+      ? [{ id: DEFERRED_SEND_PROPERTY, value: new Date(message.deferUntil).toISOString() }]
+      : []),
+  ],
 });
 
 export type ComposeContext = {
@@ -114,6 +132,7 @@ export async function writeOutlookCompose(
   const send = find(SEND_FIELD);
   const draft = find(DRAFT_FIELD);
   const discard = find(DELETE_FIELD);
+  const cancel = find(CANCEL_SEND_FIELD);
   const placeholder = isPendingEventExternalId(request.externalId);
   const attempted = [send, draft, discard].some((change) => change?.attemptedAt != null);
 
@@ -292,20 +311,38 @@ export async function writeOutlookCompose(
     return { ...item, detail: next, status: 'archived', commanderItemId: commanderId };
   }
 
-  // The sent copy of the message, in Sent Items or still in the Outbox, if Outlook has it.
-  async function sentCopy(commanderId: string) {
+  // The sent copy of the message, in Sent Items or still in the Outbox, if Outlook has it, and whether
+  // it is one Exchange is holding for later (in the Outbox, with a deferred send).
+  async function sentCopy(commanderId: string, deferred: boolean) {
     for (const folder of ['sentitems', 'outbox']) {
       const [copy] = await marked(folder, commanderId);
-      if (copy) return copy;
+      if (copy) return { copy, held: deferred && folder === 'outbox' };
     }
     return null;
   }
 
+  // Send later (#139): the message Exchange holds is taken back out of the Outbox before anything else.
+  if (cancel?.value) {
+    const named = z.object({ commanderId: z.string().min(1) }).safeParse(cancel.value);
+    if (!named.success) throw new WriteRejected('Commander couldn’t make sense of this message.');
+    const held = await marked('outbox', named.data.commanderId);
+    for (const each of held)
+      await api.send('DELETE', messagePath(each.id), undefined, nothing).catch((error: unknown) => {
+        if (!(error instanceof GraphNotFound)) throw error;
+      });
+    // Too late: Exchange already sent it. It is the sent message now, and nothing goes again.
+    if (!held.length) {
+      const [gone] = await marked('sentitems', named.data.commanderId);
+      if (gone) return { item: await itemFrom(gone, named.data.commanderId, false), superseded: [] };
+    }
+  }
+
   if (send?.value) {
     const message = parseMessage(send.value);
+    const deferred = message.deferUntil != null;
     if (send.attemptedAt != null) {
-      const copy = await sentCopy(message.commanderId);
-      if (copy) return { item: await itemFrom(copy, message.commanderId, false), superseded: [] };
+      const found = await sentCopy(message.commanderId, deferred);
+      if (found) return { item: await itemFrom(found.copy, message.commanderId, found.held), superseded: [] };
       // Its draft no longer a draft: Outlook took it to send.
       const id = await draftOf(message);
       if (id) {
@@ -314,7 +351,7 @@ export async function writeOutlookCompose(
           throw error;
         });
         if (held && held.isDraft === false)
-          return { item: await itemFrom(held, message.commanderId, false), superseded: [] };
+          return { item: await itemFrom(held, message.commanderId, deferred), superseded: [] };
         // The draft Outlook held is gone since the attempt: sending takes it from Drafts, so it is taken
         // as sent rather than sent again (the next sync brings the copy, by its Message-ID).
         if (!held && !placeholder) return { item: null, superseded: [] };
@@ -324,13 +361,18 @@ export async function writeOutlookCompose(
     // What Outlook will file in Sent Items, read before it goes (its internetMessageId threads it).
     const before = await read(id);
     await api.send('POST', `${messagePath(id)}/send`, undefined, nothing);
-    const copy = await sentCopy(message.commanderId);
-    const item = copy
-      ? await itemFrom(copy, message.commanderId, false)
+    // Held for later, it stays unsent (a draft, in no thread) in Commander until Exchange sends it.
+    const found = await sentCopy(message.commanderId, deferred);
+    const item = found
+      ? await itemFrom(found.copy, message.commanderId, found.held)
       : await itemFrom(
-          { ...before, isDraft: false, parentFolderId: wellKnown.sentitems ?? null },
+          {
+            ...before,
+            isDraft: false,
+            parentFolderId: (deferred ? wellKnown.outbox : wellKnown.sentitems) ?? null,
+          },
           message.commanderId,
-          false,
+          deferred,
         );
     return { item, superseded: [] };
   }

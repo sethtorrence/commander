@@ -13,6 +13,7 @@ import {
   type AutonomyTarget,
   autonomyTarget,
   BUCKET_FIELD,
+  CANCEL_SEND_FIELD,
   createdIn,
   DRAFT_FIELD,
   decide,
@@ -155,7 +156,8 @@ export function openGate({
   // Ares never writes or sends a message (#11, #138, #143): only the User does, pressing Send in the
   // composer. Sending is Act for you, capped at Ask, but no Suggestion carries it either: his drafts are
   // text the User opens in the composer. So a proposal that would save or send a message (the outgoing
-  // changes `draft` and `send`), make an email, or touch one of the User's drafts is refused outright,
+  // changes `draft` and `send`, or take back one Microsoft holds for later, `cancel-send`, #139), make an
+  // email, or touch one of the User's drafts (a scheduled message among them) is refused outright,
   // whatever its Action kind and whatever the Autonomy settings say.
   function writesAMessage(steps: ProposalRecord['itemActions']): boolean {
     const isDraft = (target: StepTarget) => {
@@ -165,7 +167,10 @@ export function openGate({
     };
     return steps.some((step) => {
       if (step.type === 'create') return step.item.kind === 'email';
-      if (step.type === 'edit-fields' && (DRAFT_FIELD in step.fields || SEND_FIELD in step.fields))
+      if (
+        step.type === 'edit-fields' &&
+        (DRAFT_FIELD in step.fields || SEND_FIELD in step.fields || CANCEL_SEND_FIELD in step.fields)
+      )
         return true;
       if ('itemId' in step && isDraft(step.itemId)) return true;
       return 'from' in step && (isDraft(step.from) || isDraft(step.to));

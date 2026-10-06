@@ -1,3 +1,4 @@
+import { PERSONAL_MICROSOFT_TENANT } from '@commander/domain';
 import type { AccountRecord } from '../accounts/account-store';
 import {
   type AccountSourceDefinition,
@@ -86,8 +87,9 @@ type OutlookSignIn = MicrosoftSignIn & { askedForMailboxSettings: boolean };
 
 export type OutlookAccountsOptions = SourceAccountsOptions & { config: MicrosoftConfig };
 
-// The tenant every personal Microsoft account (outlook.com, hotmail.com) signs in through.
-export const PERSONAL_ACCOUNTS_TENANT = '9188040d-6c67-4c5b-b112-36a304b66dad';
+// The tenant every personal Microsoft account (outlook.com, hotmail.com) signs in through (send later
+// tells work and personal Accounts apart by it too, #139).
+export const PERSONAL_ACCOUNTS_TENANT = PERSONAL_MICROSOFT_TENANT;
 
 const upnOf = (record: AccountRecord | null) => record?.details.userPrincipalName ?? null;
 

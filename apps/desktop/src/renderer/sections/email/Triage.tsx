@@ -514,6 +514,8 @@ export function Triage({
       placement={inline ? 'inline' : 'sheet'}
       onClose={closeComposer}
       onSent={sent}
+      // A reply scheduled for later (#139) leaves the thread where it is, for the next key.
+      onScheduled={writing.scheduledSent}
       onState={writing.track}
       {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
     />

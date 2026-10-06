@@ -168,7 +168,7 @@ test('Triage Needs reply → reply and send → archive → snooze → Todo → 
   await composer.getByTestId('compose-body').click();
   await window.keyboard.type('Thursday or Friday both work. e j z');
   await expect(position(section)).toHaveText('Needs reply · 1 of 5');
-  await composer.getByRole('button', { name: 'Send' }).click();
+  await composer.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(position(section)).toHaveText('Needs reply · 2 of 5');
   await expect(subject(section)).toHaveText('Staging certificate');
   await expect.poll(() => gmail.sent.length, { timeout: 30_000 }).toBe(1);

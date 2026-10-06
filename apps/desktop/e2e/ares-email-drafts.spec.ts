@@ -205,7 +205,7 @@ test('a Needs reply thread → Suggested reply → Open in composer → edit →
   await composer.getByTestId('compose-body').click();
   await window.keyboard.press('Control+Home');
   await window.keyboard.type('Thanks for organising! ');
-  await composer.getByRole('button', { name: 'Send' }).click();
+  await composer.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(composer).toHaveCount(0);
   await expect.poll(() => google.gmail.sent.length, { timeout: 30_000 }).toBe(1);
   const [sent] = google.gmail.sent;

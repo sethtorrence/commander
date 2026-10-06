@@ -37,9 +37,12 @@ export interface UpdatePanelProps {
   state: PanelState;
   onClose(): void;
   onAct(line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice): void;
-  /** Open on a line, or on one of its Items where it lives (`reply`: at the message waiting on the User). */
-  onOpen(line: UpdateViewLine, row?: UpdateRow, reply?: boolean): void;
-  /** One of a line's Items, acted on: accept, dismiss, tick, or Not an instruction. */
+  /**
+   * Open on a line, or on one of its Items where it lives (`reply`: at the message waiting on the User;
+   * `edit`: a missed send-later's message in the composer).
+   */
+  onOpen(line: UpdateViewLine, row?: UpdateRow, how?: 'reply' | 'edit'): void;
+  /** One of a line's Items, acted on: accept, dismiss, tick, Not an instruction, Send now or Discard. */
   onActRow(line: UpdateViewLine, row: UpdateRow, action: RowAction): void;
   onShowHistory(): void;
   onReopen(id: number): void;
@@ -308,7 +311,9 @@ function Rows({
                     variant="ghost"
                     aria-label={`${ROW_ACTION_LABELS[action]}: ${name}`}
                     onClick={() =>
-                      action === 'reply' ? onOpen(line, row, true) : onActRow(line, row, action as RowAction)
+                      action === 'reply' || action === 'edit'
+                        ? onOpen(line, row, action)
+                        : onActRow(line, row, action as RowAction)
                     }
                   >
                     {ROW_ACTION_LABELS[action]}

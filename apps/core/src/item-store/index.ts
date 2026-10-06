@@ -98,7 +98,9 @@ import {
   rulePreviewRequest,
   rulesFor,
   type SaveResult,
+  type ScheduledEntry,
   SEND_FIELD,
+  type SendLaterHeldBy,
   SORT_INTO_BUCKETS,
   type Source,
   type SourceBatch,
@@ -503,6 +505,24 @@ export type ComposeApi = {
   attachmentsInUse(): Set<string>;
   // Commander is quitting: held messages are due now. Returns the Accounts they belong to.
   releaseHeld(): string[];
+  // Send later (#139): schedules the message (Commander keeps it, or Microsoft is handed it to hold).
+  schedule(
+    draft: ComposeDraft,
+    context: ComposeContext,
+    sendAt: number,
+    heldBy: SendLaterHeldBy,
+  ): { itemId: string; sendAt: number; heldBy: SendLaterHeldBy };
+  // Change time; Send now (or a message Commander holds whose time came); Cancel or Edit.
+  reschedule(itemId: string, sendAt: number): void;
+  sendScheduled(itemId: string, context: ActionContext, why?: string): void;
+  unschedule(itemId: string): Item;
+  // Its time passed while Commander wasn't running (`at`, the send-later clock's time).
+  miss(itemId: string, at: number): void;
+  // The messages Commander holds due by `at` and not missed, and when the next one is due.
+  due(at: number): { itemId: string; scheduledAt: number }[];
+  nextDueAt(): number | null;
+  scheduled(): ScheduledEntry[];
+  missed(): { itemId: string; dueAt: number; missedAt: number }[];
   settings: { read(): EmailComposeSettings; save(settings: EmailComposeSettings): EmailComposeSettings };
   signatures: {
     read(account: string): ComposeBody | null;
@@ -1861,6 +1881,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     readItem,
     insert: (identity, state, at, chosenId) => insertItem(identity, state, at, chosenId),
     writeState,
+    rekey(itemId, externalId) {
+      db.update(schema.items).set({ externalId }).where(eq(schema.items.id, itemId)).run();
+      outgoing.rekey(itemId, externalId);
+    },
     log,
     outgoing,
     emails,
@@ -1904,6 +1928,22 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
     attachmentsInUse: () => compose.attachmentsInUse(),
     releaseHeld: () => outgoing.releaseHeld(SEND_FIELD, now()),
+    schedule: sqlite.transaction(
+      (draft: ComposeDraft, context: ComposeContext, sendAt: number, heldBy: SendLaterHeldBy) =>
+        compose.schedule(draft, { ...context, by: actionContext.parse(context).by }, sendAt, heldBy, now()),
+    ),
+    reschedule: sqlite.transaction((itemId: string, sendAt: number) =>
+      compose.reschedule(itemId, sendAt, now()),
+    ),
+    sendScheduled: sqlite.transaction((itemId: string, rawContext: ActionContext, why?: string) =>
+      compose.sendScheduled(itemId, actionContext.parse(rawContext), now(), why),
+    ),
+    unschedule: sqlite.transaction((itemId: string) => compose.unschedule(itemId, now())),
+    miss: (itemId, at) => compose.miss(itemId, at),
+    due: (at) => compose.due(at),
+    nextDueAt: () => compose.nextDueAt(),
+    scheduled: () => compose.scheduled(),
+    missed: () => compose.missed(),
     settings: {
       read: () => compose.settings.read(),
       save: (settings) => compose.settings.save(settings, now()),
@@ -2326,12 +2366,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const existing = findBySourceIdentity(batch.source, batch.account, externalId);
       if (!existing || existing.deletedAt !== null) continue;
       // A message written in Commander, sent, still under the id of the draft it was (#138): the draft
-      // going is its sending, not the message's deletion. The sent copy's sync names it again.
+      // going is its sending, not the message's deletion. The sent copy's sync names it again. So too a
+      // message Microsoft holds for later (#139), gone from Drafts into Exchange's Outbox.
       if (
         existing.kind === 'email' &&
         existing.detail?.kind === 'email' &&
-        !existing.detail.draft &&
-        compose.record(existing.id)?.sendAt
+        ((!existing.detail.draft && compose.record(existing.id)?.sendAt) ||
+          compose.heldByMicrosoft(existing.id))
       )
         continue;
       const at = now();
@@ -2475,10 +2516,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     return { ...target, externalId: incoming.externalId };
   }
 
-  // A message on its way to the Source stays sent, whatever a late answer to saving its draft says.
+  // A message on its way to the Source stays sent, whatever a late answer to saving its draft says (but
+  // one Microsoft is to hold for later stays unsent until it goes, #139).
   function stillSending(held: Item, incoming: ItemDetail | null): ItemDetail | null {
     if (incoming?.kind !== 'email' || !incoming.draft || !outgoing.queued(held.id, SEND_FIELD))
       return incoming;
+    if (compose.heldByMicrosoft(held.id)) return incoming;
     const { draft: _draft, ...sent } = incoming;
     return held.detail?.kind === 'email' ? { ...sent, sentAt: held.detail.sentAt } : sent;
   }

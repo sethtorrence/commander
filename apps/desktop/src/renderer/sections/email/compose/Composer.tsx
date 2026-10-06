@@ -5,6 +5,7 @@ import {
   type ComposeBody,
   type ComposeState,
   isBodyEmpty,
+  sendLaterTime,
   settleAresLink,
   unkeptLinks,
 } from '@commander/domain';
@@ -14,6 +15,8 @@ import { type EmailAccountSummary, emailAddressOf } from '../email';
 import { AddressField } from './AddressField';
 import { type ComposeClient, draftOf } from './compose';
 import { RichEditor } from './RichEditor';
+import { SendLaterNote, SendLaterPicker } from './SendLater';
+import type { ScheduledMessage } from './use-compose';
 
 /*
   The composer (#138): From (replies and forwards from the Account the message arrived at; new mail from
@@ -26,6 +29,10 @@ import { RichEditor } from './RichEditor';
   Opened from Ares's suggested reply (#143), it is an ordinary draft. A link he added that is in neither
   the thread nor the User's sent mail stays marked "Ares added this link", with Keep and Remove: until
   kept it is left out of the draft Gmail or Outlook holds, and Send asks the User to decide first.
+
+  Send later (#139), beside Send: a time picked from its menu shows above the buttons, with (for an
+  Account Commander sends from) "Ares has to be running (the window or the tray) at that time to send
+  this.", every time one is picked; Send becomes Schedule, and the message goes then.
 */
 
 // The pause in typing after which the draft is saved.
@@ -42,6 +49,7 @@ export function Composer({
   placement,
   onClose,
   onSent,
+  onScheduled,
   onSaveBeforeQuit,
   onState,
 }: {
@@ -53,6 +61,8 @@ export function Composer({
   placement: 'inline' | 'sheet';
   onClose: () => void;
   onSent: (sent: SentMessage) => void;
+  /** Send later (#139): the message was scheduled. */
+  onScheduled?: (scheduled: ScheduledMessage) => void;
   /** Saves what it holds when Commander quits (the window's bridge). */
   onSaveBeforeQuit?: (save: () => Promise<void>) => () => void;
   /** Hears what it holds as it changes. */
@@ -65,6 +75,9 @@ export function Composer({
   const [sending, setSending] = useState(false);
   const [attaching, setAttaching] = useState(0);
   const [problem, setProblem] = useState<string | null>(null);
+  // Send later (#139): the time picked, and whether its menu is open.
+  const [sendLater, setSendLater] = useState<number | null>(initial.sendLater ?? null);
+  const [picking, setPicking] = useState(false);
   // Bumped to draw the body again (From changed: the new Account's signature).
   const [editorKey, setEditorKey] = useState(0);
   const latest = useRef(state);
@@ -172,11 +185,20 @@ export function Composer({
       setProblem('Wait for the attachments to finish adding.');
       return;
     }
+    if (sendLater !== null && sendLater <= Date.now()) {
+      setProblem('That time has passed: pick another, or send it now.');
+      return;
+    }
     setSending(true);
     if (timer.current) clearTimeout(timer.current);
     while (inFlight.current) await inFlight.current;
     done.current = true;
     try {
+      if (sendLater !== null) {
+        const scheduled = await client.schedule(draftOf(latest.current), sendLater);
+        onScheduled?.(scheduled);
+        return;
+      }
       const sent = await client.send(draftOf(latest.current));
       onSent({ ...sent, state: { ...latest.current, itemId: sent.itemId } });
     } catch (error) {
@@ -258,6 +280,8 @@ export function Composer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    // The Send later menu's own keys (Esc closes it, not the composer).
+    if (picking) return;
     if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
       event.preventDefault();
       event.stopPropagation();
@@ -472,9 +496,41 @@ export function Composer({
           {problem}
         </p>
       )}
+      {sendLater !== null && (
+        <div data-testid="compose-send-later" className="flex flex-col gap-1 border-t border-line2 px-4 py-2">
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-label font-semibold uppercase tracking-caps text-signal-ink">
+              Send later
+            </span>
+            <span data-testid="compose-send-at" className="text-note font-semibold text-ink">
+              {sendLaterTime(sendLater, Date.now())}
+            </span>
+            <button
+              type="button"
+              onClick={() => setPicking(true)}
+              className="cursor-pointer border-0 bg-transparent p-0 text-note text-muted underline-offset-2 hover:text-ink hover:underline"
+            >
+              Change
+            </button>
+            <button
+              type="button"
+              aria-label="Send now instead"
+              title="Send now instead"
+              onClick={() => setSendLater(null)}
+              className="ml-auto cursor-pointer border-0 bg-transparent px-1 text-muted hover:text-ink"
+            >
+              ×
+            </button>
+          </div>
+          <SendLaterNote account={state.account} />
+        </div>
+      )}
       <footer className="flex flex-none items-center gap-2 border-t border-line px-3 py-2">
         <Button variant="primary" disabled={sending} onClick={() => void send()}>
-          Send
+          {sendLater !== null ? 'Schedule' : 'Send'}
+        </Button>
+        <Button aria-label="Send later" aria-haspopup="dialog" onClick={() => setPicking(true)}>
+          Send later…
         </Button>
         <span className="font-mono text-label text-faint">
           <Kbd>Ctrl</Kbd> <Kbd>↵</Kbd>
@@ -498,6 +554,18 @@ export function Composer({
           Discard
         </Button>
       </footer>
+      {picking && (
+        <SendLaterPicker
+          account={state.account}
+          initial={sendLater}
+          onClose={() => setPicking(false)}
+          onPick={(at) => {
+            setPicking(false);
+            setSendLater(at);
+            setProblem(null);
+          }}
+        />
+      )}
     </section>
   );
 }

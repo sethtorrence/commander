@@ -116,4 +116,35 @@ describe('the fake Graph’s writing side', () => {
     ]);
     expect(mail.drafts(USER.id)).toEqual([]);
   });
+
+  it('send later (#139): holds a deferred send in the Outbox until its time, and a cancel takes it out', async () => {
+    const at = Date.now() + 60 * 60_000;
+    const held = await write(`commander:${COMMANDER}`, [change('send', message({ deferUntil: at }))]);
+
+    expect(mail.sent).toEqual([]);
+    expect(mail.drafts(USER.id)).toEqual([]);
+    expect(mail.outbox(USER.id)).toEqual([
+      {
+        id: held?.item?.externalId,
+        subject: 'RE: Q4 offsite dates',
+        to: ['dana@northwind.test'],
+        deferredUntil: new Date(at).toISOString(),
+      },
+    ]);
+    expect((held?.item?.detail as EmailDetail | undefined)?.draft).toBe(true);
+
+    await write(`commander:${COMMANDER}`, [
+      change('cancel-send', { commanderId: COMMANDER, messageId: 'x' }),
+    ]);
+    expect(mail.outbox(USER.id)).toEqual([]);
+    expect(mail.sent).toEqual([]);
+  });
+
+  it('send later (#139): what Exchange holds goes to Sent Items at its time', async () => {
+    await write(`commander:${COMMANDER}`, [change('send', message({ deferUntil: Date.now() + 60_000 }))]);
+    mail.releaseOutbox(USER.id);
+
+    expect(mail.outbox(USER.id)).toEqual([]);
+    expect(mail.sent.map((each) => each.subject)).toEqual(['RE: Q4 offsite dates']);
+  });
 });

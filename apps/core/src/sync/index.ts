@@ -159,6 +159,8 @@ export function setUpSync(
   });
   // The Accounts as the main process last listed them.
   let listed: CoreSyncAccounts['accounts'] = [];
+  // Others that follow the machine sleeping and waking (send later, #139).
+  const systemListeners = new Set<(state: { awake: boolean; online: boolean }) => void>();
   function accounts(statuses = engine.statuses()): KnownAccount[] {
     const gone = new Set(
       statuses.filter((status) => status.activity === 'needs-reconnect').map((status) => status.account),
@@ -235,12 +237,19 @@ export function setUpSync(
           const parsed = coreSystemState.safeParse(raw);
           if (!parsed.success) return reject(parsed.error);
           engine.setSystemState(parsed.data);
+          for (const listener of systemListeners) listener(parsed.data);
           return true;
         }
       }
     },
 
     accounts: () => accounts(),
+
+    // Hears whenever the machine sleeps or wakes, or goes offline or online, as the main process says.
+    onSystemState(listener: (state: { awake: boolean; online: boolean }) => void) {
+      systemListeners.add(listener);
+      return () => systemListeners.delete(listener);
+    },
 
     // Where GitHub's REST API lives, as the main process last said.
     githubApiUrl: () => githubApiUrl,

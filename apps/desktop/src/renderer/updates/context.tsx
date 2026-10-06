@@ -181,9 +181,9 @@ export function UpdatesProvider({
   );
 
   const open = useCallback(
-    (line: UpdateViewLine, row?: UpdateRow, reply?: boolean) => {
+    (line: UpdateViewLine, row?: UpdateRow, how?: 'reply' | 'edit') => {
       close();
-      onOpen(openTarget(line, row, { reply }));
+      onOpen(openTarget(line, row, { reply: how === 'reply', edit: how === 'edit' }));
     },
     [close, onOpen],
   );

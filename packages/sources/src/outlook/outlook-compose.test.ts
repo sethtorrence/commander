@@ -1,4 +1,5 @@
 import {
+  CANCEL_SEND_FIELD,
   DELETE_FIELD,
   DRAFT_FIELD,
   type EmailDetail,
@@ -257,5 +258,52 @@ describe('sending through Outlook', () => {
     expect((outcome as Error).message).toBe(
       "Outlook wouldn’t make this change: At least one recipient isn't valid.",
     );
+  });
+});
+
+describe('send later held by Microsoft (#139)', () => {
+  const OUTBOX = 'AAMkAGI2-msg-outbox-commander=';
+  const AT_EIGHT = Date.UTC(2026, 9, 8, 8);
+
+  it('sends the draft with the deferred-send property, and hands back the copy Exchange holds, still unsent', async () => {
+    const { result, remaining } = await writeTo(recorded.sendDeferred, DRAFT, [
+      change(SEND_FIELD, message({ deferUntil: AT_EIGHT })),
+    ]);
+
+    expect(remaining()).toBe(0);
+    expect(result?.item).toMatchObject({ externalId: OUTBOX, commanderItemId: COMMANDER });
+    // A draft in Commander, in no thread, until Exchange sends it at its time.
+    expect(detailOf(result)).toMatchObject({ draft: true, inInbox: false, folder: { wellKnown: 'outbox' } });
+  });
+
+  it('cancels it before its time: taken out of the Outbox', async () => {
+    const { result, remaining } = await writeTo(recorded.cancelHeld, PLACEHOLDER, [
+      change(CANCEL_SEND_FIELD, { commanderId: COMMANDER, messageId: '<x@y>' }),
+    ]);
+
+    expect(remaining()).toBe(0);
+    expect(result?.item).toBeNull();
+  });
+
+  it('a cancel too late finds it sent, and hands back the sent message: nothing goes again', async () => {
+    const { result, remaining } = await writeTo(recorded.cancelTooLate, PLACEHOLDER, [
+      change(CANCEL_SEND_FIELD, { commanderId: COMMANDER, messageId: '<x@y>' }),
+      change(SEND_FIELD, message({ deferUntil: AT_EIGHT + 86_400_000 })),
+    ]);
+
+    expect(remaining()).toBe(0);
+    expect(result?.item).toMatchObject({ externalId: SENT, commanderItemId: COMMANDER });
+    expect(detailOf(result).draft).toBeUndefined();
+  });
+
+  it('changes its time: out of the Outbox, then made and held again for the new time', async () => {
+    const { result, remaining } = await writeTo(recorded.rescheduleHeld, PLACEHOLDER, [
+      change(CANCEL_SEND_FIELD, { commanderId: COMMANDER, messageId: '<x@y>' }),
+      change(SEND_FIELD, message({ deferUntil: AT_EIGHT + 86_400_000 })),
+    ]);
+
+    expect(remaining()).toBe(0);
+    expect(result?.item).toMatchObject({ externalId: OUTBOX, commanderItemId: COMMANDER });
+    expect(detailOf(result).draft).toBe(true);
   });
 });

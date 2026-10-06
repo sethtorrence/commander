@@ -8,11 +8,13 @@ import type {
   EmailAddress,
   EmailComposeSettings,
   OutboxEntry,
+  ScheduledEntry,
+  SendLaterHeldBy,
 } from '@commander/domain';
 
 /*
-  Writing email's view of the app (#138): everything the composer, the Drafts and Outbox views and the
-  writing settings ask goes through here, to the Core (over the compose bridge).
+  Writing email's view of the app (#138): everything the composer, the Drafts, Outbox and Scheduled
+  views and the writing settings ask goes through here, to the Core (over the compose bridge).
 */
 
 export interface ComposeClient {
@@ -30,6 +32,19 @@ export interface ComposeClient {
   undoSend(itemId: string): Promise<ComposeState>;
   discard(itemId: string): Promise<void>;
   retry(itemId: string): Promise<void>;
+  /** Send later (#139): it goes at `sendAt`, held by Microsoft or sent from Commander then. */
+  schedule(
+    draft: ComposeDraft,
+    sendAt: number,
+  ): Promise<{ itemId: string; sendAt: number; heldBy: SendLaterHeldBy }>;
+  scheduled(): Promise<ScheduledEntry[]>;
+  /** Change time. */
+  reschedule(itemId: string, sendAt: number): Promise<void>;
+  sendNow(itemId: string): Promise<void>;
+  /** Cancel: it won't go, and is a draft again. */
+  cancelScheduled(itemId: string): Promise<void>;
+  /** Edit: taken back into the composer, its time offered again. */
+  editScheduled(itemId: string): Promise<ComposeState>;
   drafts(account?: string): Promise<DraftEntry[]>;
   outbox(): Promise<OutboxEntry[]>;
   /** Addresses from the User's own mail, best first. */
@@ -60,6 +75,18 @@ export function composeIn(bridge: ComposeBridge): ComposeClient {
     async retry(itemId) {
       await compose({ op: 'retry', itemId });
     },
+    schedule: (draft, sendAt) => compose({ op: 'schedule', draft, sendAt }),
+    scheduled: () => compose({ op: 'scheduled' }),
+    async reschedule(itemId, sendAt) {
+      await compose({ op: 'reschedule', itemId, sendAt });
+    },
+    async sendNow(itemId) {
+      await compose({ op: 'send-now', itemId });
+    },
+    async cancelScheduled(itemId) {
+      await compose({ op: 'cancel-scheduled', itemId });
+    },
+    editScheduled: (itemId) => compose({ op: 'edit-scheduled', itemId }),
     drafts: (account) => compose({ op: 'drafts', ...(account ? { account } : {}) }),
     outbox: () => compose({ op: 'outbox' }),
     suggest: (text) => compose({ op: 'suggest', text }),
@@ -83,6 +110,12 @@ export const noCompose: ComposeClient = {
   undoSend: unavailable,
   discard: unavailable,
   retry: unavailable,
+  schedule: unavailable,
+  scheduled: async () => [],
+  reschedule: unavailable,
+  sendNow: unavailable,
+  cancelScheduled: unavailable,
+  editScheduled: unavailable,
   drafts: async () => [],
   outbox: async () => [],
   suggest: async () => [],
@@ -94,4 +127,9 @@ export const noCompose: ComposeClient = {
 };
 
 /** The draft the composer holds, as the Core takes it (what it shows beside it left out). */
-export const draftOf = ({ from: _from, quote: _quote, ...draft }: ComposeState): ComposeDraft => draft;
+export const draftOf = ({
+  from: _from,
+  quote: _quote,
+  sendLater: _sendLater,
+  ...draft
+}: ComposeState): ComposeDraft => draft;

@@ -21,6 +21,7 @@ export * from './email-compose';
 export * from './email-drafts';
 export * from './email-reader';
 export * from './email-rules';
+export * from './email-send-later';
 export * from './email-sorting';
 export * from './email-threads';
 export * from './filing';

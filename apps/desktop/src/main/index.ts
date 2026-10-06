@@ -113,6 +113,10 @@ function startCore(secrets: Secrets) {
     // The end-to-end tests may treat their fake model server (on this machine) as a cloud model, so
     // Conversations answer at once rather than taking turns.
     ...(testHooks && process.env.COMMANDER_TEST_MODEL_IN_CLOUD === '1' ? ['--test-model-in-cloud'] : []),
+    // And where send later's clock starts (#139): moved on, as if Commander had been closed meanwhile.
+    ...(testHooks && process.env.COMMANDER_TEST_SEND_LATER_OFFSET_MS
+      ? [`--send-later-clock-offset-ms=${process.env.COMMANDER_TEST_SEND_LATER_OFFSET_MS}`]
+      : []),
     // The end-to-end tests search by meaning with a stand-in model, so none of them ever downloads the
     // real one (#73). It can only make search by meaning worse, so it needs no test hooks.
     ...(process.env.COMMANDER_TEST_EMBEDDINGS === 'fake' ? ['--embeddings=fake'] : []),
@@ -196,6 +200,9 @@ function startCore(secrets: Secrets) {
           core.postMessage({ type: 'email-test-items', source, account, items }),
         // Moves the Core's snooze clock on (#135), so snoozed mail comes back without waiting.
         moveSnoozeClock: (offsetMs: number) => core.postMessage({ type: 'snooze-test-clock', offsetMs }),
+        // Moves send later's clock on (#139), so a scheduled message's time comes without waiting.
+        moveSendLaterClock: (offsetMs: number) =>
+          core.postMessage({ type: 'send-later-test-clock', offsetMs }),
       },
     });
   }

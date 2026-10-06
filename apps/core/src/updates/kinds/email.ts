@@ -1,8 +1,8 @@
-// Update lines about Ares's sorting of email (#141): a Bucket Rule he suggests, and a Bucket he
-// suggests the User adds. Each says what he noticed, what would change, and that nothing does until
-// the User says.
-import { bucketRuleSuggestionText } from '@commander/domain';
-import type { LineKind } from './types';
+// Update lines about email: Ares's sorting (#141), a Bucket Rule he suggests and a Bucket he suggests
+// the User adds, each saying what he noticed, what would change, and that nothing does until the User
+// says; and a send-later time missed while Commander wasn't running (#139).
+import { bucketRuleSuggestionText, missedSendText, sendLaterTime } from '@commander/domain';
+import type { LineContext, LineKind } from './types';
 import { cut, plural } from './words';
 
 export const bucketRuleLines: LineKind<'bucket-rule-suggestion'> = {
@@ -36,3 +36,39 @@ export const bucketSuggestionLines: LineKind<'bucket-suggestion'> = {
   guidance:
     'A Bucket you suggest adding: say its name and what it is for, and that nothing changes unless the User adds it.',
 };
+
+// A Gmail message (or a personal Outlook one) whose send-later time passed while Commander was closed
+// or the machine asleep (#139). Commander never sends it late by itself: the line asks, in Commander's
+// own words (its time is exact and its recipients are the User's), with Send now, Edit and Discard.
+export const missedSendLines: LineKind<'missed-send'> = {
+  name: 'an email that missed its send-later time',
+  template: ({ about }, context) => missedSendText(missedOf(about, context), context.now),
+  facts: ({ about }, context) => [
+    `When it was due: ${sendLaterTime(about.dueAt, context.now)}`,
+    'What happened: Commander wasn’t running at that time (closed, or the machine asleep), so the email didn’t go, and Commander never sends late by itself.',
+    'What to do: Send now, Edit or Discard. It waits in Scheduled until the User decides.',
+  ],
+  row: ({ about }, itemId, context) => {
+    if (itemId !== about.itemId) return null;
+    const item = context.item(itemId);
+    if (item?.detail?.kind === 'email' && !item.detail.draft)
+      return { state: 'Sent', actions: ['open'], settled: 'Sent' };
+    return {
+      state: `Was due ${sendLaterTime(about.dueAt, context.now)}`,
+      actions: ['send-now', 'edit', 'discard'],
+    };
+  },
+  apart: true,
+  guidance:
+    'An email that missed its send-later time: say who it was to and when it was due, and ask whether to send it now.',
+};
+
+function missedOf(about: { itemId: string; dueAt: number }, context: LineContext) {
+  const item = context.item(about.itemId);
+  const detail = item?.detail?.kind === 'email' ? item.detail : null;
+  return {
+    to: detail ? [...detail.to, ...detail.cc, ...detail.bcc] : [],
+    subject: detail?.subject ?? item?.title ?? '',
+    dueAt: about.dueAt,
+  };
+}

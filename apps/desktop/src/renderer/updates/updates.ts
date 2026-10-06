@@ -1,5 +1,7 @@
 import {
   type ActionKind,
+  SCHEDULED_FOCUS,
+  SEND_LATER_EDIT_FOCUS,
   SORT_INTO_BUCKETS,
   UNSORTED,
   UPDATE_SECTION_NAMES,
@@ -68,10 +70,20 @@ const sectionOf = (section: UpdateSection) => (OPENABLE.includes(section) ? sect
 
 /**
  * Where Open takes the User: one of the line's Items where it lives (`row`; Reply opens a Chat at the
- * message waiting on the User), else the one Item a line is about, else where its Items are.
+ * message waiting on the User), else the one Item a line is about, else where its Items are. A missed
+ * send-later (#139) opens Scheduled, and its Edit opens the message in the composer.
  */
-export function openTarget(line: UpdateViewLine, row?: UpdateRow, { reply = false } = {}): OpenTarget {
+export function openTarget(
+  line: UpdateViewLine,
+  row?: UpdateRow,
+  { reply = false, edit = false } = {},
+): OpenTarget {
   const about = line.queued?.about;
+  if (about?.kind === 'missed-send') {
+    if (edit && row)
+      return { kind: 'item', sectionId: 'email', itemId: row.itemId, focus: SEND_LATER_EDIT_FOCUS };
+    return { kind: 'section', sectionId: 'email', focus: SCHEDULED_FOCUS };
+  }
   if (row) {
     return {
       kind: 'item',
@@ -115,6 +127,9 @@ export const ROW_ACTION_LABELS: Record<UpdateRowAction, string> = {
   dismiss: 'Dismiss',
   tick: 'Tick',
   'not-an-instruction': 'Not an instruction',
+  'send-now': 'Send now',
+  edit: 'Edit',
+  discard: 'Discard',
 };
 
 /** How a row names its Item: its Source's short name, or its title. */

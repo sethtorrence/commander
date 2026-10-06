@@ -22,8 +22,8 @@
 //   suggestions it is about), Snooze hides it until later, and Accept takes a suggestion in place,
 //   through the gate, or raises an action's Autonomy level one step (never past its hard limit).
 // - Acting on one of its Items (#186): Accept or Dismiss its suggestion, Tick its Linear Todo, Not
-//   an instruction (clears its warning mark), or Dismiss it from the line; the line goes once none
-//   of its Items is left.
+//   an instruction (clears its warning mark), Send now or Discard a missed send-later (#139), or
+//   Dismiss it from the line; the line goes once none of its Items is left.
 import {
   type AutonomyLevel,
   autonomyLevels,
@@ -117,6 +117,8 @@ export type UpdatesOptions = {
   meaning?: MeaningLookup;
   // Items the Update's steering flag marked.
   onItemsChanged?: (itemIds: string[]) => void;
+  // A missed send-later's Send now and Discard (#139), carried out by writing email (compose).
+  sendLater?: { sendNow(itemId: string): void; discard(itemId: string): void };
   // Replies to the window's requests (through the main process).
   send?: (message: unknown) => void;
   log?: (message: string) => void;
@@ -444,6 +446,15 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
         });
         options.onItemsChanged?.([itemId]);
         return withoutRow(queuedId, itemId, 'done');
+      // A missed send-later (#139): it goes now, or it goes for good.
+      case 'send-now':
+      case 'discard': {
+        if (line.about.kind !== 'missed-send') throw new Error('That isn’t a missed email');
+        if (!options.sendLater) throw new Error('Writing email isn’t running');
+        if (action === 'send-now') options.sendLater.sendNow(itemId);
+        else options.sendLater.discard(itemId);
+        return withoutRow(queuedId, itemId, 'done');
+      }
     }
   }
 

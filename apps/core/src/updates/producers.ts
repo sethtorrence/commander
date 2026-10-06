@@ -19,9 +19,11 @@
 // - Bucket Rule suggestions (bucket-rule-suggestions.ts): "Always put mail from stripe.com in
 //   Receipts?", once the User's answers to Ares's sorting point one sender at one Bucket often enough.
 // - GitHub (github.ts): Ares's latest unseen GitHub summary, daily or the Monday roll-up (#121).
+// - Missed send-later (#139): a Gmail (or personal Outlook) message whose time passed while Commander
+//   was closed or the machine asleep, as a Needs you now line of its own, until the User decides.
 //
-// Later producers (meeting prep, the GitHub summary, missed send-later) call the queue's `enqueue`
-// themselves, as the "Spot stuck Linear issues" job does.
+// Later producers (meeting prep) call the queue's `enqueue` themselves, as the "Spot stuck Linear
+// issues" job does.
 import {
   type ActivityEntry,
   autonomyLevels,
@@ -65,6 +67,7 @@ const IMPORTANCE = {
   autonomy: 0.5,
   warnings: 0.7,
   cap: 0.6,
+  missed: 0.9,
 } as const;
 
 // The first day of the next month, in the User's local time.
@@ -271,6 +274,30 @@ export function createProducers({
     }
   }
 
+  // Missed send-later times (#139): one Needs you now line per miss ("Your email to Dana was due at
+  // 09:00. Send it now?"), resolved once the User has decided, here, in Scheduled, or by discarding it.
+  // A line dismissed isn't queued again for the same miss; a later miss of the message is a new line.
+  function missedSends() {
+    const missed = itemStore.compose.missed();
+    const keyOf = (each: { itemId: string; missedAt: number }) =>
+      `missed-send:${each.itemId}:${each.missedAt}`;
+    const standing = new Set(missed.map(keyOf));
+    for (const line of store.lines(['queued']))
+      if (line.about.kind === 'missed-send' && !standing.has(line.mergeKey)) queue.resolve(line.id);
+    for (const each of missed) {
+      const mergeKey = keyOf(each);
+      if (store.lastWithKey(mergeKey)) continue;
+      queue.enqueue({
+        group: 'now',
+        mergeKey,
+        about: { kind: 'missed-send', itemId: each.itemId, dueAt: each.dueAt, missedAt: each.missedAt },
+        itemIds: [each.itemId],
+        section: 'email',
+        importance: IMPORTANCE.missed,
+      });
+    }
+  }
+
   // "Always file Linear team OPS under TX?" (rule-suggestions.ts).
   const ruleSuggestions = createRuleSuggestions({ itemStore, queue });
   // "Always put mail from stripe.com in Receipts?" (bucket-rule-suggestions.ts, #141).
@@ -289,6 +316,7 @@ export function createProducers({
       ruleSuggestions.sweep();
       bucketRuleSuggestions.sweep();
       githubSummaries.sweep();
+      missedSends();
     },
   };
 }
