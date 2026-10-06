@@ -237,3 +237,7 @@ _Avoid_: Identity, alias, account (that's the User's sign-in), username
 **People log**:
 The record of every change to People (merged, split, renamed, and matched into one by an address they share), kept apart from the Activity log because a Person is not an Item; it powers undo for those changes.
 _Avoid_: People history, audit trail
+
+**People view**:
+The GitHub Section's view of each Person's week in the watched repos (what they merged and reviewed, what is open and for how long, the reviews waiting on them, their Linear issues), one card each, always by name, with Ares's paragraph about their week; for spotting who is stuck or overloaded, never for ranking. Choosing a Person opens their page.
+_Avoid_: Leaderboard, team dashboard, scorecard, stats

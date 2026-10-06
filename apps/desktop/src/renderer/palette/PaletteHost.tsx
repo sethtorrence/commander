@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { requestReveal } from '../frame/reveal';
 import { useNow } from '../frame/use-now';
 import { WHAT_ARES_KNOWS } from '../memory/WhatAresKnows';
+import { usePeople } from '../people/context';
 import { PEOPLE_SETTINGS } from '../people/PeopleSettings';
 import { useProjects } from '../projects/context';
 import { inFilter } from '../projects/filter';
@@ -75,6 +76,7 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
     mode: 'jump',
   });
   const { projects, filter, setFilter, openPage } = useProjects();
+  const { openPerson } = usePeople();
   const { toggleTheme } = useAppearance();
   const commands = useCommandRegistry();
   const accounts = useAccounts();
@@ -142,7 +144,8 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
       case 'project':
         return openPage?.(action.projectId);
       case 'person':
-        // Settings → People at the Person, until the People view (#122) gives them a page.
+        // Their page (#122); Settings → People at the Person where there are no pages.
+        if (openPerson) return openPerson(action.personId);
         onOpenSettings();
         return requestReveal(PEOPLE_SETTINGS, action.personId);
       case 'memory':

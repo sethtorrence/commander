@@ -512,6 +512,104 @@ describe('the Dashboard from the window', () => {
   });
 });
 
+describe('the People view from the window (#122)', () => {
+  it('answers each active Person’s week with Ares’s latest paragraph, and one Person’s on its own', () => {
+    const now = Date.now();
+    const pull = (number: number, author: string) => ({
+      externalId: `R_api:pull/${number}`,
+      kind: 'pull-request' as const,
+      title: `Change ${number}`,
+      status: 'done' as const,
+      detail: {
+        kind: 'pull-request' as const,
+        repo: { nodeId: 'R_api', owner: 'acme', name: 'api' },
+        number,
+        url: `https://github.com/acme/api/pull/${number}`,
+        nodeId: `PR_${number}`,
+        author,
+        state: 'merged' as const,
+        draft: false,
+        baseBranch: 'main',
+        headBranch: `b-${number}`,
+        labels: [],
+        assignees: [],
+        requestedReviewers: [],
+        reviews: [],
+        reviewDecision: null,
+        checks: null,
+        closingIssues: [],
+        additions: 1,
+        deletions: 1,
+        changedFiles: 1,
+        body: '',
+        createdAt: now - 7_200_000,
+        updatedAt: now - 3_600_000,
+        mergedAt: now - 3_600_000,
+        closedAt: now - 3_600_000,
+      },
+    });
+    store.saveFromSource({
+      source: 'github',
+      account: 'github:1',
+      items: [pull(1, 'priya'), pull(2, 'omar')],
+    });
+    const priya = store.people.list().find((each) => each.name === 'priya');
+    const range = { from: now - 86_400_000, to: now };
+    store.record(
+      {
+        type: 'create',
+        item: {
+          kind: 'github-summary',
+          title: 'GitHub summary',
+          detail: {
+            kind: 'github-summary',
+            cadence: 'daily',
+            day: '2026-10-05',
+            range,
+            choice: null,
+            writtenAt: now,
+            sections: [],
+            onFire: [],
+            counts: { shipped: 2, started: 0, stuck: 0, onFire: 0 },
+            people: [
+              {
+                personId: priya?.id ?? '',
+                name: 'priya',
+                text: 'Priya shipped a change.',
+                itemIds: [],
+                range,
+                writtenAt: now,
+              },
+            ],
+            seenAt: null,
+          },
+        },
+      },
+      { by: { kind: 'ares' } },
+    );
+
+    const answer = ask(1, { op: 'github-people', range });
+    expect(answer).toMatchObject({
+      response: {
+        ok: true,
+        result: {
+          cards: [
+            { name: 'omar', paragraph: null },
+            { name: 'priya', paragraph: { text: 'Priya shipped a change.' } },
+          ],
+          writer: { enabled: true },
+        },
+      },
+    });
+    expect(ask(2, { op: 'github-people', range, personId: priya?.id })).toMatchObject({
+      response: { ok: true, result: { cards: [{ name: 'priya' }] } },
+    });
+    expect(ask(3, { op: 'github-people', range: { from: 2, to: 1 } })).toMatchObject({
+      response: { ok: false },
+    });
+  });
+});
+
 describe('Settings → Calendar from the window', () => {
   it('reads the heads-up as off until the User turns it on, saves it, and refuses a malformed one', () => {
     expect(ask(1, { op: 'calendar-settings' })).toMatchObject({

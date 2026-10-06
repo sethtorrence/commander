@@ -56,6 +56,7 @@ const detail = (cadence: SummaryCadence, day: string, writtenAt: number): GitHub
   ],
   onFire: [],
   counts: { shipped: 1, started: 0, stuck: 0, onFire: 0 },
+  people: [],
   seenAt: null,
 });
 
@@ -102,5 +103,61 @@ describe('GitHub summaries', () => {
     expect(store.githubSummaries.markSeen(id)?.detail).toMatchObject({ seenAt: clock - HOUR });
     expect(store.activity({ itemId: id })).toHaveLength(entries);
     expect(store.githubSummaries.markSeen('not-a-summary')).toBeNull();
+  });
+});
+
+describe('People paragraphs (#122)', () => {
+  const paragraph = (personId: string, text: string, writtenAt: number) => ({
+    personId,
+    name: personId,
+    text,
+    itemIds: ['pr-1'],
+    range: { from: writtenAt - 24 * HOUR, to: writtenAt },
+    writtenAt,
+  });
+
+  it('are kept with their summary, the latest per Person whichever summary holds it', () => {
+    const yesterday = write({
+      ...detail('daily', '2026-10-04', clock - 24 * HOUR),
+      people: [
+        paragraph('priya', 'Priya spent Sunday on retries.', clock - 24 * HOUR),
+        paragraph('omar', 'Omar reviewed the queue work.', clock - 24 * HOUR),
+      ],
+    });
+    write({
+      ...detail('daily', '2026-10-05', clock),
+      people: [paragraph('priya', 'Priya merged the retries.', clock)],
+    });
+    // A Refresh, written into an older summary later on, is still the latest.
+    const refreshed = store.get(yesterday)?.item.detail;
+    if (refreshed?.kind !== 'github-summary') throw new Error('not a summary');
+    store.record(
+      {
+        type: 'update',
+        itemId: yesterday,
+        changes: {
+          detail: {
+            ...refreshed,
+            people: [
+              ...(refreshed.people ?? []).filter((each) => each.personId !== 'omar'),
+              paragraph('omar', 'Omar is waiting on two reviews.', clock + HOUR),
+            ],
+          },
+        },
+      },
+      ares,
+    );
+
+    const latest = store.githubSummaries.paragraphs();
+    expect(latest.get('priya')?.text).toBe('Priya merged the retries.');
+    expect(latest.get('omar')?.text).toBe('Omar is waiting on two reviews.');
+    expect(latest.has('sam')).toBe(false);
+  });
+
+  it('are none on a summary from before them', () => {
+    write(detail('daily', '2026-10-05', clock));
+    expect(store.githubSummaries.paragraphs().size).toBe(0);
+    const [summary] = store.githubSummaries.list();
+    expect(summary?.detail).toMatchObject({ people: [] });
   });
 });

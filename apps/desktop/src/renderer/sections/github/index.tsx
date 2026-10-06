@@ -4,6 +4,7 @@ import type { SectionDefinition } from '../section';
 import { GitHubSheet } from './GitHubSheet';
 import { githubAccountsIn, githubWorkIn } from './github-work';
 import { oversightIn } from './oversight';
+import { peopleViewIn } from './people';
 
 // The GitHub Section (#115): pull requests and issues across the watched repos, filtered, opened into
 // a detail pane with their discussion, and filed into Projects, under the oversight summary (#119). It reaches the app only through
@@ -14,7 +15,17 @@ function GitHubSection() {
   // The oversight summary at the top (#119), worked out by the Core.
   // Ares writes it (#121): asking him goes through the Updates channel, like his other Skills.
   const oversight = useMemo(() => oversightIn(window.commander.itemStore, window.commander.updates), []);
-  return <GitHubSheet work={work} accounts={accounts} changes={itemChangesFromCore} oversight={oversight} />;
+  // The People view (#122): each Person's week from the Core; Refresh asks Ares through Updates.
+  const people = useMemo(() => peopleViewIn(window.commander.itemStore, window.commander.updates), []);
+  return (
+    <GitHubSheet
+      work={work}
+      accounts={accounts}
+      changes={itemChangesFromCore}
+      oversight={oversight}
+      people={people}
+    />
+  );
 }
 
 export const github: SectionDefinition = {

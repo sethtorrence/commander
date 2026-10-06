@@ -165,6 +165,26 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         };
       case 'github-summary-seen':
         return { ok: true, result: store.githubSummaries.markSeen(request.itemId) };
+      case 'github-people': {
+        // Each Person's week (#122), with Ares's latest paragraph about them.
+        const paragraphs = store.githubSummaries.paragraphs();
+        const weeks = store.githubOversight.people({
+          range: request.range,
+          ...(request.projectId !== undefined && { projectId: request.projectId }),
+          ...(request.personId !== undefined && { personId: request.personId }),
+        });
+        return {
+          ok: true,
+          result: {
+            range: request.range,
+            cards: weeks.map((week) => ({
+              ...week,
+              paragraph: (week.personId && paragraphs.get(week.personId)) || null,
+            })),
+            writer: summaryWriter(store),
+          },
+        };
+      }
       case 'github-oversight-settings':
         return { ok: true, result: store.githubOversight.settings() };
       case 'save-github-oversight-settings':

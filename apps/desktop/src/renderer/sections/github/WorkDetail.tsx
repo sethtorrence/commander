@@ -68,13 +68,28 @@ const REVIEW_WORDS = {
 } as const;
 
 // A GitHub user as their Person: their name with every handle on hover ("You" for the User), or as
-// `@login` while their Person goes by nothing more than the login; `@ghost` for a deleted user.
+// `@login` while their Person goes by nothing more than the login; `@ghost` for a deleted user. The
+// name opens the Person's page (#122).
 function Login({ login }: { login: string | null }) {
   const people = usePeople();
   if (!login) return <>@ghost</>;
   const shown = shownAs(people, `github:${login}`, `@${login}`, { you: true });
   const named = shown.person && shown.person.name.toLowerCase() !== login.toLowerCase();
-  return <span title={shown.title}>{named || shown.person?.isUser ? shown.name : `@${login}`}</span>;
+  const text = named || shown.person?.isUser ? shown.name : `@${login}`;
+  const person = shown.person;
+  const open = people.openPerson;
+  if (!person || !open) return <span title={shown.title}>{text}</span>;
+  return (
+    <button
+      type="button"
+      data-person={person.id}
+      title={`${shown.title} · Open their page`}
+      onClick={() => open(person.id)}
+      className="cursor-pointer border-0 bg-transparent p-0 text-inherit [font:inherit] [letter-spacing:inherit] [text-transform:inherit] hover:underline"
+    >
+      {text}
+    </button>
+  );
 }
 
 function Fact({ field, label, children }: { field: string; label: string; children: ReactNode }) {

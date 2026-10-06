@@ -25,14 +25,26 @@ let store: ItemStore;
 let runner: JobRunner;
 let summaries: GitHubSummaries;
 let calls: string[];
+// What a Person's paragraph call answers (#122), and how many there were.
+let paragraph: string | null;
+let paragraphCalls: number;
 let failing: boolean;
 let prepared: string[][];
 
 const provider: ModelProviderAdapter = {
   async send(request) {
     const system = request.messages[0]?.content ?? '';
-    calls.push(/covers (.*)\./.exec(system)?.[1] ?? '');
     if (failing) throw new ModelError('unavailable', 'The provider is down');
+    // A Person's paragraph (#122) is a call of its own; only the summaries' calls are counted here.
+    if (!system.includes('GitHub oversight summary')) {
+      paragraphCalls += 1;
+      const sentences = paragraph ? [{ text: paragraph, refs: ['F1'] }] : [];
+      return {
+        text: JSON.stringify({ sentences }),
+        usage: { inputTokens: 500, cachedTokens: 0, outputTokens: 20 },
+      };
+    }
+    calls.push(/covers (.*)\./.exec(system)?.[1] ?? '');
     const refs = [...(request.messages.at(-1)?.content ?? '').matchAll(/label="(I\d+) · /g)].map((m) => m[1]);
     return {
       text: JSON.stringify({ entries: [{ section: 'shipped', theme: null, text: 'Work shipped.', refs }] }),
@@ -86,6 +98,8 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'commander-github-summaries-'));
   clock = MONDAY - 2 * DAY + 4 * HOUR; // Saturday 04:00
   calls = [];
+  paragraph = null;
+  paragraphCalls = 0;
   failing = false;
   prepared = [];
   open();
@@ -236,5 +250,45 @@ describe('asking for one', () => {
         choice: { kind: 'since-yesterday' },
       }),
     ).toEqual({ summary: null, problem: 'Nothing happened in this range for Ares to write about.' });
+  });
+});
+
+describe('People paragraphs (#122)', () => {
+  // Saturday's daily summary covers this week: Priya (the fixtures' author) merged both changes.
+  const priya = () => {
+    const found = store.people.list().find((each) => each.name === 'priya');
+    if (!found) throw new Error('No Priya');
+    return found;
+  };
+
+  it('come with each daily summary, a call per active Person', async () => {
+    paragraph = 'Priya merged two changes.';
+    await at(MONDAY - 2 * DAY + 7 * HOUR);
+    expect(calls).toHaveLength(1);
+    expect(paragraphCalls).toBe(1);
+    expect(store.githubSummaries.paragraphs().get(priya().id)?.text).toBe('Priya merged two changes.');
+  });
+
+  it('Refresh writes one again, after fetching their pull requests’ detail, or says why not', async () => {
+    await at(MONDAY - 2 * DAY + 7 * HOUR);
+    const range = { from: MONDAY - 5 * DAY, to: clock };
+    paragraph = 'Priya shipped the week’s changes.';
+    prepared = [];
+    const answer = await summaries.refreshPerson({ personId: priya().id, range });
+    expect(answer).toEqual({
+      paragraph: expect.objectContaining({ text: 'Priya shipped the week’s changes.', range }),
+      problem: null,
+    });
+    expect(prepared).toEqual([
+      expect.arrayContaining([idOf(store, 'Friday’s change'), idOf(store, 'Saturday’s change')]),
+    ]);
+    // Only her paragraph's call: no summary written.
+    expect(calls).toHaveLength(1);
+
+    runner.setEnabled(WRITE_GITHUB_SUMMARY, false);
+    expect(await summaries.refreshPerson({ personId: priya().id, range })).toEqual({
+      paragraph: null,
+      problem: 'Ares’s GitHub summary is switched off in Settings → Ares.',
+    });
   });
 });

@@ -17,6 +17,11 @@
 //   nothing to approve), like a meeting's prep. It is kept as an Item of Ares's (kind github-summary,
 //   ADR 0004's amendments) with its range and scope; nothing links to it, and its entries keep the ids
 //   of the Items they are about.
+// - People paragraphs (#122): each daily summary and roll-up also gets, for each Person active in the
+//   watched repos, one or two sentences about their week (this week for the daily summary, the
+//   roll-up's week for the roll-up), each Person a call of their own reading only their work
+//   (person-paragraph.ts), every sentence checked in code, saved with the summary. Refresh on a card
+//   (`askPerson`) writes one Person's again, into the latest summary.
 import { randomUUID } from 'node:crypto';
 import {
   factsEmpty,
@@ -32,6 +37,9 @@ import {
   oversightLocalTime,
   oversightRange,
   oversightSectionKinds,
+  type PersonParagraph,
+  type PersonWeek,
+  peopleRange,
   plainLine,
   type SummaryCadence,
   summaryCountsOf,
@@ -48,6 +56,13 @@ import {
   type ItemRef,
   type SummaryMaterial,
 } from './github-summary-material';
+import {
+  acceptParagraph,
+  gatherPersonMaterial,
+  type PersonMaterial,
+  personInstructions,
+  sentence,
+} from './person-paragraph';
 import type { AgentJob, JobInput } from './runner';
 
 // One summary Ares is to write.
@@ -63,11 +78,25 @@ export type SummaryWant = {
   choice: OversightRangeChoice | null;
 };
 
-type Part = { want: SummaryWant; facts: OversightSummary; material: SummaryMaterial };
+// One Person's paragraph Ares is to write: for a summary being written (its want's key), or a Refresh.
+export type PersonWant = {
+  // A Refresh's own key; for a summary's paragraphs, the summary's want's key and the Person.
+  key: string;
+  personId: string;
+  range: OversightRangeSpan;
+  // The summary it goes with; null for a Refresh (it goes into the latest summary).
+  summary: string | null;
+};
+
+type SummaryPart = { kind: 'summary'; want: SummaryWant; facts: OversightSummary; material: SummaryMaterial };
+type PersonPart = { kind: 'person'; want: PersonWant; week: PersonWeek; material: PersonMaterial };
+type Part = SummaryPart | PersonPart;
 type Input = JobInput & { parts: Part[] };
 
 const MAX_TEXT = 400;
 const MAX_THEME = 80;
+// Paragraphs for at most this many People per summary (by name), so a run stays a sensible size.
+export const MAX_PEOPLE_PARAGRAPHS = 30;
 
 const entry = z
   .object({
@@ -78,7 +107,11 @@ const entry = z
   })
   .nullable()
   .catch(null);
-export const OUTPUT = z.object({ entries: z.array(entry).max(200).optional().default([]) });
+// A summary's call answers with entries; a Person's paragraph's with sentences (#122).
+export const OUTPUT = z.object({
+  entries: z.array(entry).max(200).optional().default([]),
+  sentences: z.array(sentence).max(20).optional().default([]),
+});
 type Output = z.infer<typeof OUTPUT>;
 
 const SECTION_WORDS: Record<OversightSectionKind, string> = {
@@ -301,6 +334,8 @@ export type WriteGitHubSummaryOptions = {
   timeZone?: string;
   // A summary was written (so open views catch up, and the Update can mention it).
   onWritten?: (itemId: string, want: SummaryWant) => void;
+  // A Person's paragraph was written again on a Refresh, into this summary (so open views catch up).
+  onParagraph?: (summaryId: string, paragraph: PersonParagraph) => void;
 };
 
 export type WriteGitHubSummaryJob = AgentJob<Input, Output> & {
@@ -310,6 +345,10 @@ export type WriteGitHubSummaryJob = AgentJob<Input, Output> & {
   ask(want: SummaryWant): void;
   // What came of an asking: the summary written, or why there is none. Forgets the asking.
   settle(key: string): { itemId: string | null; problem: string | null };
+  // A Refresh of one Person's paragraph (#122); `settlePerson` says what came of it.
+  askPerson(want: Omit<PersonWant, 'summary'>): void;
+  // What came of a Refresh: the paragraph written, or why there is none. Forgets the asking.
+  settlePerson(key: string): { paragraph: PersonParagraph | null; problem: string | null };
 };
 
 export function writeGitHubSummaryJob(
@@ -318,11 +357,94 @@ export function writeGitHubSummaryJob(
     now = Date.now,
     timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone,
     onWritten,
+    onParagraph,
   }: WriteGitHubSummaryOptions,
 ): WriteGitHubSummaryJob {
   let scheduled: SummaryWant[] = [];
   const asked = new Map<string, SummaryWant>();
   const outcomes = new Map<string, { itemId: string | null; problem: string | null }>();
+  const askedPeople = new Map<string, PersonWant>();
+  const personOutcomes = new Map<string, { paragraph: PersonParagraph | null; problem: string | null }>();
+
+  // A Person's paragraph to write: their week's facts and material, or null when they did nothing
+  // in the range (or aren't known).
+  function personPart(want: PersonWant): PersonPart | null {
+    const [week] = itemStore.githubOversight.people({ range: want.range, personId: want.personId });
+    if (
+      !week ||
+      !(
+        week.merged.length ||
+        week.reviewed.length ||
+        week.opened.length ||
+        week.open.length ||
+        week.waiting.length
+      )
+    )
+      return null;
+    return { kind: 'person', want, week, material: gatherPersonMaterial(itemStore, week, want.range) };
+  }
+
+  // The paragraphs a daily summary or roll-up writes: each active Person's week (this week for the
+  // daily summary, the roll-up's own week), by name, up to the cap.
+  function peopleParts(want: SummaryWant): PersonPart[] {
+    if (want.cadence === 'on-demand') return [];
+    const range =
+      want.cadence === 'weekly'
+        ? want.range
+        : {
+            from: Math.min(peopleRange('this-week', want.range.to, timeZone).from, want.range.to),
+            to: want.range.to,
+          };
+    return itemStore.githubOversight
+      .people({ range })
+      .flatMap((week) => (week.personId ? [week] : []))
+      .slice(0, MAX_PEOPLE_PARAGRAPHS)
+      .map((week) => ({
+        kind: 'person' as const,
+        want: {
+          key: `${want.key}|${week.personId}`,
+          personId: week.personId as string,
+          range,
+          summary: want.key,
+        },
+        week,
+        material: gatherPersonMaterial(itemStore, week, range),
+      }));
+  }
+
+  const paragraphOf = (part: PersonPart, text: string, itemIds: string[]): PersonParagraph => ({
+    personId: part.want.personId,
+    name: part.week.name,
+    text,
+    itemIds,
+    range: part.want.range,
+    writtenAt: now(),
+  });
+
+  // A Refresh: the Person's paragraph, in place of theirs, in the latest summary. Its id, or null
+  // when there is no summary to keep it in.
+  function keepParagraph(paragraph: PersonParagraph): string | null {
+    const [latest] = itemStore.githubSummaries.list({ limit: 1 });
+    if (latest?.detail?.kind !== 'github-summary') return null;
+    const detail = latest.detail;
+    itemStore.record(
+      {
+        type: 'update',
+        itemId: latest.id,
+        changes: {
+          detail: {
+            ...detail,
+            people: [
+              ...(detail.people ?? []).filter((each) => each.personId !== paragraph.personId),
+              paragraph,
+            ],
+          },
+        },
+      },
+      { by: { kind: 'ares' }, why: `Ares wrote his paragraph about ${paragraph.name} again` },
+    );
+    return latest.id;
+  }
 
   const projectName = (projectId: string | null | undefined) =>
     projectId
@@ -345,7 +467,12 @@ export function writeGitHubSummaryJob(
     ];
   }
 
-  function save(want: SummaryWant, facts: OversightSummary, sections: GitHubSummarySection[]): string {
+  function save(
+    want: SummaryWant,
+    facts: OversightSummary,
+    sections: GitHubSummarySection[],
+    people: PersonParagraph[],
+  ): string {
     const detail: GitHubSummaryDetail = githubSummaryDetail.parse({
       kind: 'github-summary',
       cadence: want.cadence,
@@ -357,6 +484,7 @@ export function writeGitHubSummaryJob(
       sections,
       onFire: onFireLines(facts),
       counts: summaryCountsOf(facts),
+      people,
       seenAt: null,
     });
     const id = randomUUID();
@@ -396,6 +524,17 @@ export function writeGitHubSummaryJob(
       return outcome;
     },
 
+    askPerson(want) {
+      askedPeople.set(want.key, { ...want, summary: null });
+    },
+
+    settlePerson(key) {
+      askedPeople.delete(key);
+      const outcome = personOutcomes.get(key) ?? { paragraph: null, problem: null };
+      personOutcomes.delete(key);
+      return outcome;
+    },
+
     gather({ triggers }) {
       const bare = triggers.some((trigger) => trigger.kind === 'request' && !trigger.itemIds?.length);
       const wants = [
@@ -403,7 +542,8 @@ export function writeGitHubSummaryJob(
         ...scheduled.filter((want) => !itemStore.githubSummaries.writtenFor(want.cadence, want.day)),
         ...asked.values(),
       ];
-      if (!wants.length && bare) wants.push(...runNow());
+      // Run now writes a summary, but not when the run is a Refresh of one Person's paragraph.
+      if (!wants.length && !askedPeople.size && bare) wants.push(...runNow());
       const parts: Part[] = [];
       for (const want of wants) {
         const facts = itemStore.githubOversight.summary({
@@ -417,13 +557,23 @@ export function writeGitHubSummaryJob(
           });
           continue;
         }
-        parts.push({ want, facts, material: gatherSummaryMaterial(itemStore, facts) });
+        parts.push({ kind: 'summary', want, facts, material: gatherSummaryMaterial(itemStore, facts) });
+        parts.push(...peopleParts(want));
+      }
+      for (const want of askedPeople.values()) {
+        const part = personPart(want);
+        if (part) parts.push(part);
+        else
+          personOutcomes.set(want.key, {
+            paragraph: null,
+            problem: 'They did nothing in the watched repos in this range for Ares to write about.',
+          });
       }
       // Nothing for the runner to remember: each summary is kept, and never written twice a day.
       return { items: [], run: parts.length > 0, parts };
     },
 
-    // Each summary a call of its own.
+    // Each summary, and each Person's paragraph, a call of its own.
     batch(input) {
       return input.parts.map((part) => ({ items: [], run: true, parts: [part] }));
     },
@@ -431,6 +581,8 @@ export function writeGitHubSummaryJob(
     prompt(input) {
       const part = input.parts[0];
       if (!part) return { instructions: '', data: [] };
+      if (part.kind === 'person')
+        return { instructions: personInstructions(part.material, now()), data: part.material.data };
       return { instructions: instructions(part.want, now()), data: part.material.data };
     },
 
@@ -438,16 +590,47 @@ export function writeGitHubSummaryJob(
 
     apply(answers) {
       const dropped: string[] = [];
+      const people = itemStore.people.list();
+      // The paragraphs first: each summary's go with it; a Refresh goes into the latest summary.
+      const paragraphs = new Map<string, PersonParagraph[]>();
       for (const { output, input } of answers) {
         const part = input.parts[0];
-        if (!part) continue;
+        if (part?.kind !== 'person') continue;
+        const { paragraph, dropped: left } = acceptParagraph(output, part.material, people);
+        dropped.push(...left.map((each) => `${part.material.name}’s paragraph: ${each}`));
+        const kept = paragraph && paragraphOf(part, paragraph.text, paragraph.itemIds);
+        if (part.want.summary !== null) {
+          if (kept) paragraphs.set(part.want.summary, [...(paragraphs.get(part.want.summary) ?? []), kept]);
+          continue;
+        }
+        if (!kept) {
+          personOutcomes.set(part.want.key, {
+            paragraph: null,
+            problem: 'What Ares wrote didn’t hold up against their work, so it wasn’t kept.',
+          });
+          continue;
+        }
+        const summaryId = keepParagraph(kept);
+        if (!summaryId) {
+          personOutcomes.set(part.want.key, {
+            paragraph: null,
+            problem: 'Ares keeps People paragraphs with his GitHub summary, and he hasn’t written one yet.',
+          });
+          continue;
+        }
+        personOutcomes.set(part.want.key, { paragraph: kept, problem: null });
+        onParagraph?.(summaryId, kept);
+      }
+      for (const { output, input } of answers) {
+        const part = input.parts[0];
+        if (part?.kind !== 'summary') continue;
         const { want, facts, material } = part;
         // Written meanwhile (two runs racing a restart): never twice a day.
         if (want.cadence !== 'on-demand' && itemStore.githubSummaries.writtenFor(want.cadence, want.day))
           continue;
         const { accepted, dropped: left } = acceptEntries(output, material);
         dropped.push(...left);
-        const id = save(want, facts, summarySections(accepted, material));
+        const id = save(want, facts, summarySections(accepted, material), paragraphs.get(want.key) ?? []);
         if (asked.has(want.key)) outcomes.set(want.key, { itemId: id, problem: null });
         onWritten?.(id, want);
       }

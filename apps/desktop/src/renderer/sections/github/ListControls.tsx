@@ -11,19 +11,22 @@ const VIEWS: { view: WorkView; label: string }[] = [
 
 /**
  * The view switch under the Project filter, after the prototype's Bucket tabs (.bkts) as the Linear
- * Section draws them: Your work, Pull requests and Issues with their open counts, and the thin sync status line
- * on the right.
+ * Section draws them: Your work, Pull requests and Issues with their open counts, then People (#122),
+ * which goes by name and so has no count, and the thin sync status line on the right.
  */
 export function ViewSwitch({
   view,
   counts,
   onView,
   status,
+  people,
 }: {
   view: WorkView;
   counts: Record<WorkView, number>;
   onView: (view: WorkView) => void;
   status: { text: string; problem: boolean; syncing: boolean };
+  /** The People view's tab, when the Section has one: whether it is shown, and showing it. */
+  people?: { shown: boolean; onShow: () => void };
 }) {
   return (
     <div className="flex h-14 flex-none items-stretch border-b border-line">
@@ -33,7 +36,7 @@ export function ViewSwitch({
         className="ml-[41px] flex items-stretch border-l border-line2"
       >
         {VIEWS.map(({ view: each, label }) => {
-          const on = each === view;
+          const on = each === view && !people?.shown;
           return (
             <button
               key={each}
@@ -65,6 +68,30 @@ export function ViewSwitch({
             </button>
           );
         })}
+        {people && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={people.shown}
+            onClick={people.onShow}
+            className={cn(
+              'flex w-[168px] cursor-pointer flex-col items-start justify-center gap-1.5 border-0 border-r border-line2 bg-transparent px-3.5 text-left',
+              people.shown ? 'bg-sheet shadow-[inset_0_-3px_0_var(--ink)]' : 'hover:bg-raise',
+            )}
+          >
+            <span
+              className={cn(
+                'font-mono text-label leading-none uppercase tracking-caps whitespace-nowrap',
+                people.shown ? 'font-semibold text-ink' : 'font-medium text-muted',
+              )}
+            >
+              People
+            </span>
+            <span className="font-mono text-label leading-[22px] font-medium uppercase tracking-label text-faint">
+              Each one’s week
+            </span>
+          </button>
+        )}
       </div>
       <p
         data-testid="github-sync-status"

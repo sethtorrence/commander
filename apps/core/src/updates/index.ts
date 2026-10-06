@@ -33,6 +33,8 @@ import {
   type GivenUpdate,
   HARD_LIMITS,
   isAllowed,
+  type PersonParagraphAnswer,
+  type PersonParagraphRequest,
   type PresenceReport,
   presenceReport,
   type QueuedAction,
@@ -95,6 +97,8 @@ export type UpdatesOptions = {
   onReturn?: () => void;
   // Ask Ares to write the GitHub summary for a range and scope (#121).
   summariseGitHub?: (request: SummaryRequest) => Promise<GitHubSummaryAnswer>;
+  // Refresh on a People card: Ares writes one Person's paragraph again (#122).
+  refreshPersonParagraph?: (request: PersonParagraphRequest) => Promise<PersonParagraphAnswer>;
   // Items the Update's steering flag marked.
   onItemsChanged?: (itemIds: string[]) => void;
   // Replies to the window's requests (through the main process).
@@ -445,6 +449,9 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
         case 'summarise-github':
           if (!options.summariseGitHub) return { ok: false, error: 'Ares isn’t running' };
           return { ok: true, result: await options.summariseGitHub(request.request) };
+        case 'refresh-person-paragraph':
+          if (!options.refreshPersonParagraph) return { ok: false, error: 'Ares isn’t running' };
+          return { ok: true, result: await options.refreshPersonParagraph(request.request) };
         case 'history':
           return { ok: true, result: history(request.limit) };
         case 'past':

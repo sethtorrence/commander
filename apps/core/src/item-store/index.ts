@@ -2539,6 +2539,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       writtenFor: (cadence, day) => summaries.writtenFor(cadence, day),
       lastDailyTo: () => summaries.lastDailyTo(),
       markSeen: (itemId) => summaries.markSeen(itemId),
+      paragraphs: () => summaries.paragraphs(),
     },
     githubOversight: githubOversightIn(db, {
       now,
