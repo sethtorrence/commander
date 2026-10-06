@@ -22,7 +22,7 @@ import {
   type UpdateSection,
 } from '@commander/domain';
 import type { ItemStore } from '../item-store';
-import type { UpdateQueue } from './queue';
+import { inIdentifierOrder, type UpdateQueue } from './queue';
 
 // An Account as the producers see it: its Sources, its name ("Acme") and whether it needs
 // reconnecting.
@@ -106,7 +106,7 @@ export function createLinearWatch({
     const cursor = last?.about.kind === 'linear-left' ? Math.max(...last.about.entryIds) : null;
     const since = now() - WEEK;
     const entries = itemStore.linearTodosLeft(cursor).filter((entry) => cursor !== null || entry.at >= since);
-    const issues = entries.flatMap(issueOf);
+    const issues = inIdentifierOrder(entries.flatMap(issueOf));
     if (!issues.length) return;
     queue.enqueue({
       group: 'fyi',

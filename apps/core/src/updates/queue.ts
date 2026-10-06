@@ -35,10 +35,12 @@ export type UpdateQueue = {
 };
 
 const union = <T>(a: readonly T[], b: readonly T[]) => [...new Set([...a, ...b])];
+export const inIdentifierOrder = <T extends { identifier: string }>(issues: readonly T[]) =>
+  [...issues].sort((a, b) => a.identifier.localeCompare(b.identifier, 'en', { numeric: true }));
 // Both lists of issues, one entry per Item: the newer word on one already there replaces it.
-const byItem = <T extends { itemId: string }>(was: readonly T[], next: readonly T[]) => [
-  ...new Map([...was, ...next].map((issue) => [issue.itemId, issue])).values(),
-];
+// In identifier order (ENG-2 before ENG-10), so a line reads the same however a sync ordered them.
+const byItem = <T extends { itemId: string; identifier: string }>(was: readonly T[], next: readonly T[]) =>
+  inIdentifierOrder([...new Map([...was, ...next].map((issue) => [issue.itemId, issue])).values()]);
 
 // What a merged line is about: the suggestions and warnings of both, or the newer word otherwise.
 function merged(was: QueuedAbout, next: QueuedAbout): QueuedAbout {
@@ -105,11 +107,14 @@ export function createUpdateQueue({
       const importance = Math.min(1, Math.max(0, input.importance ?? 0.5));
       const was = store.queuedWithKey(input.mergeKey);
       if (was && (was.expiresAt === null || was.expiresAt > at)) {
+        const about = merged(was.about, input.about);
+        // A line naming issues keeps its Items in the issues' order, then any others.
+        const named = 'issues' in about ? about.issues.map((issue) => issue.itemId) : [];
         return changed(
           store.saveLine(was.id, {
             group: input.group,
-            about: merged(was.about, input.about),
-            itemIds: union(was.itemIds, input.itemIds),
+            about,
+            itemIds: union(named, union(was.itemIds, input.itemIds)),
             section: input.section,
             importance: Math.max(was.importance, importance),
             updatedAt: at,

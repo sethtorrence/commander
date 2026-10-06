@@ -179,6 +179,19 @@ describe('Linear issues taken off the User’s list', () => {
     ]);
   });
 
+  it('names the issues in identifier order, however a sync ordered them', async () => {
+    sync(issue(10), issue(2), issue(1));
+    clock += MINUTE;
+    sync(issue(10, { assignee: priya, updatedAt: clock }), issue(2, { assignee: priya, updatedAt: clock }));
+    clock += MINUTE;
+    sync(issue(1, { assignee: priya, updatedAt: clock }));
+
+    expect(queued()[0]?.itemIds).toEqual([idOf(1), idOf(2), idOf(10)]);
+    expect(await texts()).toEqual([
+      '3 of your Linear issues were reassigned, so they’re off your Todos: ENG-1, ENG-2 and ENG-10. Nothing to do, unless one should still be yours.',
+    ]);
+  });
+
   it('a mix of reasons says they left the list', async () => {
     sync(issue(1), issue(2));
     clock += MINUTE;
