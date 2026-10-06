@@ -1,10 +1,11 @@
 import type { FoundBy, ItemKind } from '@commander/domain';
+import type { QueryVector } from './meaning-index';
 
 /*
   A retriever finds Items for a query, best first, applying every filter itself. Search runs each
-  one and fuses their lists (fuse below). Today there is one, the word index (FTS5); search by
-  meaning (#73) adds a second, over embeddings of the same text, and Tantivy could replace the
-  first, without callers changing.
+  one and fuses their lists (fuse below). Two: the word index (FTS5), and the meaning index (#73),
+  over embeddings of the same text, which answers only when the query comes with its embedding.
+  Tantivy could replace the first without callers changing.
 */
 
 export type SearchFilters = {
@@ -21,9 +22,15 @@ export type RetrievedHit = {
   exact: boolean;
 };
 
+export type RetrieverQuery = SearchFilters & {
+  text: string;
+  // What the text means, embedded: only the meaning index reads it.
+  meaning?: QueryVector;
+};
+
 export interface Retriever {
   readonly foundBy: FoundBy;
-  retrieve(query: SearchFilters & { text: string }, limit: number): RetrievedHit[];
+  retrieve(query: RetrieverQuery, limit: number): RetrievedHit[];
 }
 
 export type FusedHit = RetrievedHit & { foundBy: FoundBy[] };

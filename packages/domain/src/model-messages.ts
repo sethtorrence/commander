@@ -9,6 +9,13 @@ import {
   type UsageSummary,
   usageSummary,
 } from './models';
+import {
+  type SearchByMeaningStatus,
+  type SearchResult,
+  searchByMeaningStatus,
+  searchQuery,
+  searchResult,
+} from './search';
 
 const requestId = z.number().int().positive();
 
@@ -20,6 +27,12 @@ export const modelsRequest = z.discriminatedUnion('op', [
   // A one-line Quick call, to show the key and settings work.
   z.object({ op: z.literal('test') }),
   z.object({ op: z.literal('usage') }),
+  // Search by meaning (#73): where it stands, switching it on or off (on again retries a failed
+  // download), and a search with meaning merged in: null while the model isn't ready (word results
+  // come from the Item store's own search, which never waits on this).
+  z.object({ op: z.literal('meaning-status') }),
+  z.object({ op: z.literal('set-meaning'), on: z.boolean() }),
+  z.object({ op: z.literal('search-meaning'), query: searchQuery }),
 ]);
 export type ModelsRequest = z.input<typeof modelsRequest>;
 export type ModelsOp = ModelsRequest['op'];
@@ -29,6 +42,9 @@ export type ModelsResults = {
   'save-settings': ModelSettings;
   test: ModelTestResult;
   usage: UsageSummary;
+  'meaning-status': SearchByMeaningStatus;
+  'set-meaning': SearchByMeaningStatus;
+  'search-meaning': SearchResult | null;
 };
 
 export const modelsResult = {
@@ -36,6 +52,9 @@ export const modelsResult = {
   'save-settings': modelSettings,
   test: modelTestResult,
   usage: usageSummary,
+  'meaning-status': searchByMeaningStatus,
+  'set-meaning': searchByMeaningStatus,
+  'search-meaning': searchResult.nullable(),
 } satisfies Record<ModelsOp, z.ZodType>;
 
 const failure = z.object({ ok: z.literal(false), error: z.string(), kind: modelErrorKind.optional() });

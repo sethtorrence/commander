@@ -108,6 +108,9 @@ function startCore(secrets: Secrets) {
     ...(testHooks && process.env.COMMANDER_TEST_SUMMARY_ROLLUP === 'off'
       ? ['--github-summary-rollup=off']
       : []),
+    // The end-to-end tests search by meaning with a stand-in model, so none of them ever downloads the
+    // real one (#73). It can only make search by meaning worse, so it needs no test hooks.
+    ...(process.env.COMMANDER_TEST_EMBEDDINGS === 'fake' ? ['--embeddings=fake'] : []),
   ]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));

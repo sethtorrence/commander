@@ -8,6 +8,7 @@ import {
   modelSettings,
   type ReasoningEffort,
   reasoningEfforts,
+  type SearchByMeaningStatus,
   type TierSetting,
 } from '@commander/domain';
 import {
@@ -26,7 +27,7 @@ import { WHAT_ARES_KNOWS } from '../../memory/WhatAresKnows';
 import { useOpenSection } from '../../sections/section';
 import { Readout, ReadoutRow, SettingRow, SettingsGroup } from '../parts';
 import { AresJobs } from './AresJobs';
-import { formatLatency, formatUsd } from './format';
+import { formatLatency, formatUsd, meaningStatusLine } from './format';
 import { UsagePanel } from './UsagePanel';
 
 const EFFORT_NAMES: Record<ReasoningEffort, string> = { low: 'Low', high: 'High', max: 'Max' };
@@ -437,6 +438,97 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
   );
 }
 
+// How often the row asks where search by meaning stands: often while it is getting ready or indexing.
+const MEANING_BUSY_POLL_MS = 1000;
+const MEANING_IDLE_POLL_MS = 10_000;
+
+// Search by meaning (#73): the local embedding model, its download and indexing, and the switch.
+function SearchByMeaningRow() {
+  const [status, setStatus] = useState<SearchByMeaningStatus | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () =>
+      window.commander.models({ op: 'meaning-status' }).then((response) => {
+        if (!current) return;
+        if (!response.ok) setProblem(response.error);
+        else setStatus(response.result);
+        const busy =
+          response.ok &&
+          (['waiting', 'downloading', 'loading'].includes(response.result.state) ||
+            (response.result.state === 'ready' && response.result.embedded < response.result.total));
+        timer = setTimeout(read, busy ? MEANING_BUSY_POLL_MS : MEANING_IDLE_POLL_MS);
+      });
+    void read();
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  async function turn(on: boolean) {
+    const response = await window.commander.models({ op: 'set-meaning', on });
+    if (!response.ok) return setProblem(response.error);
+    setProblem(null);
+    setStatus(response.result);
+  }
+
+  const megabytes = status ? Math.round(status.model.downloadBytes / 1_000_000) : null;
+  const downloading = status?.state === 'downloading' && status.totalBytes > 0;
+  return (
+    <SettingRow
+      label="Search by meaning"
+      description={`Finds things by what they mean, not only by their words: “the rate limiter thing” finds “Throttle bursts on /sync”. Uses ${status?.model.name ?? 'a small embedding model'}${megabytes ? ` (${megabytes} MB, downloaded once from Hugging Face)` : ''}, running on this machine: nothing you keep is sent anywhere.`}
+    >
+      <div className="grid max-w-[560px] gap-2" data-testid="search-by-meaning">
+        <ButtonGroup role="radiogroup" aria-label="Search by meaning">
+          {([true, false] as const).map((on) => (
+            <Button
+              key={String(on)}
+              role="radio"
+              aria-checked={status?.on === on}
+              variant={status?.on === on ? 'primary' : 'default'}
+              onClick={() => turn(on)}
+            >
+              {on ? 'On' : 'Off'}
+            </Button>
+          ))}
+        </ButtonGroup>
+        {status && (
+          <p data-testid="search-by-meaning-status" className="m-0 text-note leading-[19px] text-muted">
+            {meaningStatusLine(status)}
+          </p>
+        )}
+        {downloading && status && (
+          <div
+            role="progressbar"
+            aria-label="Downloading the model"
+            aria-valuemin={0}
+            aria-valuemax={status.totalBytes}
+            aria-valuenow={status.receivedBytes}
+            className="h-1 max-w-[320px] bg-line2"
+          >
+            <div
+              className="h-full bg-ink"
+              style={{ width: `${Math.round((100 * status.receivedBytes) / status.totalBytes)}%` }}
+            />
+          </div>
+        )}
+        {status?.state === 'failed' && (
+          <div>
+            <Button data-testid="search-by-meaning-retry" onClick={() => turn(true)}>
+              Try again now
+            </Button>
+          </div>
+        )}
+        {problem && <Problem testId="search-by-meaning-problem">{problem}</Problem>}
+      </div>
+    </SettingRow>
+  );
+}
+
 // What Ares knows (#74) lives in the Ares Section, beside his activity: this opens it there.
 function WhatAresKnowsRow() {
   const openSection = useOpenSection();
@@ -458,7 +550,8 @@ function WhatAresKnowsRow() {
   );
 }
 
-/** Settings → Ares: his API key, Test, the Quick and Deep tiers and the cap; then Usage. */
+/** Settings → Ares: his API key, Test, the Quick and Deep tiers and the cap, his jobs, search by
+ * meaning; then Usage. */
 export function AresSettings({ no, usageNo }: { no: string; usageNo: string }) {
   const [usageVersion, refreshUsage] = useReducer((version: number) => version + 1, 0);
   return (
@@ -468,6 +561,7 @@ export function AresSettings({ no, usageNo }: { no: string; usageNo: string }) {
         <TestRow onCall={refreshUsage} />
         <ModelSettingsForm onSaved={refreshUsage} />
         <AresJobs />
+        <SearchByMeaningRow />
         <WhatAresKnowsRow />
       </SettingsGroup>
       <UsagePanel no={usageNo} version={usageVersion} />

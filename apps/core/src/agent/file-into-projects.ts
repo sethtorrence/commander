@@ -72,7 +72,7 @@ import {
 } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from '../item-store';
-import { aboutItem, recall } from './memory-context';
+import { aboutItem, type MeaningLookup, recall } from './memory-context';
 import type { PromptData } from './prompt';
 import type { AgentJob, JobInput } from './runner';
 import { bySeries, seriesFiling, seriesKey } from './series-filing';
@@ -284,7 +284,11 @@ export function staleFilingSuggestions(itemStore: ItemStore): number[] {
 
 export function fileIntoProjectsJob(
   itemStore: ItemStore,
-  { maxItems = MAX_ITEMS, now = Date.now }: { maxItems?: number; now?: () => number } = {},
+  {
+    maxItems = MAX_ITEMS,
+    now = Date.now,
+    meaning,
+  }: { maxItems?: number; now?: () => number; meaning?: MeaningLookup } = {},
 ): AgentJob<Input, Output> {
   const waiting = () => new Set(pendingFilings(itemStore).map((proposal) => proposal.itemId));
 
@@ -672,20 +676,27 @@ export function fileIntoProjectsJob(
         candidates: [one],
       })),
 
-    prompt(input) {
-      const data: PromptData[] = [
-        { label: 'Projects', from: 'user-settings', text: projectsText(itemStore.projects()) },
-        // What Ares knows about Items like these (#74): examples, facts and preferences, by their words
-        // and by the people involved; unconfirmed ones only as background.
-        ...input.candidates.flatMap(({ item }) => {
+    async prompt(input) {
+      // What Ares knows about Items like these (#74): examples, facts and preferences, by their words,
+      // by the people involved and (#73) by meaning; unconfirmed ones only as background.
+      const recalled = await Promise.all(
+        input.candidates.map(async ({ item }) => {
           const about = aboutItem(item);
           const issue = issueOf(item);
+          const text = [about.words, issue?.description ? cut(issue.description, MAX_DESCRIPTION) : ''].join(
+            ' ',
+          );
           return recall(itemStore, {
-            text: [about.words, issue?.description ? cut(issue.description, MAX_DESCRIPTION) : ''].join(' '),
+            text,
             handles: about.handles,
             kinds: ['example', 'fact', 'preference'],
+            meaning: await meaning?.(text),
           });
         }),
+      );
+      const data: PromptData[] = [
+        { label: 'Projects', from: 'user-settings', text: projectsText(itemStore.projects()) },
+        ...recalled.flat(),
         ...input.candidates.map(({ ref, item }) => ({
           label: labelOf(ref, item),
           from: item,

@@ -13,6 +13,8 @@ import { configProvider } from '../src/main/summon';
 // tests never signal the real one. Pass the folder from an earlier launch to start Commander
 // again on the same data. The tests' input never reaches the system, so Commander is told the User
 // is at the machine (COMMANDER_TEST_PRESENCE) rather than reading the machine's real idle time.
+// Search by meaning runs on a stand-in model (COMMANDER_TEST_EMBEDDINGS), so no test downloads the
+// real one.
 export type LaunchedCommander = {
   app: ElectronApplication;
   userDataDir: string;
@@ -32,7 +34,12 @@ export async function launchCommander(
   const args = ['.', `--user-data-dir=${userDataDir}`, ...(options.args ?? [])];
   const app = await electron.launch({
     args,
-    env: { ...(process.env as Record<string, string>), COMMANDER_TEST_PRESENCE: 'here', ...options.env },
+    env: {
+      ...(process.env as Record<string, string>),
+      COMMANDER_TEST_PRESENCE: 'here',
+      COMMANDER_TEST_EMBEDDINGS: 'fake',
+      ...options.env,
+    },
   });
   return {
     app,

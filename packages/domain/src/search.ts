@@ -5,8 +5,9 @@ import { person } from './people';
 import { project } from './projects';
 
 // Global search: what the window asks the Core's search module, and what it answers. Search is
-// local only and never waits on a model. Results are ranked by how well their words match, with
-// exact identifier (ENG-418) and title matches first.
+// local only. Results are ranked by how well their words match, with exact identifier (ENG-418) and
+// title matches first; search by meaning (#73) merges in what an embedding model running on this
+// machine finds, in a second answer, so word results never wait on it.
 
 const id = z.string().min(1);
 const timestamp = z.number().int().nonnegative();
@@ -28,7 +29,7 @@ export const searchQuery = z.object({
 });
 export type SearchQuery = z.input<typeof searchQuery>;
 
-// How a result was found: by its words (FTS5), or, once search by meaning arrives, by what it means.
+// How a result was found: by its words (FTS5), or by what it means (an embedding, #73).
 export const foundBy = z.enum(['words', 'meaning']);
 export type FoundBy = z.infer<typeof foundBy>;
 
@@ -55,3 +56,24 @@ export const searchResult = z.object({
   memories: z.array(memory).optional(),
 });
 export type SearchResult = z.infer<typeof searchResult>;
+
+const count = z.number().int().nonnegative();
+
+// Where search by meaning stands (#73), for Settings → Ares: the embedding model is downloaded once
+// (with progress), loaded, then embeds every Item and memory in the background.
+export const searchByMeaningStates = ['off', 'waiting', 'downloading', 'loading', 'ready', 'failed'] as const;
+export const searchByMeaningStatus = z.object({
+  // The User's setting.
+  on: z.boolean(),
+  state: z.enum(searchByMeaningStates),
+  model: z.object({ name: z.string(), downloadBytes: count }),
+  // While downloading.
+  receivedBytes: count,
+  totalBytes: count,
+  // Items and memories embedded by the model, out of all there are to embed.
+  embedded: count,
+  total: count,
+  // Why it failed (it tries again later), or null.
+  problem: z.string().nullable(),
+});
+export type SearchByMeaningStatus = z.infer<typeof searchByMeaningStatus>;

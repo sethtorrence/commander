@@ -59,8 +59,14 @@ export const modelSettings = z.object({
   // How many messages from others since the last Update make a Chat busy enough for Ares to
   // summarise it in the Update (#109); 20 when not set (teams-ares.ts).
   busyChatMessages: z.number().int().min(2).max(1000).optional(),
+  // Search by meaning (#73): the local embedding model downloaded and used. On when not set.
+  searchByMeaning: z.boolean().optional(),
 });
 export type ModelSettings = z.infer<typeof modelSettings>;
+
+/** Whether search by meaning is on (#73): it is unless the User turned it off. */
+export const searchByMeaningOn = (settings: Pick<ModelSettings, 'searchByMeaning'>) =>
+  settings.searchByMeaning !== false;
 
 export const defaultModelSettings: ModelSettings = {
   tiers: {
@@ -91,12 +97,20 @@ export type ModelErrorKind = z.infer<typeof modelErrorKind>;
 
 const count = z.number().int().nonnegative();
 
-// One row of the usage ledger: a request sent to a provider. No prompt or reply text, ever.
+// What the usage ledger files a call under: one of the tiers, or an embedding (search by meaning, #73).
+export const usageTier = z.enum([...modelTiers, 'embedding']);
+export type UsageTier = z.infer<typeof usageTier>;
+// Who answered it: a provider, or the embedding model Commander runs on this machine (#73).
+export const usageProvider = z.enum([...modelProviders, 'local']);
+export type UsageProvider = z.infer<typeof usageProvider>;
+
+// One row of the usage ledger: a request sent to a provider (or the local embedding model). No prompt
+// or reply text, ever.
 export const modelCall = z.object({
   at: count,
   job: z.string().min(1),
-  tier: modelTier,
-  provider: modelProvider,
+  tier: usageTier,
+  provider: usageProvider,
   model: z.string().min(1),
   inputTokens: count,
   cachedTokens: count,

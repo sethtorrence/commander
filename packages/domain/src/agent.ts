@@ -63,6 +63,10 @@ export const AGENT_JOB_NAMES: Record<string, string> = {
   'suggest-teams-replies': 'Suggest Teams replies',
   'write-github-summary': 'Write the GitHub summary',
   'learn-facts': 'Learn facts',
+  // Search by meaning (#73): the local embedding model's calls.
+  'embed-index': 'Embed Items for search',
+  'embed-query': 'Embed searches',
+  'embed-lookup': 'Embed Memory lookups',
 };
 
 export const jobDisplayName = (job: string): string => AGENT_JOB_NAMES[job] ?? job;

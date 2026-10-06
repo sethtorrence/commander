@@ -148,7 +148,8 @@ export type AgentJob<Input extends JobInput = JobInput, Output = unknown> = {
   triggers: JobTriggers;
   // What this run should look at, or null (or no items) when there is nothing to do: no call then.
   gather(context: GatherContext): Input | null;
-  prompt(input: Input): PromptParts;
+  // May wait (to look Memory up by meaning, #73) but never on the job's own model call.
+  prompt(input: Input): PromptParts | Promise<PromptParts>;
   // The fixed schema the model's JSON reply must fit.
   output: ZodType<Output>;
   // Splits the input into the parts sent in separate calls (each part its own prompt); one call
@@ -497,7 +498,7 @@ export function createJobRunner(options: JobRunnerOptions): JobRunner {
   ): Promise<{ output: unknown; prompt: BuiltPrompt } | null> {
     let prompt: BuiltPrompt;
     try {
-      prompt = buildPrompt(job.prompt(input), { secrets });
+      prompt = buildPrompt(await job.prompt(input), { secrets });
     } catch (error) {
       if (!(error instanceof PromptRefused)) throw error;
       failed(job, 'failed', error.message, false);

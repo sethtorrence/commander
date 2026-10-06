@@ -12,8 +12,10 @@
 //   as background, which the prompt builder marks so and the runner never lets lead to more than a
 //   Suggestion. A People-to-Project fact is only ever context: the jobs' instructions say it never
 //   outweighs the Item's own facts, and Rules and the User's filing never reach Ares at all.
+//   Given the embedding of what the job is working on (`meaning`, #73), memories are found by meaning
+//   too, so one phrased differently from the Item still reaches the prompt.
 import { type Item, identitiesOf, type MemoryKind, teamsUserOf } from '@commander/domain';
-import type { ItemStore, RecalledMemory } from '../item-store';
+import type { ItemStore, QueryVector, RecalledMemory } from '../item-store';
 import type { PromptData } from './prompt';
 
 const MAX_PEOPLE = 4;
@@ -113,7 +115,13 @@ export type RecallRequest = {
   projectIds?: readonly string[];
   kinds?: readonly MemoryKind[];
   limit?: number;
+  // The text embedded, when search by meaning is ready.
+  meaning?: QueryVector | null;
 };
+
+// What a job looks Memory up by meaning with (#73): the text embedded, or null while the embedding
+// model isn't ready.
+export type MeaningLookup = (text: string) => Promise<QueryVector | null>;
 
 const KIND_WORDS: Record<MemoryKind, string> = {
   example: 'example',
@@ -136,6 +144,7 @@ export function recall(itemStore: ItemStore, request: RecallRequest): PromptData
     projectIds: request.projectIds,
     kinds: request.kinds,
     limit: request.limit,
+    meaning: request.meaning ?? undefined,
   });
   const confirmed = found.filter((memory) => memory.confirmed);
   const unconfirmed = found.filter((memory) => !memory.confirmed);

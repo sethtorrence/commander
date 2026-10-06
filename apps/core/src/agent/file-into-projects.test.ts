@@ -11,6 +11,7 @@ import { createModelClient, type ModelProviderAdapter, type ProviderRequest } fr
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Gate, openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
+import { FAKE_MODEL, fakeEmbedding } from '../meaning/fake';
 import { fileIntoProjectsJob, staleFilingSuggestions } from './file-into-projects';
 import { createFiling } from './filing';
 import { learnExamples } from './learn-examples';
@@ -425,5 +426,49 @@ describe('File into Projects with Memory (#74)', () => {
     await run([next]);
     expect(prompts().at(-1)).toMatch(/label="What Ares knows" source="the User">\n- \(fact\) Priya Patel/);
     expect(filingOf(next)).toEqual({ projectId: tx.id, filedBy: 'ares' });
+  });
+
+  it('looks memories up by meaning too (#73): one sharing no words with the Item still reaches the prompt', async () => {
+    store.memory.learn({
+      kind: 'fact',
+      text: 'Sam runs the pager rota for TX',
+      confirmed: true,
+      sources: [],
+    });
+    // The memory embedded as the Core's meaning side would, by the stand-in model.
+    const work = store.meaning.pending(FAKE_MODEL.id, 10);
+    store.meaning.save(
+      FAKE_MODEL.id,
+      work.map((each) => ({ ...each, vector: fakeEmbedding(each.text) })),
+    );
+    const lookups: string[] = [];
+    runner.stop();
+    runner = createJobRunner({
+      jobs: [
+        fileIntoProjectsJob(store, {
+          meaning: async (text) => {
+            lookups.push(text);
+            return { model: FAKE_MODEL.id, vector: fakeEmbedding(text), minSimilarity: 0.3 };
+          },
+        }),
+      ],
+      client: createModelClient({
+        settings: () => store.models.settings(),
+        providers: { zai: provider },
+        ledger: store.models,
+        now: () => clock,
+      }),
+      gate,
+      store: store.agent,
+      now: () => clock,
+      log: () => {},
+    });
+    const issue = sync({ id: '1', title: 'Hand over the on-call shift' })['OPS-1'] as string;
+    await run([issue]);
+
+    expect(lookups).toEqual([expect.stringContaining('Hand over the on-call shift')]);
+    expect(prompts().at(-1)).toMatch(
+      /label="What Ares knows" source="the User">\n- \(fact\) Sam runs the pager rota/,
+    );
   });
 });

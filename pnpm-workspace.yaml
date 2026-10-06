@@ -7,3 +7,6 @@ allowBuilds:
   # better-sqlite3 ships Node-API prebuilds that load in both Node and Electron, so its
   # node-gyp fallback build is never needed.
   better-sqlite3: false
+  # onnxruntime-node (search by meaning, #73) ships its CPU binaries (Node-API, so they load in Node and
+  # Electron alike) in the package; its install script only fetches the optional CUDA ones.
+  onnxruntime-node: false

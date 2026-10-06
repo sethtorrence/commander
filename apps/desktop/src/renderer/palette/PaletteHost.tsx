@@ -99,6 +99,14 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
   const connected = accounts.filter((account) => account.status === 'connected');
 
   const search = useCallback((query: SearchQuery) => window.commander.itemStore({ op: 'search', query }), []);
+  // Search by meaning (#73): the Core embeds the query with the local model; null until it's ready.
+  const searchByMeaning = useCallback(
+    (query: SearchQuery) =>
+      window.commander
+        .models({ op: 'search-meaning', query })
+        .then((response) => (response.ok ? response.result : null)),
+    [],
+  );
   const setOpen = useCallback((open: boolean) => setShown((now) => ({ ...now, open })), []);
 
   useShortcuts([
@@ -176,6 +184,7 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
       initial={shown.initial}
       mode={shown.mode}
       search={search}
+      searchByMeaning={searchByMeaning}
       sections={SECTIONS}
       current={current}
       projects={projects}

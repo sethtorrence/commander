@@ -5,6 +5,7 @@ import {
   createMemoryLedger,
   createModelClient,
   createZaiProvider,
+  type EmbeddingProviderAdapter,
   isOverCap,
   type MemoryLedger,
   ModelError,
@@ -417,5 +418,70 @@ describe('the monthly cap', () => {
 
     await expect(call('deep')).resolves.toMatchObject({ text: 'Hello from the fake server.' });
     expect(ledger.capWarnings).toEqual([]);
+  });
+});
+
+describe('embeddings', () => {
+  const embeddingClient = (embedder: EmbeddingProviderAdapter | null) =>
+    createModelClient({
+      settings: () => settings,
+      providers: { zai: createZaiProvider({ apiKey: async () => null }) },
+      ledger,
+      now: () => clock,
+      embedding: () => embedder,
+    });
+
+  it('embeds texts with the embedding model and logs the call with its tokens and time, at no cost', async () => {
+    const result = await embeddingClient({
+      provider: 'local',
+      model: 'granite-test',
+      async embed(texts) {
+        clock += 40;
+        return { vectors: texts.map((text) => Float32Array.from([text.length, 1])), tokens: 12 };
+      },
+    }).embed({ job: 'embed-index', texts: ['one', 'three'] });
+
+    expect(result.vectors.map((vector) => [...vector])).toEqual([
+      [3, 1],
+      [5, 1],
+    ]);
+    expect(result).toMatchObject({ provider: 'local', model: 'granite-test' });
+    expect(ledger.calls).toEqual([
+      {
+        at: clock - 40,
+        job: 'embed-index',
+        tier: 'embedding',
+        provider: 'local',
+        model: 'granite-test',
+        inputTokens: 12,
+        cachedTokens: 0,
+        outputTokens: 0,
+        latencyMs: 40,
+        costUsd: 0,
+        outcome: 'ok',
+      },
+    ]);
+  });
+
+  it('fails as unavailable, logging nothing, while there is no embedding model', async () => {
+    await expect(embeddingClient(null).embed({ job: 'embed-query', texts: ['x'] })).rejects.toMatchObject({
+      kind: 'unavailable',
+    });
+    expect(ledger.calls).toEqual([]);
+  });
+
+  it('logs a failed embedding call', async () => {
+    const failing = embeddingClient({
+      provider: 'local',
+      model: 'granite-test',
+      embed: async () => {
+        throw new Error('the worker stopped');
+      },
+    });
+    await expect(failing.embed({ job: 'embed-query', texts: ['x'] })).rejects.toMatchObject({
+      kind: 'unavailable',
+      message: 'The embedding failed: the worker stopped',
+    });
+    expect(ledger.calls).toMatchObject([{ tier: 'embedding', outcome: 'unavailable', inputTokens: 0 }]);
   });
 });

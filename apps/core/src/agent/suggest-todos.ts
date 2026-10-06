@@ -18,7 +18,7 @@
 import { type Item, imageAttachmentOf, inheritedFiling } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from '../item-store';
-import { recall } from './memory-context';
+import { type MeaningLookup, recall } from './memory-context';
 import type { AgentJob, JobInput } from './runner';
 
 export const SUGGEST_TODOS = 'suggest-todos';
@@ -87,7 +87,7 @@ function cleanTitle(title: string): string {
 
 export function suggestTodosJob(
   itemStore: ItemStore,
-  { now = Date.now }: { now?: () => number } = {},
+  { now = Date.now, meaning }: { now?: () => number; meaning?: MeaningLookup } = {},
 ): AgentJob<Input, Output> {
   // Whether a Block is a Todo already: a live Todo made from it.
   const isTodo = (blockId: string) =>
@@ -215,21 +215,26 @@ export function suggestTodosJob(
       };
     },
 
-    prompt: (input) => ({
-      instructions: INSTRUCTIONS,
-      data: [
-        ...input.notes.map((note) => ({
-          label: `Daily Note · ${note.title}`,
-          from: note.blocks,
-          text: note.lines.join('\n'),
-        })),
-        // What the User's answers taught Ares about Blocks like these, and their preferences (#74).
-        ...recall(itemStore, {
-          text: input.offered.map((offered) => offered.text).join('\n'),
-          kinds: ['example', 'preference'],
-        }),
-      ],
-    }),
+    async prompt(input) {
+      const offered = input.offered.map((each) => each.text).join('\n');
+      return {
+        instructions: INSTRUCTIONS,
+        data: [
+          ...input.notes.map((note) => ({
+            label: `Daily Note · ${note.title}`,
+            from: note.blocks,
+            text: note.lines.join('\n'),
+          })),
+          // What the User's answers taught Ares about Blocks like these, and their preferences (#74),
+          // by their words and (#73) their meaning.
+          ...recall(itemStore, {
+            text: offered,
+            kinds: ['example', 'preference'],
+            meaning: await meaning?.(offered),
+          }),
+        ],
+      };
+    },
 
     output: OUTPUT,
 

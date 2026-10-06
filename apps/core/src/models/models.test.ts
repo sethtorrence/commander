@@ -13,6 +13,8 @@ import { chatCompletion, type FakeOpenAIServer, startFakeOpenAIServer } from '@c
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createAccessTokens } from '../access-tokens';
 import { type ItemStore, openItemStore } from '../item-store';
+import { type Meaning, setUpMeaning } from '../meaning';
+import { FAKE_MODEL, fakeEmbedder } from '../meaning/fake';
 import { createKnownSecrets } from '../safety/known-secrets';
 import { setUpModels } from '.';
 
@@ -25,6 +27,7 @@ let savedKey: string | null;
 let tokenRequests: CoreAccessTokenRequest[];
 let models: ReturnType<typeof setUpModels>;
 let secrets: ReturnType<typeof createKnownSecrets>;
+let meaning: Meaning;
 const replies: CoreModelsReply[] = [];
 
 beforeEach(async () => {
@@ -54,10 +57,21 @@ beforeEach(async () => {
     send: (message) => replies.push(coreModelsReply.parse(message)),
     accessTokens,
     secrets,
+    meaning: () => meaning,
+  });
+  meaning = setUpMeaning({
+    store,
+    model: FAKE_MODEL,
+    downloaded: () => true,
+    download: async () => {},
+    load: async () => fakeEmbedder(),
+    embed: (request) => models.client.embed(request),
+    timing: { pauseMs: 0, pendingDelayMs: 0, quietAfterQueryMs: 0 },
   });
 });
 
 afterEach(async () => {
+  await meaning.stop();
   store.close();
   await server.close();
   rmSync(dir, { recursive: true, force: true });
@@ -190,6 +204,39 @@ describe('Settings → Ares, answered by the Core', () => {
     server.reply({ status: 401, json: { error: { code: '1000', message: 'Authentication failed' } } });
 
     expect(await ask({ op: 'test' })).toMatchObject({ ok: false, kind: 'auth' });
+  });
+
+  it('says where search by meaning stands, searches with meaning once it is ready, and switches it off', async () => {
+    store.record(
+      { type: 'create', item: { kind: 'todo', title: 'Throttle bursts on /sync' } },
+      { by: { kind: 'user' } },
+    );
+    const query = { text: 'the rate limiter thing' };
+    expect(await ask({ op: 'meaning-status' })).toMatchObject({
+      ok: true,
+      result: { on: true, state: 'waiting' },
+    });
+    expect(await ask({ op: 'search-meaning', query })).toEqual({ ok: true, result: null });
+
+    meaning.start();
+    await expect
+      .poll(async () => (await ask({ op: 'meaning-status' })) as { result?: { embedded: number } })
+      .toMatchObject({ result: { state: 'ready', embedded: 1, total: 1 } });
+    const found = await ask({ op: 'search-meaning', query });
+    expect(found).toMatchObject({
+      ok: true,
+      result: { hits: [{ item: { title: 'Throttle bursts on /sync' }, foundBy: ['meaning'] }] },
+    });
+
+    expect(await ask({ op: 'set-meaning', on: false })).toMatchObject({
+      ok: true,
+      result: { on: false, state: 'off' },
+    });
+    expect(await ask({ op: 'settings' })).toMatchObject({ ok: true, result: { searchByMeaning: false } });
+    expect(await ask({ op: 'search-meaning', query })).toEqual({ ok: true, result: null });
+    // Saving the rest of Settings → Ares, from a form loaded before, leaves it off.
+    await ask({ op: 'save-settings', settings: defaultModelSettings });
+    expect(await ask({ op: 'settings' })).toMatchObject({ ok: true, result: { searchByMeaning: false } });
   });
 
   it('ignores messages that are not for it', () => {

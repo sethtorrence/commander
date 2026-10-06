@@ -1,6 +1,7 @@
 // The one model interface. Callers say which tier and job a call is for; the client picks the
 // provider and model from the User's settings, applies the thinking level, enforces the monthly
-// cap, and logs every call's tokens and cost to the usage ledger.
+// cap, and logs every call's tokens and cost to the usage ledger. `embed` turns texts into vectors
+// with the embedding model (#73), logged the same way.
 import type {
   ModelCall,
   ModelProvider,
@@ -13,7 +14,13 @@ import { type ZodType, z } from 'zod';
 import { ModelError } from './errors';
 import type { UsageLedger } from './ledger';
 import { costOf } from './prices';
-import type { ChatMessage, ModelProviderAdapter, ProviderReply, TokenUsage } from './provider';
+import type {
+  ChatMessage,
+  EmbeddingProviderAdapter,
+  ModelProviderAdapter,
+  ProviderReply,
+  TokenUsage,
+} from './provider';
 
 const NO_TOKENS: TokenUsage = { inputTokens: 0, cachedTokens: 0, outputTokens: 0 };
 
@@ -53,10 +60,27 @@ export type Completion = {
   model: string;
 };
 
+export type EmbedRequest = {
+  // Which job is embedding, e.g. 'embed-index'. Logged with the call.
+  job: string;
+  texts: readonly string[];
+  signal?: AbortSignal;
+};
+
+export type Embeddings = {
+  // One per text, in order.
+  vectors: Float32Array[];
+  provider: EmbeddingProviderAdapter['provider'];
+  model: string;
+  usage: Usage;
+};
+
 export type ModelClient = {
   complete(request: StreamRequest): ModelStream;
   complete<T = unknown>(request: JsonRequest<T>): Promise<Completion & { json: T }>;
   complete(request: CompleteRequest): Promise<Completion>;
+  // Fails with ModelError 'unavailable' while there is no embedding model (not downloaded, or off).
+  embed(request: EmbedRequest): Promise<Embeddings>;
 };
 
 export type ModelClientOptions = {
@@ -64,6 +88,8 @@ export type ModelClientOptions = {
   settings: () => ModelSettings | Promise<ModelSettings>;
   providers: Record<ModelProvider, ModelProviderAdapter>;
   ledger: UsageLedger;
+  // The embedding model as it is now, or null while there is none.
+  embedding?: () => EmbeddingProviderAdapter | null;
   // The clock, in epoch milliseconds.
   now?: () => number;
 };
@@ -292,5 +318,46 @@ export function createModelClient(options: ModelClientOptions): ModelClient {
     return completed(request);
   }
 
-  return { complete } as ModelClient;
+  async function embed(request: EmbedRequest): Promise<Embeddings> {
+    const adapter = options.embedding?.() ?? null;
+    if (!adapter) throw new ModelError('unavailable', 'The embedding model isn’t ready.');
+    const started = now();
+    const log = async (inputTokens: number, outcome: ModelCall['outcome']): Promise<Usage> => {
+      const usage = {
+        inputTokens,
+        cachedTokens: 0,
+        outputTokens: 0,
+        latencyMs: Math.max(0, now() - started),
+        costUsd: 0,
+      };
+      await options.ledger.record({
+        at: started,
+        job: request.job,
+        tier: 'embedding',
+        provider: adapter.provider,
+        model: adapter.model,
+        ...usage,
+        outcome,
+      });
+      return usage;
+    };
+    let embedded: { vectors: Float32Array[]; tokens: number };
+    try {
+      embedded = await adapter.embed(request.texts, request.signal);
+    } catch (thrown) {
+      const error =
+        thrown instanceof ModelError
+          ? thrown
+          : new ModelError(
+              'unavailable',
+              `The embedding failed: ${thrown instanceof Error ? thrown.message : thrown}`,
+            );
+      await log(0, error.kind);
+      throw error;
+    }
+    const usage = await log(embedded.tokens, 'ok');
+    return { vectors: embedded.vectors, provider: adapter.provider, model: adapter.model, usage };
+  }
+
+  return { complete, embed } as ModelClient;
 }

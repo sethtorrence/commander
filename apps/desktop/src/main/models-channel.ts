@@ -11,12 +11,17 @@ import {
 
 type Pending = { op: ModelsOp; resolve: (response: ModelsResponse) => void; timer: NodeJS.Timeout };
 
-// Test waits on the model, which may retry with back-off; everything else is a quick database read.
+// Test waits on the model, which may retry with back-off; everything else is a quick database read
+// (or, for a search with meaning, a query embedded on this machine).
 const TIMEOUTS: Record<ModelsOp, number> = {
   settings: 10_000,
   'save-settings': 10_000,
   usage: 10_000,
   test: 5 * 60_000,
+  'meaning-status': 10_000,
+  'set-meaning': 10_000,
+  // Embedding the query gives up after 2 s on its own; then a quick search.
+  'search-meaning': 10_000,
 };
 
 export function createModelsChannel(send: (message: CoreModelsRequest) => void) {

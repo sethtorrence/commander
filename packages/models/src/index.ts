@@ -5,6 +5,8 @@ export {
   type CompleteRequest,
   type Completion,
   createModelClient,
+  type Embeddings,
+  type EmbedRequest,
   type ModelClient,
   type ModelClientOptions,
   type Usage,
@@ -12,6 +14,7 @@ export {
 export { costOf, PRICES, type Price, priceOf } from './prices';
 export type {
   ChatMessage,
+  EmbeddingProviderAdapter,
   ModelProviderAdapter,
   ProviderReply,
   ProviderRequest,

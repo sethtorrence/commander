@@ -1,17 +1,18 @@
 import type { MemoryKind } from '@commander/domain';
+import type { QueryVector } from '../search/meaning-index';
 
 /*
   The seam inside Memory's lookup. A retriever finds live memories for a lookup, best first; Memory
   runs each one and fuses their lists by reciprocal rank (search/retriever.ts's fuseRanked), so a
-  memory two of them find comes before one only one finds. Two today:
+  memory two of them find comes before one only one finds. Three:
 
   - words: the FTS5 word index over each memory's text and keywords (words.ts);
   - fields: what a memory is about, matched by who and what an Item involves (a Person, any of their
-    handles, a Project) (fields.ts).
+    handles, a Project) (fields.ts);
+  - meaning (#73): embeddings of the same text (meaning.ts), answering only when the lookup brings
+    the embedding of what it is about (`meaning`).
 
-  Search by meaning (#73) adds a third, over embeddings of the same text: it hears of every memory as
-  it is saved (`put`) and deleted (`drop`), and answers `retrieve` like the others. Nothing outside
-  Memory changes when it arrives.
+  Each hears of every memory as it is saved (`put`) and deleted (`drop`).
 */
 
 export type MemoryFoundBy = 'words' | 'fields' | 'meaning';
@@ -25,6 +26,8 @@ export type RetrieverQuery = {
   handles: string[];
   projectIds: string[];
   kinds?: readonly MemoryKind[];
+  // The text embedded, for the meaning retriever.
+  meaning?: QueryVector;
 };
 
 export type RetrievedMemory = { id: string; exact: boolean };
