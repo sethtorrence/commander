@@ -5,6 +5,7 @@ import {
   UPDATE_GROUP_NAMES,
   UPDATE_SECTION_NAMES,
   type UpdateRow,
+  type UpdateView,
   type UpdateViewLine,
   updateGroups,
 } from '@commander/domain';
@@ -126,11 +127,19 @@ function Note({ children }: { children: React.ReactNode }) {
   return <p className="hatch m-0 px-6 py-6 text-heading text-muted">{children}</p>;
 }
 
-type LineHandlers = Pick<UpdatePanelProps, 'onAct' | 'onOpen' | 'onActRow'>;
+export type LineHandlers = Pick<UpdatePanelProps, 'onAct' | 'onOpen' | 'onActRow'>;
 
 function Update({ state, ...handlers }: { state: Extract<PanelState, { mode: 'update' }> } & LineHandlers) {
   const { view } = state;
   if (!view) return <Note>Nothing new since you last asked.</Note>;
+  return <UpdateLines view={view} {...handlers} />;
+}
+
+/**
+ * An Update's lines in their three groups, each with its Items and actions, the smaller things folded
+ * after time away: in the panel, and in a Conversation where Ares gave it (#192).
+ */
+export function UpdateLines({ view, ...handlers }: { view: UpdateView } & LineHandlers) {
   const lead = view.lines.filter((line) => !line.folded);
   const folded = foldedSummary(view.lines);
   return (

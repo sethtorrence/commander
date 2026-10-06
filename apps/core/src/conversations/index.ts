@@ -13,9 +13,21 @@
 //   answers one at a time, and Conversations take turns (fair-queue.ts), a waiting answer saying so.
 // - Failing: no key, the cap, or a failed call leaves his answer `failed` with the reason in his
 //   voice; the User's message stays, for Send again.
-// - Trust: what the User typed is their own material (prompt.ts, buildConversationPrompt); nothing
-//   from a Source enters a Conversation yet. He never starts a Conversation or writes into one
-//   unprompted: every turn of his answers one of the User's, which the Item store enforces.
+// - Skills (#192, skills.ts): each turn he may take up to SKILL_STEPS Skill steps before answering,
+//   choosing from what the User said (Find, Update, Summarise, from the Skill registry). Each step is
+//   a call whose reply names a Skill and its input; Commander runs it and hands him what it found for
+//   the next call. Asking for more steps than that, or a Skill failing, has Commander say plainly what
+//   he couldn't finish, with whatever the material does show after it. An Update he gives shows in
+//   the Conversation with its lines and actions (`updateId`).
+// - Links: every Item handed to him has a ref (I1, I2…) for this answer; his answer names the ones
+//   its claims rest on, which become its links (`links`), each opening its Item in its Section. A ref
+//   he wasn't handed is taken out of his text.
+// - Trust: what the User typed is their own material (prompt.ts, buildConversationPrompt). What his
+//   Skills found goes in data blocks after it: each Item from a Source as outside material in a block
+//   of its own, the User's Daily Notes and confirmed Memory as theirs, the rest as background. A
+//   steering flag in any reply marks an Item only with a quote found in it (ADR 0004). He never
+//   starts a Conversation or writes into one unprompted: every turn of his answers one of the User's,
+//   which the Item store enforces.
 import {
   CONVERSATIONS_MESSAGES,
   type ConversationsOp,
@@ -24,20 +36,42 @@ import {
   type ConversationView,
   type CoreMessage,
   conversationsRequest,
+  type Item,
+  LINK_REF,
   type ModelSettings,
+  SkillInputError,
+  type SkillRegistry,
+  SUMMARISE_SKILL,
+  skillTitle,
 } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
 import { buildConversationPrompt, PromptRefused } from '../agent/prompt';
-import type { ConversationStore, RemovedConversation } from '../item-store';
+import type { ConversationStore, InjectionWarningStore, RemovedConversation } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
-import { pieceBetween, readAnswer } from './answer';
+import { heedSteering, type SteeringFlag } from '../safety/steering-flag';
+import { type AnswerReader, pieceBetween, readAnswer } from './answer';
 import { createFairQueue, type QueueTicket } from './fair-queue';
 import { HISTORY_BUDGET_CHARS, historyOf, historyWithin } from './history';
-import { CONVERSATION_INSTRUCTIONS } from './voice';
+import {
+  COULDNT_FINISH,
+  findingsOf,
+  type Gathered,
+  gather,
+  gatheredAnything,
+  handedLinks,
+  linksIn,
+  materialOf,
+  nothingGathered,
+  offeredSkills,
+  readChoice,
+  SKILL_STEPS,
+} from './skills';
+import { conversationInstructions, type Stage } from './voice';
 
 export { createFairQueue, type FairQueue, type QueueTicket } from './fair-queue';
 export { HISTORY_BUDGET_CHARS, historyOf, historyWithin } from './history';
+export { CONVERSATION_SKILLS, COULDNT_FINISH, SKILL_STEPS } from './skills';
 
 // The usage ledger's name for a Conversation's calls (AGENT_JOB_NAMES: "Conversations").
 export const CONVERSATION_JOB = 'conversation';
@@ -102,6 +136,14 @@ export type ConversationsOptions = {
   // base URL unless given (the end-to-end tests treat their fake model as a cloud one).
   oneAtATime?: () => boolean;
   historyBudget?: number;
+  // Ares's Skills (#192): those a Conversation can use are offered to him; all are listed on "What
+  // Ares can do". None: he has no Skills, and answers from his own knowledge.
+  skills?: SkillRegistry;
+  // Items by id, for what an Update's lines are about.
+  item?: (itemId: string) => Item | null;
+  // Where a steering flag marks an Item, and who hears that it did.
+  injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
+  onItemsChanged?: (itemIds: string[]) => void;
   log?: (message: string) => void;
 };
 
@@ -147,15 +189,25 @@ export function setUpConversations(options: ConversationsOptions): Conversations
   const push = (message: CoreMessage) => options.send(message);
   const changed = (turn: ConversationTurn) => push({ type: 'conversation-turn', turn });
 
-  // Ares writes his answer to the User's turn `replyTo`: the model's stream read, checked and sent to
-  // the window as it comes, then saved.
+  // Marks the outside Items a reply's steering flag names with a quote found in them.
+  function heed(flag: SteeringFlag, outside: { ref: string; itemId: string }[]) {
+    const marked = heedSteering(flag, { outside }, options.injectionWarnings);
+    if (marked.length) options.onItemsChanged?.(marked);
+  }
+
+  // Ares writes his answer to the User's turn `replyTo`: up to SKILL_STEPS Skill steps first, each a
+  // call whose reply names a Skill, then the answer itself, read, checked and sent to the window as it
+  // comes, and saved with what it rests on.
   async function write(conversationId: string, replyTo: number, entry: Answering) {
     const { turnId, controller } = entry;
     if (controller.signal.aborted) return;
     changed(store.saveAnswer(turnId, { status: 'streaming' }));
     const view = store.view(conversationId);
+    const gathered: Gathered = nothingGathered();
     let sent = '';
-    let reader: ReturnType<typeof readAnswer> | null = null;
+    let reader: AnswerReader | null = null;
+    // Commander's own words before his: what he couldn't finish.
+    let lead: string | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const flush = (text: string) => {
       if (text === sent) return;
@@ -163,57 +215,132 @@ export function setUpConversations(options: ConversationsOptions): Conversations
       sent = text;
       push({ type: 'conversation-tokens', conversationId, turnId, ...piece });
     };
+    // His answer as far as it has got, checked, with only the links he was handed.
+    const soFar = () => {
+      const text = reader && reader.grounds() !== 'skill' ? reader.final() : (lead ?? '');
+      return linksIn(text, gathered);
+    };
+    const ownKnowledge = (text: string) => {
+      const grounds = reader?.grounds();
+      if (!text || grounds === 'skill') return false;
+      return grounds === 'general' || (grounds === null && !gatheredAnything(gathered));
+    };
+    // What he rests on so far, for the window: the Skills he used, the Items handed out, the Update.
+    const resting = () => ({
+      skills: [...gathered.skills],
+      links: handedLinks(gathered),
+      updateId: gathered.update?.id ?? null,
+    });
+    entry.partial = () => soFar().text;
     try {
       if (!view) throw new Error('That Conversation is no longer in Commander');
       const turns = historyWithin(historyOf(view.turns, replyTo), budget);
-      const prompt = buildConversationPrompt(
-        { instructions: CONVERSATION_INSTRUCTIONS, turns },
-        { secrets: options.secrets },
-      );
-      const live = readAnswer(prompt.material);
-      reader = live;
-      entry.partial = () => live.final();
-      const stream = client.complete({
-        tier: 'deep',
-        job: CONVERSATION_JOB,
-        messages: prompt.messages,
-        stream: true,
-        signal: controller.signal,
-      });
-      for await (const token of stream) {
-        live.add(token);
-        timer ??= setTimeout(() => {
-          timer = null;
-          flush(live.text());
-        }, FLUSH_MS);
+      const offered = options.skills ? offeredSkills(options.skills) : [];
+      let stepsLeft = SKILL_STEPS;
+      let stage: Stage = offered.length ? { kind: 'choosing', stepsLeft } : { kind: 'last' };
+      for (;;) {
+        const prompt = buildConversationPrompt(
+          { instructions: conversationInstructions(offered, stage), turns, data: materialOf(gathered) },
+          { secrets: options.secrets },
+        );
+        const live = readAnswer(prompt.material, lead ? { lead } : {});
+        reader = live;
+        const stream = client.complete({
+          tier: 'deep',
+          job: CONVERSATION_JOB,
+          messages: prompt.messages,
+          stream: true,
+          signal: controller.signal,
+        });
+        for await (const token of stream) {
+          live.add(token);
+          if (live.grounds() === 'skill') continue;
+          timer ??= setTimeout(() => {
+            timer = null;
+            flush(live.text());
+          }, FLUSH_MS);
+        }
+        await stream.done;
+        heed(live.steering(), prompt.outside);
+        if (live.grounds() !== 'skill') break;
+        // A Skill step.
+        if (stage.kind === 'wrap-up') break;
+        // He wanted more steps than he may take: Commander says so, and he goes on with what he has.
+        if (stage.kind === 'last') {
+          lead = COULDNT_FINISH.steps;
+          stage = { kind: 'wrap-up', said: lead };
+          if (gatheredAnything(gathered)) continue;
+          break;
+        }
+        const picked = readChoice(live.request(), offered);
+        stepsLeft -= 1;
+        stage = stepsLeft > 0 ? { kind: 'choosing', stepsLeft } : { kind: 'last' };
+        if (!picked.ok) {
+          gathered.notes.push(`Your last Skill request couldn’t be used: ${picked.why}.`);
+          continue;
+        }
+        heed(picked.choice.steering, prompt.outside);
+        const { skill } = picked.choice;
+        let input = picked.choice.input;
+        // Summarise on an Item he was shown: its ref, as the Item itself.
+        const target = (input as { target?: unknown } | null)?.target;
+        if (skill === SUMMARISE_SKILL.name && typeof target === 'string' && LINK_REF.test(target.trim())) {
+          const found = gathered.items.get(target.trim());
+          if (found) input = { ...(input as object), target: `item:${found.item.id}` };
+        }
+        changed(store.saveAnswer(turnId, { ...resting(), skills: [...gathered.skills, skill] }));
+        let output: unknown;
+        try {
+          output = await (options.skills as SkillRegistry).run(skill, input);
+          if (controller.signal.aborted) throw new ModelError('cancelled', 'Stopped.');
+          gather(gathered, skill, findingsOf(skill, output, options.item ?? (() => null)));
+        } catch (error) {
+          if (controller.signal.aborted) throw error;
+          // What he gave it didn't fit what it needs: nothing ran, and he is told, as for a malformed request.
+          if (error instanceof SkillInputError) {
+            gathered.notes.push(`Your last Skill request couldn’t be used: ${error.message}.`);
+            changed(store.saveAnswer(turnId, resting()));
+            continue;
+          }
+          log(`Ares’s ${skill} Skill failed: ${error instanceof Error ? error.message : error}`);
+          gathered.skills.push(skill);
+          changed(store.saveAnswer(turnId, resting()));
+          // A Skill failed: Commander says so, and he goes on with what the others found, if anything.
+          lead = COULDNT_FINISH.failed(skillTitle({ name: skill }));
+          stage = { kind: 'wrap-up', said: lead };
+          if (gatheredAnything(gathered)) continue;
+          break;
+        }
+        changed(store.saveAnswer(turnId, resting()));
       }
-      await stream.done;
-      const text = live.final();
+      const { text, links } = soFar();
       flush(text);
       changed(
         store.saveAnswer(turnId, {
+          ...resting(),
           status: 'done',
           text,
-          ownKnowledge: text !== '' && live.ownKnowledge(),
+          links,
+          ownKnowledge: ownKnowledge(text),
           endedAt: now(),
         }),
       );
     } catch (error) {
       if (closed) return;
-      const text = reader?.final() ?? '';
+      const { text, links } = soFar();
       flush(text);
-      const ownKnowledge = text !== '' && (reader?.ownKnowledge() ?? false);
+      const rests = { ...resting(), links, ownKnowledge: ownKnowledge(text) };
       if (controller.signal.aborted) {
-        changed(store.saveAnswer(turnId, { status: 'stopped', text, ownKnowledge, endedAt: now() }));
+        changed(store.saveAnswer(turnId, { ...rests, status: 'stopped', text, endedAt: now() }));
       } else {
         if (!(error instanceof ModelError) && !(error instanceof PromptRefused)) {
           log(`A Conversation’s answer failed: ${error instanceof Error ? error.message : error}`);
         }
         changed(
           store.saveAnswer(turnId, {
+            ...rests,
             status: 'failed',
             text,
-            ownKnowledge,
             problem: problemFor(error),
             endedAt: now(),
           }),
@@ -312,6 +439,16 @@ export function setUpConversations(options: ConversationsOptions): Conversations
         clearTimeout(kept.timer);
         removed.delete(request.conversationId);
         return store.restore(kept.conversation);
+      }
+      case 'skills': {
+        // Every Skill he has, and whether a Conversation can use it yet.
+        const offered = new Set(
+          options.skills ? offeredSkills(options.skills).map((skill) => skill.name) : [],
+        );
+        return (options.skills?.list() ?? []).map((skill) => ({
+          ...skill,
+          inConversations: offered.has(skill.name),
+        }));
       }
     }
   }

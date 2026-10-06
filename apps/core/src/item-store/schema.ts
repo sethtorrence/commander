@@ -10,6 +10,7 @@ import type {
   ComposeAttachment,
   ComposeBody,
   ComposeMode,
+  ConversationLink,
   DashboardBand,
   EmailDetail,
   EventDetail,
@@ -1181,6 +1182,11 @@ export const conversationTurns = sqliteTable(
     ownKnowledge: integer('own_knowledge', { mode: 'boolean' }).notNull().default(false),
     problem: text('problem'),
     endedAt: integer('ended_at'),
+    // What his answer rests on (#192): the Items it links to by ref, the Update it gave, and the
+    // Skills he used for it.
+    links: text('links', { mode: 'json' }).$type<ConversationLink[]>().notNull().default([]),
+    updateId: integer('update_id'),
+    skills: text('skills', { mode: 'json' }).$type<string[]>().notNull().default([]),
   },
   (t) => [index('conversation_turns_conversation').on(t.conversationId, t.id)],
 );

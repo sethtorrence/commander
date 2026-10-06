@@ -19,6 +19,9 @@ function turn(overrides: Partial<ConversationTurn>): ConversationTurn {
     ownKnowledge: false,
     problem: null,
     endedAt: 0,
+    links: [],
+    updateId: null,
+    skills: [],
     ...overrides,
   };
 }
@@ -46,6 +49,21 @@ describe('what of a Conversation goes back to the model', () => {
       user('Try again: a firth?'),
       ares('A firth is'),
       user('Thanks. And a loch?'),
+    ]);
+  });
+
+  it('takes the refs out of his earlier answers: a later answer’s refs name other Items', () => {
+    nextId = 1;
+    const turns = [
+      turn({ text: 'Find the Acme redlines' }),
+      turn({ by: 'ares', text: 'Leo sent them on Tuesday [I1], and Dana replied [I2].', replyTo: 1 }),
+      turn({ text: 'Thanks [I1]' }),
+    ];
+    expect(historyOf(turns, 3)).toEqual([
+      user('Find the Acme redlines'),
+      ares('Leo sent them on Tuesday, and Dana replied.'),
+      // The User's own words go back as they wrote them.
+      user('Thanks [I1]'),
     ]);
   });
 

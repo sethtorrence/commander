@@ -24,9 +24,13 @@ export type RemovedConversation = {
   turns: (typeof schema.conversationTurns.$inferSelect)[];
 };
 
-// What may change on one of Ares's answers as he writes it.
+// What may change on one of Ares's answers as he writes it: also what it rests on (#192), the Items
+// it links to, the Update it gave and the Skills he used.
 export type AnswerChanges = Partial<
-  Pick<ConversationTurn, 'status' | 'text' | 'ownKnowledge' | 'problem' | 'endedAt'>
+  Pick<
+    ConversationTurn,
+    'status' | 'text' | 'ownKnowledge' | 'problem' | 'endedAt' | 'links' | 'updateId' | 'skills'
+  >
 >;
 
 export type ConversationStore = {

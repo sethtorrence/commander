@@ -201,7 +201,7 @@ The name and persona under which the Agent presents itself to the User.
 _Avoid_: Titanus (former name), assistant, bot, AI
 
 **Skill**:
-A named ability Ares can use, on request or when he judges it is wanted (e.g. Update, Find, Summarise, Draft, Schedule).
+A named ability Ares can use, on request or when he judges it is wanted (e.g. Update, Find, Summarise, Draft, Schedule), each listed on What Ares can do; in a Conversation he chooses one from what the User says, and using one is a **Skill step**, at most a few for each message.
 _Avoid_: Tool, command, feature, plugin
 
 **Conversation**:

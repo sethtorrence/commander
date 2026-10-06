@@ -206,17 +206,20 @@ describe('talking to Ares in a Conversation', () => {
     await vi.waitFor(() => expect(model.calls[0]?.request.reasoningEffort).toBe('max'));
   });
 
-  it('says plainly he can’t look up the User’s data yet, without the own-knowledge mark', async () => {
+  it('says plainly he can’t do what none of his Skills can, without the own-knowledge mark', async () => {
     setUp();
     const { conversation } = await ask({ op: 'today', day: DAY });
-    await ask({ op: 'send', conversationId: conversation.id, text: 'What’s on my calendar today?' });
+    await ask({ op: 'send', conversationId: conversation.id, text: 'Email Dana that I’m running late' });
     await vi.waitFor(() => expect(model.calls).toHaveLength(1));
-    model.calls[0]?.write('[their-data]\nI can’t see your calendar from here.');
+    model.calls[0]?.write('[cant]\nSending is yours to do.');
     model.calls[0]?.finish();
     const done = await settled(conversation.id);
     expect(answerOf(done)).toMatchObject({
-      text: 'I can’t look that up yet. I can’t see your calendar from here.',
+      text: 'I can’t do that yet. Sending is yours to do.',
       ownKnowledge: false,
+      links: [],
+      updateId: null,
+      skills: [],
     });
   });
 

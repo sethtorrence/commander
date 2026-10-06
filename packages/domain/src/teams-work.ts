@@ -46,6 +46,10 @@ export const DRAFT_SKILL: SkillInfo = {
   name: 'draft',
   description:
     'Draft a reply to a Teams Chat or an email thread for the User, in their own style, from its recent messages (and what the User wants said), for the User to edit and send themselves.',
+  title: 'Draft',
+  summary:
+    'Drafts a reply to a Teams Chat or an email thread in your own style, for you to edit and send yourself.',
+  example: 'Draft a reply saying I’ll be there',
 };
 
 /** Where a Todo Ares made from a Chat came from: the Chat, and the message it opens at. */

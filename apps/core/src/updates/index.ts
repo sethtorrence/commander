@@ -15,7 +15,8 @@
 //   busy day). Every Update given is kept, so the last one, or any earlier one, can be reopened, and
 //   each line lists its Items (kinds/), each with its own actions. Asking for one first runs a light
 //   sync of every Teams Account, waiting up to 2 seconds before going on with what's there.
-// - The Summarise Skill (#109) summarises a Chat on request, over a range of its messages, and the
+// - The Summarise Skill (#109) summarises a Chat on request, over a range of its messages (and in a
+//   Conversation, #192, gathers what the User names for his answer to sum up), and the
 //   Draft Skill (#110) drafts a reply to one, for the User to edit and send (never while "Draft
 //   replies" is Off).
 // - Acting on a line: Done and Dismiss take it out of the queue (Dismiss also dismisses the
@@ -49,9 +50,13 @@ import {
   type RowAction,
   type SkillRegistry,
   type SnoozeChoice,
+  SUMMARISE_NEEDS,
   SUMMARISE_SKILL,
+  type SummariseInput,
+  type SummariseTarget,
   type SummaryRange,
   type SummaryRequest,
+  summariseInput,
   UPDATE_SKILL,
   UPDATES_MESSAGES,
   type UpdateLine,
@@ -119,6 +124,11 @@ export type UpdatesOptions = {
   onItemsChanged?: (itemIds: string[]) => void;
   // A missed send-later's Send now and Discard (#139), carried out by writing email (compose).
   sendLater?: { sendNow(itemId: string): void; discard(itemId: string): void };
+  // Ares's Skills, which the Update, Summarise and Draft join; a registry of their own unless given
+  // (the Core shares one with Find and Conversations, #192).
+  skills?: SkillRegistry;
+  // Summarise on what a Conversation names (#192): what Commander holds about it, gathered and read.
+  summariseTarget?: (input: SummariseTarget) => Promise<unknown>;
   // Replies to the window's requests (through the main process).
   send?: (message: unknown) => void;
   log?: (message: string) => void;
@@ -546,11 +556,17 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     });
   }
 
-  const skills = createSkillRegistry();
+  const skills = options.skills ?? createSkillRegistry();
   skills.register({ ...UPDATE_SKILL, run: () => asked() });
-  skills.register<{ itemId: string; range: SummaryRange }, ChatSummary>({
+  // On a Chat, from the Teams Section (its summary); on what a Conversation names, what it gathers.
+  skills.register<SummariseInput, unknown>({
     ...SUMMARISE_SKILL,
-    run: ({ itemId, range }) => summarise(itemId, range),
+    input: { schema: summariseInput, describe: SUMMARISE_NEEDS },
+    run: (input) => {
+      if ('itemId' in input) return summarise(input.itemId, input.range);
+      if (!options.summariseTarget) throw new Error('Summarise works only on a Chat here');
+      return options.summariseTarget(input);
+    },
   });
   // Draft takes an Item and, for an email, what the User wants said (#143): a Chat gets a draft for its
   // reply box, an email thread its suggested reply. M7's Conversations call it this way.

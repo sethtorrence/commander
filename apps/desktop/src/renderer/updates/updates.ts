@@ -66,7 +66,8 @@ const OPENABLE: readonly UpdateSection[] = [
   'teams',
   'ares',
 ];
-const sectionOf = (section: UpdateSection) => (OPENABLE.includes(section) ? section : 'ares');
+/** The Section tab an Item of this Section opens in (the Ares Section for what has no tab). */
+export const sectionOf = (section: UpdateSection) => (OPENABLE.includes(section) ? section : 'ares');
 
 /**
  * Where Open takes the User: one of the line's Items where it lives (`row`; Reply opens a Chat at the
