@@ -212,6 +212,16 @@ export function replySubject(subject: string, mode: ComposeMode): string {
   return RE.test(trimmed) ? trimmed : `Re: ${trimmed}`;
 }
 
+/** A subject without the "Re: " and "Fwd: " before it, however many: a Todo made from it (#140). */
+export function bareSubject(subject: string): string {
+  let bare = subject.trim();
+  for (let before = ''; before !== bare; ) {
+    before = bare;
+    bare = bare.replace(RE, '').replace(FWD, '').trim();
+  }
+  return bare;
+}
+
 /** Addresses once each (by address, case aside), in order, leaving out `except`. */
 export function uniqueAddresses(
   addresses: readonly EmailAddress[],

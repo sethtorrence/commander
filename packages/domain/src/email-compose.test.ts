@@ -5,6 +5,7 @@ import {
   addressBook,
   attachmentSize,
   attachmentsProblem,
+  bareSubject,
   bodyHtml,
   bodyText,
   type ComposeBody,
@@ -134,6 +135,13 @@ describe('replies and forwards', () => {
     expect(replySubject('Quarterly plan', 'forward')).toBe('Fwd: Quarterly plan');
     expect(replySubject('Fw: Quarterly plan', 'forward')).toBe('Fw: Quarterly plan');
     expect(replySubject(' Hello ', 'new')).toBe('Hello');
+  });
+
+  it('are taken off for a Todo made from the email, however many', () => {
+    expect(bareSubject('Re: Fwd: RE:  Quarterly plan ')).toBe('Quarterly plan');
+    expect(bareSubject('AW[2]: Quarterly plan')).toBe('Quarterly plan');
+    expect(bareSubject('Review: Quarterly plan')).toBe('Review: Quarterly plan');
+    expect(bareSubject('Re:')).toBe('');
   });
 
   it('go to the sender, or with reply all to everyone but the User', () => {

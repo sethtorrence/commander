@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { requestReveal } from '../../frame/reveal';
 import { itemChangesFromCore } from '../../item-store/changes';
 import { useMeetingPreps } from '../../links/meeting-prep';
+import { makeEmailTodo } from '../email/email-todo';
 import { type SectionDefinition, useOpenSection, useSection } from '../section';
 import { sectionFor } from '../todos/links';
 import { useDashboard } from './context';
@@ -39,10 +40,14 @@ function DashboardSection() {
   );
   return (
     <RowPrepContext.Provider value={value}>
-      <DashboardSheet />
+      <DashboardSheet makeTodo={makeTodo} />
     </RowPrepContext.Provider>
   );
 }
+
+// Make it a Todo from an email row (#140), as the User.
+const makeTodo = (draft: Parameters<typeof makeEmailTodo>[1]) =>
+  makeEmailTodo(window.commander.itemStore, draft);
 
 export const dashboard: SectionDefinition = {
   id: 'dashboard',

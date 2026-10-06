@@ -1,9 +1,21 @@
-import type { EmailDetail } from '@commander/domain';
+import type { EmailDetail, EmailThreadSummary } from '@commander/domain';
+import type { PickerTarget } from '../../projects/BadgePicker';
 
 /*
   The thread view's decisions (#134), kept apart from its components: which messages start expanded,
   how a plain-text message's quoted history folds, how its text becomes links, and how sizes read.
 */
+
+/**
+ * What the Badge picker files for a thread: its latest message (its Project is the thread's), with
+ * Ares's filing suggestion on it, if one waits (#141).
+ */
+export const pickerTarget = (thread: EmailThreadSummary): PickerTarget => ({
+  id: thread.latest.id,
+  title: thread.subject,
+  filing: thread.latest.filing,
+  ...(thread.latest.filingSuggestion && { filingSuggestion: thread.latest.filingSuggestion }),
+});
 
 /** The messages shown expanded when a thread opens: the newest, and every unread one. */
 export function expandedAtFirst(messages: readonly { item: { id: string; detail: unknown } }[]): Set<string> {

@@ -29,6 +29,7 @@ import {
   nextWorkingDays,
   type ProposalRecord,
   type TimeSlot,
+  type TodoOrigin,
   timeInZone,
   zonedTime,
 } from '@commander/domain';
@@ -101,6 +102,12 @@ An empty list is fine.`;
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const PRIORITIES = ['No priority', 'Urgent', 'High', 'Medium', 'Low'];
+// Where a Todo came from, as its facts say it; any other was added by the User.
+const FROM: Partial<Record<TodoOrigin, string>> = {
+  ares: 'suggested by Ares',
+  'daily-note': 'a Daily Note',
+  email: 'made from an email',
+};
 
 // "Thu 8 Oct", for a day.
 function dayLabel(day: string): string {
@@ -160,9 +167,7 @@ export function blockTimeForTodosJob(
       if (estimate !== null) facts.push(`estimate ${estimate}`);
       lines.push(facts.join(' · '));
     } else if (detail) {
-      lines.push(
-        `From: ${detail.origin === 'ares' ? 'suggested by Ares' : detail.origin === 'daily-note' ? 'a Daily Note' : 'added by the User'}`,
-      );
+      lines.push(`From: ${FROM[detail.origin] ?? 'added by the User'}`);
     }
     return lines;
   }

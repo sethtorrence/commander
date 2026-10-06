@@ -37,8 +37,10 @@ const block = (text = 'need to send Dana the Q3 numbers') =>
   });
 const issue = (id = 'issue-1') =>
   item({ id, kind: 'linear-issue', source: 'linear', account: 'acme', title: 'Fix it' });
-const todo = (origin: 'manual' | 'ares' | 'linear' | 'daily-note', backedBy: string | null = null) =>
-  item({ kind: 'todo', title: 'A Todo', detail: { kind: 'todo', origin, dueOn: null, backedBy } });
+const todo = (
+  origin: 'manual' | 'ares' | 'linear' | 'daily-note' | 'email',
+  backedBy: string | null = null,
+) => item({ kind: 'todo', title: 'A Todo', detail: { kind: 'todo', origin, dueOn: null, backedBy } });
 
 const build = (parts: PromptParts, secrets = createKnownSecrets()) =>
   buildPrompt(parts, { secrets, nonce: NONCE });
@@ -123,6 +125,8 @@ describe('buildPrompt', () => {
       [todo('daily-note'), 'the User'],
       [todo('linear', 'issue-1'), 'outside'],
       [todo('ares'), 'outside'],
+      // Made from an email (#140): its title starts as the subject, someone else's words.
+      [todo('email'), 'outside'],
       [item({ kind: 'daily-note', detail: { kind: 'daily-note', day: '2026-10-03' } }), 'the User'],
       [item({ kind: 'email', source: 'gmail', account: 'me' }), 'outside'],
     ];

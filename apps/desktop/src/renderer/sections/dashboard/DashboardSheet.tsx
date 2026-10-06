@@ -1,4 +1,4 @@
-import { localDay } from '@commander/domain';
+import { type ActivityEntry, localDay } from '@commander/domain';
 import { Kbd, SheetStripCell, toast } from '@commander/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { clockTime } from '../../frame/calendar';
@@ -10,6 +10,8 @@ import { SideCard } from '../../projects/page/SideCard';
 import { useShortcuts } from '../../shortcuts/react';
 import { AresQueueCard } from '../../updates/AresQueueCard';
 import { localTimeZone, ScheduleCard, scheduleDays } from '../calendar/ScheduleCard';
+import { type EmailTodoDraft, emailItemTodoDraft } from '../email/email-todo';
+import { useMakeTodo } from '../email/MakeTodo';
 import { longDate, notePartNumber, weekday } from '../notes/days';
 import { SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { useDashboard } from './context';
@@ -34,9 +36,13 @@ export function useEmptyBandText(): string {
  * The Dashboard Section's sheet, after the prototype's FEED: "What needs you", the Project filter,
  * then the ranked list in bands (Now, Today, Waiting on others, FYI), driven from the keyboard, with
  * the side column holding Ares's queue, today's and tomorrow's schedule, today's Daily Note and the
- * open Todos.
+ * open Todos. `makeTodo` makes an email row a Todo (`t`, #140); without it, `t` does nothing.
  */
-export function DashboardSheet() {
+export function DashboardSheet({
+  makeTodo,
+}: {
+  makeTodo?: (draft: EmailTodoDraft) => Promise<ActivityEntry[]>;
+} = {}) {
   const dashboard = useDashboard();
   const { shown, rows, counts, loaded } = dashboard;
   const { filter } = useProjectFilter();
@@ -47,6 +53,16 @@ export function DashboardSheet() {
   const { selected } = selection;
   const badges = useBadgePicker(dashboard.apply, (entryId) => void dashboard.undo(entryId));
   const empty = useEmptyBandText();
+  // Make it a Todo (#140): the email row's Todo, undone here like any change made here.
+  const todo = useMakeTodo(async (draft) => {
+    if (!makeTodo) return null;
+    const entry = await dashboard.apply(async () => {
+      const [made] = await makeTodo(draft);
+      if (!made) throw new Error('Nothing was made');
+      return made;
+    });
+    return entry ? () => void dashboard.undo(entry.id) : null;
+  });
   const now = dashboard.rankedAt;
 
   useTabCount(loaded ? tabCount(shown) : null);
@@ -120,6 +136,12 @@ export function DashboardSheet() {
         });
       },
     },
+    {
+      keys: 't',
+      label: 'Make the email a Todo',
+      when: () => !!makeTodo && selected?.item.kind === 'email',
+      run: () => selected && todo.open(emailItemTodoDraft(selected.item)),
+    },
     { keys: 'Ctrl+z', label: 'Undo', run: () => void dashboard.undo() },
   ]);
 
@@ -172,6 +194,7 @@ export function DashboardSheet() {
           </div>
         </PickBadgeProvider>
         {badges.picker}
+        {todo.dialog}
       </SectionSheet>
       <aside
         className="relative col-span-2 min-w-0"
@@ -315,6 +338,7 @@ const KEYS: [ReactNode, string][] = [
     'Project',
   ],
   [<Kbd key="b">B</Kbd>, 'Badge'],
+  [<Kbd key="t">T</Kbd>, 'Todo'],
 ];
 
 /** The Dashboard's keys at a glance, beside its title (.fkeys). All of them are in the `?` cheat sheet. */

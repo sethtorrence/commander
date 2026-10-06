@@ -203,6 +203,7 @@ export function rankDashboardJob(
       ares: 'Suggested by Ares and added by the User',
       linear: 'From Linear',
       github: 'From GitHub: a review asked of the User, or an issue assigned to them',
+      email: 'Made by the User from an email',
     }[origin];
     return [
       `Title: ${item.title}`,

@@ -2,24 +2,26 @@ import {
   type BucketSortedBy,
   type EmailLabel,
   type EmailThreadSummary,
+  NEEDS_REPLY,
   type ThreadAction,
   UNSORTED,
 } from '@commander/domain';
 import { cn, Kbd, Led, SuggestedFiling, toast } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { BucketChip } from '../../buckets/BucketChip';
-import { bucketName } from '../../buckets/buckets';
+import { bucketName, stripOrder } from '../../buckets/buckets';
 import { SuggestedBucket } from '../../buckets/SuggestedBucket';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
 import { ItemWarning } from '../../links/ItemWarning';
+import { useCommands } from '../../palette/commands';
 import { BadgePicker, type PickerTarget } from '../../projects/BadgePicker';
 import { ItemBadge, SectionProjectFilter, useAccentBar, waitingSuggestion } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
-import { useShortcuts } from '../../shortcuts/react';
+import { type ShortcutSpec, useShortcuts } from '../../shortcuts/react';
 import type { AutonomyClient } from '../ares/activity';
-import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
+import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { CloudMailQuestions } from './CloudMail';
 import { Composer } from './compose/Composer';
 import { DraftList, OutboxList, OutboxNote } from './compose/ComposeViews';
@@ -45,6 +47,8 @@ import {
   providerOf,
   threadTime,
 } from './email';
+import { emailTodoDraft } from './email-todo';
+import { useMakeTodo } from './MakeTodo';
 import { actionToast } from './organising';
 import { type EmailReaderClient, textOnlyReader } from './reader';
 import { SuggestedReplyCard } from './SuggestedReply';
@@ -56,6 +60,8 @@ import {
   useSkipSuggestions,
 } from './skip-inbox';
 import { ThreadReader } from './ThreadReader';
+import { Triage } from './Triage';
+import { pickerTarget } from './thread-view';
 import { threadId, useEmail } from './use-email';
 import { useAresSorting } from './use-sorting';
 
@@ -93,6 +99,8 @@ const KEYS: [ReactNode, string][] = [
   [<Kbd key="d">D</Kbd>, 'Draft (Ares)'],
   [<Kbd key="slash">/</Kbd>, 'Search'],
   [<Kbd key="b">B</Kbd>, 'Project'],
+  [<Kbd key="t">T</Kbd>, 'Todo'],
+  [<Kbd key="triage">⇧T</Kbd>, 'Triage'],
   [<Kbd key="esc">Esc</Kbd>, 'Close'],
 ];
 
@@ -359,15 +367,6 @@ function ThreadRow({
   );
 }
 
-// What the Badge picker files: a thread's latest message (its Project is the thread's), with Ares's
-// filing suggestion on it, if one waits (#141).
-const pickerTarget = (thread: EmailThreadSummary): PickerTarget => ({
-  id: thread.latest.id,
-  title: thread.subject,
-  filing: thread.latest.filing,
-  ...(thread.latest.filingSuggestion && { filingSuggestion: thread.latest.filingSuggestion }),
-});
-
 /**
  * Ares's suggestions on the open thread (#141): his suggested Bucket while it is Unsorted, and his
  * dashed Badge while it is Unfiled, each with Confirm and Change.
@@ -527,6 +526,34 @@ export function EmailSheet({
       toast(error instanceof Error ? error.message : String(error));
     }
   };
+  // Triage (#140): the Bucket it walks while it runs (the Section's own view waits underneath, as it
+  // was); `run` tells one start from the next.
+  const [triage, setTriage] = useState<{ bucketId: string; run: number } | null>(null);
+  const openSection = useOpenSection();
+  // The chosen Bucket, else Needs reply (else the first, should the User have removed it).
+  const triageBucket =
+    state.buckets.find((each) => each.id === state.bucket)?.id ??
+    state.buckets.find((each) => each.id === NEEDS_REPLY)?.id ??
+    stripOrder(state.buckets)[0]?.id ??
+    null;
+  const startTriage = (bucketId: string | null) => {
+    if (!bucketId || !state.accounts.length) return;
+    setPicking(null);
+    setOrganising(null);
+    setSpecial(null);
+    setTriage((now) => ({ bucketId, run: (now?.run ?? 0) + 1 }));
+  };
+  // Make it a Todo (#140): from the selected thread, undone with its toast or Ctrl+Z.
+  const todo = useMakeTodo(async (draft) => {
+    const entries = (await client.makeTodo(draft)).map((entry) => entry.id);
+    state.remember(entries);
+    return () => void state.undo(entries);
+  });
+  const makeTodo = async (thread = selected) => {
+    if (!thread) return;
+    const found = await client.thread(thread.account, thread.threadKey).catch(() => null);
+    todo.open(emailTodoDraft(thread, found?.messages));
+  };
   const several = state.accounts.length > 1 && state.account === 'all';
   const accountName = useCallback(
     (accountId: string) => {
@@ -550,6 +577,7 @@ export function EmailSheet({
   );
   useRefreshWhenOpened(state.refresh, state.reload);
   useReveal('email', (itemId, focus) => {
+    setTriage(null);
     // "12 emails I wasn't sure about" (#141) opens the Unsorted view, where they come first.
     if (!itemId && focus === UNSORTED) {
       state.setView('inbox');
@@ -674,7 +702,7 @@ export function EmailSheet({
     setTyped('');
   };
 
-  useShortcuts([
+  const keys: ShortcutSpec[] = [
     { keys: 'j', label: 'Next thread', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous thread', run: () => state.moveSelection(-1) },
     {
@@ -719,7 +747,27 @@ export function EmailSheet({
     { keys: 'Shift+R', label: 'Reply all', when: () => !!selected, run: () => write('reply-all') },
     { keys: 'f', label: 'Forward', when: () => !!selected, run: () => write('forward') },
     { keys: 'd', label: 'Draft a reply (Ares)', when: () => !!selected, run: draftSelected },
-  ]);
+    { keys: 't', label: 'Make it a Todo', when: () => !!selected, run: () => void makeTodo() },
+    {
+      keys: 'Shift+T',
+      label: 'Triage the chosen Bucket (Needs reply unless one is)',
+      when: () => !!triageBucket && state.accounts.length > 0,
+      run: () => startTriage(triageBucket),
+    },
+  ];
+  // While Triage runs, its own keys stand in for these (Triage.tsx).
+  useShortcuts(triage ? [] : keys);
+  // From the palette, anywhere: "Triage Needs reply", "Triage FYI"…
+  useCommands(
+    stripOrder(state.buckets).map((each) => ({
+      label: `Triage ${each.name}`,
+      when: () => state.accounts.length > 0,
+      run: () => {
+        openSection('email');
+        startTriage(each.id);
+      },
+    })),
+  );
 
   const status = emailSyncLine(state.accounts, now);
   const viewName = state.views.find((each) => each.view === state.view)?.name ?? 'Inbox';
@@ -728,25 +776,49 @@ export function EmailSheet({
     state.account === 'all' ? state.accounts : state.accounts.filter((each) => each.id === state.account);
   const unread = state.unread.get(state.account) ?? 0;
   const noAccounts = state.loaded && state.accounts.length === 0;
+  const subtitle = (
+    <>
+      <b>{unread} unread</b> in the inbox
+      {state.accounts.length > 0 &&
+        ` · ${state.account === 'all' ? `${state.accounts.length} ${state.accounts.length === 1 ? 'Account' : 'Accounts'}` : accountName(state.account)}`}
+    </>
+  );
+
+  if (triage)
+    return (
+      <SectionSheet span="full" subtitle={subtitle} className="flex flex-col">
+        <Triage
+          key={triage.run}
+          start={triage.bucketId}
+          client={client}
+          changes={changes}
+          buckets={state.buckets}
+          account={state.account}
+          include={include}
+          accounts={state.accounts}
+          accountName={accountName}
+          providerFor={providerFor}
+          reader={reader}
+          compose={compose}
+          writing={writing}
+          {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
+          onLeave={() => setTriage(null)}
+        />
+      </SectionSheet>
+    );
 
   return (
-    <SectionSheet
-      span="full"
-      subtitle={
-        <>
-          <b>{unread} unread</b> in the inbox
-          {state.accounts.length > 0 &&
-            ` · ${state.account === 'all' ? `${state.accounts.length} ${state.accounts.length === 1 ? 'Account' : 'Accounts'}` : accountName(state.account)}`}
-        </>
-      }
-      aside={<Keys />}
-      className="flex flex-col"
-    >
+    <SectionSheet span="full" subtitle={subtitle} aside={<Keys />} className="flex flex-col">
       <BucketStrip
         buckets={state.buckets}
         counts={state.bucketCounts}
         bucket={state.bucket}
         onBucket={state.setBucket}
+        triage={
+          triageBucket && state.accounts.length > 0
+            ? { name: bucketName(state.buckets, triageBucket), onStart: () => startTriage(triageBucket) }
+            : undefined
+        }
       />
       <AccountBar
         accounts={state.accounts}
@@ -945,6 +1017,7 @@ export function EmailSheet({
                         how: selected.bucket ? SORTED_BY[selected.bucket.sortedBy] : null,
                       }}
                       onBucket={() => openBuckets()}
+                      onTodo={() => void makeTodo()}
                     />
                     <button
                       type="button"
@@ -1030,6 +1103,7 @@ export function EmailSheet({
           {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
         />
       )}
+      {todo.dialog}
       {picking && (
         <BadgePicker
           target={picking.target}

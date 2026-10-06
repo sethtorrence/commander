@@ -28,8 +28,8 @@ import { SNOOZE_NOTE, snoozeTime } from './organising';
 /*
   The Email Section's organising parts (#135): the view list, the search box and the provider's own
   search at the end of results, the marks on a thread's row (starred, labels, snooze), the open
-  thread's row of action buttons with its sync state, and the label and snooze pickers; for Outlook
-  (#136), Move to folder in place of labels, and a flag for a star.
+  thread's row of action buttons with its sync state (and Make it a Todo, #140), and the label and
+  snooze pickers; for Outlook (#136), Move to folder in place of labels, and a flag for a star.
 */
 
 const caps = 'font-mono text-label leading-none font-semibold uppercase tracking-caps';
@@ -235,6 +235,7 @@ export function ThreadActions({
   onRetry,
   bucket,
   onBucket,
+  onTodo,
 }: {
   thread: EmailThreadSummary;
   view: EmailListView;
@@ -242,6 +243,8 @@ export function ThreadActions({
   /** The thread's Bucket as it reads, and how it got there (#137): `v` moves it. */
   bucket?: { name: string; how: string | null };
   onBucket?: () => void;
+  /** Make it a Todo (#140): `t`. */
+  onTodo?: () => void;
   /** The note when a change made in Gmail or Outlook won over the User's. */
   superseded?: string | null;
   /** Whose mail it is: Outlook flags rather than stars, and files in folders rather than labels. */
@@ -292,6 +295,9 @@ export function ThreadActions({
           onClick={onBucket}
           title={bucket.how ? `${bucket.how} · move to another Bucket` : 'Move to a Bucket'}
         />
+      )}
+      {onTodo && (
+        <ActionButton label="Todo" keys="t" onClick={onTodo} title="Make it a Todo, linked to the email" />
       )}
       <span role="status" className="ml-auto flex flex-none items-center gap-2 px-3.5 text-note">
         {sync.kind === 'synced' && superseded && <span className="text-muted">{superseded}</span>}

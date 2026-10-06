@@ -9,6 +9,7 @@ const ORIGIN_LABELS: Record<TodoOrigin, string> = {
   linear: 'Linear',
   'daily-note': 'Daily Note',
   github: 'GitHub',
+  email: 'From email',
 };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -18,9 +19,9 @@ export function originOf(todo: Item): TodoOrigin {
 
 /**
  * "Manual"; for a Todo made from a Block, its Daily Note's day: "Daily Note · 3 Oct"; for one Ares
- * made from a Teams Chat, the Chat: "Ares · from Teams, Priya Patel"; for a Linear
- * Todo, its issue's identifier: "Linear · ENG-418"; for a GitHub Todo, its pull request's or issue's:
- * "GitHub · acme/api#12".
+ * made from a Teams Chat, the Chat: "Ares · from Teams, Priya Patel"; for one made from an email
+ * (#140), who wrote it: "From email · Dana Reyes"; for a Linear Todo, its issue's identifier:
+ * "Linear · ENG-418"; for a GitHub Todo, its pull request's or issue's: "GitHub · acme/api#12".
  */
 export function originLabel(todo: Item, madeFrom?: MadeFrom, backing?: Item): string {
   const label = ORIGIN_LABELS[originOf(todo)];
@@ -29,6 +30,7 @@ export function originLabel(todo: Item, madeFrom?: MadeFrom, backing?: Item): st
     return `${label} · ${githubIdentifier(backing.detail.repo, backing.detail.number)}`;
   if (!madeFrom) return label;
   if ('chatId' in madeFrom) return `${label} · from Teams, ${madeFrom.chatName}`;
+  if ('emailId' in madeFrom) return madeFrom.sender ? `${label} · ${madeFrom.sender}` : label;
   const [, month, date] = madeFrom.day.split('-').map(Number) as [number, number, number];
   return `${label} · ${date} ${MONTHS[month - 1]}`;
 }

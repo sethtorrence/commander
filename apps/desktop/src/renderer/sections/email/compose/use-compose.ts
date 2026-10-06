@@ -24,8 +24,11 @@ export interface EmailWriting {
   /** Ares's suggested reply to a message (#143), in the composer below its thread, as a draft. */
   openSuggested(itemId: string): Promise<void>;
   close(): void;
-  /** The composer handed its message to the Core: the Undo toast. */
-  sent(sent: SentMessage): void;
+  /**
+   * The composer handed its message to the Core: the Undo toast. Its Undo takes the message back
+   * (`undo`), or does `onUndo` instead where taking it back means more (Triage goes back to its thread).
+   */
+  sent(sent: SentMessage, onUndo?: () => void): void;
   /** Takes a message back before it goes, into the composer again. */
   undo(itemId: string): Promise<void>;
   discard(itemId: string): Promise<void>;
@@ -144,13 +147,13 @@ export function useCompose({
   );
 
   const sent = useCallback(
-    ({ itemId, sendAt }: SentMessage) => {
+    ({ itemId, sendAt }: SentMessage, onUndo?: () => void) => {
       setComposer(null);
       reload();
       toast('Sending…', {
         id: `sending-${itemId}`,
         duration: Math.max(1_000, sendAt - now()),
-        action: { label: 'Undo', onClick: () => void undo(itemId) },
+        action: { label: 'Undo', onClick: () => (onUndo ? onUndo() : void undo(itemId)) },
       });
     },
     [reload, undo, now],

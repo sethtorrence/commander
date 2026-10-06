@@ -98,9 +98,15 @@ export function TodosSheet({
     if (other.kind === 'todo') return state.jumpTo(other.id);
     const section = sectionFor(other.kind);
     // A Block opens in its Daily Note, scrolled to and highlighted; a Linear issue, or a GitHub pull
-    // request, issue or review request (its pull request), opens selected; a Chat opens at the message
-    // an Ares Todo came from (#110).
-    if (section && (other.kind === 'block' || other.kind === 'linear-issue' || section === 'github'))
+    // request, issue or review request (its pull request), opens selected; an email opens its thread
+    // (#140); a Chat opens at the message an Ares Todo came from (#110).
+    if (
+      section &&
+      (other.kind === 'block' ||
+        other.kind === 'linear-issue' ||
+        other.kind === 'email' ||
+        section === 'github')
+    )
       requestReveal(section, other.id);
     if (other.kind === 'chat') {
       const from = fromMessageOf(selected);

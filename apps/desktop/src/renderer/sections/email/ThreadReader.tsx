@@ -233,7 +233,7 @@ function LinkTarget({ reader }: { reader: EmailReaderClient }) {
       data-testid="email-link-target"
       aria-live="polite"
       className={cn(
-        'sticky bottom-0 z-[2] m-0 truncate border-t border-line bg-sheet px-10 py-1 font-mono text-label leading-5 tracking-label text-ink',
+        'm-0 truncate border-t border-line bg-sheet px-10 py-1 font-mono text-label leading-5 tracking-label text-ink',
         !target && 'invisible',
       )}
     >
@@ -252,6 +252,7 @@ export function ThreadReader({
   footer,
   noteFor,
   notice,
+  legend,
 }: {
   thread: EmailThread | null;
   summary: EmailThreadSummary | null;
@@ -266,6 +267,8 @@ export function ThreadReader({
   noteFor?: (item: Item) => ReactNode;
   /** Above its messages: Ares's suggestion on the thread (Skip the inbox, #142). */
   notice?: ReactNode;
+  /** Kept at the foot of the thread, above where a hovered link goes: Triage's keys (#140). */
+  legend?: ReactNode;
 }) {
   const subject = summary?.subject || thread?.messages.at(-1)?.item.title || '';
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -315,7 +318,10 @@ export function ThreadReader({
         )}
         {footer}
       </div>
-      <LinkTarget reader={reader} />
+      <div className="sticky bottom-0 z-[2]">
+        {legend}
+        <LinkTarget reader={reader} />
+      </div>
     </section>
   );
 }
