@@ -152,6 +152,25 @@ describe('as the User types', () => {
     expect(groups[2]?.rows[0]).toMatchObject({ tag: 'Wed 30 Sep', hint: 'Daily Note' });
   });
 
+  it('marks results found by meaning alone as related (#73)', () => {
+    const throttle = item('t-3', 'todo', 'Throttle bursts on /sync');
+    const limit = item('t-4', 'todo', 'Rate limit the webhooks');
+    const groups = paletteGroups(
+      context('rate limiter', {
+        hits: [
+          { ...hit(limit), foundBy: ['words', 'meaning'] },
+          { ...hit(throttle), foundBy: ['meaning'] },
+        ],
+        projects: [],
+      }),
+    );
+    const todos = groups.find((group) => group.title === 'Todos')?.rows ?? [];
+    expect(todos.map((row) => [row.label, row.related ?? false])).toEqual([
+      ['Rate limit the webhooks', false],
+      ['Throttle bursts on /sync', true],
+    ]);
+  });
+
   it('groups Teams Chats under Teams', () => {
     const chat = item('c-1', 'chat', 'Priya Patel', { source: 'teams' });
     const groups = paletteGroups(context('rollout plan', { hits: [hit(chat)], projects: [] }));

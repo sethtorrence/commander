@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { FAKE_MODEL, fakeEmbedding } from '@commander/core/src/meaning/fake';
 import type { ActivityEntry, Project, SearchQuery } from '@commander/domain';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -192,6 +194,63 @@ describe('the palette', () => {
     expect((input() as HTMLInputElement).value).toBe('in:linear in:todos #LT invoice');
     fireEvent.click(within(filters).getByRole('button', { name: 'Todos' }));
     expect((input() as HTMLInputElement).value).toBe('in:linear #LT invoice');
+  });
+
+  it('shows word results at once, then merges in what search by meaning finds, marked related (#73)', async () => {
+    backing.store.record({ type: 'create', item: { kind: 'todo', title: 'Throttle bursts on /sync' } }, user);
+    backing.store.record({ type: 'create', item: { kind: 'todo', title: 'Rate the coffee' } }, user);
+    // Embedded as the Core's meaning side would, by the stand-in model.
+    const work = backing.store.meaning.pending(FAKE_MODEL.id, 10);
+    backing.store.meaning.save(
+      FAKE_MODEL.id,
+      work.map((each) => ({ ...each, vector: fakeEmbedding(each.text) })),
+    );
+    let answerMeaning: () => void = () => {};
+    const meaningAsked: SearchQuery[] = [];
+    renderPalette({
+      searchByMeaning: (query) => {
+        meaningAsked.push(query);
+        return new Promise((resolve) => {
+          answerMeaning = () =>
+            resolve(
+              backing.store.search.query(query, {
+                model: FAKE_MODEL.id,
+                vector: fakeEmbedding(query.text),
+                minSimilarity: 0.5,
+              }),
+            );
+        });
+      },
+    });
+    type('rate ');
+    const todos = await screen.findByRole('group', { name: 'Todos' });
+    expect(
+      within(todos)
+        .getAllByRole('option')
+        .map((row) => row.textContent),
+    ).toEqual([expect.stringContaining('Rate the coffee')]);
+
+    await waitFor(() => expect(meaningAsked).toEqual([{ text: 'rate ' }]));
+    answerMeaning();
+    await waitFor(() =>
+      expect(screen.getByRole('option', { name: /Throttle bursts on \/sync/ }).textContent).toContain(
+        'Related',
+      ),
+    );
+    expect(screen.getByRole('option', { name: /Rate the coffee/ }).textContent).not.toContain('Related');
+  });
+
+  it('keeps the word results when search by meaning has nothing to add', async () => {
+    backing.store.record({ type: 'create', item: { kind: 'todo', title: 'Renew the passport' } }, user);
+    renderPalette({ searchByMeaning: async () => null });
+    type('passport');
+    const todos = await screen.findByRole('group', { name: 'Todos' });
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(
+      within(todos)
+        .getAllByRole('option')
+        .map((row) => row.textContent),
+    ).toEqual([expect.stringContaining('Renew the passport')]);
   });
 
   it('opens Linear’s own search when local results are thin', async () => {

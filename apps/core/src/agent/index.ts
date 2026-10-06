@@ -17,6 +17,7 @@ import { createGitHubSummaries, type GitHubSummaries } from './github-summaries'
 import { learnAppearances } from './learn-appearances';
 import { learnExamples } from './learn-examples';
 import { learnFactsJob } from './learn-facts';
+import type { MeaningLookup } from './memory-context';
 import { prepareMeetingsJob } from './prepare-meetings';
 import { proposeEventsJob } from './propose-events';
 import { rankDashboardJob } from './rank-dashboard';
@@ -57,6 +58,8 @@ export type AgentOptions = {
   // Whether the Monday roll-up is written as well as the daily summary (true unless a test turns it off).
   summaryRollUp?: boolean;
   onSummaryWritten?: (itemId: string) => void;
+  // Search by meaning (#73): what a job is working on, embedded, to look Memory up by meaning too.
+  meaning?: MeaningLookup;
   log?: (message: string) => void;
 };
 
@@ -108,11 +111,11 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   });
   const runner: JobRunner = createJobRunner({
     jobs: [
-      suggestTodosJob(itemStore, { now }),
+      suggestTodosJob(itemStore, { now, meaning: options.meaning }),
       rankDashboardJob(itemStore, { now }),
       spotStuckLinearJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}), me: options.me }),
       spotWaitingJob(itemStore, { now, me: options.me, onChanged: flagsChanged }),
-      fileIntoProjectsJob(itemStore, { now }),
+      fileIntoProjectsJob(itemStore, { now, meaning: options.meaning }),
       prepareMeetingsJob(itemStore, {
         now,
         enqueue: options.enqueue ?? (() => {}),

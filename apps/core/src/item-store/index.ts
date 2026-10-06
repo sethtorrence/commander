@@ -103,7 +103,13 @@ import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 import { type MemoryStore, openMemory } from '../memory';
-import { openSearch, type Search } from '../search';
+import {
+  type EmbeddedWork,
+  type MeaningProgress,
+  type MeaningWork,
+  openSearch,
+  type Search,
+} from '../search';
 import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
@@ -176,7 +182,7 @@ import {
 import { openUpdateStore, type UpdateStore } from './updates';
 
 export type { LearnedMemory, MemoryLookup, MemoryStore, RecalledMemory } from '../memory';
-export type { Search } from '../search';
+export type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector, Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
 export type { CalendarSettingsStore } from './calendar-settings';
@@ -392,6 +398,15 @@ export type ItemStore = {
   injectionWarnings: InjectionWarningStore;
   // Global search over the live Items, kept current by every write here.
   search: Search;
+  // Search by meaning (#73): the Items and memories whose embedding by a model is missing or out of
+  // date, and saving the embeddings the Core's meaning side made for them, written here like every
+  // other change. `onPending` hears (after the write) that something new waits to be embedded.
+  meaning: {
+    pending(model: string, limit: number): MeaningWork[];
+    save(model: string, done: readonly EmbeddedWork[]): void;
+    progress(model: string): MeaningProgress;
+    onPending(listener: () => void): () => void;
+  };
   // Memory (#74, ../memory): what Ares has learned and keeps, in the same database. His learners write
   // it, the User confirms, edits and deletes in What Ares knows, and his jobs look it up.
   memory: MemoryStore;
@@ -507,6 +522,8 @@ function dayTitle(day: string): string {
 const calendarDay = z.iso.date();
 // At most this many memories in the palette's Memory group.
 const MEMORIES_SEARCHED = 6;
+// What marks a memory's key among the work waiting to be embedded (an Item's key is its id).
+const MEMORY_KEY = 'memory:';
 
 export function openItemStore(options: ItemStoreOptions): ItemStore {
   const now = options.now ?? Date.now;
@@ -675,11 +692,24 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     projects: () => projects.list(),
   });
 
+  // Search by meaning: whoever embeds hears when something new waits, once the write is done.
+  const meaningListeners = new Set<() => void>();
+  let meaningHeard = false;
+  const meaningPending = () => {
+    if (meaningHeard) return;
+    meaningHeard = true;
+    queueMicrotask(() => {
+      meaningHeard = false;
+      for (const listener of meaningListeners) listener();
+    });
+  };
+
   // Memory: what Ares has learned, beside the Items. A memory's sources are Items, tombstones included.
   const memory = openMemory({
     db,
     sqlite,
     now,
+    onMeaningPending: meaningPending,
     sources: {
       refs(itemIds) {
         const { items } = schema;
@@ -734,7 +764,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     bodyText: (itemId) => emails.readBody(itemId)?.text ?? null,
     people: () => people.list(),
     // What Ares knows, for the palette's Memory group.
-    memories: (text) => memory.search(text, MEMORIES_SEARCHED),
+    memories: (text, meaning) => memory.search(text, MEMORIES_SEARCHED, meaning),
+    onMeaningPending: meaningPending,
   });
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
@@ -2257,7 +2288,36 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       flag: sqlite.transaction((itemId: string) => warnings.flag(itemId)),
       since: (after) => warnings.since(after),
     },
-    search: { query: (query) => search.query(query) },
+    search: { query: (query, meaning) => search.query(query, meaning) },
+    // Memories first (few, and what Ares's jobs look up), then Items; a memory's key is marked as one.
+    meaning: {
+      pending(model, limit) {
+        const memories = memory.meaning
+          .pending(model, limit)
+          .map((work) => ({ ...work, key: `${MEMORY_KEY}${work.key}` }));
+        return [...memories, ...search.meaning.pending(model, limit - memories.length)];
+      },
+      save(model, done) {
+        const isMemory = (work: EmbeddedWork) => work.key.startsWith(MEMORY_KEY);
+        memory.meaning.save(
+          model,
+          done.filter(isMemory).map((work) => ({ ...work, key: work.key.slice(MEMORY_KEY.length) })),
+        );
+        search.meaning.save(
+          model,
+          done.filter((work) => !isMemory(work)),
+        );
+      },
+      progress(model) {
+        const items = search.meaning.progress(model);
+        const memories = memory.meaning.progress(model);
+        return { embedded: items.embedded + memories.embedded, total: items.total + memories.total };
+      },
+      onPending(listener) {
+        meaningListeners.add(listener);
+        return () => meaningListeners.delete(listener);
+      },
+    },
     memory: {
       ...memory,
       learn: sqlite.transaction((input: Parameters<MemoryStore['learn']>[0]) => memory.learn(input)),

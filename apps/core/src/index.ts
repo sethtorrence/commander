@@ -17,6 +17,8 @@ import { setUpGitHubWatch } from './github-watch';
 import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 import { setUpMarkdownCopy } from './markdown-copy';
+import type { Meaning } from './meaning';
+import { meaningInCore } from './meaning/in-core';
 import { setUpMeetings } from './meetings';
 import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
@@ -54,12 +56,28 @@ setInterval(() => itemStore.takeDailySnapshot(), 60 * 60 * 1000);
 // Each one is remembered by fingerprint, so no prompt to a model can carry it (agent/prompt.ts).
 const secrets = createKnownSecrets();
 const accessTokens = createAccessTokens((message) => port.postMessage(message), { secrets });
-// Model calls for Ares; the API key is borrowed the same way, for each call.
+// Model calls for Ares; the API key is borrowed the same way, for each call. Embeddings (search by
+// meaning) come from the local model, once it is ready.
+let meaning: Meaning | undefined;
 const models = setUpModels(itemStore, {
   send: (message) => port.postMessage(message),
   accessTokens,
   secrets,
+  meaning: () => meaning,
 });
+// Search by meaning (#73): the embedding model downloaded on first use into the data folder and run in
+// a worker thread beside the Core (built next to it); every Item and memory embedded in the
+// background. Nothing leaves the machine. The end-to-end tests use a stand-in, never the real model.
+const fakeEmbeddings = process.argv.includes('--embeddings=fake');
+meaning = meaningInCore({
+  store: itemStore,
+  dataDir,
+  fake: fakeEmbeddings,
+  workerPath: join(import.meta.dirname, 'embed-worker.js'),
+  embed: (request) => models.client.embed(request),
+});
+// A little after start-up, so the first syncs go first.
+setTimeout(() => meaning?.start(), fakeEmbeddings ? 0 : 20_000);
 // Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
 let updates: Updates | undefined;
 // Settings → GitHub: what each GitHub Account can reach and watches, kept through the Item store.
@@ -170,6 +188,8 @@ const agent = setUpAgent(itemStore, {
   enqueue: (input) => updates?.queue.enqueue(input),
   // Who the User is in each Account: their Linear user, their Teams user.
   me: (account) => sync.me(account),
+  // Memory looked up by meaning too (#73), once the embedding model is ready.
+  meaning: (text) => meaning?.queryVector(text, 'embed-lookup') ?? Promise.resolve(null),
   // The GitHub summary (#121): the pull requests' detail fetched first, and each one written is for
   // the Update to mention.
   prepareWriterDetails: (itemIds) => githubOversight.prepareWriterDetails(itemIds),
@@ -204,7 +224,11 @@ updates = setUpUpdates({
     ),
   send: (message) => port.postMessage(message),
   onState: (state) => port.postMessage({ type: 'ares-updates', ...state } satisfies CoreMessage),
-  onIdle: () => agent.idle(),
+  onIdle: () => {
+    agent.idle();
+    // Search by meaning's catch-up: anything still missing an embedding.
+    meaning?.catchUp();
+  },
   // Back at the machine: the daily GitHub summary may be due.
   onReturn: () => agent.active(),
   // Ask Ares to write the GitHub summary (#121).
@@ -330,6 +354,7 @@ const closeStore = () => {
   sync.stop();
   markdownCopy.stop();
   emailSanitiser.stop();
+  void meaning?.stop();
   itemStore.close();
 };
 process.on('exit', closeStore);

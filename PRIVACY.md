@@ -16,6 +16,7 @@ When you connect an account, Commander reads what you allow on its consent scree
 
 - **The services themselves.** Commander talks directly to Google, Microsoft, Linear and GitHub to read your data and to make the changes you ask for (archiving an email, replying to an invitation, and so on).
 - **The AI model provider, only if you turn Ares on.** Ares, Commander's assistant, sends the material a task needs (for example, an email's text to sort it into a Bucket) to the model provider you configure in Settings → Ares, currently Z.ai. Nothing is sent until you add a model API key. Commander keeps a record of usage and cost, but not of what was sent.
+- **Hugging Face, once, for the search model.** Search by meaning runs a small embedding model on your computer. Commander downloads its files once from Hugging Face (huggingface.co); that download sends nothing of yours. Your data is embedded on your computer and never leaves it. You can turn search by meaning off in Settings → Ares.
 - **No one else.** Commander has no analytics, no tracking and no advertising, and it never sells or shares your data.
 
 ## Google user data

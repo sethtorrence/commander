@@ -28,8 +28,6 @@ import type {
   LinkType,
   MeetingPrepDetail,
   ModelCall,
-  ModelProvider,
-  ModelTier,
   OutgoingStatus,
   PeopleChangeAction,
   ProjectChangeAction,
@@ -50,6 +48,8 @@ import type {
   UpdateGroup,
   UpdateLine,
   UpdateSection,
+  UsageProvider,
+  UsageTier,
 } from '@commander/domain';
 import { sql } from 'drizzle-orm';
 import {
@@ -196,8 +196,8 @@ export const modelCalls = sqliteTable(
     id: integer('id').primaryKey({ autoIncrement: true }),
     at: integer('at').notNull(),
     job: text('job').notNull(),
-    tier: text('tier').$type<ModelTier>().notNull(),
-    provider: text('provider').$type<ModelProvider>().notNull(),
+    tier: text('tier').$type<UsageTier>().notNull(),
+    provider: text('provider').$type<UsageProvider>().notNull(),
     model: text('model').notNull(),
     inputTokens: integer('input_tokens').notNull(),
     cachedTokens: integer('cached_tokens').notNull(),

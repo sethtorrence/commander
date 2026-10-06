@@ -31,3 +31,13 @@ export type ModelProviderAdapter = {
   // Calls onToken as text arrives; resolves with the whole reply once the stream ends.
   stream(request: ProviderRequest, onToken: (token: string) => void): Promise<ProviderReply>;
 };
+
+// An embedding model (#73): Commander's local one now, a hosted one later. Callers use the model
+// client's `embed`, which logs each call to the usage ledger.
+export type EmbeddingProviderAdapter = {
+  // 'local': running on this machine, so it costs nothing.
+  provider: 'local';
+  model: string;
+  // One vector per text, in order, and the tokens read. Throws on failure.
+  embed(texts: readonly string[], signal?: AbortSignal): Promise<{ vectors: Float32Array[]; tokens: number }>;
+};

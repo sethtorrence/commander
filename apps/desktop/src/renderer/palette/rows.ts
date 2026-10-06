@@ -20,8 +20,9 @@ import type { PaletteQuery } from './query';
 
   - Jump: Sections and today's Daily Note; then Projects (their pages); then People (#117), which
     open their pages (#122)
-  - search results grouped by kind, the group holding the best hit first; then Memory (#74): what
-    Ares knows that matches, each opening What Ares knows at the memory
+  - search results grouped by kind, the group holding the best hit first, those found by meaning
+    alone (#73) marked "related"; then Memory (#74): what Ares knows that matches, each opening What
+    Ares knows at the memory
   - Commands
   - Search in Linear, last, when local results are thin and a Linear Account is connected
   - Search in Gmail (#135) and Search in Outlook (#136), one row per email Account, when emails are
@@ -49,6 +50,8 @@ export interface PaletteRow {
   hint: string;
   /** Shown as a Badge: the Item's filing, or the Project's own. */
   filing?: Filing;
+  /** Found by meaning alone (#73), sharing no words with what was typed: marked "related". */
+  related?: boolean;
   action: PaletteAction;
 }
 
@@ -114,7 +117,13 @@ const GROUP_OF: Record<string, string> = {
 
 function hitRow(hit: SearchHit, today: string): PaletteRow {
   const { item } = hit;
-  const row = { key: `item:${item.id}`, label: item.title, filing: item.filing ?? undefined };
+  const related = !hit.foundBy.includes('words');
+  const row = {
+    key: `item:${item.id}`,
+    label: item.title,
+    filing: item.filing ?? undefined,
+    ...(related && { related }),
+  };
   const action: PaletteAction = { type: 'item', hit };
   const detail = item.detail;
   switch (item.kind) {

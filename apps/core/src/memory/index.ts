@@ -20,8 +20,10 @@ import type Database from 'better-sqlite3';
 import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../item-store/schema';
+import type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector } from '../search/meaning-index';
 import { fuseRanked } from '../search/retriever';
 import { openMemoryFields } from './fields';
+import { openMemoryMeaning } from './meaning';
 import type { MemoryFoundBy, MemoryRetriever, RetrieverQuery } from './retriever';
 import { openMemoryWords } from './words';
 
@@ -37,9 +39,10 @@ export type { MemoryFoundBy, MemoryRetriever } from './retriever';
   - Rule memories are the Rules themselves, shown as memories; they are changed only in the Rules list.
   - A memory learned again (the same `key`) gains the new sources rather than repeating; a deleted
     one is kept as a tombstone so it is never learned again.
-  - Every saved memory is indexed at once (words.ts), in the same transaction.
-  - A lookup fuses the retrievers (retriever.ts): its words, and the People and Projects it is about.
-    Search by meaning (#73) would be one more retriever, and callers wouldn't change.
+  - Every saved memory is indexed at once (words.ts), in the same transaction; its embedding (#73,
+    meaning.ts) is made in the background and saved later.
+  - A lookup fuses the retrievers (retriever.ts): its words, the People and Projects it is about, and,
+    when the lookup brings the embedding of what it is about, its meaning.
   - A fact whose source was deleted is for review: listed apart, and never looked up, until the User
     keeps it.
 */
@@ -73,6 +76,8 @@ export type MemoryLookup = {
   projectIds?: readonly string[];
   kinds?: readonly MemoryKind[];
   limit?: number;
+  // The text embedded (#73): memories are found by meaning too.
+  meaning?: QueryVector;
 };
 
 export type RecalledMemory = Memory & { foundBy: MemoryFoundBy[] };
@@ -85,8 +90,9 @@ export type MemoryStore = {
   change(action: MemoryAction): MemoryChange;
   // What Ares knows, as its page shows it: everything, or what matches the words typed.
   list(query?: MemoryQuery): WhatAresKnows;
-  // The palette's Memory group: what matches the words typed, best first.
-  search(text: string, limit: number): Memory[];
+  // The palette's Memory group: what matches the words typed (or, with their embedding, their
+  // meaning), best first.
+  search(text: string, limit: number, meaning?: QueryVector): Memory[];
   // The live memories about what a job is working on, best first: never deleted ones, nor facts
   // waiting for review, nor rule memories (jobs read the Rules themselves).
   lookup(request: MemoryLookup): RecalledMemory[];
@@ -96,6 +102,12 @@ export type MemoryStore = {
   // How far a learner has got (null before it starts), and saving it (inside a transaction).
   progress(name: string): number | null;
   saveProgress(name: string, value: number): void;
+  // Search by meaning (#73): the memories waiting to be embedded, and saving their embeddings.
+  meaning: {
+    pending(model: string, limit: number): MeaningWork[];
+    save(model: string, done: readonly EmbeddedWork[]): void;
+    progress(model: string): MeaningProgress;
+  };
 };
 
 export type MemorySources = {
@@ -129,14 +141,14 @@ export function openMemory({
   sqlite,
   now,
   sources,
-  retrievers: extra = [],
+  onMeaningPending,
 }: {
   db: BetterSQLite3Database<typeof schema>;
   sqlite: Database.Database;
   now: () => number;
   sources: MemorySources;
-  // More retrievers to fuse in (search by meaning, #73).
-  retrievers?: MemoryRetriever[];
+  // A memory waits to be embedded (#73). Called inside the save's transaction: only schedule work.
+  onMeaningPending?: () => void;
 }): MemoryStore {
   const { memories, memorySources, memoryProgress } = schema;
 
@@ -151,9 +163,11 @@ export function openMemory({
     for (const row of db.select().from(memories).where(isNull(memories.deletedAt)).all()) yield indexed(row);
   }
   const words = openMemoryWords(sqlite, live);
-  const retrievers: MemoryRetriever[] = [words, openMemoryFields(sqlite, live), ...extra];
+  const meaning = openMemoryMeaning(sqlite);
+  const retrievers: MemoryRetriever[] = [words, openMemoryFields(sqlite, live), meaning];
   const index = (row: Row) => {
     for (const retriever of retrievers) retriever.put?.(indexed(row));
+    onMeaningPending?.();
   };
 
   const row = (memoryId: string) => db.select().from(memories).where(eq(memories.id, memoryId)).get();
@@ -276,9 +290,11 @@ export function openMemory({
     return { personIds: [...personIds], handles: [...handles], projectIds: [...(request.projectIds ?? [])] };
   }
 
+  const nobody = { personIds: [], handles: [], projectIds: [] };
+
   // The live stored memories matching the words typed, best first.
   function typed(text: string, limit: number): Memory[] {
-    const ids = words.retrieve({ text, typed: true, personIds: [], handles: [], projectIds: [] }, limit);
+    const ids = words.retrieve({ ...nobody, text, typed: true }, limit);
     return loadInOrder(ids.map((hit) => hit.id));
   }
 
@@ -418,16 +434,32 @@ export function openMemory({
       };
     },
 
-    search(text, limit) {
+    search(text, limit, vector) {
       if (!wordsOf(text).length) return [];
-      return [...typed(text, limit), ...rulesMatching(text)].slice(0, limit);
+      const found = vector
+        ? loadInOrder(
+            fuseRanked(
+              [
+                { foundBy: 'words', hits: words.retrieve({ ...nobody, text, typed: true }, limit) },
+                { foundBy: 'meaning', hits: meaning.retrieve({ ...nobody, text, meaning: vector }, limit) },
+              ],
+              limit,
+            ).map((hit) => hit.id),
+          )
+        : typed(text, limit);
+      return [...found, ...rulesMatching(text)].slice(0, limit);
     },
 
     lookup(request) {
       const limit = request.limit ?? DEFAULT_LOOKUP;
       const kinds = (request.kinds ?? ['example', 'fact', 'preference']).filter((kind) => kind !== 'rule');
       if (!kinds.length) return [];
-      const query: RetrieverQuery = { text: request.text, kinds, ...widen(request) };
+      const query: RetrieverQuery = {
+        text: request.text,
+        kinds,
+        meaning: request.meaning,
+        ...widen(request),
+      };
       // Room for what is dropped after fusing (facts waiting for review).
       const fused = fuseRanked(
         retrievers.map((retriever) => ({
@@ -477,6 +509,8 @@ export function openMemory({
         .onConflictDoUpdate({ target: memoryProgress.name, set: { value } })
         .run();
     },
+
+    meaning: { pending: meaning.pending, save: meaning.save, progress: meaning.progress },
   };
   return store;
 }

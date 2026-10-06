@@ -29,9 +29,13 @@ const WEIGHTS = '10.0, 10.0, 1.0';
 // Titles longer than this are never typed out whole, so they get no exact key.
 const EXACT_TITLE_MAX = 200;
 
+// What a put did to an Item's words: indexed them for the first time, changed them, left them as
+// they were, dropped them (a tombstone, or nothing left to find it by), or nothing (never indexed).
+export type WordChange = 'added' | 'changed' | 'unchanged' | 'dropped' | 'none';
+
 export type WordIndex = Retriever & {
   // Indexes the Item as it now is, or drops it (a tombstone, or nothing to find it by).
-  put(item: SearchableItem): void;
+  put(item: SearchableItem): WordChange;
 };
 
 type Doc = {
@@ -95,7 +99,7 @@ function indexVersion(sqlite: Database.Database): number | null {
 }
 
 // The filters as SQL over search_docs (aliased d), with their parameters.
-function filterSql(filters: SearchFilters): { where: string[]; params: Record<string, unknown> } {
+export function filterSql(filters: SearchFilters): { where: string[]; params: Record<string, unknown> } {
   const where: string[] = [];
   const params: Record<string, unknown> = {};
   const list = (name: string, column: string, values: readonly string[]) => {
@@ -181,27 +185,28 @@ export function openWordIndex(
 
   const write = statements();
 
-  function put(item: SearchableItem) {
+  function put(item: SearchableItem): WordChange {
     const text = searchTextOf(item);
     const found = write.find.get(item.id);
     if (!text) {
-      if (!found) return;
+      if (!found) return 'none';
       write.dropText.run(found.doc);
       write.dropDoc.run(found.doc);
-      return;
+      return 'dropped';
     }
     const doc = docOf(item, text);
     if (!found) {
       const added = write.addDoc.get({ ...doc, doc: rowidFor(item, write.taken) }) as { doc: number };
       write.addText.run(added.doc, text.title, text.identifier, text.body);
-      return;
+      return 'added';
     }
     write.setDoc.run({ ...doc, doc: found.doc });
     // Most writes (filing, ticking, moving a Block) leave the words alone: then the FTS5 row stays.
     const indexed = write.text.get(found.doc);
     if (indexed?.title === text.title && indexed.identifier === text.identifier && indexed.body === text.body)
-      return;
+      return 'unchanged';
     write.setText.run(text.title, text.identifier, text.body, found.doc);
+    return 'changed';
   }
 
   function retrieve(query: SearchFilters & { text: string }, limit: number): RetrievedHit[] {

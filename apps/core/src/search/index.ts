@@ -9,25 +9,33 @@ import {
   searchQuery,
 } from '@commander/domain';
 import type Database from 'better-sqlite3';
+import { type MeaningIndex, openMeaningIndex, type QueryVector } from './meaning-index';
 import { fuse, type Retriever } from './retriever';
-import type { SearchableItem } from './text';
+import { type SearchableItem, searchTextOf } from './text';
 import { openWordIndex } from './words-index';
+
+export type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector } from './meaning-index';
 
 /*
   Global search, behind its own interface. The Item store opens it on the same database, calls
   `put` with every Item it writes (inside the write's transaction) and hands `query` to the window.
-  Everything about how Items are found stays in here: today one retriever, the FTS5 word index;
-  search by meaning (#73) adds a second retriever, fused with the first, and Tantivy could replace
-  the word index, with neither change reaching callers.
+  Everything about how Items are found stays in here: two retrievers fused by reciprocal rank, the
+  FTS5 word index and the meaning index (#73, embeddings of the same text). Words answer at once;
+  meaning answers only when the query brings its embedding (`meaning`), which the Core's meaning side
+  makes off the main thread, so a plain search never waits on a model. Tantivy could replace the
+  word index without callers changing.
 */
 
 export type Search = {
-  query(query: SearchQuery): SearchResult;
+  // `meaning`: the query's text embedded, to find Items by meaning too (none: words only).
+  query(query: SearchQuery, meaning?: QueryVector): SearchResult;
 };
 
 export type SearchIndex = Search & {
   // Called by the Item store with every Item it creates or changes.
   put(item: SearchableItem): void;
+  // What waits to be embedded, and saving embeddings (the Item store hands these to ../meaning).
+  meaning: Pick<MeaningIndex, 'pending' | 'save' | 'progress'>;
 };
 
 export type SearchSources = {
@@ -41,8 +49,10 @@ export type SearchSources = {
   bodyText?: (itemId: string) => string | null;
   // Everyone Commander knows (#117), the User first, then by name.
   people?: () => Person[];
-  // What Ares knows (#74) matching the words typed, best first: Memory finds its own.
-  memories?: (text: string) => Memory[];
+  // What Ares knows (#74) matching the words typed (and their meaning), best first: Memory finds its own.
+  memories?: (text: string, meaning?: QueryVector) => Memory[];
+  // Something new waits to be embedded. Called inside the write's transaction: only schedule work.
+  onMeaningPending?: () => void;
 };
 
 const sentAtOf = (item: Item) => (item.detail?.kind === 'email' ? item.detail.sentAt : null);
@@ -72,7 +82,8 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
   const words = openWordIndex(sqlite, function* () {
     for (const page of sources.allItems()) yield page.map(withBody);
   });
-  const retrievers: Retriever[] = [words];
+  const meaning = openMeaningIndex(sqlite);
+  const retrievers: Retriever[] = [words, meaning];
 
   // The calendar day each Block or Daily Note belongs to, for opening it in Notes.
   function daysOf(items: Item[]): Map<string, string> {
@@ -129,14 +140,22 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
   }
 
   return {
-    put: (item) => words.put(withBody(item)),
+    put(raw) {
+      const item = withBody(raw);
+      const change = words.put(item);
+      if (change === 'unchanged' || change === 'none') return;
+      meaning.changed(item.id, change, change === 'dropped' ? null : searchTextOf(item), item.updatedAt);
+      if (change !== 'dropped') sources.onMeaningPending?.();
+    },
 
-    query(input) {
+    meaning: { pending: meaning.pending, save: meaning.save, progress: meaning.progress },
+
+    query(input, vector) {
       const { limit = DEFAULT_LIMIT, ...query } = searchQuery.parse(input);
       const fused = fuse(
         retrievers.map((retriever) => ({
           foundBy: retriever.foundBy,
-          hits: retriever.retrieve(query, limit),
+          hits: retriever.retrieve({ ...query, meaning: vector }, limit),
         })),
         limit,
       );
@@ -157,7 +176,7 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
         hits: emailsNewestFirst(hits),
         projects: narrowed ? [] : matchingProjects(query.text),
         people: narrowed ? [] : matchingPeople(query.text),
-        memories: narrowed ? [] : (sources.memories?.(query.text) ?? []),
+        memories: narrowed ? [] : (sources.memories?.(query.text, vector) ?? []),
       };
     },
   };

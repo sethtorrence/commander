@@ -11,7 +11,9 @@ import { type PaletteAction, type PaletteContext, type PaletteRow, paletteGroups
   input on a sheet laid over the drawing, the rows grouped under sticky headings, the keys along the
   foot. It finds as the User types (the Core's search, local and instant), jumps to Sections,
   Projects and today's Daily Note, and runs commands. A filter row under the input picks chips.
-  `↑`/`↓` move, `Enter` acts, `Esc` closes.
+  `↑`/`↓` move, `Enter` acts, `Esc` closes. Once the User pauses, it asks again with search by
+  meaning (#73), and merges in what that finds (marked "related"), keeping the selected row; word
+  results never wait for it.
 */
 
 export interface PaletteProps {
@@ -22,6 +24,8 @@ export interface PaletteProps {
   /** Jump (Ctrl+K) or Find (`/`, a Section search): the label beside the input. */
   mode: 'jump' | 'find';
   search(query: SearchQuery): Promise<SearchResult>;
+  /** The same search with meaning merged in (#73), or null while search by meaning isn't ready. */
+  searchByMeaning?(query: SearchQuery): Promise<SearchResult | null>;
   sections: PaletteContext['sections'];
   current: string;
   projects: readonly Project[];
@@ -40,11 +44,16 @@ export interface PaletteProps {
 
 const keyOf = (query: SearchQuery | null) => (query ? JSON.stringify(query) : '');
 
+// How long the User pauses before the palette asks again with meaning.
+const MEANING_PAUSE_MS = 200;
+
 export function Palette(props: PaletteProps) {
-  const { open, onOpenChange, initial, mode, search, onAction } = props;
+  const { open, onOpenChange, initial, mode, search, searchByMeaning, onAction } = props;
   const [input, setInput] = useState(initial);
   const [selected, setSelected] = useState(0);
-  const [answer, setAnswer] = useState<{ key: string; result: SearchResult } | null>(null);
+  const [answer, setAnswer] = useState<{ key: string; result: SearchResult; meaning?: true } | null>(null);
+  // The row selected when meaning's answer came in, to keep it selected as the rows move.
+  const keepSelected = useRef<string | null>(null);
   const [commands, setCommands] = useState<readonly Command[]>([]);
   const [enterWaiting, setEnterWaiting] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -77,13 +86,28 @@ export function Palette(props: PaletteProps) {
     let current = true;
     const key = keyOf(query.search);
     search(query.search).then(
-      (result) => current && setAnswer({ key, result }),
+      (result) => current && setAnswer((now) => (now?.key === key && now.meaning ? now : { key, result })),
       () => current && setAnswer({ key, result: { hits: [], projects: [] } }),
     );
+    // Then, once the User pauses, with meaning merged in.
+    const asked = query.search;
+    const timer = searchByMeaning
+      ? setTimeout(() => {
+          searchByMeaning(asked).then(
+            (result) => {
+              if (!current || !result) return;
+              keepSelected.current = rowsNow.current[atNow.current]?.key ?? null;
+              setAnswer({ key, result, meaning: true });
+            },
+            () => {},
+          );
+        }, MEANING_PAUSE_MS)
+      : undefined;
     return () => {
       current = false;
+      clearTimeout(timer);
     };
-  }, [open, query.search, search]);
+  }, [open, query.search, search, searchByMeaning]);
 
   const linearAccounts = useMemo(
     () =>
@@ -122,6 +146,19 @@ export function Palette(props: PaletteProps) {
   );
   const rows = useMemo(() => groups.flatMap((group) => group.rows), [groups]);
   const at = Math.min(selected, Math.max(0, rows.length - 1));
+  const rowsNow = useRef(rows);
+  rowsNow.current = rows;
+  const atNow = useRef(at);
+  atNow.current = at;
+
+  // Meaning's answer moved the rows: the row that was selected stays selected.
+  useEffect(() => {
+    const kept = keepSelected.current;
+    if (kept === null) return;
+    keepSelected.current = null;
+    const index = rows.findIndex((row) => row.key === kept);
+    if (index >= 0) setSelected(index);
+  }, [rows]);
 
   const act = (row: PaletteRow | undefined) => {
     if (!row) return;
@@ -305,6 +342,14 @@ export function Palette(props: PaletteProps) {
                         isSelected && 'text-sheet',
                       )}
                     >
+                      {row.related && (
+                        <span
+                          data-testid="palette-related"
+                          className={cn('text-faint', isSelected && 'text-sheet')}
+                        >
+                          Related
+                        </span>
+                      )}
                       {row.filing !== undefined && <ItemBadge filing={row.filing} size="sm" />}
                       {row.hint}
                     </span>

@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { Readout, ReadoutRow, SettingRow, SettingsGroup } from '../parts';
 import { formatTokens, formatUsd } from './format';
 
-const PROVIDER_NAMES: Record<string, string> = { zai: 'Z.ai' };
+// 'local': the embedding model search by meaning runs on this machine (#73), at no cost.
+const PROVIDER_NAMES: Record<string, string> = { zai: 'Z.ai', local: 'This machine' };
 
 const calls = (count: number) => `${count} ${count === 1 ? 'call' : 'calls'}`;
 

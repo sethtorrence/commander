@@ -10,7 +10,10 @@ import * as schema from '../item-store/schema';
 
 // Search stays instant on a big database: 50,000 Items (Linear issues with descriptions and
 // comments, Todos, Daily Notes and their Blocks) over a small vocabulary, so common words match
-// most of them: a harder case than real notes. Each query must answer in under 50 ms.
+// most of them: a harder case than real notes. Each query must answer in under 50 ms. With every
+// Item embedded (#73, random 384-dimension vectors, the real model's size), a hybrid query (words
+// and meaning) must answer in under 200 ms, and the backfill's own work on the Core's main thread
+// (finding what waits, saving a batch) must stay small.
 
 const ISSUES = 30_000;
 const TODOS = 8_000;
@@ -18,6 +21,11 @@ const DAYS = 400;
 const BLOCKS_PER_DAY = 30;
 const TOTAL = ISSUES + TODOS + DAYS * (BLOCKS_PER_DAY + 1);
 const BUDGET_MS = 50;
+const HYBRID_BUDGET_MS = 200;
+// The backfill's main-thread work per batch: what waits (a page of 64) and saving 8 embeddings.
+const BACKFILL_STEP_BUDGET_MS = 50;
+const DIMENSIONS = 384;
+const MODEL = 'perf-vectors';
 
 const WORDS = (
   'login loop sync throttle burst invoice export import cache token refresh session cookie banner ' +
@@ -180,3 +188,57 @@ it(`answers in under ${BUDGET_MS} ms on ${TOTAL} Items`, () => {
   expect(store.search.query({ text: 'ENG-418' }).hits[0]?.item.title).toBeDefined();
   expect(store.search.query({ text: 'ENG-418' }).hits[0]?.exact).toBe(true);
 }, 60_000);
+
+const unit = () => {
+  const vector = Float32Array.from({ length: DIMENSIONS }, () => random() - 0.5);
+  const norm = Math.hypot(...vector);
+  return vector.map((value) => value / norm);
+};
+
+it(`answers a hybrid query (words and meaning) in under ${HYBRID_BUDGET_MS} ms with all ${TOTAL} Items embedded`, () => {
+  // Embedding everything, as the backfill does, timing its main-thread steps along the way.
+  const pendingMs: number[] = [];
+  const saveMs: number[] = [];
+  for (;;) {
+    let began = performance.now();
+    const work = store.meaning.pending(MODEL, 64);
+    pendingMs.push(performance.now() - began);
+    if (!work.length) break;
+    for (let i = 0; i < work.length; i += 8) {
+      began = performance.now();
+      store.meaning.save(
+        MODEL,
+        work.slice(i, i + 8).map((each) => ({ ...each, vector: unit() })),
+      );
+      saveMs.push(performance.now() - began);
+    }
+  }
+  const worst = (all: number[]) => Math.round(Math.max(...all) * 10) / 10;
+  const middle = (all: number[]) =>
+    Math.round(([...all].sort((a, b) => a - b)[all.length >> 1] as number) * 10) / 10;
+  console.info(
+    `Backfill steps on the main thread (ms): finding what waits median ${middle(pendingMs)}, worst ${worst(pendingMs)}; saving 8 median ${middle(saveMs)}, worst ${worst(saveMs)}`,
+  );
+  expect(store.meaning.progress(MODEL)).toEqual({ embedded: TOTAL, total: TOTAL });
+  expect(middle(pendingMs)).toBeLessThan(BACKFILL_STEP_BUDGET_MS);
+  expect(middle(saveMs)).toBeLessThan(BACKFILL_STEP_BUDGET_MS);
+
+  const timings: Record<string, number> = {};
+  for (const query of QUERIES) {
+    const meaning = { model: MODEL, vector: unit(), minSimilarity: 0 };
+    store.search.query(query, meaning);
+    const runs: number[] = [];
+    for (let run = 0; run < 5; run++) {
+      const began = performance.now();
+      const result = store.search.query(query, meaning);
+      runs.push(performance.now() - began);
+      expect(result.hits.some((hit) => hit.foundBy.includes('meaning'))).toBe(true);
+    }
+    timings[JSON.stringify(query)] = middle(runs);
+  }
+  console.info('Hybrid search timings (ms):', timings);
+  for (const ms of Object.values(timings)) expect(ms).toBeLessThan(HYBRID_BUDGET_MS);
+  // The exact identifier still comes first.
+  const exact = store.search.query({ text: 'ENG-418' }, { model: MODEL, vector: unit(), minSimilarity: 0 });
+  expect(exact.hits[0]?.exact).toBe(true);
+}, 300_000);

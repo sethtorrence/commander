@@ -1,6 +1,7 @@
 // Ares's voice box in the Core: the model client, wired to the Item store's usage ledger and
-// settings, with the API key borrowed from the main process for each call and held in memory only.
-// Also answers Settings → Ares (settings, Test, Usage) for the window.
+// settings, with the API key borrowed from the main process for each call and held in memory only,
+// and to the local embedding model (search by meaning, #73) once it is loaded. Also answers
+// Settings → Ares (settings, Test, Usage, search by meaning) and the palette's search with meaning.
 import {
   type CoreModelsReply,
   coreModelsRequest,
@@ -19,7 +20,10 @@ import {
 import { z } from 'zod';
 import { type AccessTokens, AccessTokenUnavailable } from '../access-tokens';
 import type { ItemStore } from '../item-store';
+import type { Meaning } from '../meaning';
 import type { KnownSecrets } from '../safety/known-secrets';
+
+type MeaningSide = Pick<Meaning, 'status' | 'setOn' | 'queryVector' | 'adapter'>;
 
 // What Test asks for: short, so it costs a fraction of a cent.
 const TEST_PROMPT = 'Reply with one short, friendly sentence to confirm you can hear me.';
@@ -27,13 +31,28 @@ const TEST_PROMPT = 'Reply with one short, friendly sentence to confirm you can 
 async function answer(
   store: ItemStore,
   client: ModelClient,
+  meaning: MeaningSide | undefined,
   request: z.output<typeof modelsRequest>,
 ): Promise<CoreModelsReply['response']> {
   switch (request.op) {
+    case 'meaning-status':
+      if (!meaning) return { ok: false, error: 'Search by meaning isn’t set up' };
+      return { ok: true, result: meaning.status() };
+    case 'set-meaning':
+      if (!meaning) return { ok: false, error: 'Search by meaning isn’t set up' };
+      return { ok: true, result: meaning.setOn(request.on) };
+    case 'search-meaning': {
+      // Null while the model isn't ready: the window keeps the word results it already has.
+      const vector = await meaning?.queryVector(request.query.text);
+      return { ok: true, result: vector ? store.search.query(request.query, vector) : null };
+    }
     case 'settings':
       return { ok: true, result: store.models.settings() };
-    case 'save-settings':
-      return { ok: true, result: store.models.saveSettings(request.settings) };
+    case 'save-settings': {
+      // Search by meaning is switched on its own (set-meaning), which a form loaded before can't undo.
+      const { searchByMeaning } = store.models.settings();
+      return { ok: true, result: store.models.saveSettings({ ...request.settings, searchByMeaning }) };
+    }
     case 'usage':
       return { ok: true, result: store.models.usageSummary() };
     case 'test': {
@@ -110,11 +129,14 @@ export function setUpModels(
     send,
     accessTokens,
     secrets,
+    meaning,
   }: {
     send: (message: CoreModelsReply) => void;
     accessTokens: Pick<AccessTokens, 'request'>;
     // The tokens and keys the Core holds (fed by accessTokens): no message to a model may carry one.
     secrets?: Pick<KnownSecrets, 'foundIn'>;
+    // Search by meaning (../meaning), set up after the client it embeds through.
+    meaning?: () => MeaningSide | undefined;
   },
 ) {
   const zai = refusingSecrets(
@@ -126,6 +148,7 @@ export function setUpModels(
     settings: () => store.models.settings(),
     providers: { zai },
     ledger: store.models,
+    embedding: () => meaning?.()?.adapter() ?? null,
   });
 
   async function reply(id: number, raw: unknown) {
@@ -135,7 +158,7 @@ export function setUpModels(
       response = { ok: false, error: `Malformed models request: ${parsed.error.message}` };
     } else {
       try {
-        response = await answer(store, client, parsed.data.request);
+        response = await answer(store, client, meaning?.(), parsed.data.request);
       } catch (error) {
         response =
           error instanceof ModelError
