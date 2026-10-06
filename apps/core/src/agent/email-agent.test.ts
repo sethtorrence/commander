@@ -1,7 +1,13 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type ActionContext, SORT_INTO_BUCKETS, sortingLine } from '@commander/domain';
+import {
+  type ActionContext,
+  type EmailDetail,
+  NEEDS_REPLY,
+  SORT_INTO_BUCKETS,
+  sortingLine,
+} from '@commander/domain';
 import { createModelClient, type ModelProviderAdapter, type ProviderRequest } from '@commander/models';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type Gate, openGate } from '../autonomy/gate';
@@ -24,16 +30,20 @@ let store: ItemStore;
 let gate: Gate;
 let agent: Agent;
 let calls: ProviderRequest[];
+// The Bucket the fake model sorts into.
+let sortInto: string;
 
 const sorts = (request: ProviderRequest) => !!request.messages[0]?.content.includes('You sort the User');
 const provider: ModelProviderAdapter = {
   async send(request) {
     calls.push(request);
     const text = sorts(request)
-      ? '{"bucket":"FYI","confidence":0.95,"reason":"Nothing to do"}'
-      : request.messages[0]?.content.includes('You file the User')
-        ? '{"filings":[]}'
-        : '{"todos":[],"ranking":[],"facts":[],"lines":[]}';
+      ? JSON.stringify({ bucket: sortInto, confidence: 0.95, reason: 'Nothing to do' })
+      : request.messages[0]?.content.includes('email threads')
+        ? '{"body":"Hi Dana,\\n\\nThursday works.\\n\\nAlex","confidence":0.9}'
+        : request.messages[0]?.content.includes('You file the User')
+          ? '{"filings":[]}'
+          : '{"todos":[],"ranking":[],"facts":[],"lines":[]}';
     return { text, usage: { inputTokens: 10, cachedTokens: 0, outputTokens: 5 } };
   },
   stream: () => Promise.reject(new Error('not used')),
@@ -47,6 +57,7 @@ beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'commander-email-agent-'));
   clock = T;
   calls = [];
+  sortInto = 'FYI';
   store = openItemStore({
     path: join(dir, 'commander.db'),
     snapshotDir: join(dir, 'snapshots'),
@@ -194,5 +205,40 @@ describe('Ares and a new Account’s mail', () => {
     agent.synced({ source: 'gmail', account: GMAIL, outcome: 'synced', itemIds: [] });
     await agent.runner.settled();
     expect(store.autonomy.proposals({ action: SORT_INTO_BUCKETS, statuses: ['pending'] })).toEqual([]);
+  });
+});
+
+describe('Ares drafts for a thread entering Needs reply (#143)', () => {
+  const drafts = () => calls.filter((call) => call.messages[0]?.content.includes('email threads'));
+  const suggestion = (itemId: string) => {
+    const detail = store.get(itemId)?.item.detail as EmailDetail;
+    return store.emailThread(GMAIL, detail.threadKey)?.suggestedReply ?? null;
+  };
+
+  it('when Ares sorts it there', async () => {
+    sortInto = 'Needs reply';
+    const ids = deliver(store, clock, [{ id: 'q', subject: 'Q4 offsite dates', sentAt: T - HOUR }]);
+    agent.synced({ source: 'gmail', account: GMAIL, outcome: 'synced', itemIds: Object.values(ids) });
+    await agent.runner.settled();
+    // The gate tells the Core, which tells the Agent: Ares did something.
+    agent.aresChanged();
+    await agent.runner.settled();
+    expect(drafts()).toHaveLength(1);
+    expect(suggestion(ids.q as string)).toMatchObject({
+      state: 'ready',
+      body: 'Hi Dana,\n\nThursday works.\n\nAlex',
+    });
+  });
+
+  it('when the User moves it there', async () => {
+    const ids = deliver(store, clock, [{ id: 'q', subject: 'Q4 offsite dates', sentAt: T - HOUR }]);
+    agent.synced({ source: 'gmail', account: GMAIL, outcome: 'synced', itemIds: Object.values(ids) });
+    await agent.runner.settled();
+    expect(drafts()).toHaveLength(0);
+    moveThread(store, ids.q as string, NEEDS_REPLY);
+    agent.userChanged([ids.q as string]);
+    await agent.runner.settled();
+    expect(drafts()).toHaveLength(1);
+    expect(suggestion(ids.q as string)?.state).toBe('ready');
   });
 });

@@ -57,6 +57,40 @@ describe('the composer’s editor', () => {
     ).toEqual([{ type: 'paragraph', runs: [{ text: 'xy' }] }]);
   });
 
+  it('marks a link Ares added, and keeps only that address marked when the User types beside it (#143)', () => {
+    const marked: ComposeBody = [
+      {
+        type: 'paragraph',
+        runs: [{ text: 'Slots: ' }, { text: 'https://cal.example/alex', aresLink: true }],
+      },
+    ];
+    const root = editor();
+    writeEditor(root, marked);
+    const mark = root.querySelector('[data-ares-link]');
+    expect(mark?.getAttribute('data-ares-link')).toBe('https://cal.example/alex');
+    expect(mark?.getAttribute('title')).toContain('Ares added this link');
+    expect(readEditor(root)).toEqual(marked);
+
+    // Typing at the end of the mark lands inside it: what was typed is the User's.
+    mark?.append(' or Friday');
+    expect(readEditor(root)).toEqual([
+      {
+        type: 'paragraph',
+        runs: [
+          { text: 'Slots: ' },
+          { text: 'https://cal.example/alex', aresLink: true },
+          { text: ' or Friday' },
+        ],
+      },
+    ]);
+    // An address the User changed is theirs.
+    expect(
+      readEditor(
+        editor('<div><span data-ares-link="https://cal.example/alex">https://cal.example/sam</span></div>'),
+      ),
+    ).toEqual([{ type: 'paragraph', runs: [{ text: 'https://cal.example/sam' }] }]);
+  });
+
   it('starts with an empty line when there is nothing', () => {
     const root = editor();
     writeEditor(root, []);

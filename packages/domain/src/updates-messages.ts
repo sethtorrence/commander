@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { draftEmailRequest, type ReadyReply, readyReply } from './email-drafts';
 import { oversightRangeSpan } from './github-oversight';
 import { personParagraph, summaryRequest } from './github-summary';
 import { item } from './items';
@@ -46,6 +47,9 @@ export const updatesRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('summarise-chat'), itemId: z.string().min(1), range: summaryRange }),
   // Draft (#110): Ares drafts a reply to a Chat, on request, for the User to edit and send.
   z.object({ op: z.literal('draft-reply'), itemId: z.string().min(1) }),
+  // Draft a reply (#143): Ares drafts a reply to an email thread, on request, kept as the thread's
+  // suggested reply for the User to open in the composer (or not). Optionally with what to say.
+  draftEmailRequest.extend({ op: z.literal('draft-email-reply') }),
   // Ask Ares to write the GitHub summary (#121) for a range and scope: the summary he wrote, or why
   // he didn't (the plain summary shows then).
   z.object({ op: z.literal('summarise-github'), request: summaryRequest }),
@@ -73,6 +77,7 @@ export type UpdatesResults = {
   'run-skill': UpdateView | null;
   'summarise-chat': ChatSummary;
   'draft-reply': ChatDraft;
+  'draft-email-reply': ReadyReply;
   'summarise-github': GitHubSummaryAnswer;
   'refresh-person-paragraph': PersonParagraphAnswer;
   history: UpdateSummary[];
@@ -86,6 +91,7 @@ export const updatesResult = {
   'run-skill': updateView.nullable(),
   'summarise-chat': chatSummary,
   'draft-reply': chatDraft,
+  'draft-email-reply': readyReply,
   'summarise-github': githubSummaryAnswer,
   'refresh-person-paragraph': personParagraphAnswer,
   history: z.array(updateSummary),

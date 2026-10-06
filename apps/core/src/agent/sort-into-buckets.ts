@@ -141,8 +141,8 @@ const QUOTE_START = [
   /^From: .+$/,
 ];
 
-/** An email's text as Ares reads it: quoted history and quoted lines left out, cut to MAX_TEXT. */
-export function trimmedText(text: string, max = MAX_TEXT): string {
+/** The lines of an email's text its sender wrote: quoted history and quoted lines left out. */
+export function ownLines(text: string): string[] {
   const kept: string[] = [];
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim();
@@ -151,7 +151,12 @@ export function trimmedText(text: string, max = MAX_TEXT): string {
     if (trimmed.startsWith('>')) continue;
     kept.push(line);
   }
-  return cut(kept.join('\n'), max);
+  return kept;
+}
+
+/** An email's text as Ares reads it: quoted history and quoted lines left out, cut to MAX_TEXT. */
+export function trimmedText(text: string, max = MAX_TEXT): string {
+  return cut(ownLines(text).join('\n'), max);
 }
 
 const addressText = (address: EmailAddress) => {

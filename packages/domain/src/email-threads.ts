@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { emailBucket } from './buckets';
 import { emailBody, emailLabel } from './email';
+import { suggestedReply } from './email-drafts';
 import { item } from './items';
 
 // The Email Section's reads: the inbox as threads (across Accounts, or one), and one thread's
@@ -119,5 +120,7 @@ export const emailThread = z.object({
   account: id,
   threadKey: id,
   messages: z.array(z.object({ item, body: emailBody.nullable() })),
+  // Ares's suggested reply at the end of the thread (#143): offered or ready, or none.
+  suggestedReply: suggestedReply.nullable().optional(),
 });
 export type EmailThread = z.infer<typeof emailThread>;

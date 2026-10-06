@@ -330,6 +330,13 @@
       "when": 1791317535328,
       "tag": "0046_conversations",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "6",
+      "when": 1791318228289,
+      "tag": "0047_suggested_replies",
+      "breakpoints": true
     }
   ]
 }

@@ -206,7 +206,7 @@ export function RichEditor({
         onDrop={onDrop}
         onDragOver={(event) => event.preventDefault()}
         onKeyDown={onKeyDown}
-        className="min-h-[160px] flex-1 overflow-y-auto px-4 py-3 text-[15px] leading-[1.6] text-text outline-none [&_a]:text-ink [&_a]:underline [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-6"
+        className="min-h-[160px] flex-1 overflow-y-auto px-4 py-3 text-[15px] leading-[1.6] text-text outline-none [&_[data-ares-link]]:bg-signal-focus [&_[data-ares-link]]:text-ink [&_[data-ares-link]]:outline-1 [&_[data-ares-link]]:outline-dashed [&_[data-ares-link]]:outline-ink [&_a]:text-ink [&_a]:underline [&_ol]:my-1 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:my-1 [&_ul]:list-disc [&_ul]:pl-6"
       />
     </div>
   );

@@ -18,6 +18,8 @@ type Pending = { op: ComposeOp; resolve: (response: ComposeResponse) => void; ti
 const TIMEOUTS: Record<ComposeOp, number> = {
   open: 120_000,
   'open-draft': 120_000,
+  // Ares's suggested reply (#143): a reply's quote made and its draft saved.
+  'open-suggested': 120_000,
   save: 60_000,
   send: 60_000,
   'undo-send': 10_000,

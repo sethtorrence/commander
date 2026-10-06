@@ -97,6 +97,9 @@ export type MemoryStore = {
   // waiting for review, nor rule memories (jobs read the Rules themselves).
   lookup(request: MemoryLookup): RecalledMemory[];
   get(memoryId: string): Memory | null;
+  // The live memory learned under this key (one Account's writing style, #143), or null: never one
+  // deleted, nor a fact waiting for review.
+  byKey(key: string): Memory | null;
   // Which of these keys have been learned (deleted ones included).
   knows(keys: readonly string[]): Set<string>;
   // How far a learner has got (null before it starts), and saving it (inside a transaction).
@@ -482,6 +485,13 @@ export function openMemory({
         return ruleMemories().find((each) => each.id === memoryId) ?? null;
       const found = row(memoryId);
       return found && found.deletedAt === null ? (toMemories([found])[0] as Memory) : null;
+    },
+
+    byKey(key) {
+      const found = db.select().from(memories).where(eq(memories.key, key)).get();
+      if (!found || found.deletedAt !== null) return null;
+      const [memory] = toMemories([found]);
+      return memory && !memory.forReview ? memory : null;
     },
 
     knows(keys) {

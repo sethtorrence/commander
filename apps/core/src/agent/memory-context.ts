@@ -142,6 +142,8 @@ export type RecallRequest = {
   limit?: number;
   // The text embedded, when search by meaning is ready.
   meaning?: QueryVector | null;
+  // Memories the job puts in its prompt itself (an Account's writing style, #143): left out here.
+  except?: readonly string[];
 };
 
 // What a job looks Memory up by meaning with (#73): the text embedded, or null while the embedding
@@ -163,14 +165,17 @@ const line = (memory: RecalledMemory) => `- (${KIND_WORDS[memory.kind]}) ${memor
  * holds nothing relevant.
  */
 export function recall(itemStore: ItemStore, request: RecallRequest): PromptData[] {
-  const found = itemStore.memory.lookup({
-    text: request.text,
-    handles: request.handles,
-    projectIds: request.projectIds,
-    kinds: request.kinds,
-    limit: request.limit,
-    meaning: request.meaning ?? undefined,
-  });
+  const except = new Set(request.except ?? []);
+  const found = itemStore.memory
+    .lookup({
+      text: request.text,
+      handles: request.handles,
+      projectIds: request.projectIds,
+      kinds: request.kinds,
+      limit: request.limit,
+      meaning: request.meaning ?? undefined,
+    })
+    .filter((memory) => !except.has(memory.id));
   const confirmed = found.filter((memory) => memory.confirmed);
   const unconfirmed = found.filter((memory) => !memory.confirmed);
   const data: PromptData[] = [];

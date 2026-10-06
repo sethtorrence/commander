@@ -6,6 +6,9 @@
 // (`compose-files/`, readable by the User only) until the message is sent; and Settings → Email's
 // default Account and Undo time, and each Account's signature.
 //
+// Ares's suggested reply (#143) opens here too: as a reply with his draft for its body, saved at once as
+// an ordinary draft, the User's to edit and send.
+//
 // Every send is held for the Undo time in the outgoing queue, here in the Core, so closing the window to
 // the tray never cancels one; Commander quitting asks for held messages to go first (compose-send-held),
 // and answers once they have gone or can't (offline, refused), within the time the main process allows.
@@ -23,6 +26,7 @@ import {
   type ComposeRequest,
   type ComposeState,
   coreComposeRequest,
+  draftBody,
   type EmailAddress,
   type EmailDetail,
   type Item,
@@ -268,10 +272,42 @@ export function setUpCompose({
     return suggestAddresses(book.entries, text, limit);
   }
 
+  // Ares's suggested reply to a message (#143), opened: a reply to it with his draft as its body (the
+  // links he added still marked), and the Account's signature, saved at once as an ordinary draft by
+  // the User, which reaches the Source's Drafts through the outgoing queue like any other. Until now
+  // nothing of it had left Commander.
+  async function openSuggested(itemId: string): Promise<ComposeState> {
+    const suggestion = store.suggestedReplies.ready(itemId);
+    if (!suggestion) throw new Error('Ares’s suggested reply is no longer waiting: the thread has moved on.');
+    const state = await open('reply', itemId);
+    const body = withSignature(
+      draftBody(suggestion.body, suggestion.addedLinks),
+      store.compose.signatures.read(state.account),
+    );
+    const draft: ComposeDraft = {
+      itemId: null,
+      mode: state.mode,
+      account: state.account,
+      replyToItemId: state.replyToItemId,
+      to: state.to,
+      cc: state.cc,
+      bcc: state.bcc,
+      subject: state.subject,
+      body,
+      attachments: [],
+    };
+    const saved = store.compose.save(draft, await contextFor(draft));
+    store.suggestedReplies.opened(itemId, saved.itemId);
+    onItemsChanged([saved.itemId, itemId]);
+    return { ...state, body, itemId: saved.itemId };
+  }
+
   async function answer(request: ComposeRequest): Promise<unknown> {
     switch (request.op) {
       case 'open':
         return open(request.mode, request.itemId, request.account);
+      case 'open-suggested':
+        return openSuggested(request.itemId);
       case 'open-draft': {
         const { detail } = emailItem(request.itemId);
         if (!detail.draft) throw new Error('That message has already been sent.');

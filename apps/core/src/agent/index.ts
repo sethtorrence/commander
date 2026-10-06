@@ -12,7 +12,7 @@
 // failed or over-cap call, or the User coming back ends it.
 import {
   type CoreMessage,
-  DRAFT_REPLIES,
+  DRAFT_EMAIL_REPLIES,
   type Enqueue,
   FILE_INTO_PROJECTS,
   SORT_INTO_BUCKETS,
@@ -24,12 +24,14 @@ import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import type { SyncedEvent } from '../sync';
 import { blockTimeForTodosJob } from './block-time-for-todos';
+import { draftEmailRepliesJob } from './draft-email-reply';
 import { fileIntoProjectsJob } from './file-into-projects';
 import { createFiling, type Filing } from './filing';
 import { createGitHubSummaries, type GitHubSummaries } from './github-summaries';
 import { learnAppearances } from './learn-appearances';
 import { learnExamples } from './learn-examples';
 import { learnFactsJob } from './learn-facts';
+import { learnWritingStyleJob } from './learn-writing-style';
 import type { MeaningLookup } from './memory-context';
 import { prepareMeetingsJob } from './prepare-meetings';
 import { proposeEventsJob } from './propose-events';
@@ -156,6 +158,10 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       proposeEventsJob(itemStore, { now }),
       summaryJob,
       learnFactsJob(itemStore, { now }),
+      // Ares's drafts (#143): replies to threads entering Needs reply, in the style he learns from the
+      // User's sent mail.
+      draftEmailRepliesJob(itemStore, { now, meaning: options.meaning, onDrafted: options.onItemsChanged }),
+      learnWritingStyleJob(itemStore, { now }),
     ],
     client: options.client,
     gate: options.gate,
@@ -175,14 +181,9 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     },
   });
 
-  // Draft (#110) runs on request, outside the runner (it changes nothing), under an Organise action
-  // of its own, so the Settings grid can switch it off.
-  options.gate.registerAction({
-    action: DRAFT_REPLIES,
-    actionKind: 'organise',
-    name: 'Draft replies',
-    hint: 'Draft beside a Chat’s reply box: a reply for you to edit and send. It changes nothing',
-  });
+  // Draft beside a Chat's reply box (#110) runs on request, outside the runner (it changes nothing),
+  // under the Organise action "Draft replies", which the email drafting job registers (#143), so the
+  // Settings grid can switch both off.
 
   const filing = createFiling({ itemStore, gate: options.gate });
   // Ares's filing suggestions the User or a Rule has since overruled, his suggested replies to
@@ -294,11 +295,16 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       if (blocks.length) runner.trigger({ kind: 'typing', itemIds: blocks });
       const ranked = itemIds.filter((id) => RANKED_KINDS.has(itemStore.get(id)?.item.kind ?? ''));
       if (ranked.length) runner.trigger({ kind: 'todos-changed', itemIds: ranked });
+      // The User may have moved a thread into Needs reply: it may want a draft (#143).
+      if (itemIds.some((id) => itemStore.get(id)?.item.kind === 'email'))
+        runner.trigger({ kind: 'due', job: DRAFT_EMAIL_REPLIES });
     },
 
     aresChanged() {
       learn();
       runner.trigger({ kind: 'todos-changed', itemIds: [] });
+      // Ares may have sorted a thread into Needs reply: it may want a draft (#143).
+      runner.trigger({ kind: 'due', job: DRAFT_EMAIL_REPLIES });
     },
 
     synced({ source, account, itemIds }) {

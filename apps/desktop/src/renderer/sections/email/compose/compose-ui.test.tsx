@@ -138,6 +138,10 @@ function fakeCompose() {
       calls.push({ op: 'open-draft', itemId });
       return base({ itemId, to: [dana], subject: 'Lunch?' });
     },
+    async openSuggested(itemId) {
+      calls.push({ op: 'open-suggested', itemId });
+      return base({ itemId: 'draft-1', mode: 'reply', replyToItemId: itemId, to: [dana] });
+    },
     async save(draft) {
       calls.push({ op: 'save', draft });
       return { itemId: draft.itemId ?? 'draft-1' };

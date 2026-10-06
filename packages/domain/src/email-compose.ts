@@ -16,7 +16,9 @@ import { type EmailAddress, type EmailDetail, emailAddress, normaliseMessageId }
   plain text.
 
   Sending is Act for you when Ares does it (#11): only the User sends. Ares may only leave a draft
-  (#143), which stays text in the composer until the User presses Send.
+  (#143), which stays text in the composer until the User presses Send. A link he added that is in
+  neither the thread nor the User's sent mail is a run marked `aresLink`: highlighted in the composer,
+  and left out of the message's HTML and text (so out of Drafts and every send) until the User keeps it.
 
   A message is an `email` Item from the moment it is first saved: a draft, then (once sent) the sent
   message in its thread, matched to the copy the Source syncs by the Source's answer (or, after a crash,
@@ -55,6 +57,8 @@ export const composeRun = z.object({
   italic: z.boolean().optional(),
   // A link's address; a run whose address isn't a web or mail address is plain text.
   href: z.string().max(2_000).optional(),
+  // A link Ares added to his draft (#143) that the User hasn't kept yet: never part of the message.
+  aresLink: z.boolean().optional(),
 });
 export type ComposeRun = z.infer<typeof composeRun>;
 
@@ -104,7 +108,10 @@ function runHtml(run: ComposeRun): string {
   return html;
 }
 
-const runsHtml = (runs: readonly ComposeRun[]) => runs.map(runHtml).join('');
+// Links Ares added and the User hasn't kept are never part of the message (#143).
+const sent = (runs: readonly ComposeRun[]) => runs.filter((run) => !run.aresLink);
+
+const runsHtml = (runs: readonly ComposeRun[]) => sent(runs).map(runHtml).join('');
 
 /** The body as HTML: a <div> per paragraph (as Gmail writes them), <ul>/<ol> lists, <b>, <i> and <a>. */
 export function bodyHtml(body: ComposeBody): string {
@@ -131,13 +138,37 @@ function runText(run: ComposeRun): string {
 export function bodyText(body: ComposeBody): string {
   const lines: string[] = [];
   for (const block of body) {
-    if (block.type === 'paragraph') lines.push(block.runs.map(runText).join(''));
+    if (block.type === 'paragraph') lines.push(sent(block.runs).map(runText).join(''));
     else
       block.items.forEach((runs, index) => {
-        lines.push(`${block.ordered ? `${index + 1}.` : '-'} ${runs.map(runText).join('')}`);
+        lines.push(`${block.ordered ? `${index + 1}.` : '-'} ${sent(runs).map(runText).join('')}`);
       });
   }
   return lines.join('\n');
+}
+
+const everyRun = (body: ComposeBody) =>
+  body.flatMap((block) => (block.type === 'paragraph' ? block.runs : block.items.flat()));
+
+/** The links Ares added to the body that the User hasn't kept yet (#143), each once, in order. */
+export function unkeptLinks(body: ComposeBody): string[] {
+  return [...new Set(everyRun(body).flatMap((run) => (run.aresLink && run.text.trim() ? [run.text] : [])))];
+}
+
+/** The body with one of Ares's links kept (from now on an ordinary part of the message) or taken out. */
+export function settleAresLink(body: ComposeBody, link: string, keep: boolean): ComposeBody {
+  const settle = (runs: readonly ComposeRun[]): ComposeRun[] =>
+    runs.flatMap((run) => {
+      if (!run.aresLink || run.text !== link) return [run];
+      if (!keep) return [];
+      const { aresLink: _added, ...kept } = run;
+      return [kept];
+    });
+  return body.map((block) =>
+    block.type === 'paragraph'
+      ? { ...block, runs: settle(block.runs) }
+      : { ...block, items: block.items.map(settle) },
+  );
 }
 
 /** The body with the Account's signature below it, after a blank line and the "-- " line mail clients know. */
@@ -584,6 +615,9 @@ export const composeRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('open'), mode: composeMode, itemId: id.optional(), account: id.optional() }),
   // A draft (Commander's, or one made in Gmail or Outlook), in the composer.
   z.object({ op: z.literal('open-draft'), itemId: id }),
+  // Ares's suggested reply to a message (#143), opened in the composer: a reply to it with his draft
+  // as its body, saved at once as an ordinary draft (to the Source's Drafts too).
+  z.object({ op: z.literal('open-suggested'), itemId: id }),
   // Saves the draft (to the Source's Drafts folder too, through the outgoing queue). Its Item comes back.
   z.object({ op: z.literal('save'), draft: composeDraft }),
   // Sends it: held for the Undo time, then sent. Its Item and when it goes come back.
@@ -626,6 +660,7 @@ export type ComposeOp = ComposeRequest['op'];
 export const composeResult = {
   open: composeState,
   'open-draft': composeState,
+  'open-suggested': composeState,
   save: z.object({ itemId: id }),
   send: z.object({ itemId: id, sendAt: timestamp }),
   'undo-send': composeState,

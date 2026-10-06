@@ -21,6 +21,8 @@ export interface EmailWriting {
   /** Opens a composer: new mail, or a reply, reply all or forward of a message (its Item). */
   open(mode: ComposeMode, itemId?: string): Promise<void>;
   openDraft(itemId: string): Promise<void>;
+  /** Ares's suggested reply to a message (#143), in the composer below its thread, as a draft. */
+  openSuggested(itemId: string): Promise<void>;
   close(): void;
   /** The composer handed its message to the Core: the Undo toast. */
   sent(sent: SentMessage): void;
@@ -117,6 +119,18 @@ export function useCompose({
     [client, show],
   );
 
+  const openSuggested = useCallback(
+    async (itemId: string) => {
+      try {
+        show(await client.openSuggested(itemId), 'inline');
+        reload();
+      } catch (error) {
+        toast(message(error));
+      }
+    },
+    [client, show, reload],
+  );
+
   const undo = useCallback(
     async (itemId: string) => {
       try {
@@ -179,6 +193,7 @@ export function useCompose({
     outbox,
     open,
     openDraft,
+    openSuggested,
     close,
     sent,
     undo,
