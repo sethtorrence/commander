@@ -18,6 +18,7 @@ import { attachmentSchemePrivileges, serveAttachment } from './attachments-proto
 import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
 import { createComposeChannel } from './compose-channel';
+import { createConversationsChannel } from './conversations-channel';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { setUpEmailReader } from './email-reader';
 import { emailReaderSchemePrivileges } from './email-reader/protocol';
@@ -109,6 +110,9 @@ function startCore(secrets: Secrets) {
     ...(testHooks && process.env.COMMANDER_TEST_SUMMARY_ROLLUP === 'off'
       ? ['--github-summary-rollup=off']
       : []),
+    // The end-to-end tests may treat their fake model server (on this machine) as a cloud model, so
+    // Conversations answer at once rather than taking turns.
+    ...(testHooks && process.env.COMMANDER_TEST_MODEL_IN_CLOUD === '1' ? ['--test-model-in-cloud'] : []),
     // The end-to-end tests search by meaning with a stand-in model, so none of them ever downloads the
     // real one (#73). It can only make search by meaning worse, so it needs no test hooks.
     ...(process.env.COMMANDER_TEST_EMBEDDINGS === 'fake' ? ['--embeddings=fake'] : []),
@@ -153,6 +157,10 @@ function startCore(secrets: Secrets) {
   // Writing email (#138): the window's composer, answered by the Core.
   const compose = createComposeChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.compose, (_event, request: unknown) => compose.request(request));
+  // Conversations with Ares (#191): the window asks, the Core answers; his answers stream as core
+  // messages.
+  const conversations = createConversationsChannel((message) => core.postMessage(message));
+  ipcMain.handle(ipc.conversations, (_event, request: unknown) => conversations.request(request));
   // Whether the User is at the machine, from powerMonitor, for "You're here / away" and having the
   // Update ready on return.
   // The end-to-end tests stand in for powerMonitor (their input never reaches the system).
@@ -194,6 +202,7 @@ function startCore(secrets: Secrets) {
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
     if (markdownCopy.settle(raw) || updates.settle(raw) || compose.settle(raw)) return;
+    if (conversations.settle(raw)) return;
     if (emailReader?.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.
     if (models(raw)) return;

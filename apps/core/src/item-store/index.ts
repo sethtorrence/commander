@@ -139,6 +139,7 @@ import {
   queueCommanderEventChanges,
 } from './commander-events';
 import { type ComposeContext, type ComposeRecord, composeIn } from './compose';
+import { type ConversationStore, openConversationStore } from './conversations';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
 import { type EmailImagesStore, emailImagesIn } from './email-images';
@@ -205,6 +206,8 @@ export type { ChannelSettingsStore } from './channel-settings';
 export type { ChatSettingsStore } from './chat-settings';
 export type { BusyCopies, BusyCopy } from './commander-events';
 export type { ComposeContext, ComposeRecord } from './compose';
+export type { AnswerChanges, ConversationStore, RemovedConversation } from './conversations';
+export { ConversationError } from './conversations';
 export type { DashboardStore, StoredClear } from './dashboard';
 export type { FilingFeedbackStore } from './filing-feedback';
 export type { FocusSettingsStore } from './focus-settings';
@@ -439,6 +442,8 @@ export type ItemStore = {
   markdownCopyFolder: MarkdownCopyFolderStore;
   // Ares's queue for the Update, the Updates he gave, and where the producers stand (updates.ts).
   updates: UpdateStore;
+  // Conversations with Ares and their turns (#191, conversations.ts), in the same database.
+  conversations: ConversationStore;
   // Settings → GitHub: what each GitHub Account watches (github-watch.ts), in the same database.
   githubWatch: GitHubWatchStore;
   // The GitHub Section's discussions, fetched on demand and kept beside the detail (github-discussions.ts).
@@ -2564,6 +2569,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         withDetails(db.select().from(schema.items).where(eq(schema.items.id, id)).all())[0] ?? null,
     }),
     updates: openUpdateStore(db),
+    conversations: openConversationStore(db, now),
     emailSorting: sortingAnswers.store,
     filing: {
       ...filing.store,

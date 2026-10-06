@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { aresStatus } from './agent';
+import { conversationTokens, conversationTurnChanged } from './conversations';
 import { markdownCopyStatus } from './markdown-copy-messages';
 import { updatesState } from './updates';
 
@@ -52,10 +53,13 @@ const meetingHeadsUp = z.object({
 // How the Markdown copy of the Daily Notes stands changed (markdown-copy-messages.ts): Settings shows it.
 const markdownCopyChanged = z.object({ type: z.literal('markdown-copy-status'), status: markdownCopyStatus });
 
+// Conversations (#191, conversations.ts): Ares's answer as he writes it, and his turn as it changes.
 export const coreMessage = z.discriminatedUnion('type', [
   heartbeat,
   aresActivity,
   aresStatusChanged,
+  conversationTokens,
+  conversationTurnChanged,
   dashboardRanked,
   aresUpdates,
   itemsChanged,

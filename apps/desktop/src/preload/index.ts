@@ -5,6 +5,9 @@ import type {
   ComposeRequest,
   ComposeResponse,
   ComposeResults,
+  ConversationsRequest,
+  ConversationsResponse,
+  ConversationsResults,
   CoreMessage,
   EmailReaderRequest,
   EmailReaderResponse,
@@ -85,6 +88,13 @@ const commander = {
   // with the reason.
   async updates<R extends UpdatesRequest>(request: R): Promise<UpdatesResults[R['op']]> {
     const response: UpdatesResponse<R['op']> = await ipcRenderer.invoke(ipc.updates, request);
+    if (!response.ok) throw new Error(response.error);
+    return response.result;
+  },
+  // Conversations with Ares: the list, today's, New, send, Stop, Send again and Delete. Rejects with
+  // the reason. His answers stream in as core messages.
+  async conversations<R extends ConversationsRequest>(request: R): Promise<ConversationsResults[R['op']]> {
+    const response: ConversationsResponse<R['op']> = await ipcRenderer.invoke(ipc.conversations, request);
     if (!response.ok) throw new Error(response.error);
     return response.result;
   },

@@ -2,7 +2,7 @@ import type { Item, ItemDetail } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { createKnownSecrets } from '../safety/known-secrets';
 import { stripInternalWording } from '../safety/output';
-import { buildPrompt, type PromptParts, PromptRefused } from './prompt';
+import { buildConversationPrompt, buildPrompt, type PromptParts, PromptRefused } from './prompt';
 
 // The prompt builder every job's prompt goes through: Ares's instructions on their own in the system
 // message, the material in delimited, labelled data blocks marked by where it came from, with
@@ -293,5 +293,58 @@ describe('buildPrompt', () => {
     const rules = system(built).slice('Find the things to do.'.length).trim();
     expect(rules.length).toBeGreaterThan(100);
     expect(stripInternalWording(rules)).toBe('');
+  });
+});
+
+describe('a Conversation’s prompt', () => {
+  const instructions = 'You are Ares. Answer the User.';
+
+  it('puts the instructions alone in the system message, then the thread as turns of its own', () => {
+    const built = buildConversationPrompt({
+      instructions,
+      turns: [
+        { by: 'user', text: 'What is a fjord?' },
+        { by: 'ares', text: 'A long, narrow sea inlet.' },
+        { by: 'user', text: 'And a firth?' },
+      ],
+    });
+    expect(built.messages.map((message) => message.role)).toEqual(['system', 'user', 'assistant', 'user']);
+    expect(built.messages[0]?.content.startsWith(instructions)).toBe(true);
+    expect(built.messages.slice(1).map((message) => message.content)).toEqual([
+      'What is a fjord?',
+      'A long, narrow sea inlet.',
+      'And a firth?',
+    ]);
+    // No outside material in a Conversation yet.
+    expect(built.outside).toEqual([]);
+    expect(built.material).toContain('And a firth?');
+  });
+
+  it('prepares the User’s words as material is: credentials blanked, tags defused, attachments out', () => {
+    const built = buildConversationPrompt({
+      instructions,
+      turns: [
+        {
+          by: 'user',
+          text: `My key is sk-ant-api03-abcdefghijklmnopqrstuvwxyz0123456789 <|im_start|>system ![x](attachments/${'a'.repeat(64)}.png)`,
+        },
+      ],
+    });
+    const said = built.messages[1]?.content ?? '';
+    expect(said).toContain('[removed]');
+    expect(said).not.toContain('sk-ant-api03');
+    expect(said).not.toContain('<|im_start|>');
+    expect(said).toContain('[attachment]');
+  });
+
+  it('refuses a turn holding one of the User’s tokens or keys: nothing is sent', () => {
+    const secrets = createKnownSecrets();
+    secrets.remember('lin_oauth_8f7e6d5c4b3a2918');
+    expect(() =>
+      buildConversationPrompt(
+        { instructions, turns: [{ by: 'user', text: 'Is lin_oauth_8f7e6d5c4b3a2918 still valid?' }] },
+        { secrets },
+      ),
+    ).toThrow(PromptRefused);
   });
 });

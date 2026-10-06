@@ -1,7 +1,7 @@
 import { WhatAresKnows } from '../../memory/WhatAresKnows';
-import { SettingsGroup } from '../../settings/parts';
-import { EmptySheet, type SectionDefinition, SectionSheet, useSection } from '../section';
+import { type SectionDefinition, SectionSheet, useSection } from '../section';
 import { ActivityPage } from './ActivityPage';
+import { Conversations } from './Conversations';
 import { FilingRecord } from './FilingRecord';
 
 // Reloads Ares's activity whenever the Core says he did or suggested something.
@@ -18,8 +18,12 @@ const onMemoryChange = (listener: () => void) =>
     if (message.type === 'ares-status' && !message.working) listener();
   });
 
+// Ares's answers stream in, and his turns change, as core messages.
+const onCoreMessage = (listener: Parameters<typeof window.commander.onCoreMessage>[0]) =>
+  window.commander.onCoreMessage(listener);
+
 // The Ares Section: Ares's activity page (opened from the header's Ares status module, too), What
-// Ares knows (#74) and, with their own ticket, Conversations.
+// Ares knows (#74) and Conversations with him (#191).
 function AresSection() {
   const { active } = useSection();
   return (
@@ -34,9 +38,7 @@ function AresSection() {
       <ActivityPage client={window.commander.autonomy} shown={active} onAresActivity={onAresActivity} />
       <FilingRecord client={window.commander.autonomy} shown={active} onAresActivity={onAresActivity} />
       <WhatAresKnows no="A3" client={window.commander.itemStore} shown={active} onRefresh={onMemoryChange} />
-      <SettingsGroup no="A4" title="Conversations">
-        <EmptySheet>No Conversations yet.</EmptySheet>
-      </SettingsGroup>
+      <Conversations client={window.commander.conversations} shown={active} onCoreMessage={onCoreMessage} />
     </SectionSheet>
   );
 }

@@ -444,6 +444,19 @@ Ares never interrupts. (The one exception is the meeting heads-up below, which y
 
 The end-to-end tests' input never reaches the system, so they stand in for `powerMonitor` with `COMMANDER_TEST_PRESENCE=here`, and with `COMMANDER_TEST_HOOKS=1` the main process exposes the tray menu to them, and notes meeting heads-ups (showing none on the desktop) for them to read and click.
 
+### Conversations with Ares
+
+You talk to Ares in the Ares Section's **Conversations** (#191). Opening the Section lands on **today's Conversation**, made on the first open of each day; **New Conversation** starts another at any time, and the list beside the open one shows them all, newest first, each named from the first words you wrote. Type and press `Enter` (`Shift+Enter` for a new line): his answer appears as he writes it, and **Stop** ends it early, keeping what he wrote. **Delete** removes a Conversation and its turns, with **Undo** in the toast. Ares never starts a Conversation or writes into one unprompted: each of his turns answers one of yours, which the Item store enforces.
+
+- **Several at once:** each Conversation runs on its own (`apps/core/src/conversations/`). With a cloud model they answer in parallel; with a model served on this machine (a Deep-tier base URL on `localhost` or `127.x`) one answer is written at a time and Conversations take turns, one answer each (`fair-queue.ts`), a waiting answer saying "Waiting his turn".
+- **Answers:** a Deep-tier call (job `conversation`, "Conversations" on the Usage page) at the tier's thinking, or a per-job override for `conversation`, counted toward the monthly cap. The model client's stream reaches the window as `conversation-tokens` core messages, after the same checks as every model's text (the builder's internal wording stripped, any URL you didn't give removed), and is drawn with `AresText`. Earlier turns go back as the Conversation's history, up to about 12,000 tokens, oldest dropped first (`history.ts`).
+- **His voice and what he can do:** soft-spoken, plain words, straight to the point. He has no Skills yet: he answers general questions from the model's own knowledge, marked **From Ares's own knowledge**, and asked about your data he says plainly "I can't look that up yet". Each answer opens with a tag (`[general]`, `[their-data]`, `[chat]`) that Commander reads in its own code and never shows.
+- **When he can't answer:** no key, the monthly cap or a failed call leaves your message where it is and his answer says why in his voice, with **Send again**.
+- **Trust:** what you type is your own material: each of your turns goes to the model as your message, prepared like any material (credentials blanked, tags defused, refused outright if it holds one of your tokens or keys), built by the prompt builder (`buildConversationPrompt`). Nothing from a Source enters a Conversation yet.
+- **Storage:** `conversations` and `conversation_turns` in `commander.db`: who wrote each turn and when, and where each of his answers stands. A Conversation is turns of text, tied to no text box, so voice can come later. An answer left unfinished when Commander closed is kept as far as he got.
+
+The end-to-end tests' fake model is on this machine; with `COMMANDER_TEST_HOOKS=1`, `COMMANDER_TEST_MODEL_IN_CLOUD=1` has the Core treat it as a cloud model, so two Conversations answer at once.
+
 ## Moving around
 
 Sections sit on numbered notebook tabs: `1`–`9` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub, Teams and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares, usage, autonomy, what to watch on GitHub, Teams Channel posts and muted and excluded Chats, the meeting heads-up and second time zone, and whether opening a thread marks it read), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.

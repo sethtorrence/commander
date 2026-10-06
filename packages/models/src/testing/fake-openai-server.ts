@@ -18,6 +18,9 @@ export type FakeReply = {
   json?: unknown;
   // Server-sent events: each chunk is sent as a `data:` line, followed by `data: [DONE]`.
   sse?: unknown[];
+  // Sends the events this far apart rather than all at once (to watch an answer streaming in, or
+  // stop one), until the client goes away.
+  sseEveryMs?: number;
   // Never answer (for timeouts).
   hang?: boolean;
   // Answer only after this long (to watch a call in progress).
@@ -96,6 +99,21 @@ function send(res: ServerResponse, reply: FakeReply) {
   }
   if (reply.sse) {
     res.writeHead(reply.status ?? 200, { 'content-type': 'text/event-stream', ...reply.headers });
+    if (reply.sseEveryMs) {
+      const chunks = [...reply.sse];
+      const next = () => {
+        if (res.destroyed || res.writableEnded) return;
+        const chunk = chunks.shift();
+        if (chunk === undefined) {
+          res.end('data: [DONE]\n\n');
+          return;
+        }
+        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+        setTimeout(next, reply.sseEveryMs);
+      };
+      next();
+      return;
+    }
     for (const chunk of reply.sse) res.write(`data: ${JSON.stringify(chunk)}\n\n`);
     res.end('data: [DONE]\n\n');
     return;

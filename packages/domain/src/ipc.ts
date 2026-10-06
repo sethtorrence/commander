@@ -36,6 +36,9 @@ export const ipc = {
   // the tray's "Ask for an update" was chosen (askForUpdate), and the window runs the Update Skill.
   updates: 'updates',
   askForUpdate: 'ask-for-update',
+  // Conversations with Ares (#191); see conversations.ts for the validated contract. His answers
+  // stream to the window as core messages.
+  conversations: 'conversations',
   // Settings → GitHub: what each GitHub Account watches; see github-watch-messages.ts.
   githubWatch: 'github-watch',
   // The GitHub Section: a pull request's or issue's discussion, fetched on demand; see
