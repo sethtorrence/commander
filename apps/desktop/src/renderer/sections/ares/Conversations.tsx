@@ -1,8 +1,18 @@
 import { type Conversation, type ConversationTurn, MAX_TURN_TEXT } from '@commander/domain';
 import { AresText, Button, cn, Kbd, Led } from '@commander/ui';
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { SettingsGroup } from '../../settings/parts';
-import { answeringTurn, type ConversationsClient, canSendAgain, lastWritten, nameOf } from './conversations';
+import { useUpdates } from '../../updates/context';
+import { ConversationUpdate } from './ConversationUpdate';
+import {
+  answeringTurn,
+  type ConversationsClient,
+  canSendAgain,
+  doingOf,
+  lastWritten,
+  nameOf,
+  refsOf,
+} from './conversations';
 import { type CoreMessages, useConversations } from './use-conversations';
 
 /*
@@ -10,7 +20,10 @@ import { type CoreMessages, useConversations } from './use-conversations';
   beside the open one; opening the Section lands on today's, and New Conversation starts another.
   Type and press Enter (Shift+Enter for a new line): Ares's answer appears as he writes it, drawn with
   AresText (text only, nothing loaded, and only a link the User gave is clickable), with "From
-  Ares's own knowledge" under an answer that came from the model rather than the User's data. Stop
+  Ares's own knowledge" under an answer that came from the model rather than the User's data. With
+  his Skills (#192) he says what he is doing while one runs ("Looking it up…"); each Item his answer
+  rests on is a link that opens it in its Section, and an Update he gave shows under his words with
+  its lines and actions, as in the Update panel. Stop
   ends it early and keeps what he wrote; a failed answer says why in his voice, and Send again asks
   him once more. Several run at once; with a model on this machine an answer may wait its turn, and
   says so. Delete removes one, with Undo in the toast. Each Conversation keeps its own unsent words.
@@ -119,8 +132,8 @@ export function Conversations({
           <ol ref={thread} aria-label="Turns" className="m-0 h-[420px] list-none overflow-y-auto px-5 py-4">
             {view && !view.turns.length && (
               <li className="text-note text-faint">
-                Ask Ares anything. He answers general questions from what he knows; he can’t look at your
-                email, calendar or notes from here yet.
+                Ask Ares anything: what’s on today, what you missed, where that email went. He looks it up in
+                what Commander holds and links what he found; general questions he answers from what he knows.
               </li>
             )}
             {view?.turns.map((turn) => (
@@ -227,6 +240,9 @@ function ConversationRow({
 }
 
 function Turn({ turn, text, sources }: { turn: ConversationTurn; text: string; sources: readonly string[] }) {
+  const { open } = useUpdates();
+  const refs = useMemo(() => refsOf(turn.links, open), [turn.links, open]);
+  const doing = text ? null : doingOf(turn);
   if (turn.by === 'user') {
     return (
       <li data-testid="conversation-turn" data-by="user" className="mb-4 flex justify-end">
@@ -247,11 +263,22 @@ function Turn({ turn, text, sources }: { turn: ConversationTurn; text: string; s
           Waiting his turn: Ares is answering in another Conversation.
         </p>
       )}
+      {doing && (
+        <p className="m-0 text-note text-muted" role="status" data-testid="ares-doing">
+          {doing}
+        </p>
+      )}
       {text && (
         <div data-testid="ares-answer">
-          <AresText text={text} sources={sources} className="text-[14px] leading-[21px] text-text" />
+          <AresText
+            text={text}
+            sources={sources}
+            refs={refs}
+            className="text-[14px] leading-[21px] text-text"
+          />
         </div>
       )}
+      {turn.updateId !== null && <ConversationUpdate updateId={turn.updateId} />}
       {turn.status === 'stopped' && (
         <p className={cn(metaClass, 'mt-1.5')}>{text ? 'Stopped' : 'Stopped before he began'}</p>
       )}

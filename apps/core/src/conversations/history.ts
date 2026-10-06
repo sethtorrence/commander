@@ -1,6 +1,6 @@
 // What of a Conversation goes back to the model with each answer (#191): its earlier turns, as its
 // history, within a budget, oldest dropped first.
-import type { ConversationTurn } from '@commander/domain';
+import { type ConversationTurn, LINK_MARKER } from '@commander/domain';
 import type { PromptTurn } from '../agent/prompt';
 
 // About 12,000 tokens of history (at roughly four characters a token): plenty for a Conversation's
@@ -19,8 +19,15 @@ export function historyOf(turns: readonly ConversationTurn[], replyTo: number): 
         turn.by === 'user' ||
         ((turn.status === 'done' || turn.status === 'stopped') && turn.text.trim() !== ''),
     )
-    .map((turn) => ({ by: turn.by, text: turn.text }));
+    .map((turn) => ({ by: turn.by, text: turn.by === 'ares' ? withoutRefs(turn.text) : turn.text }));
 }
+
+/**
+ * His earlier answer without its refs ([I1]): those named what he was handed for that answer, and a
+ * later answer's refs start again, so they would point at the wrong Items.
+ */
+export const withoutRefs = (text: string) =>
+  text.replace(new RegExp(`[ \\t]?${LINK_MARKER.source}`, 'g'), '');
 
 /**
  * The most recent turns that fit the budget (in characters), oldest dropped first. The last turn (the

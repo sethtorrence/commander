@@ -125,9 +125,34 @@ export const chatSummary = z.object({
 });
 export type ChatSummary = z.infer<typeof chatSummary>;
 
-/** Summarise: one of Ares's Skills, on a Chat. */
+/**
+ * Summarise: one of Ares's Skills, on a Chat (Summarise in the Teams Section), or on what the User
+ * names in a Conversation (#192): a Project, a GitHub repo, an email thread or a Chat.
+ */
 export const SUMMARISE_SKILL: SkillInfo = {
   name: 'summarise',
+  title: 'Summarise',
   description:
-    'Summarise a Teams Chat for the User: what was said and settled, and anything that needs them, over the messages since they last read it, today, or this week.',
+    'Summarise something the User names: a Project ("how’s Titanlink this sprint?"), a GitHub repo, an email thread or a Teams Chat ("sum up this thread"), over today, this week, this sprint, this month or all of it. It gathers and reads what Commander holds about it, for you to sum up: what happened and was settled, and anything that needs the User.',
+  summary: 'Sums up a Project, a GitHub repo, an email thread or a Teams Chat over the time you say.',
+  example: 'Summarise Titanlink this sprint',
 };
+
+/** What a summary in a Conversation covers, back from now: "sprint" is the current Linear cycle. */
+export const summaryTargetRanges = ['today', 'week', 'sprint', 'month', 'all'] as const;
+export const summaryTargetRange = z.enum(summaryTargetRanges);
+export type SummaryTargetRange = z.infer<typeof summaryTargetRange>;
+
+/**
+ * What Summarise is given: a Chat and a range (the Teams Section's Summarise), or, in a Conversation,
+ * the words naming what to summarise (or the ref of an Item he was shown, "I2") and how far back.
+ */
+export const summariseInput = z.union([
+  z.object({ itemId: z.string().min(1), range: summaryRange }),
+  z.object({ target: z.string().trim().min(1).max(200), range: summaryTargetRange.optional() }),
+]);
+export type SummariseInput = z.infer<typeof summariseInput>;
+export type SummariseTarget = Extract<SummariseInput, { target: string }>;
+
+export const SUMMARISE_NEEDS =
+  '{"target": words naming what to summarise (a Project’s name or code, a GitHub repo as owner/name, an email thread’s subject or a Chat’s people), or the ref of an Item you were shown ("I2"); "range": "today", "week", "sprint", "month" or "all" (optional: a week for a Project or repo, all of a thread)}';

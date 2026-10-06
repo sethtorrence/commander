@@ -1,6 +1,6 @@
 // Commander's Industrial design system. Styles: import '@commander/ui/styles.css' once.
 
-export { AresText, type AresTextProps, urlsIn } from './components/ares-text';
+export { AresText, type AresTextProps, type AresTextRef, urlsIn } from './components/ares-text';
 export { Badge, type BadgeProps, badgeVariants } from './components/badge';
 export { Button, ButtonGroup, buttonVariants } from './components/button';
 export {

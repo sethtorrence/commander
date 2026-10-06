@@ -12,11 +12,11 @@ import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Talking to Ares (#191), end to end, with a fake OpenAI-compatible server standing in for Z.ai (never
 // the real one), streaming its answers a piece at a time. Today's Conversation: a question streams in
-// with the own-knowledge mark, a long story is stopped half-way and keeps what he wrote, a question
-// about the User's data gets "I can't look that up yet"; a second Conversation answers while the
-// first is still writing; delete and Undo; and both are there after a restart. Then, with the model on
-// this machine, a second Conversation waits its turn. The model's key goes in the real keyring, so
-// this needs the author's Linux Wayland session.
+// with the own-knowledge mark, a long story is stopped half-way and keeps what he wrote, asking him to
+// act gets "I can't do that yet" (his Skills are in ares-skills.spec.ts); a second Conversation
+// answers while the first is still writing; delete and Undo; and both are there after a restart.
+// Then, with the model on this machine, a second Conversation waits its turn. The model's key goes in
+// the real keyring, so this needs the author's Linux Wayland session.
 const onLinuxWayland = process.platform === 'linux' && !!process.env.WAYLAND_DISPLAY;
 
 type Message = { role: string; content: string };
@@ -42,7 +42,7 @@ function model(request: FakeRequest): FakeReply {
   if (asked.includes('fjord')) return stream(FJORD, 250);
   if (asked.includes('long story')) return stream(STORY, 250);
   if (asked.includes('long summary')) return stream(SUMMARY, 250);
-  if (asked.includes('my calendar')) return stream(['[their-data]\n', 'I can’t look that up yet.'], 20);
+  if (asked.includes('Email Dana')) return stream(['[cant]\n', 'Sending is yours to do.'], 20);
   if (asked.includes('2 + 2')) return stream(['[general]\n', '4.'], 20);
   return stream(['[chat]\n', 'Hello.'], 20);
 }
@@ -103,7 +103,7 @@ const conversationCalls = () =>
     ),
   );
 
-test('send, stream, Stop, a question about my data, a second Conversation at once, delete and Undo, kept across a restart', async () => {
+test('send, stream, Stop, asking him to act, a second Conversation at once, delete and Undo, kept across a restart', async () => {
   test.setTimeout(180_000);
   // The fake model is on this machine: the tests treat it as a cloud model, so Conversations answer at
   // once rather than taking turns.
@@ -161,12 +161,12 @@ test('send, stream, Stop, a question about my data, a second Conversation at onc
     { role: 'user', content: 'Tell me a long story' },
   ]);
 
-  // About the User's data: he says plainly he can't look it up yet, without the mark.
-  await say(thread, 'What is on my calendar today?');
-  const calendar = turns.nth(5);
-  await expect(calendar).toHaveAttribute('data-status', 'done');
-  await expect(calendar.getByTestId('ares-answer')).toHaveText('I can’t look that up yet.');
-  await expect(calendar.getByTestId('own-knowledge')).toHaveCount(0);
+  // Asked to act, which none of his Skills can (#192): he says plainly he can't yet, without the mark.
+  await say(thread, 'Email Dana that I’m running late');
+  const act = turns.nth(5);
+  await expect(act).toHaveAttribute('data-status', 'done');
+  await expect(act.getByTestId('ares-answer')).toHaveText('I can’t do that yet. Sending is yours to do.');
+  await expect(act.getByTestId('own-knowledge')).toHaveCount(0);
 
   // A long summary in today's Conversation, and while he writes it, a quick question in a new one.
   await say(thread, 'Write a long summary of the Roman Empire');

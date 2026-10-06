@@ -111,6 +111,28 @@ describe('AresText', () => {
     }
   });
 
+  it('makes an Item named by its ref a link that opens it, only for the refs it was given (#192)', () => {
+    const opened: string[] = [];
+    const refs = new Map([
+      ['I1', { text: 'Acme redlines', label: 'Open Acme redlines', onOpen: () => opened.push('email-1') }],
+    ]);
+    const { container } = render(
+      <AresText
+        text={'- Leo sent the redlines [I1].\n- Dana agreed [I2].\n- See [I1](https://evil.test).'}
+        refs={refs}
+      />,
+    );
+    const link = screen.getByRole('button', { name: 'Open Acme redlines' });
+    expect(link.textContent).toBe('Acme redlines');
+    link.click();
+    expect(opened).toEqual(['email-1']);
+    // A ref it wasn't given stays text; a Markdown link is never an Item's.
+    expect(container.textContent).toContain('Dana agreed [I2].');
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(container.querySelector('a')).toBeNull();
+    expect(container.textContent).toContain('I1 (https://evil.test)');
+  });
+
   it('renders inline, in a span, when asked', () => {
     const { container } = render(<AresText inline text={'Send **Dana** the numbers\nnow'} />);
     expect(container.firstElementChild?.tagName).toBe('SPAN');

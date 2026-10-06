@@ -2,7 +2,7 @@
 // utilityProcess and talks to the main process only through validated messages.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import type { CoreAccountRefused, CoreMessage } from '@commander/domain';
+import { type CoreAccountRefused, type CoreMessage, createSkillRegistry } from '@commander/domain';
 import { createAccessTokens } from './access-tokens';
 import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
@@ -26,6 +26,8 @@ import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
 import { setUpScheduler } from './scheduling';
 import { type SendLater, setUpSendLater } from './send-later';
+import { createFindSkill } from './skills/find';
+import { createSummariseTarget } from './skills/summarise';
 import { setUpSkipInbox } from './skip-inbox';
 import { setUpSnooze } from './snooze';
 import { setUpSync } from './sync';
@@ -250,6 +252,17 @@ const agent = setUpAgent(itemStore, {
 });
 sync.engine.onSynced((event) => agent.synced(event));
 
+// Ares's Skills (#192), one registry: Find here, the Update, Summarise and Draft with the Updates below.
+// Conversations choose from it, and "What Ares can do" lists it.
+const skills = createSkillRegistry();
+skills.register(
+  createFindSkill({
+    itemStore,
+    meaning: (text) => meaning?.queryVector(text, 'embed-query') ?? Promise.resolve(null),
+  }),
+);
+const summariseTarget = createSummariseTarget({ itemStore });
+
 // Ares's queue and the Update Skill. The main process reports the User's presence (powerMonitor);
 // the queued count and "You're here / away" go to the window as they change, and the machine going
 // idle is the Agent's cue for its catch-up work. Nothing here ever draws the User's attention.
@@ -287,6 +300,8 @@ updates = setUpUpdates({
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
   // A missed send-later's Send now and Discard (#139).
   sendLater: { sendNow: (itemId) => compose.sendNow(itemId), discard: (itemId) => compose.discard(itemId) },
+  skills,
+  summariseTarget,
 });
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
 sync.engine.onSynced(() => updates?.sweep());
@@ -309,8 +324,9 @@ sendLater = setUpSendLater({
 sync.onSystemState((state) => sendLater?.systemState(state));
 
 // Conversations with Ares (#191): the User's messages answered on the Deep tier, streamed to the window
-// as he writes. The end-to-end tests may treat their fake model (on this machine) as a cloud one, so
-// two Conversations answer at once.
+// as he writes, with his Skills (#192). A steering flag's mark shows at once in open views. The
+// end-to-end tests may treat their fake model (on this machine) as a cloud one, so two Conversations
+// answer at once.
 const conversations = setUpConversations({
   store: itemStore.conversations,
   client: models.client,
@@ -318,6 +334,10 @@ const conversations = setUpConversations({
   secrets,
   send: (message) => port.postMessage(message),
   oneAtATime: testHooks && process.argv.includes('--test-model-in-cloud') ? () => false : undefined,
+  skills,
+  item: (itemId) => itemStore.get(itemId)?.item ?? null,
+  injectionWarnings: itemStore.injectionWarnings,
+  onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
 
 // Today's meetings (#128): the meeting chips in today's Daily Note follow each calendar sync, and the

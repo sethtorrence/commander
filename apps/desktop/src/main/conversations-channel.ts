@@ -28,6 +28,7 @@ const TIMEOUTS: Record<ConversationsOp, number> = {
   stop: 20_000,
   delete: 20_000,
   'undo-delete': 10_000,
+  skills: 10_000,
 };
 
 const reply = z.object({

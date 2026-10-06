@@ -46,9 +46,25 @@ export interface UpdatesApi {
   presence: Presence | null;
   /** Runs the Update Skill and opens the Update. */
   ask(): void;
+  /** Opens where something lives: an Item in its Section, a Section, or Settings. */
+  open(target: OpenTarget): void;
+  /** An earlier Update as it stands now (one Ares gave in a Conversation, #192). */
+  past(id: number): Promise<UpdateView>;
+  /** Acts on a line of any Update shown, as the panel does; resolves once it is done. */
+  act(line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice): Promise<void>;
+  /** Acts on one of a line's Items, as the panel does. */
+  actRow(line: UpdateViewLine, row: UpdateRow, action: RowAction): Promise<void>;
 }
 
-const UpdatesContext = createContext<UpdatesApi>({ queued: 0, presence: null, ask: () => {} });
+const UpdatesContext = createContext<UpdatesApi>({
+  queued: 0,
+  presence: null,
+  ask: () => {},
+  open: () => {},
+  past: () => Promise.reject(new Error('Ares’s Updates aren’t here')),
+  act: async () => {},
+  actRow: async () => {},
+});
 
 /** The quiet count, presence and Ask for an update, for the header and the Dashboard. */
 export const useUpdates = () => useContext(UpdatesContext);
@@ -135,49 +151,70 @@ export function UpdatesProvider({
     [client],
   );
 
-  const act = useCallback(
-    async (line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice) => {
-      if (!client || panel.mode !== 'update' || !panel.view) return;
-      // Accepting a Rule suggestion opens the Rule editor, filled in; the line is done once it is saved.
+  // Acts on a line of any Update shown. Accepting a Rule suggestion opens the Rule editor, filled in
+  // (the line is done once it is saved), and accepting a Bucket Ares suggests opens it, editable
+  // (nothing is added until it is saved): 'editor'. Anything else goes to the Core.
+  const actOnLine = useCallback(
+    async (line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice): Promise<'editor' | 'done'> => {
+      if (!client) return 'done';
       const about = line.queued?.about;
       if (
         action === 'accept' &&
         (about?.kind === 'rule-suggestion' || about?.kind === 'bucket-rule-suggestion')
       ) {
-        asked.current++;
-        setPanel({ mode: 'closed' });
         setRuleSuggestion({ about, queuedId: line.queuedId, at: Date.now() });
-        return;
+        return 'editor';
       }
-      // Accepting a Bucket Ares suggests opens it, editable; nothing is added until it is saved.
       if (action === 'accept' && about?.kind === 'bucket-suggestion') {
-        asked.current++;
-        setPanel({ mode: 'closed' });
         setBucketSuggestion({ about, queuedId: line.queuedId, at: Date.now() });
-        return;
+        return 'editor';
       }
       try {
         await client({ op: 'act', queuedId: line.queuedId, action, ...(snooze && { snooze }) });
       } catch (error) {
         report(error);
       }
-      await refresh(panel.view, panel.past).catch(report);
+      return 'done';
     },
-    [client, panel, refresh],
+    [client],
+  );
+
+  const actOnRow = useCallback(
+    async (line: UpdateViewLine, row: UpdateRow, action: RowAction) => {
+      if (!client) return;
+      try {
+        await client({ op: 'act-row', queuedId: line.queuedId, itemId: row.itemId, action });
+      } catch (error) {
+        report(error);
+      }
+    },
+    [client],
+  );
+
+  const act = useCallback(
+    async (line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice) => {
+      if (!client || panel.mode !== 'update' || !panel.view) return;
+      const view = panel.view;
+      const past = panel.past;
+      // An editor opened over the panel: the panel closes.
+      if ((await actOnLine(line, action, snooze)) === 'editor') {
+        asked.current++;
+        setPanel({ mode: 'closed' });
+        return;
+      }
+      await refresh(view, past).catch(report);
+    },
+    [client, panel, refresh, actOnLine],
   );
 
   // One of a line's Items, acted on in place; the Update shown is read again after.
   const actRow = useCallback(
     async (line: UpdateViewLine, row: UpdateRow, action: RowAction) => {
       if (!client || panel.mode !== 'update' || !panel.view) return;
-      try {
-        await client({ op: 'act-row', queuedId: line.queuedId, itemId: row.itemId, action });
-      } catch (error) {
-        report(error);
-      }
+      await actOnRow(line, row, action);
       await refresh(panel.view, panel.past).catch(report);
     },
-    [client, panel, refresh],
+    [client, panel, refresh, actOnRow],
   );
 
   const open = useCallback(
@@ -205,7 +242,21 @@ export function UpdatesProvider({
     [client],
   );
 
-  const api = useMemo(() => ({ ...state, ask }), [state, ask]);
+  const past = useCallback(
+    (id: number) => (client ? client({ op: 'past', id }) : Promise.reject(new Error('Ares isn’t running'))),
+    [client],
+  );
+  const lineAct = useCallback(
+    async (line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice) => {
+      await actOnLine(line, action, snooze);
+    },
+    [actOnLine],
+  );
+
+  const api = useMemo(
+    () => ({ ...state, ask, open: onOpen, past, act: lineAct, actRow: actOnRow }),
+    [state, ask, onOpen, past, lineAct, actOnRow],
+  );
   return (
     <UpdatesContext.Provider value={api}>
       {children}

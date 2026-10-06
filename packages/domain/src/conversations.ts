@@ -1,9 +1,17 @@
 import { z } from 'zod';
+import { itemKind } from './items';
+import { skillInfo } from './skills';
+import { updateSection } from './updates';
 
 // Conversations (#24, #191): the User talks to Ares in the Ares Section. Each Conversation is a
 // thread of turns of text, the User's and Ares's, kept in the Item store's database; several can run
 // at once. Ares never starts one or writes into one unprompted: each of his turns answers one of the
 // User's. A turn is only text, tied to nothing on screen, so voice can come later.
+//
+// With Skills (#192) an answer can rest on the User's own data: each Item it was given carries a ref
+// (I1, I2…) for that answer, and the answer names the ones its claims rest on as [I1]; those are its
+// links, each opening its Item in its Section. Commander keeps only refs it handed out in that answer.
+// An answer that gave the Update names it, shown in the Conversation with its lines and actions.
 
 const timestamp = z.number().int().nonnegative();
 const conversationId = z.string().min(1);
@@ -28,6 +36,22 @@ export const turnStatuses = ['queued', 'streaming', 'done', 'stopped', 'failed']
 export const turnStatus = z.enum(turnStatuses);
 export type TurnStatus = z.infer<typeof turnStatus>;
 
+// How an answer names an Item it rests on: [I1], [I2]… in its text.
+export const LINK_REF = /^I[1-9]\d{0,2}$/;
+export const LINK_MARKER = /\[(I[1-9]\d{0,2})\]/g;
+
+// One Item an answer rests on, as its link shows it: named by its Source's short name (ENG-418) or
+// its title, and opening in its Section.
+export const conversationLink = z.object({
+  ref: z.string().regex(LINK_REF),
+  itemId: z.string().min(1),
+  kind: itemKind,
+  title: z.string(),
+  label: z.string().nullable(),
+  section: updateSection,
+});
+export type ConversationLink = z.infer<typeof conversationLink>;
+
 export const conversationTurn = z.object({
   id: turnId,
   conversationId,
@@ -44,8 +68,39 @@ export const conversationTurn = z.object({
   problem: z.string().nullable(),
   // When he finished, stopped or failed.
   endedAt: timestamp.nullable(),
+  // The Items his answer names, by their refs in its text (#192). Empty on the User's turns.
+  links: z.array(conversationLink),
+  // The Update he gave in this answer, shown with its lines and actions; null when he gave none.
+  updateId: z.number().int().positive().nullable(),
+  // The Skills he used for this answer, in order, by name (one may run more than once).
+  skills: z.array(z.string()),
 });
 export type ConversationTurn = z.infer<typeof conversationTurn>;
+
+/** An answer's text cut into plain pieces and the links it names, in order, for drawing. */
+export function piecesOf(
+  text: string,
+  links: readonly ConversationLink[],
+): ({ text: string } | { link: ConversationLink })[] {
+  const byRef = new Map(links.map((link) => [link.ref, link]));
+  const pieces: ({ text: string } | { link: ConversationLink })[] = [];
+  let at = 0;
+  for (const match of text.matchAll(LINK_MARKER)) {
+    const link = byRef.get(match[1] as string);
+    if (!link) continue;
+    const index = match.index ?? 0;
+    if (index > at) pieces.push({ text: text.slice(at, index) });
+    pieces.push({ link });
+    at = index + match[0].length;
+  }
+  if (at < text.length) pieces.push({ text: text.slice(at) });
+  return pieces;
+}
+
+// A Skill as the "What Ares can do" page lists it: from the Skill registry, and whether he can use
+// it in a Conversation yet (the rest are used where they live, Draft on a Teams Chat).
+export const conversationSkill = skillInfo.extend({ inConversations: z.boolean() });
+export type ConversationSkill = z.infer<typeof conversationSkill>;
 
 export const conversation = z.object({
   id: conversationId,
@@ -117,6 +172,8 @@ export const conversationsRequest = z.discriminatedUnion('op', [
   // Removes a Conversation and its turns; Undo (while the toast shows) puts them back.
   z.object({ op: z.literal('delete'), conversationId }),
   z.object({ op: z.literal('undo-delete'), conversationId }),
+  // What Ares can do: every Skill he has (#192).
+  z.object({ op: z.literal('skills') }),
 ]);
 export type ConversationsRequest = z.input<typeof conversationsRequest>;
 export type ConversationsOp = ConversationsRequest['op'];
@@ -131,6 +188,7 @@ export type ConversationsResults = {
   stop: ConversationView;
   delete: { conversationId: string };
   'undo-delete': ConversationView;
+  skills: ConversationSkill[];
 };
 
 export const conversationsResult = {
@@ -143,6 +201,7 @@ export const conversationsResult = {
   stop: conversationView,
   delete: z.object({ conversationId }),
   'undo-delete': conversationView,
+  skills: z.array(conversationSkill),
 } satisfies Record<ConversationsOp, z.ZodType>;
 
 export type ConversationsResponse<Op extends ConversationsOp = ConversationsOp> =

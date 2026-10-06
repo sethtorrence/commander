@@ -1,12 +1,64 @@
 import {
   type Conversation,
+  type ConversationLink,
   type ConversationsRequest,
   type ConversationsResults,
   type ConversationTurn,
   type ConversationView,
   conversationName,
+  skillTitle,
 } from '@commander/domain';
+import type { AresTextRef } from '@commander/ui';
+import { type OpenTarget, sectionOf } from '../../updates/updates';
 import { dayLabel, longDate, weekday } from '../notes/days';
+
+// The longest an Item's title shows in a link.
+const LINK_TITLE = 48;
+
+/** Where an answer's link to an Item opens it: in its Section. */
+export const linkTarget = (link: ConversationLink): OpenTarget => ({
+  kind: 'item',
+  sectionId: sectionOf(link.section),
+  itemId: link.itemId,
+});
+
+/**
+ * An answer's links as AresText draws them (#192): each named by its Source's short name (ENG-418)
+ * or its title, opening its Item where it lives.
+ */
+export function refsOf(
+  links: readonly ConversationLink[],
+  open: (target: OpenTarget) => void,
+): ReadonlyMap<string, AresTextRef> {
+  return new Map(
+    links.map((link) => {
+      const title = link.title.trim() || 'Untitled';
+      const text =
+        link.label ?? (title.length > LINK_TITLE ? `${title.slice(0, LINK_TITLE - 1).trimEnd()}…` : title);
+      return [
+        link.ref,
+        {
+          text,
+          label: `Open ${link.label ? `${link.label} ${title}` : title}`,
+          onOpen: () => open(linkTarget(link)),
+        },
+      ];
+    }),
+  );
+}
+
+const DOING: Record<string, string> = {
+  find: 'Looking it up',
+  update: 'Putting your Update together',
+  summarise: 'Gathering what to sum up',
+};
+
+/** What Ares is doing before he writes, while a Skill runs: "Looking it up…". */
+export function doingOf(turn: Pick<ConversationTurn, 'status' | 'skills'>): string | null {
+  const skill = turn.skills.at(-1);
+  if (turn.status !== 'streaming' || !skill) return null;
+  return `${DOING[skill] ?? `Using ${skillTitle({ name: skill })}`}…`;
+}
 
 // Conversations with Ares (#191), as the window keeps them: what it asks the Core, and how it puts
 // the Core's word about a turn (a reply, or a turn pushed as it changes) together.

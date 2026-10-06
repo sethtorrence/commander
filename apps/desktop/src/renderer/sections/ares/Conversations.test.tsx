@@ -1,10 +1,24 @@
 // @vitest-environment jsdom
+
+import { writeBlock } from '@commander/core/src/agent/testing/meeting-fixtures';
 import {
   type Conversations as CoreConversations,
   setUpConversations,
 } from '@commander/core/src/conversations';
 import type { ItemStore } from '@commander/core/src/item-store';
-import { CONVERSATIONS_MESSAGES, type CoreMessage } from '@commander/domain';
+import { createFindSkill } from '@commander/core/src/skills/find';
+import {
+  CONVERSATIONS_MESSAGES,
+  type CoreMessage,
+  createSkillRegistry,
+  DRAFT_SKILL,
+  FIND_SKILL,
+  type QueuedLine,
+  type SkillRegistry,
+  UPDATE_SKILL,
+  type UpdatesRequest,
+  type UpdateView,
+} from '@commander/domain';
 import {
   createModelClient,
   ModelError,
@@ -14,8 +28,13 @@ import {
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { openTestItemStore } from '../../item-store/test-item-store';
+import { CommandProvider, createCommandRegistry } from '../../palette/commands';
+import { ShortcutProvider } from '../../shortcuts/react';
+import { UpdatesProvider } from '../../updates/context';
+import type { UpdatesClient } from '../../updates/updates';
 import { Conversations } from './Conversations';
 import type { ConversationsClient } from './conversations';
+import { WhatAresCanDo } from './WhatAresCanDo';
 
 // Conversations (#191) in the Ares Section, with the Core's own Conversations behind the window's
 // channel and a model the test writes token by token.
@@ -58,8 +77,15 @@ beforeEach(() => {
   ({ store, close } = openTestItemStore());
   calls = [];
   refuse = null;
+  boot();
+});
+
+// The Core's Conversations behind the window's channel, with these Skills (#192) or none.
+function boot(skills?: SkillRegistry) {
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   core = setUpConversations({
+    skills,
+    item: (itemId) => store.get(itemId)?.item ?? null,
     store: store.conversations,
     client: createModelClient({
       settings: () => store.models.settings(),
@@ -92,7 +118,7 @@ beforeEach(() => {
       pending.set(id, { resolve, reject });
       core.handle({ type: CONVERSATIONS_MESSAGES.request, id, request });
     })) as ConversationsClient;
-});
+}
 
 afterEach(() => {
   cleanup();
@@ -185,5 +211,157 @@ describe('Conversations in the Ares Section', () => {
       within(within(list).getByRole('listitem', { name: 'Today' })).getByRole('button', { name: /^Today/ }),
     );
     await waitFor(() => expect(input()).toHaveProperty('value', 'half a thought'));
+  });
+});
+
+// The Update the fake Update Skill gives, as the Core keeps it, and what the window asked of Updates.
+const queuedLine = (status: QueuedLine['status']): QueuedLine => ({
+  id: 3,
+  group: 'decision',
+  mergeKey: 'suggestions:3',
+  about: {
+    kind: 'suggestions',
+    action: 'suggest-todos',
+    name: 'Suggest Todos',
+    actionKind: 'organise',
+    proposalIds: [3],
+  },
+  itemIds: ['block-3'],
+  section: 'notes',
+  importance: 0.6,
+  createdAt: 1,
+  updatedAt: 1,
+  expiresAt: null,
+  snoozedUntil: null,
+  status,
+  settledAt: null,
+});
+const givenUpdate = (status: QueuedLine['status']): UpdateView => ({
+  id: 5,
+  at: new Date(2026, 9, 6, 9, 0).getTime(),
+  awayMs: 0,
+  folded: false,
+  voice: 'template',
+  lines: [
+    {
+      queuedId: 3,
+      group: 'decision',
+      kind: 'suggestions',
+      text: 'One Todo I wasn’t sure about: Send Dana the Q3 numbers.',
+      itemIds: ['block-3'],
+      section: 'notes',
+      sources: [],
+      folded: false,
+      fresh: true,
+      queued: queuedLine(status),
+      rows: [],
+    },
+  ],
+});
+
+describe('Ares’s Skills in a Conversation (#192)', () => {
+  let opened: unknown[];
+  let updateRequests: UpdatesRequest[];
+  let lineStatus: QueuedLine['status'];
+  const updates = (async (request: UpdatesRequest) => {
+    updateRequests.push(request);
+    if (request.op === 'act') lineStatus = 'done';
+    if (request.op === 'past') return givenUpdate(lineStatus);
+    if (request.op === 'state') return { queued: 1, presence: { state: 'active', since: 1 } };
+    return null;
+  }) as UpdatesClient;
+
+  beforeEach(() => {
+    opened = [];
+    updateRequests = [];
+    lineStatus = 'queued';
+  });
+
+  function showWithSkills(registry: SkillRegistry) {
+    core.stop();
+    boot(registry);
+    render(
+      <ShortcutProvider>
+        <CommandProvider registry={createCommandRegistry()}>
+          <UpdatesProvider client={updates} onOpen={(target) => opened.push(target)}>
+            <Conversations client={client} shown onCoreMessage={onCoreMessage} />
+            <WhatAresCanDo client={client} shown />
+          </UpdatesProvider>
+        </CommandProvider>
+      </ShortcutProvider>,
+    );
+  }
+
+  it('says what he is doing while Find runs, then links what his answer rests on, each opening in its Section', async () => {
+    const blockId = writeBlock(store, '2026-10-05', 'Acme kickoff notes');
+    const registry = createSkillRegistry();
+    registry.register(createFindSkill({ itemStore: store }));
+    showWithSkills(registry);
+    await type('Where are my Acme notes?');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    act(() => {
+      calls[0]?.write('[skill]\n{"skill":"find","input":{"query":"acme"}}');
+      calls[0]?.finish();
+    });
+    await waitFor(() => expect(calls).toHaveLength(2));
+    // Nothing of his Skill request shows; what he is doing does.
+    expect(screen.getByTestId('ares-doing').textContent).toBe('Looking it up…');
+    expect(screen.queryByTestId('ares-answer')).toBeNull();
+    act(() => {
+      calls[1]?.write('[their-data]\nThey’re in Monday’s Daily Note [I1].');
+      calls[1]?.finish();
+    });
+    const link = await screen.findByRole('button', { name: 'Open Acme kickoff notes' });
+    expect(screen.getByTestId('ares-answer').textContent).toBe(
+      'They’re in Monday’s Daily Note Acme kickoff notes.',
+    );
+    expect(screen.queryByTestId('own-knowledge')).toBeNull();
+    fireEvent.click(link);
+    expect(opened).toEqual([{ kind: 'item', sectionId: 'notes', itemId: blockId }]);
+  });
+
+  it('shows the Update he gave when asked in words, with its lines and actions, as the panel does', async () => {
+    const registry = createSkillRegistry();
+    registry.register({ ...UPDATE_SKILL, run: async () => givenUpdate('queued') });
+    showWithSkills(registry);
+    await type('Anything I should know?');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    act(() => {
+      calls[0]?.write('[skill]\n{"skill":"update","input":{}}');
+      calls[0]?.finish();
+    });
+    await waitFor(() => expect(calls).toHaveLength(2));
+    act(() => {
+      calls[1]?.write('[their-data]\nOne thing waits on you.');
+      calls[1]?.finish();
+    });
+    const shown = await screen.findByTestId('conversation-update');
+    expect(within(shown).getByTestId('update-line').textContent).toContain('Send Dana the Q3 numbers');
+    fireEvent.click(within(shown).getByRole('button', { name: 'Open' }));
+    expect(opened).toEqual([{ kind: 'item', sectionId: 'notes', itemId: 'block-3' }]);
+    fireEvent.click(within(shown).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(within(shown).getByTestId('update-line-status').textContent).toBe('Done'));
+    expect(updateRequests).toContainEqual({ op: 'act', queuedId: 3, action: 'done' });
+  });
+
+  it('lists every Skill he has on What Ares can do, with how to ask for each', async () => {
+    const registry = createSkillRegistry();
+    registry.register(createFindSkill({ itemStore: store }));
+    registry.register({ ...UPDATE_SKILL, run: async () => null });
+    registry.register({ ...DRAFT_SKILL, run: async () => null });
+    showWithSkills(registry);
+    const page = screen.getByTestId('what-ares-can-do');
+    await waitFor(() => expect(within(page).getAllByTestId('ares-skill')).toHaveLength(3));
+    const find = within(page).getByRole('listitem', { name: 'Find' });
+    expect(find.textContent).toContain(FIND_SKILL.summary);
+    expect(within(find).getByTestId('ares-skill-example').textContent).toBe(
+      'Ask: “Find the email about the Acme redlines”',
+    );
+    expect(within(page).getByRole('listitem', { name: 'Update' }).textContent).toContain(
+      'Ask: “Anything I should know?”',
+    );
+    expect(within(page).getByRole('listitem', { name: 'Draft' }).textContent).toContain(
+      'Not in Conversations yet',
+    );
   });
 });
