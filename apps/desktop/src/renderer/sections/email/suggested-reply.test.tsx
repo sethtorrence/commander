@@ -247,9 +247,12 @@ describe('Ares’s suggested reply', () => {
     fireEvent.click(within(card).getByRole('button', { name: 'Open in composer' }));
     const composer = await within(thread).findByRole('region', { name: 'Reply' });
 
-    // Marked in the body, listed with Keep and Remove; Send asks the User to decide first.
-    expect(within(composer).getByTestId('compose-body').querySelector('[data-ares-link]')?.textContent).toBe(
-      LINK,
+    // Marked in the body (filled in just after the composer opens), listed with Keep and Remove; Send
+    // asks the User to decide first.
+    await waitFor(() =>
+      expect(
+        within(composer).getByTestId('compose-body').querySelector('[data-ares-link]')?.textContent,
+      ).toBe(LINK),
     );
     const links = within(composer).getByRole('list', { name: 'Links Ares added' });
     expect(links.textContent).toContain('Ares added this link');
