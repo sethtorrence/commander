@@ -1,5 +1,4 @@
 import type { BucketSortedBy, EmailLabel, EmailThreadSummary, ThreadAction } from '@commander/domain';
-import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { cn, Kbd, Led, toast } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { BucketChip } from '../../buckets/BucketChip';
@@ -15,15 +14,24 @@ import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
 import { BucketPicker, BucketStrip } from './EmailBuckets';
 import {
-  GmailSearchLinks,
+  FolderPicker,
   LabelPicker,
   SearchBox,
+  SearchLinks,
   SnoozePicker,
   ThreadActions,
   ThreadMarks,
   ViewBar,
 } from './EmailOrganising';
-import { type EmailAccountsClient, type EmailClient, emailSyncLine, threadTime } from './email';
+import {
+  type EmailAccountSummary,
+  type EmailAccountsClient,
+  type EmailClient,
+  emailAddressOf,
+  emailSyncLine,
+  providerOf,
+  threadTime,
+} from './email';
 import { actionToast } from './organising';
 import { type EmailReaderClient, textOnlyReader } from './reader';
 import { ThreadReader } from './ThreadReader';
@@ -82,7 +90,7 @@ function AccountBar({
   status,
   onRefresh,
 }: {
-  accounts: GoogleAccountSummary[];
+  accounts: EmailAccountSummary[];
   account: string;
   unread: ReadonlyMap<string, number>;
   onAccount: (account: string) => void;
@@ -91,7 +99,7 @@ function AccountBar({
 }) {
   const choices = [
     { id: 'all', name: 'All Accounts', kind: `${accounts.length} connected` },
-    ...accounts.map((each) => ({ id: each.id, name: each.email, kind: 'Gmail' })),
+    ...accounts.map((each) => ({ id: each.id, name: emailAddressOf(each), kind: providerOf(each) })),
   ];
   return (
     <div className="flex h-[46px] flex-none items-stretch border-b border-line">
@@ -317,7 +325,7 @@ export function EmailSheet({
   const [picking, setPicking] = useState<{ target: PickerTarget; anchor: HTMLElement | null } | null>(null);
   // The label or snooze picker open on a thread (#135), and the Account's labels for the first.
   const [organising, setOrganising] = useState<
-    | { kind: 'labels'; thread: EmailThreadSummary; labels: EmailLabel[] }
+    | { kind: 'labels' | 'folders'; thread: EmailThreadSummary; labels: EmailLabel[] }
     | { kind: 'snooze'; thread: EmailThreadSummary }
     | { kind: 'bucket'; thread: EmailThreadSummary }
     | null
@@ -326,7 +334,16 @@ export function EmailSheet({
   const searchBox = useRef<HTMLInputElement>(null);
   const several = state.accounts.length > 1 && state.account === 'all';
   const accountName = useCallback(
-    (accountId: string) => state.accounts.find((each) => each.id === accountId)?.email ?? accountId,
+    (accountId: string) => {
+      const found = state.accounts.find((each) => each.id === accountId);
+      return found ? emailAddressOf(found) : accountId;
+    },
+    [state.accounts],
+  );
+  // Whose mail a thread is (#136): Outlook files in folders and flags; Gmail labels and stars.
+  const providerFor = useCallback(
+    (thread: EmailThreadSummary | null) =>
+      providerOf(state.accounts.find((each) => each.id === thread?.account)),
     [state.accounts],
   );
 
@@ -370,10 +387,14 @@ export function EmailSheet({
       const entries = await state.act(action, thread);
       if (!entries.length) return;
       toast(
-        actionToast(action, thread.subject, Date.now(), (bucketId) => nameOf(bucketId) ?? 'Unsorted'),
-        {
-          action: { label: 'Undo', onClick: () => void state.undo(entries) },
-        },
+        actionToast(
+          action,
+          thread.subject,
+          Date.now(),
+          (bucketId) => nameOf(bucketId) ?? 'Unsorted',
+          providerFor(thread),
+        ),
+        { action: { label: 'Undo', onClick: () => void state.undo(entries) } },
       );
     } catch (error) {
       toast(error instanceof Error ? error.message : String(error));
@@ -381,7 +402,8 @@ export function EmailSheet({
   };
   const openLabels = async (thread = selected) => {
     if (!thread) return;
-    setOrganising({ kind: 'labels', thread, labels: await client.labels(thread.account) });
+    const kind = providerFor(thread) === 'Outlook' ? 'folders' : 'labels';
+    setOrganising({ kind, thread, labels: await client.labels(thread.account) });
   };
   const openSnooze = (thread = selected) => {
     if (thread) setOrganising({ kind: 'snooze', thread });
@@ -451,7 +473,7 @@ export function EmailSheet({
 
   const status = emailSyncLine(state.accounts, now);
   const viewName = state.views.find((each) => each.view === state.view)?.name ?? 'Inbox';
-  // Gmail's own search, in the Account the switcher shows (or each).
+  // Gmail's or Outlook's own search, in the Account the switcher shows (or each).
   const searchAccounts =
     state.account === 'all' ? state.accounts : state.accounts.filter((each) => each.id === state.account);
   const unread = state.unread.get(state.account) ?? 0;
@@ -493,7 +515,7 @@ export function EmailSheet({
       <SectionProjectFilter items={state.forProjectFilter} />
       {noAccounts ? (
         <EmptySheet>
-          No email Account connected yet. Connect a Google Account in Settings → Accounts (,).
+          No email Account connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).
         </EmptySheet>
       ) : (
         <div className={cn('flex-1', open && 'grid grid-cols-[minmax(0,3fr)_minmax(0,5fr)]')}>
@@ -547,7 +569,7 @@ export function EmailSheet({
                 </p>
               )
             )}
-            {state.search !== null && <GmailSearchLinks text={state.search} accounts={searchAccounts} />}
+            {state.search !== null && <SearchLinks text={state.search} accounts={searchAccounts} />}
           </div>
           {open && (
             <ThreadReader
@@ -563,6 +585,7 @@ export function EmailSheet({
                     view={state.view}
                     sync={state.sync}
                     superseded={state.superseded}
+                    provider={providerFor(selected)}
                     onAct={(action) => void act(action)}
                     onLabels={() => void openLabels()}
                     onSnooze={() => openSnooze()}
@@ -586,6 +609,17 @@ export function EmailSheet({
           onToggle={(label, on) =>
             void act(on ? { type: 'label', label } : { type: 'unlabel', labelId: label.id }, organised)
           }
+          onClose={() => setOrganising(null)}
+        />
+      )}
+      {organising?.kind === 'folders' && organised && (
+        <FolderPicker
+          thread={organised}
+          folders={organising.labels}
+          onPick={(folder) => {
+            setOrganising(null);
+            void act({ type: 'move', folder }, organised);
+          }}
           onClose={() => setOrganising(null)}
         />
       )}

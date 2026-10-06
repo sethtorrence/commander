@@ -1,0 +1,40 @@
+{
+  "page": {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders('AAMkAGI2-fld-inbox=')/messages/delta?$skiptoken=inbox-page-2"
+    },
+    "response": {
+      "status": 429,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8",
+        "retry-after": "37"
+      },
+      "body": {
+        "error": {
+          "code": "ApplicationThrottled",
+          "message": "Application is over its MailboxConcurrency limit."
+        }
+      }
+    }
+  },
+  "folders": {
+    "request": {
+      "method": "GET",
+      "path": "/me/mailFolders?$select=id,displayName,parentFolderId,childFolderCount&$top=100"
+    },
+    "response": {
+      "status": 503,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8",
+        "retry-after": "120"
+      },
+      "body": {
+        "error": {
+          "code": "ServiceUnavailable",
+          "message": "Service Unavailable"
+        }
+      }
+    }
+  }
+}

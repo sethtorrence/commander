@@ -5,9 +5,9 @@ import {
   type EmailViewCount,
   emailSnoozeChoices,
   gmailSearchUrl,
+  outlookSearchUrl,
   type ThreadAction,
 } from '@commander/domain';
-import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import {
   Button,
   cn,
@@ -22,12 +22,14 @@ import {
 } from '@commander/ui';
 import { forwardRef, type KeyboardEvent, useState } from 'react';
 import type { IssueSync } from '../linear/editing';
+import { type EmailAccountSummary, emailAddressOf, providerOf } from './email';
 import { SNOOZE_NOTE, snoozeTime } from './organising';
 
 /*
-  The Email Section's organising parts (#135): the view list, the search box and Gmail's own search
-  at the end of results, the marks on a thread's row (starred, labels, snooze), the open thread's
-  row of action buttons with its sync state, and the label and snooze pickers.
+  The Email Section's organising parts (#135): the view list, the search box and the provider's own
+  search at the end of results, the marks on a thread's row (starred, labels, snooze), the open
+  thread's row of action buttons with its sync state, and the label and snooze pickers; for Outlook
+  (#136), Move to folder in place of labels, and a flag for a star.
 */
 
 const caps = 'font-mono text-label leading-none font-semibold uppercase tracking-caps';
@@ -110,28 +112,39 @@ export const SearchBox = forwardRef<
   );
 });
 
-/** Gmail's own search for the same words, one link per Account, for mail older than Commander downloaded. */
-export function GmailSearchLinks({ text, accounts }: { text: string; accounts: GoogleAccountSummary[] }) {
+/**
+ * The provider's own search for the same words, one link per Account (Gmail's, or Outlook on the
+ * web's, #136), for mail older than Commander downloaded.
+ */
+export function SearchLinks({ text, accounts }: { text: string; accounts: EmailAccountSummary[] }) {
   if (!accounts.length) return null;
+  const providers = [...new Set(accounts.map(providerOf))].join(' and ');
   return (
     <div className="border-b border-line2 py-2.5 pr-5 pl-13">
       <p className="m-0 mb-1.5 text-note text-faint">
-        Commander keeps the 30 days before an Account was connected and everything since. Older mail is in
-        Gmail:
+        Commander keeps the 30 days before an Account was connected and everything since. Older mail is in{' '}
+        {providers}:
       </p>
       <ul className="m-0 flex list-none flex-wrap gap-x-4 gap-y-1 p-0">
-        {accounts.map((account) => (
-          <li key={account.id}>
-            <a
-              href={gmailSearchUrl(account.email, text)}
-              target="_blank"
-              rel="noreferrer"
-              className={cn(caps, 'text-ink underline-offset-2 hover:underline')}
-            >
-              Search in Gmail · <span className="normal-case">{account.email}</span> ↗
-            </a>
-          </li>
-        ))}
+        {accounts.map((account) => {
+          const address = emailAddressOf(account);
+          const href =
+            account.source === 'google'
+              ? gmailSearchUrl(address, text)
+              : outlookSearchUrl(address, text, account.personal === true);
+          return (
+            <li key={account.id}>
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+                className={cn(caps, 'text-ink underline-offset-2 hover:underline')}
+              >
+                Search in {providerOf(account)} · <span className="normal-case">{address}</span> ↗
+              </a>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -211,6 +224,7 @@ export function ThreadActions({
   view,
   sync,
   superseded,
+  provider = 'Gmail',
   onAct,
   onLabels,
   onSnooze,
@@ -224,8 +238,10 @@ export function ThreadActions({
   /** The thread's Bucket as it reads, and how it got there (#137): `v` moves it. */
   bucket?: { name: string; how: string | null };
   onBucket?: () => void;
-  /** The note when a change made in Gmail won over the User's. */
+  /** The note when a change made in Gmail or Outlook won over the User's. */
   superseded?: string | null;
+  /** Whose mail it is: Outlook flags rather than stars, and files in folders rather than labels. */
+  provider?: 'Gmail' | 'Outlook';
   onAct: (action: ThreadAction) => void;
   onLabels: () => void;
   onSnooze: () => void;
@@ -233,6 +249,8 @@ export function ThreadActions({
 }) {
   const inTrash = view === 'trash' || !!thread.inTrash;
   const unread = thread.unreadCount > 0;
+  const outlook = provider === 'Outlook';
+  const star = outlook ? 'Flag' : 'Star';
   return (
     <div
       role="toolbar"
@@ -252,7 +270,7 @@ export function ThreadActions({
         </>
       )}
       <ActionButton
-        label={thread.starred ? 'Unstar' : 'Star'}
+        label={thread.starred ? `Un${star.toLowerCase()}` : star}
         keys="s"
         onClick={() => onAct({ type: thread.starred ? 'unstar' : 'star' })}
       />
@@ -261,7 +279,7 @@ export function ThreadActions({
       ) : (
         <ActionButton label="Mark unread" keys="Shift+U" onClick={() => onAct({ type: 'unread' })} />
       )}
-      <ActionButton label="Labels" keys="l" onClick={onLabels} />
+      <ActionButton label={outlook ? 'Move to folder' : 'Labels'} keys="l" onClick={onLabels} />
       <ActionButton label={thread.snoozedUntil ? 'Snoozed' : 'Snooze'} keys="z" onClick={onSnooze} />
       {bucket && onBucket && (
         <ActionButton
@@ -273,7 +291,7 @@ export function ThreadActions({
       )}
       <span role="status" className="ml-auto flex flex-none items-center gap-2 px-3.5 text-note">
         {sync.kind === 'synced' && superseded && <span className="text-muted">{superseded}</span>}
-        {sync.kind === 'sending' && <span className="text-faint">Sending to Gmail…</span>}
+        {sync.kind === 'sending' && <span className="text-faint">Sending to {provider}…</span>}
         {sync.kind === 'failed' && (
           <>
             <span className="font-semibold text-ink" title={sync.error ?? undefined}>
@@ -344,6 +362,69 @@ export function LabelPicker({
               {labels.length
                 ? 'No label matches.'
                 : 'This Account has no labels of its own yet. Make them in Gmail.'}
+            </p>
+          )}
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Move to folder (`l` on an Outlook thread, #136): the Account's folders Commander syncs, other than
+ * Outlook's own (the Inbox, Archive and Trash have their own actions); picking one moves the thread.
+ */
+export function FolderPicker({
+  thread,
+  folders,
+  onPick,
+  onClose,
+}: {
+  thread: EmailThreadSummary;
+  folders: EmailLabel[];
+  onPick: (folder: EmailLabel) => void;
+  onClose: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const here = new Set((thread.labels ?? []).map((label) => label.id));
+  const shown = folders.filter((folder) => folder.name.toLowerCase().includes(query.trim().toLowerCase()));
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="w-[min(420px,calc(100vw-48px))]">
+        <DialogHeader partNumber="EML-L">
+          <DialogTitle>Move to folder</DialogTitle>
+        </DialogHeader>
+        <DialogDescription className="sr-only">Outlook folders for {thread.subject}</DialogDescription>
+        <DialogBody className="flex flex-col gap-3">
+          <Input
+            aria-label="Find a folder"
+            placeholder="Find a folder"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+          {shown.length ? (
+            <ul className="m-0 flex max-h-[320px] list-none flex-col overflow-auto p-0">
+              {shown.map((folder) => (
+                <li key={folder.id} className="border-b border-line2">
+                  <button
+                    type="button"
+                    aria-current={here.has(folder.id) || undefined}
+                    onClick={() => onPick(folder)}
+                    className={cn(
+                      'flex w-full cursor-pointer items-center border-0 bg-transparent px-1 py-2 text-left text-row text-ink hover:bg-raise',
+                      here.has(folder.id) && 'font-semibold',
+                    )}
+                  >
+                    {folder.name}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="m-0 text-note text-faint">
+              {folders.length
+                ? 'No folder matches.'
+                : 'This Account has no folders of its own yet. Make them in Outlook.'}
             </p>
           )}
         </DialogBody>

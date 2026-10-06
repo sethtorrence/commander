@@ -1,6 +1,13 @@
 import { BUCKET_FIELD, type EmailBucket } from './buckets';
 import type { EventDetail, EventResponse } from './calendar';
-import { type EmailDetail, type EmailLabel, type EmailSnooze, emailStatus } from './email';
+import {
+  type EmailDetail,
+  type EmailFolder,
+  type EmailLabel,
+  type EmailSnooze,
+  emailStatus,
+  isSystemFolder,
+} from './email';
 import { canAnswer } from './invitations';
 import type { ItemDetail, ItemKind, ItemStatus } from './items';
 import type { LinearIssueDetail } from './linear';
@@ -30,7 +37,9 @@ import { type ChatDetail, type ChatReply, latestFromOthers } from './teams';
 // label beside those (the label, or null once removed), kept in step with the Source's labels (Gmail's
 // INBOX, UNREAD, STARRED and TRASH; the ones Commander can't change, like SENT, stay as they are).
 // `snooze` and `bucket` (#137) are Commander's own (local fields): edited, logged and undone like the
-// others, kept through syncs, but never queued for the Source.
+// others, kept through syncs, but never queued for the Source. Outlook's mail (#136) has `folder` (the
+// folder it is filed in) instead of labels: `inbox` is the Inbox folder, `trash` Deleted Items,
+// `starred` its flag.
 
 export type SyncedFields = Record<string, unknown>;
 
@@ -144,6 +153,7 @@ const INBOX_FIELD = 'inbox';
 const STARRED_FIELD = 'starred';
 const TRASH_FIELD = 'trash';
 export const SNOOZE_FIELD = 'snooze';
+export const FOLDER_FIELD = 'folder';
 const EMAIL_FLAGS = [INBOX_FIELD, READ_FIELD, STARRED_FIELD, TRASH_FIELD, SNOOZE_FIELD, BUCKET_FIELD];
 // Commander's own email fields: never queued for the Source. (Mirroring Buckets to Gmail labels and
 // Outlook categories, #142, is a switch that is off by default.)
@@ -161,6 +171,13 @@ const FIXED_LABELS = new Set(['SENT', 'DRAFT', 'SPAM', 'CHAT']);
 /** Whether a Source label is one of an email's own labels (`label:<id>`), not a flag or a fixed one. */
 export const isEmailLabelField = (labelId: string) => !(labelId in FLAG_LABELS) && !FIXED_LABELS.has(labelId);
 
+// An Outlook folder as the `folder` field holds it, always in the same shape so values compare equal.
+const folderValue = (folder: EmailFolder | null | undefined): EmailFolder | null =>
+  folder ? { id: folder.id, name: folder.name, wellKnown: folder.wellKnown ?? null } : null;
+
+/** Whether the detail is an Outlook message's (#136): filed in one folder rather than labelled. */
+export const isOutlookEmail = (detail: EmailDetail) => detail.folder !== undefined;
+
 function emailFields(detail: EmailDetail): SyncedFields {
   const fields: SyncedFields = {
     [INBOX_FIELD]: detail.inInbox,
@@ -170,12 +187,45 @@ function emailFields(detail: EmailDetail): SyncedFields {
     [SNOOZE_FIELD]: detail.snooze ?? null,
     [BUCKET_FIELD]: detail.bucket ?? null,
   };
+  if (isOutlookEmail(detail)) {
+    fields[FOLDER_FIELD] = folderValue(detail.folder);
+    return fields;
+  }
   for (const label of detail.labels)
     if (isEmailLabelField(label.id)) fields[`${LABEL_FIELD}${label.id}`] = { id: label.id, name: label.name };
   return fields;
 }
 
+// Outlook (#136): the folder field files it, and it shows as the message's label unless it is one of
+// Outlook's own folders. Trash is Deleted Items, on top of the folder it came from.
+function withOutlookFields(detail: EmailDetail, fields: SyncedFields): EmailDetail {
+  const folder = folderValue(fields[FOLDER_FIELD] as EmailFolder | null | undefined);
+  const next: EmailDetail = {
+    ...detail,
+    inInbox: fields[INBOX_FIELD] as boolean,
+    read: fields[READ_FIELD] as boolean,
+    starred: fields[STARRED_FIELD] as boolean,
+    folder,
+    labels: folder && !isSystemFolder(folder) ? [{ id: folder.id, name: folder.name }] : [],
+  };
+  return withTrashAndLocal(next, fields);
+}
+
+// Trash and Commander's own fields (snooze, bucket), the same for every email Source.
+function withTrashAndLocal(next: EmailDetail, fields: SyncedFields): EmailDetail {
+  delete next.inTrash;
+  delete next.snooze;
+  delete next.bucket;
+  if (fields[TRASH_FIELD] === true) next.inTrash = true;
+  const snooze = fields[SNOOZE_FIELD] as EmailSnooze | null | undefined;
+  if (snooze) next.snooze = snooze;
+  const bucket = fields[BUCKET_FIELD] as EmailBucket | null | undefined;
+  if (bucket) next.bucket = bucket;
+  return next;
+}
+
 function withEmailFields(detail: EmailDetail, fields: SyncedFields): EmailDetail {
+  if (isOutlookEmail(detail)) return withOutlookFields(detail, fields);
   const flags = {
     INBOX: fields[INBOX_FIELD] === true,
     UNREAD: fields[READ_FIELD] === false,
@@ -203,19 +253,13 @@ function withEmailFields(detail: EmailDetail, fields: SyncedFields): EmailDetail
     starred: fields[STARRED_FIELD] as boolean,
     labels: [...kept, ...added] as EmailLabel[],
   };
-  delete next.inTrash;
-  delete next.snooze;
-  if (flags.TRASH) next.inTrash = true;
-  const snooze = fields[SNOOZE_FIELD] as EmailSnooze | null | undefined;
-  if (snooze) next.snooze = snooze;
-  delete next.bucket;
-  const bucket = fields[BUCKET_FIELD] as EmailBucket | null | undefined;
-  if (bucket) next.bucket = bucket;
-  return next;
+  return withTrashAndLocal(next, fields);
 }
 
 const isEmailField = (field: string) =>
-  EMAIL_FLAGS.includes(field) || (field.startsWith(LABEL_FIELD) && field.length > LABEL_FIELD.length);
+  EMAIL_FLAGS.includes(field) ||
+  field === FOLDER_FIELD ||
+  (field.startsWith(LABEL_FIELD) && field.length > LABEL_FIELD.length);
 
 /** Whether `field` names one of a detail kind's synced fields. */
 export function isSyncedField(kind: ItemDetail['kind'], field: string): boolean {

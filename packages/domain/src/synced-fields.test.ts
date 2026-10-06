@@ -376,3 +376,65 @@ describe('an email’s synced fields', () => {
     expect(statusFromDetail({ ...mail, inTrash: true }, 'open')).toBe('archived');
   });
 });
+
+describe('an Outlook email’s synced fields (#136)', () => {
+  const projects = { id: 'AAMk-folder-projects', name: 'Projects', wellKnown: null };
+  const inbox = { id: 'AAMk-folder-inbox', name: 'Inbox', wellKnown: 'inbox' };
+  const mail: EmailDetail = {
+    kind: 'email',
+    messageId: '<m1@mail.test>',
+    inReplyTo: null,
+    references: [],
+    threadKey: 'mid:<m1@mail.test>',
+    sourceThreadId: 'AAQk-conversation',
+    from: { name: 'Dana', address: 'dana@northwind.test' },
+    to: [],
+    cc: [],
+    bcc: [],
+    replyTo: [],
+    subject: 'Q4 offsite',
+    sentAt: 1,
+    snippet: '',
+    read: false,
+    starred: false,
+    inInbox: true,
+    sentByMe: false,
+    folder: inbox,
+    labels: [],
+    categories: ['Blue category'],
+    attachments: [],
+    hasInvitation: false,
+    listUnsubscribe: null,
+    listId: null,
+  };
+
+  it('has inbox, read, starred (flag), trash, snooze, bucket and its folder, and no labels', () => {
+    expect(syncedFieldsOf(mail)).toEqual({
+      inbox: true,
+      read: false,
+      starred: false,
+      trash: false,
+      snooze: null,
+      bucket: null,
+      folder: inbox,
+    });
+    expect(isSyncedField('email', 'folder')).toBe(true);
+    expect(isLocalField('email', 'folder')).toBe(false);
+  });
+
+  it('files it in the folder the fields name, shown as its label unless it is one of Outlook’s own', () => {
+    const moved = withSyncedFields(mail, { ...syncedFieldsOf(mail), inbox: false, folder: projects });
+    expect(moved).toMatchObject({ inInbox: false, folder: projects, categories: ['Blue category'] });
+    expect(moved.labels).toEqual([{ id: projects.id, name: 'Projects' }]);
+    expect(statusFromDetail(moved, 'open')).toBe('archived');
+    const back = withSyncedFields(moved, { ...syncedFieldsOf(moved), inbox: true, folder: inbox });
+    expect(back.labels).toEqual([]);
+    expect(statusFromDetail(back, 'archived')).toBe('open');
+  });
+
+  it('keeps its folder while in Deleted Items, so restoring it puts it back', () => {
+    const trashed = withSyncedFields(mail, { ...syncedFieldsOf(mail), trash: true });
+    expect(trashed).toMatchObject({ inTrash: true, folder: inbox, inInbox: true });
+    expect(statusFromDetail(trashed, 'open')).toBe('archived');
+  });
+});

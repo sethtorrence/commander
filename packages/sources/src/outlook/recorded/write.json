@@ -1,0 +1,778 @@
+{
+  "archive": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/$batch",
+        "body": {
+          "requests": [
+            {
+              "id": "1",
+              "method": "GET",
+              "url": "/me/mailFolders/inbox?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            },
+            {
+              "id": "2",
+              "method": "GET",
+              "url": "/me/mailFolders/archive?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            },
+            {
+              "id": "3",
+              "method": "GET",
+              "url": "/me/mailFolders/sentitems?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            },
+            {
+              "id": "4",
+              "method": "GET",
+              "url": "/me/mailFolders/deleteditems?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "responses": [
+            {
+              "id": "1",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-inbox="
+              }
+            },
+            {
+              "id": "2",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-archive="
+              }
+            },
+            {
+              "id": "3",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-sentitems="
+              }
+            },
+            {
+              "id": "4",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-deleteditems="
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/$batch",
+        "body": {
+          "requests": [
+            {
+              "id": "1",
+              "method": "GET",
+              "url": "/me/mailFolders/junkemail?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            },
+            {
+              "id": "2",
+              "method": "GET",
+              "url": "/me/mailFolders/drafts?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            },
+            {
+              "id": "3",
+              "method": "GET",
+              "url": "/me/mailFolders/outbox?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            },
+            {
+              "id": "4",
+              "method": "GET",
+              "url": "/me/mailFolders/conversationhistory?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "responses": [
+            {
+              "id": "1",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-junkemail="
+              }
+            },
+            {
+              "id": "2",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-drafts="
+              }
+            },
+            {
+              "id": "3",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-outbox="
+              }
+            },
+            {
+              "id": "4",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/mailFolders(id)/$entity",
+                "id": "AAMkAGI2-fld-conversationhistory="
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/$batch",
+        "body": {
+          "requests": [
+            {
+              "id": "1",
+              "method": "GET",
+              "url": "/me/mailFolders/syncissues?$select=id",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            },
+            {
+              "id": "2",
+              "method": "GET",
+              "url": "/me?$select=mail,userPrincipalName",
+              "headers": {
+                "prefer": "IdType=\"ImmutableId\""
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "responses": [
+            {
+              "id": "1",
+              "status": 404,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "error": {
+                  "code": "ErrorFolderNotFound",
+                  "message": "The specified folder could not be found in the store."
+                }
+              }
+            },
+            {
+              "id": "2",
+              "status": 200,
+              "headers": {
+                "content-type": "application/json"
+              },
+              "body": {
+                "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/$entity",
+                "mail": "sam@contoso.test",
+                "userPrincipalName": "sam@contoso.test"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": false,
+          "flag": {
+            "flagStatus": "flagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": [],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=/move",
+        "body": {
+          "destinationId": "archive"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD23\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "receivedDateTime": "2026-10-02T15:40:11Z",
+          "sentDateTime": "2026-10-02T15:40:00Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Booked the venue for 19–21 Nov. Agenda to follow.",
+          "body": {
+            "contentType": "html",
+            "content": "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"http://schemas.microsoft.com/office/2004/12/omml\" xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n<head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\r\n<meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\">\r\n<!--[if !mso]><style>v\\:* {behavior:url(#default#VML);}\r\no\\:* {behavior:url(#default#VML);}\r\n</style><![endif]--><style><!--\r\n/* Font Definitions */\r\n@font-face\r\n\t{font-family:\"Cambria Math\";}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Aptos\",sans-serif;}\r\n.MsoChpDefault\r\n\t{mso-style-type:export-only;}\r\n@page WordSection1\r\n\t{size:612.0pt 792.0pt;}\r\ndiv.WordSection1\r\n\t{page:WordSection1;}\r\n--></style><!--[if gte mso 9]><xml>\r\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\r\n</xml><![endif]-->\r\n</head>\r\n<body lang=\"EN-GB\" link=\"#467886\" vlink=\"#96607D\" style=\"word-wrap:break-word\">\r\n<div class=\"WordSection1\">\r\n<p class=\"MsoNormal\">Booked the venue for 19–21 Nov. Agenda to follow.<o:p></o:p></p>\r\n</div>\r\n</body>\r\n</html>\r\n"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Dana Whitfield",
+              "address": "dana@northwind.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Dana Whitfield",
+              "address": "dana@northwind.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": false,
+          "isDraft": false,
+          "flag": {
+            "flagStatus": "flagged",
+            "startDateTime": {
+              "dateTime": "2026-10-02T00:00:00.0000000",
+              "timeZone": "UTC"
+            },
+            "dueDateTime": {
+              "dateTime": "2026-10-09T00:00:00.0000000",
+              "timeZone": "UTC"
+            }
+          },
+          "parentFolderId": "AAMkAGI2-fld-archive=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<offsite-2@mail.northwind.test>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-07T09:01:00Z"
+        }
+      }
+    }
+  ],
+  "readAndFlag": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": false,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": [],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=",
+        "body": {
+          "isRead": true,
+          "flag": {
+            "flagStatus": "flagged"
+          }
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD23\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "receivedDateTime": "2026-10-02T15:40:11Z",
+          "sentDateTime": "2026-10-02T15:40:00Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Booked the venue for 19–21 Nov. Agenda to follow.",
+          "body": {
+            "contentType": "html",
+            "content": "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"http://schemas.microsoft.com/office/2004/12/omml\" xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n<head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\r\n<meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\">\r\n<!--[if !mso]><style>v\\:* {behavior:url(#default#VML);}\r\no\\:* {behavior:url(#default#VML);}\r\n</style><![endif]--><style><!--\r\n/* Font Definitions */\r\n@font-face\r\n\t{font-family:\"Cambria Math\";}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Aptos\",sans-serif;}\r\n.MsoChpDefault\r\n\t{mso-style-type:export-only;}\r\n@page WordSection1\r\n\t{size:612.0pt 792.0pt;}\r\ndiv.WordSection1\r\n\t{page:WordSection1;}\r\n--></style><!--[if gte mso 9]><xml>\r\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\r\n</xml><![endif]-->\r\n</head>\r\n<body lang=\"EN-GB\" link=\"#467886\" vlink=\"#96607D\" style=\"word-wrap:break-word\">\r\n<div class=\"WordSection1\">\r\n<p class=\"MsoNormal\">Booked the venue for 19–21 Nov. Agenda to follow.<o:p></o:p></p>\r\n</div>\r\n</body>\r\n</html>\r\n"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Dana Whitfield",
+              "address": "dana@northwind.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Dana Whitfield",
+              "address": "dana@northwind.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": false,
+          "flag": {
+            "flagStatus": "flagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<offsite-2@mail.northwind.test>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-07T09:01:00Z"
+        }
+      }
+    }
+  ],
+  "already": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-archive=",
+          "categories": [],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    }
+  ],
+  "moveToFolder": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": [],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=/move",
+        "body": {
+          "destinationId": "AAMkAGI2-fld-projects="
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD23\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "receivedDateTime": "2026-10-02T15:40:11Z",
+          "sentDateTime": "2026-10-02T15:40:00Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Booked the venue for 19–21 Nov. Agenda to follow.",
+          "body": {
+            "contentType": "html",
+            "content": "<html xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" xmlns:m=\"http://schemas.microsoft.com/office/2004/12/omml\" xmlns=\"http://www.w3.org/TR/REC-html40\">\r\n<head>\r\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">\r\n<meta name=\"Generator\" content=\"Microsoft Word 15 (filtered medium)\">\r\n<!--[if !mso]><style>v\\:* {behavior:url(#default#VML);}\r\no\\:* {behavior:url(#default#VML);}\r\n</style><![endif]--><style><!--\r\n/* Font Definitions */\r\n@font-face\r\n\t{font-family:\"Cambria Math\";}\r\np.MsoNormal, li.MsoNormal, div.MsoNormal\r\n\t{margin:0cm;\r\n\tfont-size:11.0pt;\r\n\tfont-family:\"Aptos\",sans-serif;}\r\n.MsoChpDefault\r\n\t{mso-style-type:export-only;}\r\n@page WordSection1\r\n\t{size:612.0pt 792.0pt;}\r\ndiv.WordSection1\r\n\t{page:WordSection1;}\r\n--></style><!--[if gte mso 9]><xml>\r\n<o:shapedefaults v:ext=\"edit\" spidmax=\"1026\" />\r\n</xml><![endif]-->\r\n</head>\r\n<body lang=\"EN-GB\" link=\"#467886\" vlink=\"#96607D\" style=\"word-wrap:break-word\">\r\n<div class=\"WordSection1\">\r\n<p class=\"MsoNormal\">Booked the venue for 19–21 Nov. Agenda to follow.<o:p></o:p></p>\r\n</div>\r\n</body>\r\n</html>\r\n"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Dana Whitfield",
+              "address": "dana@northwind.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Dana Whitfield",
+              "address": "dana@northwind.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": false,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-projects=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<offsite-2@mail.northwind.test>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-02T15:40:11Z"
+        }
+      }
+    }
+  ],
+  "superseded": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-offsite-2=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-archive=",
+          "categories": [],
+          "lastModifiedDateTime": "2026-10-07T09:30:00Z"
+        }
+      }
+    }
+  ],
+  "trash": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-certificate=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-certificate=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "categories": [],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/messages/AAMkAGI2-msg-certificate=/move",
+        "body": {
+          "destinationId": "deleteditems"
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD25\"",
+          "id": "AAMkAGI2-msg-certificate=",
+          "receivedDateTime": "2026-10-03T09:02:45Z",
+          "sentDateTime": "2026-10-03T09:02:00Z",
+          "subject": "Staging certificate",
+          "bodyPreview": "The staging certificate expires on Friday. Can you renew it? The CSR is attached.",
+          "body": {
+            "contentType": "text",
+            "content": "The staging certificate expires on Friday. Can you renew it?\r\nThe CSR is attached.\r\n\r\nPriya"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Priya Patel",
+              "address": "priya@contoso.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Priya Patel",
+              "address": "priya@contoso.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": false,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-deleteditems=",
+          "conversationId": "AAQkAGI2-conv-certificate=",
+          "internetMessageId": "<CERT01@contoso.test>",
+          "categories": [],
+          "hasAttachments": true,
+          "lastModifiedDateTime": "2026-10-03T09:02:45Z"
+        }
+      }
+    }
+  ],
+  "restore": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-certificate=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,isRead,flag,parentFolderId,categories,lastModifiedDateTime)/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD4\"",
+          "id": "AAMkAGI2-msg-certificate=",
+          "isRead": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-deleteditems=",
+          "categories": [],
+          "lastModifiedDateTime": "2026-10-03T13:00:00Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/messages/AAMkAGI2-msg-certificate=/move",
+        "body": {
+          "destinationId": "AAMkAGI2-fld-inbox="
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "@odata.etag": "W/\"CQAAABYAAAD25\"",
+          "id": "AAMkAGI2-msg-certificate=",
+          "receivedDateTime": "2026-10-03T09:02:45Z",
+          "sentDateTime": "2026-10-03T09:02:00Z",
+          "subject": "Staging certificate",
+          "bodyPreview": "The staging certificate expires on Friday. Can you renew it? The CSR is attached.",
+          "body": {
+            "contentType": "text",
+            "content": "The staging certificate expires on Friday. Can you renew it?\r\nThe CSR is attached.\r\n\r\nPriya"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Priya Patel",
+              "address": "priya@contoso.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Priya Patel",
+              "address": "priya@contoso.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Sam Rivera",
+                "address": "sam@contoso.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": false,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-inbox=",
+          "conversationId": "AAQkAGI2-conv-certificate=",
+          "internetMessageId": "<CERT01@contoso.test>",
+          "categories": [],
+          "hasAttachments": true,
+          "lastModifiedDateTime": "2026-10-03T09:02:45Z"
+        }
+      }
+    }
+  ],
+  "gone": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-vanished=?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorItemNotFound",
+            "message": "The specified object was not found in the store."
+          }
+        }
+      }
+    }
+  ]
+}

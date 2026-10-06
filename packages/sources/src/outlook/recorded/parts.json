@@ -1,0 +1,104 @@
+{
+  "byPartId": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-certificate=/attachments/AAMkAGI2-att-certificate-csr=?$select=id,name,contentType,size,isInline,contentId"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages('AAMkAGI2-msg-certificate=')/attachments/$entity",
+          "@odata.type": "#microsoft.graph.fileAttachment",
+          "@odata.mediaContentType": "application/pkcs10",
+          "id": "AAMkAGI2-att-certificate-csr=",
+          "lastModifiedDateTime": "2026-10-03T09:02:45Z",
+          "name": "staging.csr",
+          "contentType": "application/pkcs10",
+          "size": 1187,
+          "isInline": false,
+          "contentId": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-certificate=/attachments/AAMkAGI2-att-certificate-csr=/$value"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/octet-stream"
+        },
+        "bodyBase64": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURSBSRVFVRVNULS0tLS0KTUlJQnN6Q0NBUndDQVFBd2N6RUxNQWtHQTFVRUJoTUNSMEl4RURBT0JnTlZCQWdNQjBWdVoyeGhibVF4Ci0tLS0tRU5EIENFUlRJRklDQVRFIFJFUVVFU1QtLS0tLQo="
+      }
+    }
+  ],
+  "byContentId": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-1=/attachments?$select=id,name,contentType,size,isInline,contentId"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages('AAMkAGI2-msg-offsite-1=')/attachments",
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.fileAttachment",
+              "@odata.mediaContentType": "image/png",
+              "id": "AAMkAGI2-att-offsite-logo=",
+              "lastModifiedDateTime": "2026-10-03T09:02:45Z",
+              "name": "image001.png",
+              "contentType": "image/png",
+              "size": 4310,
+              "isInline": true,
+              "contentId": "image001.png@01DB1A2B.3C4D5E60"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-1=/attachments/AAMkAGI2-att-offsite-logo=/$value"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "image/png"
+        },
+        "bodyBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAwS2OUAAAAABJRU5ErkJggg=="
+      }
+    }
+  ],
+  "gone": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-certificate=/attachments/AAMkAGI2-att-certificate-csr=?$select=id,name,contentType,size,isInline,contentId"
+      },
+      "response": {
+        "status": 404,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "error": {
+            "code": "ErrorItemNotFound",
+            "message": "The specified object was not found in the store."
+          }
+        }
+      }
+    }
+  ]
+}

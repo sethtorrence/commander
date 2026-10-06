@@ -1,6 +1,6 @@
-import type { AccountSyncStatus, GoogleAccountSummary } from '@commander/domain/ipc';
+import type { AccountSyncStatus, GoogleAccountSummary, OutlookAccountSummary } from '@commander/domain/ipc';
 import { describe, expect, it } from 'vitest';
-import { emailAccountsOf, emailSyncLine, threadTime } from './email';
+import { emailAccountsOf, emailAddressOf, emailSyncLine, mailSourceOf, threadTime } from './email';
 
 // The Email Section's wording: its status line, and when each thread last had mail.
 
@@ -100,14 +100,54 @@ describe('emailSyncLine', () => {
   });
 });
 
+const outlook = (
+  id: string,
+  upn: string,
+  sync: AccountSyncStatus | null,
+  mail = true,
+): OutlookAccountSummary => ({
+  id,
+  source: 'outlook',
+  name: `Outlook · ${upn}`,
+  userPrincipalName: upn,
+  method: 'oauth',
+  status: 'connected',
+  user: null,
+  sync,
+  sources: [
+    { source: 'outlook', granted: true, enabled: mail, sync },
+    { source: 'outlook-calendar', granted: true, enabled: true, sync: null },
+  ],
+});
+
 describe('emailAccountsOf', () => {
-  it('keeps the Google Accounts with Gmail on', () => {
+  it('keeps the Google Accounts with Gmail on and the Outlook Accounts with mail on (#136)', () => {
     const accounts = [
       google('google:1', 'alex@gmail.test', null),
       google('google:2', 'sam@x.test', null, false),
+      outlook('outlook:1', 'sam@contoso.test', null),
+      outlook('outlook:2', 'sam@fabrikam.test', null, false),
     ];
 
-    expect(emailAccountsOf(accounts).map((account) => account.id)).toEqual(['google:1']);
+    const kept = emailAccountsOf(accounts);
+    expect(kept.map((account) => account.id)).toEqual(['google:1', 'outlook:1']);
+    expect(kept.map(emailAddressOf)).toEqual(['alex@gmail.test', 'sam@contoso.test']);
+    expect(kept.map(mailSourceOf)).toEqual(['gmail', 'outlook']);
+  });
+
+  it('names each Account by its address in the status line, its mail’s sync whichever Source it carries', () => {
+    const line = emailSyncLine(
+      [
+        google('google:1', 'alex@gmail.test', status()),
+        outlook(
+          'outlook:1',
+          'sam@contoso.test',
+          status({ account: 'outlook:1', source: 'outlook', progress: { done: 3, total: 9 } }),
+        ),
+      ],
+      NOW,
+    );
+    expect(line.text).toBe('alex@gmail.test synced 14:02 · sam@contoso.test downloading 30 days: 3 of ~9');
   });
 });
 

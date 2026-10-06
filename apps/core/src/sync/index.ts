@@ -21,6 +21,7 @@ import {
   createGoogleCalendarSource,
   createLinearSource,
   createOutlookCalendarSource,
+  createOutlookSource,
   createTeamsSource,
   type FreeBusyRequest,
   type FreeBusyResult,
@@ -29,6 +30,7 @@ import {
   type GoogleCalendarSourceOptions,
   type LinearSourceOptions,
   type OutlookCalendarSourceOptions,
+  type OutlookSourceOptions,
   type SourceAdapter,
   type SyncWatch,
   type TeamsSourceOptions,
@@ -68,6 +70,8 @@ export type SyncOptions = {
   githubWatch?: (account: string, apiUrl: string) => Promise<SyncWatch | null>;
   // For tests: stands in for the Gmail adapter.
   gmailSource?: (options: GmailSourceOptions) => SourceAdapter;
+  // For tests: stands in for the Outlook mail adapter.
+  outlookSource?: (options: OutlookSourceOptions) => SourceAdapter;
   random?: () => number;
   log?: (message: string) => void;
   // The Accounts changed, or whether one needs reconnecting did.
@@ -106,6 +110,7 @@ export function setUpSync(
     githubSource = createGitHubSource,
     githubWatch,
     gmailSource = createGmailSource,
+    outlookSource = createOutlookSource,
     random,
     log = (message) => console.warn(message),
     onAccountsChanged,
@@ -131,6 +136,8 @@ export function setUpSync(
     }),
     githubSource({ apiUrl: () => githubApiUrl }),
     gmailSource({ gmailUrl: () => gmailUrl }),
+    // Outlook mail (#136), through Graph too.
+    outlookSource({ graphUrl: () => graphUrl }),
   ];
   const engine: SyncEngine = createSyncEngine({
     store,

@@ -307,6 +307,26 @@ describe('as the User types', () => {
     expect(noMail.some((group) => group.title === 'Search in Gmail')).toBe(false);
   });
 
+  it('offers Search in Outlook for each Outlook Account when emails are among the results (#136)', () => {
+    const mail = item('e-2', 'email', 'Q4 offsite dates', { source: 'outlook', account: 'outlook:t:sam' });
+    const groups = paletteGroups({
+      ...context('offsite', { hits: [hit(mail)], projects: [] }),
+      outlookAccounts: [{ address: 'sam@contoso.test', personal: false }],
+    });
+    expect(groups.find((group) => group.title === 'Search in Outlook')).toMatchObject({
+      rows: [
+        {
+          label: 'Search “offsite” in Outlook',
+          hint: 'sam@contoso.test ↗',
+          action: {
+            type: 'browser',
+            url: 'https://outlook.office.com/mail/deeplink/search?query=offsite&login_hint=sam%40contoso.test',
+          },
+        },
+      ],
+    });
+  });
+
   it('offers no Search in Linear without a Linear Account', () => {
     const groups = paletteGroups({ ...context('okta', { hits: [], projects: [] }), linearAccounts: [] });
     expect(groups).toEqual([]);

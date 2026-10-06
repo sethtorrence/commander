@@ -31,6 +31,8 @@ export interface PaletteProps {
   accounts: readonly { id: string; name: string; source: string; urlKey?: string }[];
   /** The email Accounts, for Search in Gmail (#135). */
   gmailAccounts?: readonly { email: string }[];
+  /** The Outlook Accounts with mail on, for Search in Outlook (#136). */
+  outlookAccounts?: readonly { address: string; personal: boolean }[];
   now: Date;
   today: string;
   onAction(action: PaletteAction): void;
@@ -102,6 +104,7 @@ export function Palette(props: PaletteProps) {
         commands,
         linearAccounts,
         gmailAccounts: props.gmailAccounts ?? [],
+        outlookAccounts: props.outlookAccounts ?? [],
         today: props.today,
       }),
     [
@@ -113,6 +116,7 @@ export function Palette(props: PaletteProps) {
       commands,
       linearAccounts,
       props.gmailAccounts,
+      props.outlookAccounts,
       props.today,
     ],
   );

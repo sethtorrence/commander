@@ -91,7 +91,7 @@ A manual, keyboard-driven pass through email where you decide what happens to ea
 _Avoid_: Inbox zero, processing
 
 **Snooze**:
-Commander's own hold on an email thread until a chosen time: it leaves the inbox for Snoozed and comes back to the top of the inbox at that time, marked unread, while Commander runs (the window or the tray); nothing about it reaches Gmail.
+Commander's own hold on an email thread until a chosen time: it leaves the inbox for Snoozed and comes back to the top of the inbox at that time, marked unread, while Commander runs (the window or the tray); nothing about it reaches Gmail or Outlook.
 _Avoid_: Remind, defer, Muted (that's for Chats)
 
 **Thread**:

@@ -4,6 +4,7 @@ import {
   emailSearchMatches,
   emailSnoozeChoices,
   gmailSearchUrl,
+  outlookSearchUrl,
   parseEmailSearch,
   threadActionFields,
   threadInView,
@@ -217,3 +218,42 @@ describe('snooze choices', () => {
     ]);
   });
 });
+
+describe('Outlook threads (#136)', () => {
+  const inbox = { id: 'AAMk-folder-inbox', name: 'Inbox', wellKnown: 'inbox' };
+  const sent = { id: 'AAMk-folder-sent', name: 'Sent Items', wellKnown: 'sentitems' };
+  const projects = { id: 'AAMk-folder-projects', name: 'Projects' };
+  const thread = [
+    mail('m1', { sentAt: 1, folder: inbox, labels: [] }),
+    mail('m2', { sentAt: 2, folder: sent, labels: [], inInbox: false, sentByMe: true }),
+    mail('m3', { sentAt: 3, folder: inbox, labels: [], inTrash: true }),
+  ];
+
+  it('moves every message to a folder, leaving the User’s own in Sent Items', () => {
+    const folder = { ...projects, wellKnown: null };
+    expect(threadActionFields({ type: 'move', folder: projects }, thread)).toEqual([
+      { itemId: 'm1', fields: { folder, inbox: false } },
+      { itemId: 'm3', fields: { folder, inbox: false, trash: false } },
+    ]);
+    // Already there: nothing to change.
+    const filed = [mail('m4', { folder, inInbox: false, labels: [] })];
+    expect(threadActionFields({ type: 'move', folder: projects }, filed)).toEqual([]);
+  });
+
+  it('moves to the Inbox as into the inbox', () => {
+    expect(
+      threadActionFields({ type: 'move', folder: inbox }, [mail('m5', { folder, inInbox: false })]),
+    ).toEqual([{ itemId: 'm5', fields: { folder: inbox, inbox: true } }]);
+  });
+
+  it('opens Outlook on the web’s search for the Account', () => {
+    expect(outlookSearchUrl('sam@contoso.test', 'offsite from:dana', false)).toBe(
+      'https://outlook.office.com/mail/deeplink/search?query=offsite%20from%3Adana&login_hint=sam%40contoso.test',
+    );
+    expect(outlookSearchUrl('sam@outlook.test', 'in:archive venue', true)).toBe(
+      'https://outlook.live.com/mail/deeplink/search?query=venue&login_hint=sam%40outlook.test',
+    );
+  });
+});
+
+const folder = { id: 'AAMk-folder-projects', name: 'Projects', wellKnown: null };

@@ -1,3 +1,4 @@
+import firstSync from '@commander/sources/src/outlook/recorded/first-sync.json';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import { HOSTILE } from './hostile-corpus';
@@ -452,6 +453,37 @@ describe('sanitising email HTML: quoted history', () => {
 
   it('says there is no quote when there is none', () => {
     expect(run('<p>Just a note.</p>', { quotes: false }).hasQuote).toBe(false);
+  });
+});
+
+describe('sanitising email HTML: Outlook’s bodies (#136)', () => {
+  // Dana's message as Graph sends it (the Outlook adapter's recording): a whole Word-made document,
+  // with conditional comments, VML, Office's `o:p` tags, an inline logo and a tracking pixel.
+  const outlook = (
+    firstSync as { response: { body: { value?: { id: string; body?: { content: string } }[] } } }[]
+  )
+    .flatMap((exchange) => exchange.response.body.value ?? [])
+    .find((message) => message.id === 'AAMkAGI2-msg-offsite-1=')?.body?.content as string;
+
+  it('shows the text, without Office’s own markup, conditional comments or VML behaviours', () => {
+    const { html } = run(outlook);
+    const shown = parse(html);
+    expect(shown.body.textContent).toContain('Which dates work for you for the Q4 offsite?');
+    expect(html).not.toMatch(/<o:p|\[if |behavior|urn:schemas-microsoft-com/i);
+    expect(shown.querySelectorAll('p.MsoNormal').length).toBeGreaterThan(0);
+  });
+
+  it('serves its inline logo from the message’s parts and holds its tracking pixel back', () => {
+    const result = run(outlook);
+    const images = [...parse(result.html).body.querySelectorAll('img[src]')].map((img) =>
+      img.getAttribute('src'),
+    );
+    // The reader matches it to the part by its normalised Content-ID.
+    expect(images).toEqual([
+      `commander-mail://part/${TOKEN}/${encodeURIComponent('image001.png@01DB1A2B.3C4D5E60')}`,
+    ]);
+    expect(result.remoteImages).toEqual([]);
+    expect(result.heldImages).toBe(1);
   });
 });
 

@@ -170,7 +170,9 @@ function Message({ item, body, reader }: { item: Item; body: EmailBody | null; r
         />
       )}
       {body?.truncated && !body.html && (
-        <p className="mt-2 text-note text-faint">This message is long: the rest is in Gmail.</p>
+        <p className="mt-2 text-note text-faint">
+          This message is long: the rest is in {item.source === 'outlook' ? 'Outlook' : 'Gmail'}.
+        </p>
       )}
       {asText && body?.textFromHtml && (
         <p className="mt-2 font-mono text-label uppercase tracking-label text-faint">

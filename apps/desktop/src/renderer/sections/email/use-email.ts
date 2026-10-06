@@ -14,11 +14,10 @@ import {
   threadActionFields,
   UNSORTED,
 } from '@commander/domain';
-import type { GoogleAccountSummary } from '@commander/domain/ipc';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ItemChanges } from '../../item-store/changes';
 import { type IssueSync, supersededNote } from '../linear/editing';
-import type { EmailAccountsClient, EmailClient } from './email';
+import { type EmailAccountSummary, type EmailAccountsClient, type EmailClient, mailSourceOf } from './email';
 import { loadMarkRead, markReadDelay, threadSync } from './organising';
 
 export const ACCOUNT_STORAGE_KEY = 'commander.email.account';
@@ -43,8 +42,8 @@ export function facetsOf(threads: readonly EmailThreadSummary[]): EmailThreadFac
 }
 
 export interface EmailState {
-  /** The email Accounts (Google Accounts with Gmail on), each with how it is syncing. */
-  accounts: GoogleAccountSummary[];
+  /** The email Accounts (Google Accounts with Gmail on, Outlook Accounts with mail on), each syncing. */
+  accounts: EmailAccountSummary[];
   /** Whether the Accounts and threads have loaded once. */
   loaded: boolean;
   /** All Accounts ('all'), or one Account's id. Remembered across restarts. */
@@ -85,7 +84,7 @@ export interface EmailState {
   file(projectId: string | null): Promise<number[]>;
   /** Undoes a change made here (all its entries). */
   undo(entryIds: number[]): Promise<void>;
-  /** Asks every email Account to sync now (the sync engine's refresh of its Gmail). */
+  /** Asks every email Account to sync now (the sync engine's refresh of its Gmail or Outlook). */
   refresh(): void;
   reload(): void;
   /** The view listed (Inbox, Starred, Snoozed, Archive, Trash or a label), and each view's counts. */
@@ -102,11 +101,11 @@ export interface EmailState {
   act(action: ThreadAction, thread?: EmailThreadSummary): Promise<number[]>;
   /** Undoes the last change made here (an action or a filing). */
   undoLast(): Promise<void>;
-  /** Whether the selected thread's changes reached Gmail, are on their way, or couldn't sync. */
+  /** Whether the selected thread's changes reached Gmail or Outlook, are on their way, or couldn't sync. */
   sync: IssueSync;
   /** Sends the selected thread's changes that couldn't sync again. */
   retry(): Promise<void>;
-  /** The note when a change made in Gmail won over the User's ("Changed in Gmail at 14:02"), or null. */
+  /** The note when a change made in Gmail or Outlook won over the User's ("Changed in Gmail at 14:02"), or null. */
   superseded: string | null;
 }
 
@@ -119,13 +118,14 @@ function loadAccount(storage: Storage): string {
 }
 
 // What changes when mail arrives: each Account's last sync, and how far a first download has got.
-// And changes on their way to Gmail, or that couldn't sync (which change no Item).
-const syncSignature = (accounts: readonly GoogleAccountSummary[]) =>
+// And changes on their way to Gmail or Outlook, or that couldn't sync (which change no Item).
+const syncSignature = (accounts: readonly EmailAccountSummary[]) =>
   accounts
     .map((account) => {
-      const gmail = account.sources.find((each) => each.source === 'gmail')?.sync ?? account.sync;
-      const outgoing = `${gmail?.outgoing?.pending ?? 0}/${gmail?.outgoing?.failed ?? 0}`;
-      return `${account.id}:${account.sync?.lastSyncedAt ?? ''}:${account.sync?.progress?.done ?? ''}:${outgoing}`;
+      const mail =
+        account.sources.find((each) => each.source === mailSourceOf(account))?.sync ?? account.sync;
+      const outgoing = `${mail?.outgoing?.pending ?? 0}/${mail?.outgoing?.failed ?? 0}`;
+      return `${account.id}:${mail?.lastSyncedAt ?? ''}:${mail?.progress?.done ?? ''}:${outgoing}`;
     })
     .join('|');
 
@@ -151,7 +151,7 @@ export function useEmail({
   const [bucket, setBucketState] = useState<string | null>(null);
   const [facets, setFacets] = useState<EmailThreadFacet[]>([]);
   const [needsReply, setNeedsReply] = useState(0);
-  const [knownAccounts, setAccounts] = useState<GoogleAccountSummary[] | null>(null);
+  const [knownAccounts, setAccounts] = useState<EmailAccountSummary[] | null>(null);
   const accounts = useMemo(() => knownAccounts ?? [], [knownAccounts]);
   const [chosen, setChosen] = useState(() => loadAccount(storage));
   const account =
@@ -271,7 +271,7 @@ export function useEmail({
     };
   }, [client, open, selectedKey, list]);
 
-  // Whether the selected thread's changes reached Gmail: read again whenever the threads are.
+  // Whether the selected thread's changes reached their Source: read again whenever the threads are.
   const selectedItemIds = selected?.itemIds.join('|') ?? '';
   // biome-ignore lint/correctness/useExhaustiveDependencies: `list` changing means the changes may have too
   useEffect(() => {
@@ -280,7 +280,7 @@ export function useEmail({
     void client.outgoing(ids).then((found) => {
       if (live) setOutgoing(found);
     });
-    // A change made in Gmail that won over the User's, on any of its messages, until they change it again.
+    // A change made in Gmail or Outlook that won over the User's, on any of its messages, until they change it again.
     void Promise.all(ids.map((id) => client.history(id))).then((histories) => {
       if (live) setSuperseded(histories.map(supersededNote).find((note) => note !== null) ?? null);
     });
@@ -415,14 +415,14 @@ export function useEmail({
       refreshWanted.current = true;
       return;
     }
-    for (const each of knownAccounts) void accountsClient.refresh(each.id);
+    for (const each of knownAccounts) void accountsClient.refresh(each.id, mailSourceOf(each));
   }, [accountsClient, knownAccounts]);
 
   // A refresh asked for before the Accounts were read goes once they are.
   useEffect(() => {
     if (knownAccounts && refreshWanted.current) {
       refreshWanted.current = false;
-      for (const each of knownAccounts) void accountsClient.refresh(each.id);
+      for (const each of knownAccounts) void accountsClient.refresh(each.id, mailSourceOf(each));
     }
   }, [accountsClient, knownAccounts]);
 

@@ -21,6 +21,7 @@ import {
   WINDOW_BACK_DAYS,
 } from '../google-calendar/google-calendar-source';
 import type { ListedCalendar } from '../google-calendar/shapes';
+import { type Gate, MAILBOX_CONCURRENCY, mailboxGate } from '../outlook/mailbox-gate';
 import {
   type AccessToken,
   type Cadence,
@@ -97,7 +98,7 @@ import { zonedInstant } from './time-zones';
 // take an answer back to "not answered", so that one is refused (Couldn't sync).
 
 export const OUTLOOK_CALENDAR_CADENCE: Cadence = { defaultMinutes: 15, choices: [15, 30, 60] };
-export const MAX_CONCURRENT_REQUESTS = 4;
+export const MAX_CONCURRENT_REQUESTS = MAILBOX_CONCURRENCY;
 // A delta restarts once its window's start is older than this.
 export const RESTART_AFTER_DAYS = 7;
 
@@ -138,25 +139,6 @@ const RESYNC_CODES = new Set(['syncstatenotfound', 'syncstateinvalid', 'resyncre
 class CalendarUnreadable extends Error {
   override name = 'CalendarUnreadable';
 }
-
-// Lets no more than `size` tasks run at once; the rest wait their turn.
-function gate(size: number) {
-  let running = 0;
-  const waiting: (() => void)[] = [];
-  return async function run<T>(task: () => Promise<T>): Promise<T> {
-    if (running < size) running += 1;
-    else await new Promise<void>((resolve) => waiting.push(resolve));
-    try {
-      return await task();
-    } finally {
-      // Hand the slot straight to the next in line, or give it back.
-      const next = waiting.shift();
-      if (next) next();
-      else running -= 1;
-    }
-  };
-}
-type Gate = ReturnType<typeof gate>;
 
 const iso = (time: number) => new Date(time).toISOString();
 
@@ -562,16 +544,8 @@ export function createOutlookCalendarSource({
   fetch = globalThis.fetch,
   now = Date.now,
 }: OutlookCalendarSourceOptions): SourceAdapter {
-  // One gate per mailbox, shared by every sync and write of the Account.
-  const gates = new Map<string, Gate>();
-  const gateOf = (account: string) => {
-    let found = gates.get(account);
-    if (!found) {
-      found = gate(MAX_CONCURRENT_REQUESTS);
-      gates.set(account, found);
-    }
-    return found;
-  };
+  // One gate per mailbox, shared by every sync and write of the Account, its mail's too.
+  const gateOf = mailboxGate;
   // Per Account, what writes have learnt of its calendars (the Commander calendar's id above all), kept
   // in memory only: a restart finds it again by name.
   const knownCalendars = new Map<string, KnownCalendars>();
