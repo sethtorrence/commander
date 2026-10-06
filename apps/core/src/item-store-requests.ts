@@ -230,6 +230,8 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.emailSearch(request.query) };
       case 'email-labels':
         return { ok: true, result: store.emailLabels(request.account) };
+      case 'email-sorting':
+        return { ok: true, result: store.emailSorting.progress() };
       case 'memories':
         return { ok: true, result: store.memory.list(request.query) };
       case 'change-memory':

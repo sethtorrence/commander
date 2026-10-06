@@ -151,6 +151,30 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     // How many Items the User filed that way.
     count: z.number().int().positive(),
   }),
+  // "Always put mail from stripe.com in Receipts?" (#141): the User's answers to Ares's sorting point
+  // one sender address, domain or mailing list at one Bucket often enough. Accepting opens the Bucket
+  // Rule, filled in, to go at the top of the list; dismissing it stops it coming back.
+  z.object({
+    kind: z.literal('bucket-rule-suggestion'),
+    // The email Rule field (`gmail.domain`), the value and how it reads ("stripe.com").
+    field: z.string().min(1),
+    value: z.string().min(1),
+    label: z.string().min(1),
+    bucketId: z.string().min(1),
+    // The Bucket's name when it was suggested, for the plain sentence.
+    name: z.string().min(1),
+    // How many emails the User sorted that way.
+    count: z.number().int().positive(),
+  }),
+  // A Bucket Ares suggests the User adds (#141), from the week's corrections and unsure sorts: its
+  // name and description, and his reason (his words, shown with AresText). Nothing is added until the
+  // User accepts (Add Bucket, editable first); dismissing it stops it coming back.
+  z.object({
+    kind: z.literal('bucket-suggestion'),
+    name: z.string().trim().min(1).max(40),
+    description: z.string().trim().max(500),
+    reason: z.string().trim().max(300),
+  }),
 ]);
 export type QueuedAbout = z.infer<typeof queuedAbout>;
 export type QueuedKind = QueuedAbout['kind'];

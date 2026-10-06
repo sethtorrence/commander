@@ -13,6 +13,7 @@ import { type ChannelChoices, channelChoices, channelSettingAction } from './cha
 import { commanderEventDraft } from './commander-events';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import type { EmailLabel } from './email';
+import { type SortingProgress, sortingProgress } from './email-sorting';
 import {
   type EmailSearchResult,
   type EmailThread,
@@ -219,6 +220,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('email-views'), query: emailViewQuery.default({}) }),
   z.object({ op: z.literal('email-search'), query: emailSearchQuery }),
   z.object({ op: z.literal('email-labels'), account: z.string().min(1).optional() }),
+  // How far Ares has got sorting the mail in scope (#141), for the Email status line.
+  z.object({ op: z.literal('email-sorting') }),
   // Ares's meeting preps (#130) for these events: at most one each.
   z.object({ op: z.literal('meeting-preps'), eventIds: z.array(z.string().min(1)).max(500) }),
   // The oversight summary (#119): the summary for a range, over everything, one Project (its id) or
@@ -337,6 +340,7 @@ export type ItemStoreResults = {
   'email-views': EmailViewCounts;
   'email-search': EmailSearchResult;
   'email-labels': EmailLabel[];
+  'email-sorting': SortingProgress;
   'meeting-preps': Item[];
   'github-oversight': OversightSummary;
   'github-oversight-settings': OversightSettings;
@@ -409,6 +413,7 @@ export const itemStoreResult = {
   'email-views': emailViewCounts,
   'email-search': emailSearchResult,
   'email-labels': emailLabelList,
+  'email-sorting': sortingProgress,
   'meeting-preps': z.array(item),
   'github-oversight': oversightSummarySchema,
   'github-oversight-settings': oversightSettings,

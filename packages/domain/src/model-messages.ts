@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cloudMailAnswer } from './email-sorting';
 import {
   type ModelErrorKind,
   type ModelSettings,
@@ -33,6 +34,9 @@ export const modelsRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('meaning-status') }),
   z.object({ op: z.literal('set-meaning'), on: z.boolean() }),
   z.object({ op: z.literal('search-meaning'), query: searchQuery }),
+  // Gmail and the cloud (#141): the User's answer, for one Gmail Account, to "Let Ares read mail
+  // from …?". Changeable in Settings → Ares; Settings saves never touch it.
+  z.object({ op: z.literal('set-cloud-mail'), account: z.string().min(1), answer: cloudMailAnswer }),
 ]);
 export type ModelsRequest = z.input<typeof modelsRequest>;
 export type ModelsOp = ModelsRequest['op'];
@@ -45,6 +49,7 @@ export type ModelsResults = {
   'meaning-status': SearchByMeaningStatus;
   'set-meaning': SearchByMeaningStatus;
   'search-meaning': SearchResult | null;
+  'set-cloud-mail': ModelSettings;
 };
 
 export const modelsResult = {
@@ -55,6 +60,7 @@ export const modelsResult = {
   'meaning-status': searchByMeaningStatus,
   'set-meaning': searchByMeaningStatus,
   'search-meaning': searchResult.nullable(),
+  'set-cloud-mail': modelSettings,
 } satisfies Record<ModelsOp, z.ZodType>;
 
 const failure = z.object({ ok: z.literal(false), error: z.string(), kind: modelErrorKind.optional() });

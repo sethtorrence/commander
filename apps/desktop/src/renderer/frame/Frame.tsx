@@ -242,6 +242,8 @@ export function Frame() {
       }
       openSection(target.sectionId);
       if (target.kind === 'item') requestReveal(target.sectionId, target.itemId, target.focus);
+      // A place in a Section rather than an Item (the Email Section's Unsorted view, #141).
+      if (target.kind === 'section' && target.focus) requestReveal(target.sectionId, '', target.focus);
     },
     [openSettings, openSection],
   );

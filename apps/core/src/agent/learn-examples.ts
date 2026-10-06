@@ -6,18 +6,29 @@
 // - Each correction and confirmation of his filing (filing-feedback.ts): "Linear issue OPS-1 (team
 //   OPS · Relay · infra) belongs to TX (Tactics), not TL (Titanlink)". About the Project chosen and the
 //   Item's people, found by the Item's words, with the Item as its source.
+// - Each correction and confirmation of his sorting of email (#141, item-store/email-sorting.ts):
+//   "Mail from receipts@stripe.com belongs in Receipts, not Newsletters". Named by the sender's address
+//   and mailing list, never the email's words nor the sender's display name; about the sender (as a
+//   handle), found by the email's words too, with the email as its source.
 // - Each "Suggest Todos" suggestion on a Block the User dismissed, and each Todo of his from one the
 //   User undid: "Not a Todo: “dentist was fine” (Ares suggested “Book the dentist”)", with the Block as
 //   its source.
 //
 // They are the User's own answers, so they are confirmed. Each is learned once (keyed by its activity
 // entry or proposal), and one the User deletes is never learned again.
-import type { Item, ProposalRecord } from '@commander/domain';
+import {
+  type EmailDetail,
+  emailSubject,
+  type Item,
+  type ProposalRecord,
+  senderDomains,
+} from '@commander/domain';
 import type { ItemStore } from '../item-store';
 import { aboutItem } from './memory-context';
 import { SUGGEST_TODOS } from './suggest-todos';
 
 const FILING_PROGRESS = 'examples:filing';
+const SORTING_PROGRESS = 'examples:sorting';
 // The Todo suggestions looked at each time, newest first: dismissing or undoing one comes soon after.
 const TODO_SUGGESTIONS = 300;
 
@@ -71,6 +82,45 @@ export function learnExamples(itemStore: ItemStore): number {
       if (memory) learned++;
     }
     itemStore.memory.saveProgress(FILING_PROGRESS, answer.entryId);
+  }
+
+  // Corrections and confirmations of his sorting of email, oldest first.
+  const bucketName = (bucketId: string | null) =>
+    bucketId
+      ? (itemStore.buckets().find((bucket) => bucket.id === bucketId)?.name ?? 'a Bucket since removed')
+      : null;
+  const sortedAfter = itemStore.memory.progress(SORTING_PROGRESS) ?? 0;
+  const sortings = itemStore.emailSorting
+    .feedback()
+    .filter((answer) => answer.entryId > sortedAfter)
+    .reverse();
+  const sortedBefore = itemStore.memory.knows(sortings.map((answer) => `sorting:${answer.entryId}`));
+  for (const answer of sortings) {
+    const item = itemStore.get(answer.itemId)?.item;
+    const email = item?.detail?.kind === 'email' ? (item.detail as EmailDetail) : null;
+    if (item && email && !sortedBefore.has(`sorting:${answer.entryId}`)) {
+      const subject = emailSubject(email);
+      const chosen = bucketName(answer.chosen);
+      const suggested = bucketName(answer.suggested);
+      const text =
+        answer.kind === 'confirmation'
+          ? `${subject} belongs in ${chosen}`
+          : chosen
+            ? `${subject} belongs in ${chosen}, not ${suggested}`
+            : `${subject} doesn’t belong in ${suggested}: the User leaves it Unsorted`;
+      const sender = email.from?.address.trim().toLowerCase();
+      const memory = itemStore.memory.learn({
+        kind: 'example',
+        key: `sorting:${answer.entryId}`,
+        text,
+        keywords: [sender ?? '', ...senderDomains(email), email.listId ?? '', email.subject].join(' '),
+        confirmed: true,
+        handles: sender ? [sender] : [],
+        sources: [item.id],
+      });
+      if (memory) learned++;
+    }
+    itemStore.memory.saveProgress(SORTING_PROGRESS, answer.entryId);
   }
 
   // Todo suggestions on Blocks the User dismissed, or whose Todo they undid.

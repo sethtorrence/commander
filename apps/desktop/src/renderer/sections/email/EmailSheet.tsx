@@ -1,17 +1,25 @@
-import type { BucketSortedBy, EmailLabel, EmailThreadSummary, ThreadAction } from '@commander/domain';
-import { cn, Kbd, Led, toast } from '@commander/ui';
+import {
+  type BucketSortedBy,
+  type EmailLabel,
+  type EmailThreadSummary,
+  type ThreadAction,
+  UNSORTED,
+} from '@commander/domain';
+import { cn, Kbd, Led, SuggestedFiling, toast } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { BucketChip } from '../../buckets/BucketChip';
 import { bucketName } from '../../buckets/buckets';
+import { SuggestedBucket } from '../../buckets/SuggestedBucket';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
 import { ItemWarning } from '../../links/ItemWarning';
 import { BadgePicker, type PickerTarget } from '../../projects/BadgePicker';
-import { ItemBadge, SectionProjectFilter, useAccentBar } from '../../projects/badges';
+import { ItemBadge, SectionProjectFilter, useAccentBar, waitingSuggestion } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useSection, useTabCount } from '../section';
+import { CloudMailQuestions } from './CloudMail';
 import { BucketPicker, BucketStrip } from './EmailBuckets';
 import {
   FolderPicker,
@@ -36,6 +44,7 @@ import { actionToast } from './organising';
 import { type EmailReaderClient, textOnlyReader } from './reader';
 import { ThreadReader } from './ThreadReader';
 import { threadId, useEmail } from './use-email';
+import { useAresSorting } from './use-sorting';
 
 // Enter opens the selected thread, except on a control that Enter presses (a button, a link).
 const onPressable = () => !!document.activeElement?.closest('button, a[href], summary, [role="button"]');
@@ -88,6 +97,7 @@ function AccountBar({
   unread,
   onAccount,
   status,
+  sorting,
   onRefresh,
 }: {
   accounts: EmailAccountSummary[];
@@ -95,6 +105,8 @@ function AccountBar({
   unread: ReadonlyMap<string, number>;
   onAccount: (account: string) => void;
   status: { text: string; problem: boolean; syncing: boolean };
+  /** "Ares is sorting: 400 of 3,000" while he sorts a download (#141), else null. */
+  sorting: string | null;
   onRefresh: () => void;
 }) {
   const choices = [
@@ -143,11 +155,22 @@ function AccountBar({
           );
         })}
       </div>
+      {sorting && (
+        <p
+          data-testid="email-sorting-status"
+          role="status"
+          className="m-0 ml-auto flex min-w-0 flex-none items-center gap-2 self-center pl-4 font-mono text-label leading-tight font-medium uppercase tracking-label text-faint"
+        >
+          <Led size="sm" />
+          <span className="truncate">{sorting}</span>
+        </p>
+      )}
       <p
         data-testid="email-sync-status"
         role="status"
         className={cn(
-          'm-0 ml-auto flex min-w-0 items-center gap-2 self-center px-4 text-right font-mono text-label leading-tight uppercase tracking-label',
+          'm-0 flex min-w-0 items-center gap-2 self-center px-4 text-right font-mono text-label leading-tight uppercase tracking-label',
+          !sorting && 'ml-auto',
           status.problem ? 'font-semibold text-ink' : 'font-medium text-faint',
         )}
       >
@@ -192,6 +215,9 @@ function ThreadRow({
   selected,
   account,
   bucket,
+  suggestedBucket,
+  onConfirmBucket,
+  onChangeBucket,
   onOpen,
   onFile,
 }: {
@@ -202,6 +228,10 @@ function ThreadRow({
   account: string | null;
   /** Its Bucket's name, or null while Unsorted (#137). */
   bucket: string | null;
+  /** Ares's suggested Bucket's name while it waits (#141), else null. */
+  suggestedBucket: string | null;
+  onConfirmBucket: () => void;
+  onChangeBucket: () => void;
   onOpen: () => void;
   onFile: (anchor: HTMLElement) => void;
 }) {
@@ -255,7 +285,7 @@ function ThreadRow({
           }}
           className="flex flex-none cursor-pointer self-center border-0 bg-transparent p-0 hover:outline hover:outline-offset-1 hover:outline-ink"
         >
-          <ItemBadge filing={thread.latest.filing} />
+          <ItemBadge filing={thread.latest.filing} suggestion={waitingSuggestion(thread.latest)} />
         </button>
         <span
           data-testid="thread-senders"
@@ -286,7 +316,11 @@ function ThreadRow({
       </div>
       <div className="mt-1 flex min-w-0 items-center gap-2">
         <ItemWarning item={thread.latest} />
-        <BucketChip faint={bucket === null}>{bucket ?? 'Unsorted'}</BucketChip>
+        {bucket === null && suggestedBucket ? (
+          <SuggestedBucket name={suggestedBucket} onConfirm={onConfirmBucket} onChange={onChangeBucket} />
+        ) : (
+          <BucketChip faint={bucket === null}>{bucket ?? 'Unsorted'}</BucketChip>
+        )}
         {account && (
           <span className="inline-flex h-5 max-w-[180px] flex-none items-center border border-line bg-sheet px-[7px] font-mono text-label leading-none font-medium uppercase tracking-label whitespace-nowrap text-muted">
             <span className="truncate normal-case">{account}</span>
@@ -297,6 +331,63 @@ function ThreadRow({
         <span className="min-w-0 truncate text-note text-muted">{thread.snippet}</span>
       </div>
     </li>
+  );
+}
+
+// What the Badge picker files: a thread's latest message (its Project is the thread's), with Ares's
+// filing suggestion on it, if one waits (#141).
+const pickerTarget = (thread: EmailThreadSummary): PickerTarget => ({
+  id: thread.latest.id,
+  title: thread.subject,
+  filing: thread.latest.filing,
+  ...(thread.latest.filingSuggestion && { filingSuggestion: thread.latest.filingSuggestion }),
+});
+
+/**
+ * Ares's suggestions on the open thread (#141): his suggested Bucket while it is Unsorted, and his
+ * dashed Badge while it is Unfiled, each with Confirm and Change.
+ */
+function ThreadSuggestions({
+  thread,
+  bucketName,
+  onConfirmBucket,
+  onChangeBucket,
+  onConfirmFiling,
+  onChangeFiling,
+}: {
+  thread: EmailThreadSummary;
+  bucketName: (bucketId: string | null | undefined) => string | null;
+  onConfirmBucket: () => void;
+  onChangeBucket: () => void;
+  onConfirmFiling: () => void;
+  onChangeFiling: () => void;
+}) {
+  const { projectById } = useProjects();
+  const bucket = thread.bucket ? null : bucketName(thread.latest.bucketSuggestion?.bucketId);
+  const filing = waitingSuggestion(thread.latest);
+  const project = filing ? projectById(filing.projectId) : undefined;
+  if (!bucket && !project) return null;
+  return (
+    <span className="flex flex-none items-center gap-3 border-r border-line2 px-3">
+      {bucket && (
+        <SuggestedBucket
+          data-testid="suggested-bucket"
+          name={bucket}
+          onConfirm={onConfirmBucket}
+          onChange={onChangeBucket}
+        />
+      )}
+      {project && (
+        <SuggestedFiling
+          data-testid="suggested-filing"
+          code={project.code}
+          accent={project.accent}
+          project={project.name}
+          onConfirm={onConfirmFiling}
+          onChange={onChangeFiling}
+        />
+      )}
+    </span>
   );
 }
 
@@ -318,9 +409,11 @@ export function EmailSheet({
   reader?: EmailReaderClient;
 }) {
   const { include } = useProjectFilter();
-  const { projectOf } = useProjects();
+  const { projectOf, projectById, settleFiling } = useProjects();
   const now = useNow(60_000);
   const state = useEmail({ client, accounts, changes, include });
+  // Ares's sorting (#141): his progress, and the Gmail Accounts waiting for the User's answer.
+  const sorting = useAresSorting({ client, accounts: state.accounts, changes });
   const { selected, open, setOpen } = state;
   const [picking, setPicking] = useState<{ target: PickerTarget; anchor: HTMLElement | null } | null>(null);
   // The label or snooze picker open on a thread (#135), and the Account's labels for the first.
@@ -354,7 +447,15 @@ export function EmailSheet({
     [state.buckets],
   );
   useRefreshWhenOpened(state.refresh, state.reload);
-  useReveal('email', (itemId) => void state.reveal(itemId));
+  useReveal('email', (itemId, focus) => {
+    // "12 emails I wasn't sure about" (#141) opens the Unsorted view, where they come first.
+    if (!itemId && focus === UNSORTED) {
+      state.setView('inbox');
+      state.setBucket(UNSORTED);
+      return;
+    }
+    void state.reveal(itemId);
+  });
 
   const file = (anchor?: HTMLElement | null) => {
     if (!selected) return;
@@ -363,15 +464,23 @@ export function EmailSheet({
       document.querySelector<HTMLElement>(
         `[data-item-id="${CSS.escape(selected.latest.id)}"] [data-slot="badge"]`,
       );
-    setPicking({
-      target: { id: selected.latest.id, title: selected.subject, filing: selected.latest.filing },
-      anchor: badge,
-    });
+    setPicking({ target: pickerTarget(selected), anchor: badge });
   };
 
   const pick = async (projectId: string | null) => {
     const subject = selected?.subject ?? '';
+    const suggestion = picking ? waitingSuggestion(picking.target) : undefined;
     setPicking(null);
+    // Unfiled, on Ares's dashed Badge: his suggestion turned down (#71, #141).
+    if (suggestion && projectId === null) {
+      try {
+        await settleFiling(suggestion.proposalId, null);
+        toast(`Left Unfiled: ${subject}. Ares won’t suggest it again`);
+      } catch (error) {
+        toast(error instanceof Error ? error.message : String(error));
+      }
+      return;
+    }
     const entries = await state.file(projectId);
     if (!entries.length) return;
     const project = projectOf(projectId ? { projectId, filedBy: 'user' } : null);
@@ -410,6 +519,36 @@ export function EmailSheet({
   };
   const openBuckets = (thread = selected) => {
     if (thread) setOrganising({ kind: 'bucket', thread });
+  };
+  // Confirm on Ares's suggested Bucket (#141): sorted there, by the User, with Undo.
+  const confirmBucket = async (thread: EmailThreadSummary) => {
+    const suggestion = thread.bucket ? undefined : thread.latest.bucketSuggestion;
+    if (!suggestion) return;
+    try {
+      const entries = await client.confirmBucket(suggestion.proposalId);
+      state.reload();
+      toast(`Moved to ${nameOf(suggestion.bucketId) ?? 'a Bucket'}: ${thread.subject || '(no subject)'}`, {
+        action: { label: 'Undo', onClick: () => void state.undo(entries) },
+      });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error));
+    }
+  };
+  // Confirm on Ares's dashed Badge in the open thread (#141): filed there, by the User.
+  const confirmFiling = async (thread: EmailThreadSummary) => {
+    const suggestion = waitingSuggestion(thread.latest);
+    if (!suggestion) return;
+    try {
+      const entry = await settleFiling(suggestion.proposalId, suggestion.projectId);
+      state.reload();
+      const project = projectById(suggestion.projectId);
+      if (entry && project)
+        toast(`Confirmed under ${project.code}: ${thread.subject || '(no subject)'}`, {
+          action: { label: 'Undo', onClick: () => void state.undo([entry.id]) },
+        });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : String(error));
+    }
   };
   // The thread the picker is on, as it now is (its labels change while the picker is open).
   const organised = organising
@@ -504,7 +643,12 @@ export function EmailSheet({
         unread={state.unread}
         onAccount={state.setAccount}
         status={status}
+        sorting={sorting.line}
         onRefresh={state.refresh}
+      />
+      <CloudMailQuestions
+        accounts={sorting.unanswered}
+        onAnswer={(account, answer) => void sorting.answer(account, answer)}
       />
       <ViewBar
         views={state.views}
@@ -542,16 +686,19 @@ export function EmailSheet({
                     selected={threadId(thread) === state.selectedId}
                     account={several ? accountName(thread.account) : null}
                     bucket={nameOf(thread.bucket?.bucketId)}
+                    suggestedBucket={thread.bucket ? null : nameOf(thread.latest.bucketSuggestion?.bucketId)}
+                    onConfirmBucket={() => void confirmBucket(thread)}
+                    onChangeBucket={() => {
+                      state.select(threadId(thread));
+                      openBuckets(thread);
+                    }}
                     onOpen={() => {
                       state.select(threadId(thread));
                       setOpen(true);
                     }}
                     onFile={(anchor) => {
                       state.select(threadId(thread));
-                      setPicking({
-                        target: { id: thread.latest.id, title: thread.subject, filing: thread.latest.filing },
-                        anchor,
-                      });
+                      setPicking({ target: pickerTarget(thread), anchor });
                     }}
                   />
                 ))}
@@ -580,22 +727,32 @@ export function EmailSheet({
               onClose={() => setOpen(false)}
               toolbar={
                 selected && (
-                  <ThreadActions
-                    thread={selected}
-                    view={state.view}
-                    sync={state.sync}
-                    superseded={state.superseded}
-                    provider={providerFor(selected)}
-                    onAct={(action) => void act(action)}
-                    onLabels={() => void openLabels()}
-                    onSnooze={() => openSnooze()}
-                    onRetry={() => void state.retry()}
-                    bucket={{
-                      name: nameOf(selected.bucket?.bucketId) ?? 'Unsorted',
-                      how: selected.bucket ? SORTED_BY[selected.bucket.sortedBy] : null,
-                    }}
-                    onBucket={() => openBuckets()}
-                  />
+                  <>
+                    <ThreadActions
+                      thread={selected}
+                      view={state.view}
+                      sync={state.sync}
+                      superseded={state.superseded}
+                      provider={providerFor(selected)}
+                      onAct={(action) => void act(action)}
+                      onLabels={() => void openLabels()}
+                      onSnooze={() => openSnooze()}
+                      onRetry={() => void state.retry()}
+                      bucket={{
+                        name: nameOf(selected.bucket?.bucketId) ?? 'Unsorted',
+                        how: selected.bucket ? SORTED_BY[selected.bucket.sortedBy] : null,
+                      }}
+                      onBucket={() => openBuckets()}
+                    />
+                    <ThreadSuggestions
+                      thread={selected}
+                      bucketName={nameOf}
+                      onConfirmBucket={() => void confirmBucket(selected)}
+                      onChangeBucket={() => openBuckets(selected)}
+                      onConfirmFiling={() => void confirmFiling(selected)}
+                      onChangeFiling={() => file()}
+                    />
+                  </>
                 )
               }
             />

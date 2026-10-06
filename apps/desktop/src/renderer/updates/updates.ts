@@ -1,5 +1,7 @@
 import {
   type ActionKind,
+  SORT_INTO_BUCKETS,
+  UNSORTED,
   UPDATE_SECTION_NAMES,
   type UpdateRow,
   type UpdateRowAction,
@@ -33,7 +35,11 @@ export function acceptLabel(line: UpdateViewLine): string | null {
       return 'Yes, just do them';
     // Opens the Rule editor, filled in (#71).
     case 'rule-suggestion':
+    case 'bucket-rule-suggestion':
       return 'Make the Rule…';
+    // Opens the Bucket, filled in and editable (#141).
+    case 'bucket-suggestion':
+      return 'Add Bucket…';
     default:
       return null;
   }
@@ -42,7 +48,8 @@ export function acceptLabel(line: UpdateViewLine): string | null {
 export type OpenTarget =
   // `focus`: where in the Item to open it (Reply: the Chat's message waiting on the User).
   | { kind: 'item'; sectionId: string; itemId: string; focus?: string }
-  | { kind: 'section'; sectionId: string }
+  // `focus`: where in the Section (the Email Section's Unsorted view, #141).
+  | { kind: 'section'; sectionId: string; focus?: string }
   // `part`: where in Settings (Accounts, for an Account to reconnect).
   | { kind: 'settings'; part?: 'accounts' };
 
@@ -73,12 +80,21 @@ export function openTarget(line: UpdateViewLine, row?: UpdateRow, { reply = fals
       ...(reply && row.focus ? { focus: row.focus } : {}),
     };
   }
-  if (about?.kind === 'cap-warning' || about?.kind === 'autonomy-change' || about?.kind === 'rule-suggestion')
+  if (
+    about?.kind === 'cap-warning' ||
+    about?.kind === 'autonomy-change' ||
+    about?.kind === 'rule-suggestion' ||
+    about?.kind === 'bucket-rule-suggestion' ||
+    about?.kind === 'bucket-suggestion'
+  )
     return { kind: 'settings' };
   if (about?.kind === 'reconnect') return { kind: 'settings', part: 'accounts' };
   const first = line.itemIds[0];
   const single = line.itemIds.length === 1 || about?.kind === 'chained';
   if (first && single) return { kind: 'item', sectionId: sectionOf(line.section), itemId: first };
+  // "12 emails I wasn't sure about" (#141): the Unsorted view, where they wait first.
+  if (about?.kind === 'suggestions' && about.action === SORT_INTO_BUCKETS)
+    return { kind: 'section', sectionId: 'email', focus: UNSORTED };
   if (about?.kind === 'suggestions') return { kind: 'section', sectionId: 'ares' };
   return { kind: 'section', sectionId: sectionOf(line.section) };
 }

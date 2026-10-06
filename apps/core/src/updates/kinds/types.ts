@@ -19,6 +19,8 @@ export type LineContext = {
   proposalsOn(itemId: string): ProposalRecord[];
   // A Project's code ("TX"), by its id.
   projectCode(projectId: string): string | null;
+  // A Bucket's name ("Receipts"), by its id (#141).
+  bucketName?(bucketId: string): string | null;
   // The warning standing on an Item: what in it read like an instruction (word for word, when
   // known), or null when it isn't marked.
   warning(itemId: string): { quote: string | null } | null;

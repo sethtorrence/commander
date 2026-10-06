@@ -32,6 +32,7 @@ import {
   type DailyTemplate,
   DELETE_FIELD,
   dailyNoteQuery,
+  decide,
   describeRule,
   type EmailBody,
   type EmailDetail,
@@ -72,6 +73,7 @@ import {
   linearCatalog,
   type Mention,
   type MentionQuery,
+  mayReadMail,
   mentionQuery,
   type Project,
   type ProjectAction,
@@ -90,6 +92,7 @@ import {
   rulePreviewRequest,
   rulesFor,
   type SaveResult,
+  SORT_INTO_BUCKETS,
   type Source,
   type SourceBatch,
   sourceBatch,
@@ -130,6 +133,7 @@ import {
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
 import { type EmailImagesStore, emailImagesIn } from './email-images';
+import { type EmailSortingStore, emailSortingIn } from './email-sorting';
 import { emailsIn } from './emails';
 import { type FilingFeedbackStore, filingFeedbackIn } from './filing-feedback';
 import { type FocusSettingsStore, focusSettingsIn } from './focus-settings';
@@ -442,6 +446,9 @@ export type ItemStore = {
   chatWaiting: ChatWaitingStore;
   // Ares's filing (filing-feedback.ts): his record, and the User's corrections and confirmations,
   // which the Item store records whenever the User files an Item he filed or suggested a Project for.
+  // Ares's sorting of email (#141, email-sorting.ts): the mail his to sort, and the User's corrections
+  // and confirmations, recorded whenever the User moves an email he sorted or suggested a Bucket for.
+  emailSorting: EmailSortingStore;
   filing: FilingFeedbackStore & {
     // The User turned down his suggestion for an Item without filing it (Unfiled): a correction.
     decline(itemId: string, suggestedProjectId: string, context: ActionContext): ActivityEntry;
@@ -611,13 +618,39 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   });
   // Ares's filing suggestions on Items, and the User's answers to his filing.
   const filing = filingFeedbackIn(db, (entry, at) => log({ ...entry, why: null }, at));
+  // Ares's sorting of email (#141): the mail his to sort, his suggested Buckets, and the User's answers.
+  const sortingAnswers = emailSortingIn(db, {
+    withDetails: (rows) => withDetails(rows),
+    log: (entry, at) => log({ ...entry, why: null }, at),
+    now,
+    sorting: {
+      on: () =>
+        agent.job(SORT_INTO_BUCKETS).enabled &&
+        decide(
+          {
+            action: SORT_INTO_BUCKETS,
+            actionKind: 'organise',
+            section: 'email',
+            confidence: 1,
+            chained: false,
+          },
+          autonomy.settings(),
+        ) !== 'off',
+      mayRead: (source, account) => mayReadMail(models.settings(), source, account),
+    },
+  });
   const attachments = attachmentFolder({
     dir: options.attachmentsDir ?? join(dirname(options.path), 'attachments'),
     now,
     invalid: (message) => new ItemStoreError('invalid', message),
   });
   // Emails (emails.ts): their detail, threading as they arrive, and their bodies beside them.
-  const emails = emailsIn(db, { withDetails: (rows) => withDetails(rows), now, search: () => search });
+  const emails = emailsIn(db, {
+    withDetails: (rows) => withDetails(rows),
+    now,
+    search: () => search,
+    suggested: (itemIds) => new Set(sortingAnswers.suggestions(itemIds).keys()),
+  });
   // Ares's GitHub summaries (github-summaries.ts): their detail, and when the User first opened each.
   const summaries = githubSummariesIn(db, { now, withDetails: (rows) => withDetails(rows) });
 
@@ -914,6 +947,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     const answeredFrom = (id: string) =>
       [id, backedBy(id), pullOf(id), pullOf(backedBy(id))].filter((each): each is string => !!each);
     const suggested = filing.suggestions(rows.flatMap((row) => answeredFrom(row.id)));
+    // Ares's suggested Bucket waiting on an email (#141).
+    const bucketSuggested = sortingAnswers.suggestions(emailIds);
     // Ares's waiting flag on a Chat.
     const flags = waiting.standing(rows.filter((row) => row.kind === 'chat').map((row) => row.id));
     return rows.map((row) => {
@@ -923,10 +958,12 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         .map((id) => suggested.get(id))
         .find((each) => each !== undefined);
       const flag = flags.get(row.id);
+      const bucketSuggestion = bucketSuggested.get(row.id);
       return {
         ...item,
         ...(at !== undefined && { injectionWarning: { at } }),
         ...(suggestion && { filingSuggestion: suggestion }),
+        ...(bucketSuggestion && { bucketSuggestion }),
         ...(flag && { waiting: flag }),
       };
     });
@@ -1416,6 +1453,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     );
     const after = writeState(item, edited, at);
     const logged = logAndQueue(item, { ...entry, action: 'update', itemId: item.id, before, after }, at);
+    sortingAnswers.answer(item, before, after, logged, at);
     afterChange(item, before, after, logged);
     return logged;
   }
@@ -2260,6 +2298,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
 
   const autonomy = openAutonomyStore(db, now);
   const agent = openAgentStore(db, now);
+  const models = openModelStore(db, now);
   const githubWatch = githubWatchIn(db, {
     now,
     transaction: (fn) => sqlite.transaction(fn)(),
@@ -2292,7 +2331,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   });
 
   return {
-    models: openModelStore(db, now),
+    models,
     syncState,
     outgoing,
     autonomy,
@@ -2304,6 +2343,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         withDetails(db.select().from(schema.items).where(eq(schema.items.id, id)).all())[0] ?? null,
     }),
     updates: openUpdateStore(db),
+    emailSorting: sortingAnswers.store,
     filing: {
       ...filing.store,
       decline: sqlite.transaction((itemId: string, suggestedProjectId: string, rawContext: ActionContext) => {

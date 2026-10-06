@@ -49,9 +49,18 @@ async function answer(
     case 'settings':
       return { ok: true, result: store.models.settings() };
     case 'save-settings': {
-      // Search by meaning is switched on its own (set-meaning), which a form loaded before can't undo.
-      const { searchByMeaning } = store.models.settings();
-      return { ok: true, result: store.models.saveSettings({ ...request.settings, searchByMeaning }) };
+      // Search by meaning is switched on its own (set-meaning), and each Gmail Account's answer about
+      // the cloud on its own too (set-cloud-mail), which a form loaded before can't undo.
+      const { searchByMeaning, cloudMail } = store.models.settings();
+      return {
+        ok: true,
+        result: store.models.saveSettings({ ...request.settings, searchByMeaning, cloudMail }),
+      };
+    }
+    case 'set-cloud-mail': {
+      const settings = store.models.settings();
+      const cloudMail = { ...settings.cloudMail, [request.account]: request.answer };
+      return { ok: true, result: store.models.saveSettings({ ...settings, cloudMail }) };
     }
     case 'usage':
       return { ok: true, result: store.models.usageSummary() };

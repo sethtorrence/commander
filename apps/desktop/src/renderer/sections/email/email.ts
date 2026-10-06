@@ -11,7 +11,9 @@ import type {
   ItemAction,
   MessageFields,
   OutgoingChange,
+  SortingProgress,
 } from '@commander/domain';
+import { type CloudMailAnswer, FILE_INTO_PROJECTS, SORT_INTO_BUCKETS } from '@commander/domain';
 import type {
   AccountSummary,
   AccountsState,
@@ -65,9 +67,26 @@ export interface EmailClient {
   file(itemIds: string[], projectId: string | null): Promise<ActivityEntry[]>;
   /** Undoes a change made here, all its entries at once. */
   undo(entryIds: number[]): Promise<void>;
+  /** How far Ares has got sorting the mail in scope (#141), for the status line. */
+  sorting(): Promise<SortingProgress>;
+  /** Confirms Ares's suggested Bucket on an email: sorted there, by the User. Returns its entries. */
+  confirmBucket(proposalId: number): Promise<number[]>;
+  /** Each Gmail Account's answer to "Let Ares read mail from …?" (#141), by Account id. */
+  cloudMail(): Promise<Record<string, CloudMailAnswer>>;
+  /** Saves an Account's answer; allowed, Ares starts sorting its mail at once. */
+  answerCloudMail(account: string, answer: CloudMailAnswer): Promise<void>;
 }
 
-export function emailIn(itemStore: ItemStoreClient): EmailClient {
+/** The window's channels to Ares (his suggestions, his jobs) and his settings. */
+type Bridges = {
+  autonomy: () => Window['commander']['autonomy'];
+  models: () => Window['commander']['models'];
+};
+
+export function emailIn(
+  itemStore: ItemStoreClient,
+  bridges: Bridges = { autonomy: () => window.commander.autonomy, models: () => window.commander.models },
+): EmailClient {
   return {
     threads: (query) => itemStore({ op: 'email-threads', query }),
     buckets: () => itemStore({ op: 'buckets' }),
@@ -99,6 +118,23 @@ export function emailIn(itemStore: ItemStoreClient): EmailClient {
     async undo(entryIds) {
       const actions = [...entryIds].reverse().map((entryId): ItemAction => ({ type: 'undo', entryId }));
       if (actions.length) await itemStore({ op: 'record-all', actions });
+    },
+    sorting: () => itemStore({ op: 'email-sorting' }),
+    async confirmBucket(proposalId) {
+      const record = await bridges.autonomy()({ op: 'accept', proposalId });
+      return record.entryIds;
+    },
+    async cloudMail() {
+      const response = await bridges.models()({ op: 'settings' });
+      if (!response.ok) throw new Error(response.error);
+      return response.result.cloudMail ?? {};
+    },
+    async answerCloudMail(account, answer) {
+      const response = await bridges.models()({ op: 'set-cloud-mail', account, answer });
+      if (!response.ok) throw new Error(response.error);
+      if (answer !== 'allowed') return;
+      for (const job of [SORT_INTO_BUCKETS, FILE_INTO_PROJECTS])
+        await bridges.autonomy()({ op: 'run-job', job });
     },
   };
 }

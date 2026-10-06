@@ -146,6 +146,9 @@ export const item = z.object({
   // Present while Ares has suggested a Project for the Item (or, for a Todo, the Item behind it) and
   // is waiting for the User: the dashed Badge, with Confirm and Change (#71). Absent otherwise.
   filingSuggestion: z.object({ proposalId: z.number().int().positive(), projectId: id }).optional(),
+  // Present while Ares has suggested a Bucket for an email and is waiting for the User: the dashed
+  // Bucket, with Confirm and Change (#141). Absent otherwise.
+  bucketSuggestion: z.object({ proposalId: z.number().int().positive(), bucketId: id }).optional(),
   // Present while Ares judges that someone in a Chat is waiting on the User (#109): the message, and
   // his reason in one short sentence (shown through AresText). Absent otherwise.
   waiting: z.object({ messageId: id, reason: z.string().min(1).max(300), at: timestamp }).optional(),

@@ -1,11 +1,12 @@
-import { type QueuedAbout, ruleSuggestionDraft } from '@commander/domain';
+import { bucketRuleSuggestionDraft, type QueuedAbout, ruleSuggestionDraft } from '@commander/domain';
 import { useEffect, useMemo } from 'react';
 import type { ItemStoreClient } from '../item-store/client';
 import { useRuleFlow } from '../rules/rule-flow';
 import { rulesIn } from '../rules/rules';
 
 export type RuleSuggestion = {
-  about: Extract<QueuedAbout, { kind: 'rule-suggestion' }>;
+  // A Rule filing into a Project (#71), or a Bucket Rule sorting email (#141).
+  about: Extract<QueuedAbout, { kind: 'rule-suggestion' | 'bucket-rule-suggestion' }>;
   queuedId: number;
   // A fresh one each time the User accepts, so accepting again reopens the editor.
   at: number;
@@ -34,7 +35,7 @@ export function SuggestedRule({
   useEffect(() => {
     const { about, queuedId } = suggestion;
     edit(null, undefined, {
-      draft: ruleSuggestionDraft(about),
+      draft: about.kind === 'rule-suggestion' ? ruleSuggestionDraft(about) : bucketRuleSuggestionDraft(about),
       position: 0,
       onSaved: () => onSaved(queuedId),
     });
