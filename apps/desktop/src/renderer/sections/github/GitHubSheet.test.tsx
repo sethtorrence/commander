@@ -31,6 +31,10 @@ let discussionAsked: string[];
 let answer: (itemId: string) => Promise<GitHubDiscussionResponse>;
 const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
 const HOUR = 3_600_000;
+// The clock is pinned to the fixtures' own moment (NOW is UTC), so ages read the same in every time
+// zone; the last sync is 14:02 local on that same local day, as the status line shows it.
+const PINNED = NOW + 3 * HOUR;
+const SYNCED_AT = new Date(PINNED).setHours(14, 2, 0, 0);
 
 function fakeAccounts(initial: GitHubAccountSummary[]) {
   let accounts = initial;
@@ -64,7 +68,7 @@ const syncStatus = (overrides: Partial<AccountSyncStatus> = {}): AccountSyncStat
   activity: 'idle',
   cadenceMinutes: 15,
   cadenceChoices: [15],
-  lastSyncedAt: new Date(2026, 9, 3, 14, 2).getTime(),
+  lastSyncedAt: SYNCED_AT,
   nextSyncAt: null,
   itemCount: 3,
   problem: null,
@@ -139,7 +143,7 @@ const discussion = (changes: Partial<GitHubDiscussion> = {}): GitHubDiscussion =
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
-  vi.setSystemTime(new Date(2026, 9, 3, 15, 0));
+  vi.setSystemTime(PINNED);
 });
 afterEach(() => {
   vi.useRealTimers();
