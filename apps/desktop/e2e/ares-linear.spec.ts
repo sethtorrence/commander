@@ -9,7 +9,7 @@ import {
 } from '@commander/models/testing';
 import { expect, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear, viewerOf } from '../src/main/linear/fake-linear-server';
-import { openSettings } from './frame';
+import { openSettings, settingsPage } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares keeps an eye on Linear, end to end: a fake Linear (never the real one) and a fake
@@ -61,7 +61,7 @@ async function freePort(): Promise<number> {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -129,6 +129,7 @@ test('sync → a reassignment and a stuck issue, both in the Update; Reconnect q
   await connectFakeModel(page, server);
 
   // Connect Linear: the sync brings both issues as the User's Linear Todos, and Ares looks after it.
+  await settingsPage(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel');
   await accounts.getByLabel('Linear personal API key').fill(API_KEY);
   await accounts.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -181,7 +182,7 @@ test('sync → a reassignment and a stuck issue, both in the Update; Reconnect q
 
   // The key is revoked in Linear: syncing pauses, and the Update says so first.
   linear.revokeApiKey(API_KEY);
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   await accounts.getByRole('button', { name: 'Sync now' }).click();
   await expect(accounts.getByTestId('account-status')).toHaveText('Needs reconnecting');
   await page.keyboard.press('Escape');

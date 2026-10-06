@@ -90,7 +90,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 }
 
 async function openEmail(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const section = window.getByTestId('accounts-panel').getByTestId('source-google');
   await section.getByRole('button', { name: 'Connect Google' }).click();
   await expect(section.getByTestId('account-synced')).toHaveText(/· 4 emails$/);

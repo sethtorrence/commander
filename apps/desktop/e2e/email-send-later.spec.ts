@@ -68,7 +68,7 @@ async function withGoogle() {
   commander = await launchCommander({ env: googleEnv(google) });
   const window = await commander.window();
   await standInForTheBrowser(commander.app);
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const section = window.getByTestId('accounts-panel').getByTestId('source-google');
   await section.getByRole('button', { name: 'Connect Google' }).click();
   await expect(section.getByTestId('account-status')).toHaveText('Connected');
@@ -103,7 +103,7 @@ async function withOutlook() {
       if (url.startsWith(login)) await fetch(url);
     };
   }, microsoft.loginUrl);
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const outlook = window.getByTestId('accounts-panel').getByTestId('source-outlook');
   await outlook.getByRole('button', { name: 'Connect Outlook' }).click();
   await expect(outlook.getByTestId('account-status').first()).toHaveText('Connected');

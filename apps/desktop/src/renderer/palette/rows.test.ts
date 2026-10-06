@@ -118,6 +118,35 @@ describe('the palette before anything is typed', () => {
   });
 });
 
+describe('the Settings pages (#199)', () => {
+  const settingsPages = [
+    { id: 'general', label: 'General' },
+    { id: 'accounts', label: 'Accounts' },
+    { id: 'ares', label: 'Ares' },
+  ];
+  const groupsFor = (input: string) =>
+    paletteGroups({ ...context(input, { hits: [], projects: [] }), settingsPages });
+
+  it('are offered once something is typed, matching their names, or all of them for “settings”', () => {
+    expect(paletteGroups({ ...context(''), settingsPages }).map((group) => group.title)).not.toContain(
+      'Settings',
+    );
+    const accounts = groupsFor('acc').find((group) => group.title === 'Settings');
+    expect(accounts?.rows).toEqual([
+      {
+        key: 'settings:accounts',
+        tag: 'Set 02',
+        label: 'Accounts',
+        hint: 'Settings',
+        action: { type: 'settings', page: 'accounts' },
+      },
+    ]);
+    const all = groupsFor('settings').find((group) => group.title === 'Settings');
+    expect(all?.rows.map((row) => row.label)).toEqual(['General', 'Accounts', 'Ares']);
+    expect(groupsFor('settings ar').find((group) => group.title === 'Settings')?.rows).toHaveLength(1);
+  });
+});
+
 describe('as the User types', () => {
   it('keeps the Jump rows and commands whose words start with what was typed', () => {
     expect(shape('li', { hits: [], projects: [] })).toEqual([

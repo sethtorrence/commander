@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /*
-  Settings → Notes → Markdown copy folder (#53). The Core writes a read-only Markdown copy of every
+  Settings → Data → Markdown copy folder (#53). The Core writes a read-only Markdown copy of every
   Daily Note into a folder the User picks with the system folder picker. The window can only ask the
   main process to show that picker (or to turn the copy off): it never names a folder itself, so it
   can't make Commander write anywhere it likes. The main process checks the folder chosen and hands it

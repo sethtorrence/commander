@@ -6,7 +6,7 @@ import {
   type FakeGoogleUser,
   startFakeGoogle,
 } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // The Calendar views end to end (#127), against a fake Google on this machine with two Google
@@ -117,7 +117,7 @@ test('switch views, spot a clash between two Accounts, add a second time zone, f
   await standInForTheBrowser(commander.app);
 
   // Two Google Accounts: Alex's own, then Sam's work one.
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-google');
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   await expect(accounts.getByTestId('account-name')).toHaveText(['Google · alex@gmail.test']);
@@ -125,6 +125,7 @@ test('switch views, spot a clash between two Accounts, add a second time zone, f
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   await expect(accounts.getByTestId('account-name')).toHaveCount(2);
 
+  await settingsPage(window, 'Projects');
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Titanlink');
   await newProject.getByLabel('Badge code').fill('TL');
@@ -181,7 +182,7 @@ test('switch views, spot a clash between two Accounts, add a second time zone, f
   );
 
   // A second time zone, from Settings → Calendar: a second column of hours, and its time in the pane.
-  await openSettings(window);
+  await openSettings(window, 'Calendar');
   const zone = window.getByRole('combobox', { name: 'Second time zone' });
   await zone.fill(SECOND_ZONE);
   await zone.press('Enter');

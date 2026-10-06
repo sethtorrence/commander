@@ -8,7 +8,7 @@ import {
 import { type ElectronApplication, expect, type Page, test } from '@playwright/test';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
 import { type FakeMicrosoft, SAM, startFakeMicrosoft } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Focus blocks and blocking time across Accounts end to end (#131), against a fake Google (sign-in and
@@ -118,6 +118,7 @@ function blockTimeForTodos(request: FakeRequest): FakeReply {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(page: Page) {
+  await settingsPage(page, 'Ares');
   const ares = page.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -137,11 +138,12 @@ test('Plan focus time → suggestions → Accept all → blocks in the Commander
   await standInForTheBrowser(commander.app, google.authorizeUrl);
 
   // Connect Google and the model, and choose where focus blocks go.
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel').getByTestId('source-google');
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   await expect(accounts.getByTestId('calendar-switches').getByRole('switch')).toHaveCount(1);
   await connectFakeModel(page);
+  await settingsPage(page, 'Calendar');
   const focusSettings = page.getByTestId('focus-time-settings');
   const where = focusSettings.getByRole('combobox', { name: 'Focus blocks go in' });
   await expect(where.locator('option')).toHaveCount(2);
@@ -303,7 +305,7 @@ test('a pair switched on: a personal event puts a private Busy on the work calen
   await standInForTheBrowser(commander.app, google.authorizeUrl, work.loginUrl);
 
   // Connect both Accounts.
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel');
   await accounts.getByTestId('source-google').getByRole('button', { name: 'Connect Google' }).click();
   await expect(
@@ -315,6 +317,7 @@ test('a pair switched on: a personal event puts a private Busy on the work calen
   ).toHaveCount(1);
 
   // Off by default; add "personal Google → work Outlook", and the other way round too.
+  await settingsPage(page, 'Calendar');
   const focusSettings = page.getByTestId('focus-time-settings');
   const addPair = async (from: string, to: string) => {
     await focusSettings.getByRole('combobox', { name: 'Busy events in' }).selectOption({ label: from });

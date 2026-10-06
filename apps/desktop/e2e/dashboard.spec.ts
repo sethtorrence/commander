@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear, viewerOf } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // The Dashboard end to end: Todos made in Commander and Linear issues from a fake Linear (never the
@@ -127,11 +127,12 @@ test('seeded Todos and Linear issues are ranked into bands; tick, clear, filter 
   await makeTodo(window, 'Book the dentist', 0);
 
   // Connect Linear and make a Project.
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(panel.getByTestId('account-synced')).toHaveText(/5 issues/);
+  await settingsPage(window, 'Projects');
   const form = window.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill('Longtail');
   await form.getByLabel('Badge code').fill('LT');

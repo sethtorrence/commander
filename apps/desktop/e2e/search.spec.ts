@@ -216,7 +216,7 @@ test('ENG-418 opens the issue in Linear, and Search in Linear opens the browser'
   const { app } = commander;
   const window = await commander.window();
   const openedExternally = await catchTheBrowser(app);
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();

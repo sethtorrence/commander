@@ -13,7 +13,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Answering invitations end to end (#129), against a fake Google, a fake Microsoft and a fake
@@ -98,6 +98,7 @@ function model(request: FakeRequest): FakeReply {
 }
 
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
+  await settingsPage(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -209,8 +210,9 @@ test('a clashing invitation arrives → Ares suggests declining it → Send → 
   const window = await commander.window();
   await standInForTheBrowser(app, [microsoft.loginUrl, google.authorizeUrl]);
 
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await connectFakeModel(window, server);
+  await settingsPage(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await panel.getByTestId('source-google').getByRole('button', { name: 'Connect Google' }).click();
   await expect(
@@ -283,7 +285,7 @@ test('answering from the Calendar row in Outlook: Accept, Decline, then Ctrl+Z s
   const { app } = commander;
   const window = await commander.window();
   await standInForTheBrowser(app, [microsoft.loginUrl]);
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const outlook = window.getByTestId('accounts-panel').getByTestId('source-outlook');
   await outlook.getByRole('button', { name: 'Connect Outlook' }).click();
   await expect(outlook.getByTestId('calendar-switches').getByRole('switch')).toHaveCount(1);

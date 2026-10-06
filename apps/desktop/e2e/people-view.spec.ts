@@ -10,7 +10,7 @@ import {
 } from '@commander/models/testing';
 import { expect, type Page, test } from '@playwright/test';
 import { type FakeGitHub, OCTOCAT, startFakeGitHub } from '../src/main/github/fake-github-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // The People view end to end (#122), against a fake GitHub and a fake OpenAI-compatible server
@@ -130,7 +130,7 @@ function environment() {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -144,6 +144,7 @@ async function connectFakeModel(window: Page) {
 
 // In Settings already (after the model).
 async function connectGitHub(window: Page) {
+  await settingsPage(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-github');
   await accounts.getByRole('button', { name: 'Connect GitHub' }).click();
   const code = window.getByTestId('github-user-code');

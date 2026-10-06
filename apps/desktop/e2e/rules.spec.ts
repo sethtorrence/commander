@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Rules end to end, with issues from a fake Linear on this machine (never the real one) arriving
@@ -64,11 +64,12 @@ test('create a Rule, preview and accept re-filing, see the Badges change, undo; 
     },
   });
   const window = await commander.window();
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel');
   await accounts.getByLabel('Linear personal API key').fill(API_KEY);
   await accounts.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(accounts.getByTestId('account-synced')).toHaveText(/3 issues/);
+  await settingsPage(window, 'Projects');
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Titanlink');
   await newProject.getByLabel('Badge code').fill('TL');

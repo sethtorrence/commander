@@ -68,7 +68,7 @@ function pointAtFakeGitHub() {
 }
 
 async function connectGitHub(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-github');
   await accounts.getByRole('button', { name: 'Connect GitHub' }).click();
   const code = window.getByTestId('github-user-code');

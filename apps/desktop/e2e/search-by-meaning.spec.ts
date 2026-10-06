@@ -33,7 +33,7 @@ test('the model gets ready in Settings → Ares, and Ctrl+K finds by meaning, ma
   const window = await commander.window();
   await addTodos(window, ['Throttle bursts on /sync', 'Rate the new coffee place', 'Renew the passport']);
 
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   await expect(status(window)).toHaveText('Ready. All 3 Items and memories are indexed', { timeout: 20_000 });
   await expect(choice(window, 'On')).toHaveAttribute('aria-checked', 'true');
 
@@ -54,7 +54,7 @@ test('switched off, search is by words alone, and stays off after a restart', as
   commander = await launchCommander();
   const window = await commander.window();
   await addTodos(window, ['Throttle bursts on /sync']);
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   await expect(status(window)).toHaveText(/Ready/, { timeout: 20_000 });
   await choice(window, 'Off').click();
   await expect(status(window)).toHaveText('Off. Search finds things by their words.');
@@ -68,7 +68,7 @@ test('switched off, search is by words alone, and stays off after a restart', as
   await commander.app.close();
   commander = await launchCommander({ userDataDir });
   const reopened = await commander.window();
-  await openSettings(reopened);
+  await openSettings(reopened, 'Ares');
   await expect(status(reopened)).toHaveText('Off. Search finds things by their words.');
   await expect(choice(reopened, 'Off')).toHaveAttribute('aria-checked', 'true');
 });

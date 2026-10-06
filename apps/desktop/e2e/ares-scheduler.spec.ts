@@ -7,7 +7,7 @@ import {
 } from '@commander/models/testing';
 import { type ElectronApplication, expect, type Locator, type Page, test } from '@playwright/test';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares's scheduler end to end (#132), against a fake Google (sign-in and the Calendar API, free/busy
@@ -108,6 +108,7 @@ function model(request: FakeRequest): FakeReply {
 }
 
 async function connectFakeModel(page: Page) {
+  await settingsPage(page, 'Ares');
   const ares = page.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -157,11 +158,12 @@ test('“call with Leo Tuesday at 2” → Ares’s card → booking link → Cr
   await standInForTheBrowser(commander.app, google.authorizeUrl);
 
   // Connect Google and the model; save the booking link in Settings → Calendar.
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel').getByTestId('source-google');
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   await expect(accounts.getByTestId('calendar-switches').getByRole('switch')).toHaveCount(1);
   await connectFakeModel(page);
+  await settingsPage(page, 'Calendar');
   const scheduling = page.getByTestId('scheduling-settings');
   await scheduling.getByRole('textbox', { name: 'Google booking link' }).fill(BOOKING_LINK);
   await scheduling.getByRole('button', { name: 'Save' }).click();
@@ -253,7 +255,7 @@ test('Find time… finds slots free for the User and a colleague, and says the o
   });
   const page = await commander.window();
   await standInForTheBrowser(commander.app, google.authorizeUrl);
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel').getByTestId('source-google');
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   await expect(accounts.getByTestId('calendar-switches').getByRole('switch')).toHaveCount(1);

@@ -14,6 +14,7 @@ import { errorText } from '../projects/change-with-undo';
 import { useOpenSection } from '../sections/section';
 import { goneNote, kindTag, sectionFor } from '../sections/todos/links';
 import { SettingsGroup } from '../settings/parts';
+import { SettingsLink } from '../settings/SettingsLink';
 
 /*
   What Ares knows (#74): everything Ares has learned and keeps, grouped by kind (Facts, Examples,
@@ -293,7 +294,11 @@ function MemoryRow({
           <span className={metaClass}>
             {rule ? 'Rule since' : memory.by === 'user' ? 'Added' : 'Learned'} {learnedOn(memory.learnedAt)}
           </span>
-          {rule && <span>Change it in Settings → Rules</span>}
+          {rule && (
+            <span>
+              Change it in <SettingsLink to={{ group: 'rules' }}>Settings → Rules</SettingsLink>
+            </span>
+          )}
           {memory.sources.length > 0 && (
             <span className="inline-flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               From{' '}

@@ -31,7 +31,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 }
 
 async function openTeamsAccounts(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const teams = window.getByTestId('accounts-panel').getByTestId('source-teams');
   await expect(teams.getByRole('button', { name: 'Connect Teams' })).toBeVisible();
   return teams;

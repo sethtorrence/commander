@@ -28,6 +28,7 @@ import {
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
 import type { ItemStoreClient } from '../../item-store/client';
 import { SettingRow, SettingsGroup } from '../parts';
+import { SettingsLink } from '../SettingsLink';
 import { OversightSettings } from './OversightSettings';
 import { RepoProjectsCell, RepoProjectsProvider } from './RepoProjects';
 
@@ -453,7 +454,8 @@ export function GitHubWatchPanel({
       {accounts !== null && accounts.length === 0 && (
         <SettingRow label="Repositories" description="Orgs and repos Commander watches for you.">
           <p className="m-0 text-note text-muted">
-            Connect a GitHub Account in Accounts above, then choose the orgs and repos to watch here.
+            Connect a GitHub Account in <SettingsLink to={{ group: 'accounts' }}>Accounts</SettingsLink>, then
+            choose the orgs and repos to watch here.
           </p>
         </SettingRow>
       )}

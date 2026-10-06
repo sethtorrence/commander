@@ -10,7 +10,7 @@ import {
 } from '@commander/models/testing';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { type FakeGitHub, OCTOCAT, startFakeGitHub } from '../src/main/github/fake-github-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Rules and Ares file GitHub Items, end to end (#118), against a fake GitHub on this machine (never
@@ -50,6 +50,7 @@ function model(request: FakeRequest): FakeReply {
 }
 
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
+  await settingsPage(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -62,6 +63,7 @@ async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
 }
 
 async function createProject(window: Page, name: string, code: string) {
+  await settingsPage(window, 'Projects');
   const form = window.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill(name);
   await form.getByLabel('Badge code').fill(code);
@@ -135,12 +137,13 @@ test('Map to Project… makes a repo Rule that files its Items; the editor offer
     env: { COMMANDER_TEST_GITHUB: JSON.stringify(config), PATH: emptyPath },
   });
   const window = await commander.window();
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await connectFakeModel(window, server);
   await createProject(window, 'Titanlink', 'TL');
   await createProject(window, 'Longtail', 'LT');
 
   // Connect GitHub: three Items sync, from three watched repos (docs has none).
+  await settingsPage(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-github');
   await accounts.getByRole('button', { name: 'Connect GitHub' }).click();
   const code = window.getByTestId('github-user-code');
@@ -149,6 +152,7 @@ test('Map to Project… makes a repo Rule that files its Items; the editor offer
   await expect(accounts.getByTestId('account-synced')).toHaveText(/· 3 items$/);
 
   // Settings → GitHub: Map to Project… on acme-org/api opens a repo Rule, its Project to choose.
+  await settingsPage(window, 'GitHub');
   const api = window.getByTestId('github-watch').getByTestId('github-repo-acme-org/api');
   await api.getByRole('button', { name: 'Map acme-org/api to a Project' }).click();
   const editor = window.getByRole('dialog', { name: 'New Rule' });
@@ -160,6 +164,7 @@ test('Map to Project… makes a repo Rule that files its Items; the editor offer
   await offer.getByRole('button', { name: 'Re-file 2 items' }).click();
   await expect(api.getByRole('img', { name: 'Titanlink', exact: true })).toBeVisible();
   // The one Rules list holds it.
+  await settingsPage(window, 'Projects');
   await expect(window.getByRole('list', { name: 'Rules' }).getByRole('listitem')).toHaveText([
     /repo is acme-org\/api/,
   ]);

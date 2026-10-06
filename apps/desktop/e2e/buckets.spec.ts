@@ -86,7 +86,7 @@ test('mail arrives Unsorted → v to Receipts → a Bucket Rule → re-sort prev
   const window = await commander.window();
   await standInForTheBrowser(commander.app);
 
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const google_ = window.getByTestId('accounts-panel').getByTestId('source-google');
   await google_.getByRole('button', { name: 'Connect Google' }).click();
   await expect(google_.getByTestId('account-synced')).toHaveText(/· 3 emails$/);
@@ -114,7 +114,7 @@ test('mail arrives Unsorted → v to Receipts → a Bucket Rule → re-sort prev
   await expect(strip(section).getByRole('tab', { name: /^Receipts/ })).toHaveText('Receipts1');
 
   // Settings → Rules: from domain is shop.test → Receipts.
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await window.getByRole('button', { name: 'New Rule', exact: true }).click();
   const editor = window.getByRole('dialog', { name: 'New Rule' });
   await editor.getByRole('combobox', { name: 'Target' }).selectOption({ label: 'A Bucket (email)' });

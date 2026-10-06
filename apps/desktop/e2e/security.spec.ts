@@ -10,7 +10,7 @@ test('Settings → Security shows the libsecret keyring protecting secrets', asy
   test.skip(!onLinuxWayland, 'needs a Linux Wayland session with a Secret Service keyring');
   const { app } = await launchCommander();
   const window = await app.firstWindow();
-  await openSettings(window);
+  await openSettings(window, 'Security');
 
   const panel = window.getByTestId('security-panel');
   await expect(panel).toBeVisible();

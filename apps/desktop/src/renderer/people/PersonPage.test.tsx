@@ -100,7 +100,7 @@ describe('a Person’s page', () => {
     const stopGitHub = onReveal('github', (id) => revealed.push(`github:${id}`));
     const priya = renderPage({ onOpenSettings, onBack, onOpenSection });
     fireEvent.click(await screen.findByTestId('person-manage'));
-    expect(onOpenSettings).toHaveBeenCalled();
+    expect(onOpenSettings).toHaveBeenCalledWith({ group: 'people' });
     expect(revealed).toContain(`settings:${priya?.id}`);
 
     fireEvent.click(await screen.findByTitle('Open acme/api#41'));

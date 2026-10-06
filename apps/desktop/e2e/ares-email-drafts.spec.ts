@@ -7,7 +7,7 @@ import {
 } from '@commander/models/testing';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares drafts replies in the User's own style, end to end (#143), against a fake Google and Gmail and a
@@ -53,6 +53,7 @@ const draftingCalls = (server: FakeOpenAIServer) =>
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
+  await settingsPage(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -146,8 +147,9 @@ test('a Needs reply thread → Suggested reply → Open in composer → edit →
     };
   });
 
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await connectFakeModel(window, server);
+  await settingsPage(window, 'Accounts');
   const googleSource = window.getByTestId('accounts-panel').getByTestId('source-google');
   await googleSource.getByRole('button', { name: 'Connect Google' }).click();
   await expect(googleSource.getByTestId('account-synced')).toHaveText(/· 4 emails$/);
@@ -219,7 +221,7 @@ test('a Needs reply thread → Suggested reply → Open in composer → edit →
   // Two drafting calls (the second asked for), on the Usage page under "Draft replies".
   expect(draftingCalls(server)).toHaveLength(2);
 
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const usage = window.getByTestId('usage-panel');
   await usage.getByRole('button', { name: 'Refresh' }).click();
   await expect(usage.getByTestId('usage-by-job')).toContainText('Draft replies');

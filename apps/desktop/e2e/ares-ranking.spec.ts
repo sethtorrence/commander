@@ -10,7 +10,7 @@ import {
 } from '@commander/models/testing';
 import { type ElectronApplication, expect, type Locator, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear, viewerOf } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares ranks the Dashboard, end to end: a fake Linear (never the real one) and a fake
@@ -124,7 +124,7 @@ async function suggestTodo(app: ElectronApplication, page: Page, text: string, t
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -217,6 +217,7 @@ test('sync, Ares’s bands and reasons, Add a suggested Todo, clear a row; at Of
   );
 
   // Connect Linear: the sync brings the issues, and Ares ranks after it.
+  await settingsPage(page, 'Accounts');
   const panel = page.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -273,7 +274,7 @@ test('sync, Ares’s bands and reasons, Add a suggested Todo, clear a row; at Of
   await expect(dashboard).toContainText('1 cleared');
 
   // Every ranking run is on the Usage page, under its name.
-  await openSettings(page);
+  await openSettings(page, 'Ares');
   const usage = page.getByTestId('usage-panel');
   await usage.getByRole('button', { name: 'Refresh' }).click();
   await expect(usage.getByTestId('usage-by-job')).toContainText('Rank the Dashboard');

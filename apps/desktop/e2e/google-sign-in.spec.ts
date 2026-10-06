@@ -33,7 +33,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 }
 
 async function openGoogleAccounts(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const google = window.getByTestId('accounts-panel').getByTestId('source-google');
   await expect(google).toBeAttached();
   return google;

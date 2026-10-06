@@ -1,6 +1,6 @@
 /*
   The read-only Markdown copy of the Daily Notes (#53): one `YYYY-MM-DD.md` per day, in a folder the
-  User chose in Settings → Notes, for Obsidian, grep and backups. The database stays the source of
+  User chose in Settings → Data, for Obsidian, grep and backups. The database stays the source of
   truth: nothing in the folder is ever read back.
 
   - Off until a folder is chosen. Choosing or changing it writes every day with something written in

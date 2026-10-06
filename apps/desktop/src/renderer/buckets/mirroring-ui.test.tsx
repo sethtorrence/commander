@@ -172,8 +172,7 @@ describe('Mirror Buckets in Settings → Accounts', () => {
     store.bucketMirror.set({ account: gmail.id, source: 'gmail', enabled: true });
     store.autonomy.saveSettings({ ...store.autonomy.settings(), actions: { [MIRROR_BUCKETS]: 'off' } });
     renderFor(gmail);
-    expect(
-      await screen.findByText(/Paused: Mirror Buckets is below Auto in Settings → Autonomy/),
-    ).toBeTruthy();
+    const paused = await screen.findByText(/Paused: Mirror Buckets is below Auto in/);
+    expect(paused.textContent).toContain('below Auto in Settings → Autonomy, so nothing is written');
   });
 });

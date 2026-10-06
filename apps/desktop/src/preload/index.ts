@@ -114,7 +114,7 @@ const commander = {
       ipcRenderer.off(ipc.openItem, handler);
     };
   },
-  // Settings → Notes → Markdown copy folder. The folder comes only from the system picker, which the
+  // Settings → Data → Markdown copy folder. The folder comes only from the system picker, which the
   // main process shows; resolves with the refusal's reason, if any.
   markdownCopy: (request: MarkdownCopyRequest): Promise<MarkdownCopyResponse> =>
     ipcRenderer.invoke(ipc.markdownCopy, request),

@@ -3,7 +3,7 @@ import type { AddressInfo } from 'node:net';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { FAKE_LABELS, FAKE_STATES } from '../src/main/linear/fake-linear-issues';
 import { ACME, type FakeLinear, startFakeLinear, viewerOf } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Send to Linear end to end, against a fake Linear on this machine (never the real one). A Block
@@ -73,11 +73,12 @@ async function setUp(): Promise<Page> {
     },
   });
   const page = await commander.window();
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   const panel = page.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(panel.getByTestId('account-synced')).toHaveText(/1 issue/);
+  await settingsPage(page, 'Projects');
   const form = page.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill('Longtail');
   await form.getByLabel('Badge code').fill('LT');

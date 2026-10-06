@@ -134,7 +134,7 @@ async function environment(extra: Record<string, string> = {}) {
 }
 
 async function connect(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();

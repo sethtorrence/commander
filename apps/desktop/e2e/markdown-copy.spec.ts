@@ -5,7 +5,7 @@ import { type ElectronApplication, expect, type Page, test } from '@playwright/t
 import { openSettings, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
-// The read-only Markdown copy of the Daily Notes (#53): Settings → Notes → Markdown copy folder, chosen
+// The read-only Markdown copy of the Daily Notes (#53): Settings → Data → Markdown copy folder, chosen
 // with the system folder picker (stood in for here, from the main process), and the files the Core
 // writes there.
 
@@ -102,7 +102,7 @@ test('choosing a folder writes each day; edits rewrite it within seconds, over a
   writeFileSync(join(vault, 'My own note.md'), 'mine');
 
   // Nothing is written until a folder is chosen.
-  await openSettings(page);
+  await openSettings(page, 'Data');
   const setting = page.getByTestId('markdown-copy');
   await expect(setting.getByTestId('markdown-copy-folder')).toHaveText('None chosen');
   await expect(setting.getByTestId('markdown-copy-state')).toHaveText('Off');
@@ -150,7 +150,7 @@ test('choosing a folder writes each day; edits rewrite it within seconds, over a
   await expect(sheet.locator('[data-block-text]').first()).toHaveText('Written today, and again');
 
   // Turned off, nothing more is written.
-  await openSettings(page);
+  await openSettings(page, 'Data');
   await setting.getByRole('button', { name: 'Turn off' }).click();
   await expect(setting.getByTestId('markdown-copy-state')).toHaveText('Off');
 });
@@ -160,7 +160,7 @@ test('a folder that can’t be written shows a notice in Settings, and editing c
   await page.evaluate(() =>
     window.commander.itemStore({ op: 'save-daily-template', template: { blocks: [] } }),
   );
-  await openSettings(page);
+  await openSettings(page, 'Data');
   const setting = page.getByTestId('markdown-copy');
   await pickerChooses(commander.app, vault);
   await setting.getByRole('button', { name: 'Choose folder…' }).click();
@@ -185,7 +185,7 @@ test('a folder that can’t be written shows a notice in Settings, and editing c
     )
     .toContain('Still saved');
 
-  await openSettings(page);
+  await openSettings(page, 'Data');
   await expect(setting.getByTestId('markdown-copy-problem')).toContainText(vault, { timeout: 15_000 });
   await expect(setting.getByTestId('markdown-copy-problem')).toContainText('can’t be found');
   await expect(setting.getByTestId('markdown-copy-state')).toHaveText('Not writing');
@@ -193,7 +193,7 @@ test('a folder that can’t be written shows a notice in Settings, and editing c
 
 test('Commander’s own data folder is refused, with the reason', async () => {
   const page = await commander.window();
-  await openSettings(page);
+  await openSettings(page, 'Data');
   const setting = page.getByTestId('markdown-copy');
   await pickerChooses(commander.app, commander.userDataDir);
   await setting.getByRole('button', { name: 'Choose folder…' }).click();

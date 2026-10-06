@@ -6,7 +6,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Outlook Calendar sync end to end, against a fake Microsoft identity platform and Graph on this
@@ -162,7 +162,7 @@ test('connect Outlook → events in the Agenda → open one in Outlook on the we
   const openedExternally = await standInForTheBrowser(app, [microsoft.loginUrl]);
 
   // Connect, and the Account's calendars are listed: the default and the User's own on, Dana's off.
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const outlook = window.getByTestId('accounts-panel').getByTestId('source-outlook');
   await outlook.getByRole('button', { name: 'Connect Outlook' }).click();
   const switches = outlook.getByTestId('calendar-switches');
@@ -179,6 +179,7 @@ test('connect Outlook → events in the Agenda → open one in Outlook on the we
   expect(microsoft.calendarPrefers.length).toBeGreaterThan(0);
   expect(microsoft.calendarPrefers.every((prefer) => prefer.includes('IdType="ImmutableId"'))).toBe(true);
 
+  await settingsPage(window, 'Projects');
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Titanlink');
   await newProject.getByLabel('Badge code').fill('TL');
@@ -262,7 +263,7 @@ test('connect Outlook → events in the Agenda → open one in Outlook on the we
 
   // Switching Dana's shared calendar on in Settings syncs it, and its event joins the Agenda.
   await window.keyboard.press('Escape');
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await shared.click();
   await expect(shared).toHaveAttribute('aria-checked', 'true');
   await tab(window, 'Calendar').click();
@@ -309,7 +310,7 @@ test('with a Google Account too, the Agenda shows both Accounts’ events togeth
   const window = await app.firstWindow();
   await standInForTheBrowser(app, [microsoft.loginUrl, google.authorizeUrl]);
 
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await panel.getByTestId('source-outlook').getByRole('button', { name: 'Connect Outlook' }).click();
   await expect(

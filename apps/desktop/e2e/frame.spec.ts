@@ -1,5 +1,5 @@
 import { expect, type Page, test } from '@playwright/test';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { launchCommander } from './launch-commander';
 
 const SECTIONS = ['Dashboard', 'Notes', 'Todos', 'Linear', 'Email', 'Calendar', 'GitHub', 'Teams', 'Ares'];
@@ -104,7 +104,7 @@ test('typing digits into a field or an editor never switches Sections', async ()
   const commander = await launchCommander();
   const window = await commander.window();
 
-  await openSettings(window);
+  await openSettings(window, 'General');
   const hex = window.getByRole('textbox', { name: 'Hex colour' });
   await hex.fill('');
   await hex.pressSequentially('#12345');
@@ -148,10 +148,61 @@ test('Settings opens from the header and with the comma key, and Esc goes back',
   await window.getByRole('button', { name: 'Close Settings' }).click();
   await expectOpen(window, 'Linear');
 
-  // The design gallery is reachable from Settings.
+  // The design gallery is for development builds: a built Commander has no way to it in Settings.
   await window.keyboard.press(',');
-  await window.getByRole('link', { name: /design gallery/i }).click();
-  await expect(window.getByTestId('design-gallery')).toBeVisible();
+  await settingsPage(window, 'General');
+  await expect(window.getByRole('heading', { name: 'Appearance' })).toBeVisible();
+  await expect(window.getByRole('link', { name: /design gallery/i })).toHaveCount(0);
+
+  await commander.close();
+});
+
+test('Settings in pages: the sidebar, j and k, the palette, and links that open a page at a group', async () => {
+  const commander = await launchCommander();
+  const window = await commander.window();
+  const pages = window.getByRole('navigation', { name: 'Settings pages' });
+  const current = pages.locator('[aria-current="page"]');
+
+  // It opens on General; choosing a page shows only that page.
+  await openSettings(window);
+  await expect(current).toHaveText(/General$/);
+  await expect(window.getByTestId('start-at-login')).toBeVisible();
+  await settingsPage(window, 'Security');
+  await expect(window.getByTestId('security-panel')).toBeVisible();
+  await expect(window.getByTestId('start-at-login')).toBeHidden();
+
+  // The keyboard: j and k step through the pages, and the arrows move along the sidebar.
+  await window.keyboard.press('j');
+  await expect(current).toHaveText(/Diagnostics$/);
+  await window.keyboard.press('k');
+  await window.keyboard.press('k');
+  await expect(current).toHaveText(/Data$/);
+  await current.focus();
+  await window.keyboard.press('ArrowUp');
+  await expect(current).toHaveText(/Teams$/);
+  await expect(current).toBeFocused();
+
+  // Settings opens again where it was left.
+  await window.keyboard.press('Escape');
+  await expect(window.getByTestId('settings')).toBeHidden();
+  await window.keyboard.press(',');
+  await expect(current).toHaveText(/Teams$/);
+  await window.keyboard.press('Escape');
+
+  // The palette lists the pages.
+  await window.keyboard.press('Control+k');
+  await window.getByRole('combobox', { name: 'Search Commander' }).fill('settings acc');
+  await expect(window.getByRole('option', { name: /Accounts/ })).toBeVisible();
+  await window.keyboard.press('Enter');
+  await expect(window.getByTestId('settings')).toBeVisible();
+  await expect(current).toHaveText(/Accounts$/);
+  await window.keyboard.press('Escape');
+
+  // An empty Section's way to Settings opens it at Accounts.
+  await tab(window, 'Linear').click();
+  await window.getByTestId('section-linear').getByRole('button', { name: 'Settings → Accounts' }).click();
+  await expect(current).toHaveText(/Accounts$/);
+  await expect(window.getByTestId('accounts-panel')).toBeInViewport();
 
   await commander.close();
 });

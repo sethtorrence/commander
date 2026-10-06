@@ -7,7 +7,7 @@ import {
 } from '@commander/models/testing';
 import { expect, type Page, test } from '@playwright/test';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Meeting prep end to end (#130), against a fake Google and a fake OpenAI-compatible server standing in
@@ -78,7 +78,7 @@ test.afterEach(async () => {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -152,6 +152,7 @@ test('a meeting 30 minutes away → prep under its chip → U says it is ready �
       if (url.startsWith(authorize)) await fetch(url);
     };
   }, google.authorizeUrl);
+  await settingsPage(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel').getByTestId('source-google');
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   await expect(accounts.getByTestId('calendar-switches').getByRole('switch')).toHaveCount(1);
@@ -226,7 +227,7 @@ test('a meeting 30 minutes away → prep under its chip → U says it is ready �
   );
 
   // Every run is on the Usage page, under its name.
-  await openSettings(page);
+  await openSettings(page, 'Ares');
   const usage = page.getByTestId('usage-panel');
   await usage.getByRole('button', { name: 'Refresh' }).click();
   await expect(usage.getByTestId('usage-by-job')).toContainText('Prepare for meetings');

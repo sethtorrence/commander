@@ -131,7 +131,7 @@ test('Start at login is off by default and toggles an autostart entry', async ()
   const entry = join(config, 'autostart', 'commander.desktop');
   const commander = await launchCommander({ env: { XDG_CONFIG_HOME: config } });
   const window = await commander.app.firstWindow();
-  await openSettings(window);
+  await openSettings(window, 'General');
   const toggle = window.getByTestId('start-at-login');
 
   await expect(toggle).toBeEnabled();

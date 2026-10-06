@@ -9,7 +9,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings } from './frame';
+import { openSettings, settingsPage } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares's Updates say what, why and what to do (#186), end to end, with a fake Linear and a fake
@@ -91,10 +91,11 @@ async function standInForTheBrowser(app: ElectronApplication) {
 
 // Five messages from others make a busy Chat; Linear and Teams connected.
 async function connect(page: Page) {
-  await openSettings(page);
+  await openSettings(page, 'Ares');
   await page.getByTestId('ares-settings').getByTestId('busy-chat-messages').fill('5');
   await page.getByTestId('model-settings-save').click();
   await expect(page.getByTestId('model-settings-saved')).toBeVisible();
+  await settingsPage(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel');
   await accounts.getByLabel('Linear personal API key').fill(API_KEY);
   await accounts.getByRole('button', { name: 'Connect', exact: true }).click();

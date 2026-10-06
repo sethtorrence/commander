@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ElectronApplication, expect, type Page, test } from '@playwright/test';
 import { type FakeGitHub, OCTOCAT, startFakeGitHub } from '../src/main/github/fake-github-server';
-import { openSettings } from './frame';
+import { openSettings, settingsPage } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Settings → GitHub end to end (#113), against a fake GitHub on this machine (never the real one):
@@ -43,7 +43,7 @@ const openedUrls = (app: ElectronApplication) =>
   app.evaluate(() => (globalThis as unknown as { openedUrls: string[] }).openedUrls);
 
 async function connectWithTheApp(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-github');
   await accounts.getByRole('button', { name: 'Connect GitHub' }).click();
   const code = window.getByTestId('github-user-code');
@@ -95,6 +95,7 @@ test('Settings → GitHub lists what the app reaches, starts with the repos work
   await connectWithTheApp(page);
 
   // Installed orgs and their repos, personal repos, and an org without the app. Archived repos never.
+  await settingsPage(page, 'GitHub');
   const acme = watchPanel(page).getByTestId('github-org-acme-org');
   await expect(acme.getByRole('checkbox', { name: /^acme-org\// })).toHaveCount(2);
   await expect(repoBox(page, 'acme-org/api')).toBeVisible();
@@ -194,7 +195,7 @@ test('Settings → GitHub lists what the app reaches, starts with the repos work
   // Restart on the same data: the choices are as left.
   commander = await launchCommander({ userDataDir: first.userDataDir, env });
   page = await commander.window();
-  await openSettings(page);
+  await openSettings(page, 'GitHub');
   await expect(repoBox(page, 'acme-org/web')).toBeChecked();
   await expect(repoBox(page, 'acme-org/made-later')).toBeChecked();
   await expect(repoBox(page, 'acme-org/api')).not.toBeChecked();
@@ -209,7 +210,7 @@ test('Settings → GitHub lists what the app reaches, starts with the repos work
 test('a classic-token Account gets the same page from its own lists', async () => {
   commander = await launchCommander({ env: pointAtFakeGitHub({ app: false }) });
   const page = await commander.window();
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   const accounts = page.getByTestId('accounts-panel').getByTestId('source-github');
   await accounts
     .getByLabel('GitHub classic personal access token')
@@ -218,6 +219,7 @@ test('a classic-token Account gets the same page from its own lists', async () =
   await expect(accounts.getByTestId('account-name')).toHaveText(['octocat']);
 
   // Every org the token reaches, with its repos, whether or not the app is installed there.
+  await settingsPage(page, 'GitHub');
   await expect(repoBox(page, 'acme-org/api')).toBeChecked();
   await expect(repoBox(page, 'initech/secret-plans')).not.toBeChecked();
   await expect(repoBox(page, 'octocat/dotfiles')).toBeChecked();

@@ -8,7 +8,7 @@ import { HOSTILE } from '../../core/src/email-reader/hostile-corpus';
 import { sanitizeEmailHtml } from '../../core/src/email-reader/sanitize';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
 import { type FakeMicrosoft, SAM, startFakeMicrosoft } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // The sandboxed HTML reader end to end (#134), against a fake Google (and Microsoft) on this machine
@@ -98,6 +98,7 @@ const openedInBrowser = (app: ElectronApplication) =>
 
 async function connect(window: Page, source: 'google' | 'outlook') {
   if (!(await window.getByTestId('settings').isVisible())) await openSettings(window);
+  await settingsPage(window, 'Accounts');
   const section = window.getByTestId('accounts-panel').getByTestId(`source-${source}`);
   await section
     .getByRole('button', { name: source === 'google' ? 'Connect Google' : 'Connect Outlook' })
@@ -159,6 +160,7 @@ test('hostile email: no script runs, the window is untouched, nothing leaves unt
   await connect(window, 'google');
 
   // Gmail Accounts show images by default: ask first, so they are held back.
+  await settingsPage(window, 'Email');
   const askFirst = window.getByRole('switch', {
     name: new RegExp(`^Ask before showing images for .*${ALEX.email}`),
   });
@@ -418,7 +420,7 @@ test('inline images and attachments: shown from the message’s own parts, saved
   // Removing the Account removes its cached parts.
   const cachedBefore = readdirSync(parts);
   expect(cachedBefore.length).toBe(1);
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const section = window.getByTestId('accounts-panel').getByTestId('source-google');
   await section
     .getByRole('button', { name: /Remove/ })
@@ -477,7 +479,7 @@ test('Outlook Accounts hold images back: Show images and Always show from this s
   await expect(reader(window).getByTestId('email-images-bar')).toHaveCount(0);
 
   // The trusted sender is listed in Settings → Email, and can be removed.
-  await openSettings(window);
+  await openSettings(window, 'Email');
   const settings = window.getByTestId('email-settings');
   await expect(settings.getByTestId('trusted-sender')).toHaveText(/news@shop\.test/);
   await settings.getByRole('button', { name: 'Stop always showing images from news@shop.test' }).click();

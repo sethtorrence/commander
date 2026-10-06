@@ -2,6 +2,7 @@ import { cn, SectionHeader, type SectionHeaderProps, Sheet } from '@commander/ui
 import { type ComponentType, createContext, type ReactNode, useContext, useEffect, useMemo } from 'react';
 import { partNumber } from '../frame/calendar';
 import { useNow } from '../frame/use-now';
+import type { SettingsPlace } from '../settings/pages';
 
 /*
   What a Section is to the frame. Each Section lives in its own folder (sections/<id>/) and exports
@@ -9,8 +10,9 @@ import { useNow } from '../frame/use-now';
   number key. The frame keeps every Section mounted (hidden when another is open), wraps it in a
   shortcut scope named after its id, and passes nothing else: inside, `useSection()` says where it
   sits, `useShortcuts()` adds keys that work only while it is open, and <SectionSheet> draws its
-  sheet with the title strip and part number. `useTabCount()` puts a count on its tab, and
-  `useOpenSection()` opens another Section (to show a linked Item).
+  sheet with the title strip and part number. `useTabCount()` puts a count on its tab,
+  `useOpenSection()` opens another Section (to show a linked Item), and `useOpenSettings()` opens
+  Settings at a page or group.
 */
 export interface SectionDefinition {
   /** Stable id, also the shortcut scope: "todos". */
@@ -43,6 +45,8 @@ export function SectionProvider({ place, children }: { place: SectionPlace; chil
 /** What a Section may ask of the frame. */
 export interface FrameControls {
   openSection(id: string): void;
+  /** Opens Settings, at a page or a group when given (settings/pages.ts). */
+  openSettings?(place?: SettingsPlace): void;
   /** The count on a Section's notebook tab, or null for none. */
   setTabCount(sectionId: string, count: number | null): void;
 }
@@ -66,6 +70,12 @@ export function useTabCount(count: number | null): void {
 export function useOpenSection(): (id: string) => void {
   const controls = useContext(FrameControlsContext);
   return useMemo(() => (id: string) => controls?.openSection(id), [controls]);
+}
+
+/** Opens Settings, at a page or group when given. Does nothing outside the frame. */
+export function useOpenSettings(): (place?: SettingsPlace) => void {
+  const controls = useContext(FrameControlsContext);
+  return useMemo(() => (place?: SettingsPlace) => controls?.openSettings?.(place), [controls]);
 }
 
 // The header's slot across C–E (see Header's slotRef), for the open Section to portal its own strip into.

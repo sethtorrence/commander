@@ -7,6 +7,7 @@ import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
 import { SideCard } from '../../projects/page/SideCard';
+import { SettingsLink } from '../../settings/SettingsLink';
 import { useShortcuts } from '../../shortcuts/react';
 import type { AutonomyClient } from '../ares/activity';
 import { supersededNote } from '../linear/editing';
@@ -411,7 +412,8 @@ export function CalendarSheet({
         )}
         {state.loaded && state.accounts.length === 0 && total === 0 && view === 'agenda' ? (
           <EmptySheet>
-            No calendar connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).
+            No calendar connected yet. Connect a Google or Outlook Account in{' '}
+            <SettingsLink to={{ group: 'accounts' }}>Settings → Accounts</SettingsLink>.
           </EmptySheet>
         ) : (
           <PickBadgeProvider value={badges.open}>
@@ -605,7 +607,8 @@ export function CalendarSheet({
               </ul>
             ) : (
               <p className="m-0 px-2.5 py-2 text-note text-faint">
-                No calendars yet. Calendars switched on in Settings → Accounts show here.
+                No calendars yet. Calendars switched on in{' '}
+                <SettingsLink to={{ group: 'accounts' }}>Settings → Accounts</SettingsLink> show here.
               </p>
             )}
           </SideCard>

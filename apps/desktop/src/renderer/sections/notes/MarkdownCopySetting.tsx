@@ -13,7 +13,7 @@ const STATE_LABELS: Record<MarkdownCopyStatus['state'], string> = {
 const time = (at: number) => new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
 /**
- * Settings → Notes → Markdown copy folder: where the Core writes a read-only `YYYY-MM-DD.md` of each
+ * Settings → Data → Markdown copy folder: where the Core writes a read-only `YYYY-MM-DD.md` of each
  * day. The folder comes from the system picker (shown by the main process); a failing folder shows a
  * notice here, and never holds up editing.
  */

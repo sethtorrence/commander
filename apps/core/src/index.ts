@@ -167,7 +167,7 @@ const compose = setUpCompose({
 compose.sweep();
 setInterval(() => compose.sweep(), 60 * 60 * 1000);
 
-// The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Notes.
+// The read-only Markdown copy of the Daily Notes, in the folder chosen in Settings → Data.
 const markdownCopy = setUpMarkdownCopy({
   store: itemStore,
   dataDir,

@@ -441,7 +441,7 @@ export type ItemStore = {
   // A Project as a Link (or a `[[` link token) shows it: the one it was merged into, if it was. Null
   // for no such Project.
   projectRef(projectId: string): ProjectRef | null;
-  // Settings → Notes → Markdown copy folder (markdown-copy-folder.ts), in the same database.
+  // Settings → Data → Markdown copy folder (markdown-copy-folder.ts), in the same database.
   markdownCopyFolder: MarkdownCopyFolderStore;
   // Ares's queue for the Update, the Updates he gave, and where the producers stand (updates.ts).
   updates: UpdateStore;

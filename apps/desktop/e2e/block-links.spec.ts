@@ -21,7 +21,7 @@ const dayFrom = (page: Page, offset = 0) =>
   }, offset);
 
 async function createProject(window: Page, name: string, code: string) {
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   const form = window.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill(name);
   await form.getByLabel('Badge code').fill(code);

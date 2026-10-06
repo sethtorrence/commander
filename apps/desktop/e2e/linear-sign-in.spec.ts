@@ -41,7 +41,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 }
 
 async function openAccounts(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await expect(panel).toBeVisible();
   return panel;

@@ -56,7 +56,7 @@ test.afterEach(async () => {
 });
 
 async function connect(page: Page) {
-  await openSettings(page);
+  await openSettings(page, 'Accounts');
   const panel = page.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();

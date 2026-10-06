@@ -7,7 +7,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // The Teams Section end to end. Chats come from a fake Microsoft Graph on this machine (never the real
@@ -129,7 +129,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 }
 
 async function connectTeams(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const teams = window.getByTestId('accounts-panel').getByTestId('source-teams');
   await teams.getByRole('button', { name: 'Connect Teams' }).click();
   await expect(teams.getByTestId('account-status')).toHaveText('Connected');
@@ -153,6 +153,7 @@ test('filter the Chats, open one, file it, mute another and exclude a third', as
   const window = await commander.window();
   const openedExternally = await standInForTheBrowser(commander.app);
   await connectTeams(window);
+  await settingsPage(window, 'Projects');
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Titanlink');
   await newProject.getByLabel('Badge code').fill('TL');
@@ -270,7 +271,7 @@ test('filter the Chats, open one, file it, mute another and exclude a third', as
   await expect(rows(section)).toHaveCount(3);
 
   // Settings → Teams lists it; Include again brings it back with the next check.
-  await openSettings(window);
+  await openSettings(window, 'Teams');
   const excluded = window.getByRole('region', { name: 'Excluded chats', exact: true });
   await expect(excluded).toContainText('Daily standup');
   await expect(window.getByRole('region', { name: 'Muted chats', exact: true })).toContainText('Social');

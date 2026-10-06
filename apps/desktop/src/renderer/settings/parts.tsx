@@ -1,7 +1,12 @@
 import { cn } from '@commander/ui';
 import { type ComponentProps, type ReactNode, useId } from 'react';
+import { settingsGroupId } from './pages';
 
-/** A numbered group on the Settings sheet, headed like the prototype's group headers (.gh). */
+/**
+ * A numbered group on the Settings sheet, headed like the prototype's group headers (.gh). Its title
+ * names it for links into Settings (`data-settings-group`, see pages.ts), and it scrolls to just
+ * under the tabs.
+ */
 export function SettingsGroup({
   no,
   title,
@@ -12,7 +17,12 @@ export function SettingsGroup({
 }: Omit<ComponentProps<'section'>, 'title'> & { no: string; title: string; note?: ReactNode }) {
   const id = useId();
   return (
-    <section aria-labelledby={id} className={cn('[&+&]:mt-5.5 [&+&>h2]:border-t', className)} {...props}>
+    <section
+      aria-labelledby={id}
+      data-settings-group={settingsGroupId(title)}
+      className={cn('scroll-mt-(--body) [&+&]:mt-5.5 [&+&>h2]:border-t', className)}
+      {...props}
+    >
       <h2
         id={id}
         className="relative m-0 flex h-8 items-center gap-2.5 border-b border-line pr-5 pl-13 font-sans text-[12px] leading-none font-bold uppercase tracking-heading text-ink font-stretch-(--stretch-wider)"

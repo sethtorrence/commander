@@ -1,4 +1,4 @@
-// Settings → Notes → Markdown copy folder, in the main process. The window asks for the system folder
+// Settings → Data → Markdown copy folder, in the main process. The window asks for the system folder
 // picker (or to turn the copy off); the folder chosen there is checked here and handed to the Core,
 // which writes the copy. The window never names a folder, so it can't make Commander write anywhere.
 import { realpathSync, statSync } from 'node:fs';

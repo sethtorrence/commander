@@ -89,7 +89,7 @@ function syncActivity(page: Page) {
 }
 
 async function connectTeams(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const teams = window.getByTestId('accounts-panel').getByTestId('source-teams');
   await teams.getByRole('button', { name: 'Connect Teams' }).click();
   await expect(teams.getByTestId('account-sync').getByTestId('account-synced')).toHaveText(/· 1 chat$/);

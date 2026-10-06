@@ -8,6 +8,7 @@ import { usePeople } from '../../people/context';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
+import { SettingsLink } from '../../settings/SettingsLink';
 import { useShortcuts } from '../../shortcuts/react';
 import { syncLine } from '../linear/linear-issues';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
@@ -289,7 +290,10 @@ export function GitHubSheet({
         </p>
       )}
       {!listShown ? null : state.loaded && state.accounts.length === 0 && !state.allWork.length ? (
-        <EmptySheet>No GitHub Account connected yet. Connect one in Settings → Accounts (,).</EmptySheet>
+        <EmptySheet>
+          No GitHub Account connected yet. Connect one in{' '}
+          <SettingsLink to={{ group: 'accounts' }}>Settings → Accounts</SettingsLink>.
+        </EmptySheet>
       ) : (
         <PickBadgeProvider value={badges.open}>
           <div className={cn('flex-1', detailOpen && 'grid grid-cols-[minmax(0,9fr)_minmax(0,7fr)]')}>

@@ -106,7 +106,7 @@ describe('where Open goes', () => {
     expect(openTarget(line())).toEqual({ kind: 'item', sectionId: 'notes', itemId: 'block-1' });
   });
 
-  it('to Ares’s activity page for several suggestions, and to Settings for the cap or an Autonomy change', () => {
+  it('to Ares’s activity page for several suggestions, and to Settings at the cap or Autonomy', () => {
     const several = {
       kind: 'suggestions' as const,
       action: 'a',
@@ -126,7 +126,19 @@ describe('where Open goes', () => {
           section: 'ares',
         }),
       ),
-    ).toEqual({ kind: 'settings' });
+    ).toEqual({ kind: 'settings', group: 'ares' });
+    const change = {
+      kind: 'autonomy-change' as const,
+      action: 'a',
+      name: 'A',
+      actionKind: 'organise' as const,
+      section: null,
+      from: 'ask' as const,
+      to: 'auto-when-sure' as const,
+      accepted: 20,
+      lastProposalId: 9,
+    };
+    expect(openTarget(line({ about: change, itemIds: [] }))).toEqual({ kind: 'settings', group: 'autonomy' });
   });
 
   it('to the Chat a busy-Chat summary is about, in the Teams Section (#109)', () => {
@@ -231,7 +243,7 @@ describe('Ares watching Linear', () => {
       itemIds: [],
       section: 'linear',
     });
-    expect(openTarget(reconnect)).toEqual({ kind: 'settings', part: 'accounts' });
+    expect(openTarget(reconnect)).toEqual({ kind: 'settings', group: 'accounts' });
     expect(acceptLabel(reconnect)).toBeNull();
   });
 });
@@ -299,14 +311,14 @@ describe('Ares sorting email (#141)', () => {
       },
     });
     expect(acceptLabel(rule)).toBe('Make the Rule…');
-    expect(openTarget(rule)).toEqual({ kind: 'settings' });
+    expect(openTarget(rule)).toEqual({ kind: 'settings', group: 'rules' });
     const bucket = line({
       section: 'email',
       itemIds: [],
       about: { kind: 'bucket-suggestion', name: 'Investors', description: 'From investors', reason: 'x' },
     });
     expect(acceptLabel(bucket)).toBe('Add Bucket…');
-    expect(openTarget(bucket)).toEqual({ kind: 'settings' });
+    expect(openTarget(bucket)).toEqual({ kind: 'settings', group: 'buckets' });
   });
 });
 

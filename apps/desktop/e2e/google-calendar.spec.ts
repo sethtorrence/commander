@@ -5,7 +5,7 @@ import {
   type FakeGoogle,
   startFakeGoogle,
 } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Google Calendar sync end to end, against a fake Google (sign-in and the Calendar API) on this
@@ -159,7 +159,7 @@ test('connect Google → events in the Agenda → open one → hand it to Google
   const openedExternally = await standInForTheBrowser(app, google.authorizeUrl);
 
   // Connect, and the Account's calendars are listed: the primary and owned ones on, holidays off.
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-google');
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   const switches = accounts.getByTestId('calendar-switches');
@@ -174,6 +174,7 @@ test('connect Google → events in the Agenda → open one → hand it to Google
   // The subscribed calendar is never read until switched on.
   expect(google.calendarRequests.some((request) => request.includes(HOLIDAYS))).toBe(false);
 
+  await settingsPage(window, 'Projects');
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Titanlink');
   await newProject.getByLabel('Badge code').fill('TL');
@@ -257,7 +258,7 @@ test('connect Google → events in the Agenda → open one → hand it to Google
   await window.keyboard.press('Escape');
 
   // Switching the holidays calendar on in Settings syncs it, and its event joins the Agenda.
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await holidays.click();
   await expect(holidays).toHaveAttribute('aria-checked', 'true');
   await tab(window, 'Calendar').click();

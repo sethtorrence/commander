@@ -81,7 +81,7 @@ test('the template edited in Settings makes the next day, at midnight while runn
   const todayBefore = await shownBlocks(todaySheet);
 
   // Settings → Notes → Daily template, in the same outliner: add and nest, remove, retype.
-  await openSettings(window);
+  await openSettings(window, 'Notes');
   const editor = window.getByTestId('daily-template');
   await expect.poll(() => outlineOf(editor)).toEqual(DEFAULTS);
   await block(editor, 'Morning').click();

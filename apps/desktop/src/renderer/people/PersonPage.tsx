@@ -6,6 +6,7 @@ import type { ItemChanges } from '../item-store/changes';
 import { SideCard } from '../projects/page/SideCard';
 import { type CardTarget, type ParagraphState, PersonCard } from '../sections/github/PersonCard';
 import { type PeopleViewClient, spanOf } from '../sections/github/people';
+import type { SettingsPlace } from '../settings/pages';
 import { useShortcuts } from '../shortcuts/react';
 import { usePeople } from './context';
 import { PEOPLE_SETTINGS } from './PeopleSettings';
@@ -26,7 +27,7 @@ export interface PersonPageProps {
   /** Where `Esc` and the back control go: where the User came from. */
   back: { label: string; onClick: () => void };
   onOpenSection: (sectionId: string) => void;
-  onOpenSettings: () => void;
+  onOpenSettings: (place?: SettingsPlace) => void;
   changes?: ItemChanges;
   now?: () => number;
 }
@@ -110,7 +111,7 @@ export function PersonPage({
     );
   };
   const manage = () => {
-    onOpenSettings();
+    onOpenSettings({ group: 'people' });
     requestReveal(PEOPLE_SETTINGS, personId);
   };
 

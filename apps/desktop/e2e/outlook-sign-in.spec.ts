@@ -31,7 +31,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 }
 
 async function openOutlookAccounts(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const outlook = window.getByTestId('accounts-panel').getByTestId('source-outlook');
   await expect(outlook).toBeAttached();
   return outlook;

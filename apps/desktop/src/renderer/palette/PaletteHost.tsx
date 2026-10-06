@@ -14,6 +14,7 @@ import { type EmailAccountSummary, emailAccountsIn } from '../sections/email/ema
 import { linearAccountsIn } from '../sections/linear/linear-issues';
 import { dayKey } from '../sections/notes/days';
 import { sectionFor } from '../sections/todos/links';
+import { SETTINGS_PAGES, type SettingsPlace } from '../settings/pages';
 import { useShortcuts } from '../shortcuts/react';
 import { useCommandRegistry, useCommands } from './commands';
 import { Palette } from './Palette';
@@ -24,15 +25,16 @@ import type { PaletteAction } from './rows';
   The palette in the frame: `Ctrl+K` (everywhere, even while typing) opens it on everything, `/`
   (when not typing) opens it on the open Section and the Project filter. It registers the frame's
   own commands, and carries out what the User picks: opening a Section, a Project page, today's
-  Daily Note, an Item where it lives (frame/reveal.ts), a command, or Linear's own search in
-  the browser.
+  Daily Note, a Settings page, an Item where it lives (frame/reveal.ts), a command, or Linear's own
+  search in the browser.
 */
 
 export interface PaletteHostProps {
   /** The open Section's id (or "settings", or the Project page's scope). */
   current: string;
   onOpenSection(sectionId: string): void;
-  onOpenSettings(): void;
+  /** Opens Settings, at a page or group when given. */
+  onOpenSettings(place?: SettingsPlace): void;
   onToggleShortcuts(): void;
 }
 
@@ -128,7 +130,7 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
   ]);
 
   useCommands([
-    { label: 'Open Settings', keys: ',', group: 'General', run: onOpenSettings },
+    { label: 'Open Settings', keys: ',', group: 'General', run: () => onOpenSettings() },
     { label: 'Keyboard shortcuts', keys: '?', group: 'General', inDialogs: true, run: onToggleShortcuts },
     { label: 'Switch theme', run: toggleTheme },
     {
@@ -154,8 +156,12 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
       case 'person':
         // Their page (#122); Settings → People at the Person where there are no pages.
         if (openPerson) return openPerson(action.personId);
-        onOpenSettings();
+        onOpenSettings({ group: 'people' });
         return requestReveal(PEOPLE_SETTINGS, action.personId);
+      case 'settings': {
+        const page = SETTINGS_PAGES.find((each) => each.id === action.page);
+        return page && onOpenSettings({ page: page.id });
+      }
       case 'memory':
         // What Ares knows, in the Ares Section, at the memory.
         onOpenSection('ares');
@@ -186,6 +192,7 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
       search={search}
       searchByMeaning={searchByMeaning}
       sections={SECTIONS}
+      settingsPages={SETTINGS_PAGES}
       current={current}
       projects={projects}
       commands={commands.available}

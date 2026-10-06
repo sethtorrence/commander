@@ -76,7 +76,7 @@ const blockRow = (sheet: Locator, text: string) =>
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -162,7 +162,7 @@ test('type, pause, a margin card, Add: the Todo is in Todos with origin Ares; Di
 
   // Every call is on the Usage page, under "Suggest Todos".
   const calls = server.requests.length;
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const usage = window.getByTestId('usage-panel');
   await usage.getByRole('button', { name: 'Refresh' }).click();
   await expect(usage.getByTestId('usage-by-job')).toContainText('Suggest Todos');

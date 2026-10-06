@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type ElectronApplication, expect, type Locator, type Page, test } from '@playwright/test';
 import { type FakeGitHub, OCTOCAT, startFakeGitHub } from '../src/main/github/fake-github-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 import { pickOption } from './pick-option';
 
@@ -124,7 +124,7 @@ function pointAtFakeGitHub() {
 }
 
 async function connectGitHub(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-github');
   await accounts.getByRole('button', { name: 'Connect GitHub' }).click();
   const code = window.getByTestId('github-user-code');
@@ -143,6 +143,7 @@ test('switch views, filter, open a pull request with its discussion, and file it
   const window = await commander.window();
   const openedExternally = await catchTheBrowser(app);
   await connectGitHub(window);
+  await settingsPage(window, 'Projects');
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Longtail');
   await newProject.getByLabel('Badge code').fill('LT');
