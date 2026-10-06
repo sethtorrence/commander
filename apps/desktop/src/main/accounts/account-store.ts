@@ -30,6 +30,9 @@ export type AccountRecord = {
   // Teams (#111): whether the sign-in carries ChannelMessage.Read.All (granted), and whether the User
   // switched Sync Channel posts on (only a granted one can be). Absent: never asked for.
   channelPosts?: { granted: boolean; enabled: boolean };
+  // Outlook (#142): whether the sign-in carries MailboxSettings.ReadWrite, asked for only when the User
+  // switches Mirror Buckets on (Grant access). Absent: never asked for.
+  mailboxSettings?: { granted: boolean };
 };
 
 export type AccountStore = {
@@ -58,6 +61,7 @@ const accountRecord = z.object({
   details: z.record(z.string(), z.string()),
   sources: z.array(z.object({ source, granted: z.boolean(), enabled: z.boolean() })).optional(),
   channelPosts: z.object({ granted: z.boolean(), enabled: z.boolean() }).optional(),
+  mailboxSettings: z.object({ granted: z.boolean() }).optional(),
 });
 
 const currentFile = z.object({ version: z.literal(VERSION), accounts: z.array(accountRecord) });

@@ -37,7 +37,9 @@ export type Gate = {
   settings(): AutonomySettings;
   // Sets one cell of the Settings grid. null clears a Section or per-action override.
   setLevel(target: AutonomyTarget, level: AutonomyLevel | null): AutonomySettings;
-  propose(proposal: Proposal): ProposalOutcome;
+  // `askOnly`: a suggestion at most, whatever the settings (Commander offering what is already held,
+  // like the mail in a Bucket just set to skip the inbox, #142).
+  propose(proposal: Proposal, options?: { askOnly?: boolean }): ProposalOutcome;
   // The User accepts a pending suggestion: it is carried out, as the User, with Ares's reason and
   // its cause. Nothing further happens by itself: each next step is a fresh proposal. `changes`: what
   // the User changed on its card first (a proposed meeting's time, guests, Account and calendar).
@@ -372,7 +374,7 @@ export function openGate({
       return itemStore.autonomy.saveSettings(next);
     },
 
-    propose(input) {
+    propose(input, { askOnly = false } = {}) {
       const parsed = proposalSchema.parse(input);
       const action = requireAction(parsed.action);
       if (action.actionKind !== parsed.actionKind) {
@@ -392,7 +394,8 @@ export function openGate({
       if (!itemStore.get(parsed.itemId)) throw new GateError('not-found', `No Item ${parsed.itemId}`);
       if (followsAChain(parsed.causedBy?.entryId) || reachesBeyondOutsideCause(parsed)) parsed.chained = true;
 
-      const decision = decide(parsed, settings());
+      const decided = decide(parsed, settings());
+      const decision = askOnly && decided === 'auto' ? 'ask' : decided;
       if (decision === 'off') return { decision };
 
       const outcome = itemStore.transaction((): ProposalOutcome => {

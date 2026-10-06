@@ -1,8 +1,15 @@
 import {
+  BUCKET_MIRROR_FIELD,
+  bucketOfLabel,
   type EmailDetail,
   type EmailLabel,
   emailStatus,
+  GMAIL_MIRROR_PREFIX,
   isPendingEventExternalId,
+  type MirroredBuckets,
+  mirroredValue,
+  mirrorLabelName,
+  namesOf,
   type SourceItem,
 } from '@commander/domain';
 import { z } from 'zod';
@@ -11,6 +18,8 @@ import {
   type Cadence,
   CursorExpired,
   type FieldChange,
+  type MirrorRequest,
+  type MirrorResult,
   type PartRequest,
   type SourceAdapter,
   type StoredItem,
@@ -19,7 +28,15 @@ import {
   WriteRejected,
   type WriteRequest,
 } from '../source';
-import { connectGmail, createPacer, type GmailClient, MessageGone, type Pacer } from './client';
+import {
+  connectGmail,
+  createPacer,
+  type GmailClient,
+  LabelMissing,
+  LabelTaken,
+  MessageGone,
+  type Pacer,
+} from './client';
 import { DRAFT_PREFIX, syncGmailDrafts, writeCompose } from './compose';
 import { labelName, readGmailMessage } from './message';
 import { fetchGmailPart } from './parts';
@@ -66,6 +83,13 @@ import {
 //   whenever a sync sees a draft change (a first download that met one, or history touching a message
 //   labelled DRAFT or a held draft's message), and fetched only where their message changed. Messages
 //   written in Commander are saved as drafts and sent through the outgoing queue (compose.ts).
+// - Mirror Buckets (#142): `bucket-mirror` keeps exactly one `Commander/<Bucket>` label on a message (the
+//   label made first if Gmail hasn't got it, any other `Commander/…` label taken off, the User's own
+//   labels left alone), in the same `messages.modify`. An Account's label plan makes labels under a
+//   `Commander` parent (`labels.create`), renames them with their Bucket (`labels.patch`) and deletes
+//   them (`labels.delete`), the parent too once it is empty and on no message. Only labels named
+//   `Commander/…` are ever renamed or deleted. None of this runs unless the Item store queued it,
+//   which it does only for an Account that mirrors its Buckets.
 
 export const GMAIL_CADENCE: Cadence = { defaultMinutes: 15, choices: [5, 10, 15, 30, 60] };
 
@@ -139,9 +163,13 @@ function relabelled(
   const ordered = [...had, ...labelIds.filter((id) => !had.includes(id))];
   const next: EmailDetail = {
     ...detail,
-    labels: ordered.map(
-      (id) => detail.labels.find((label) => label.id === id) ?? { id, name: labelName(id, names) },
-    ),
+    // A label renamed since (a Bucket's label, #142) takes its new name.
+    labels: ordered.map((id) => {
+      const held = detail.labels.find((label) => label.id === id);
+      const name = names.get(id);
+      if (held && (name === undefined || held.name === labelName(id, names))) return held;
+      return { id, name: labelName(id, names) };
+    }),
     read: !ordered.includes('UNREAD'),
     starred: ordered.includes('STARRED'),
     inInbox: ordered.includes('INBOX'),
@@ -236,6 +264,19 @@ export function createGmailSource({
       if (run.draftsChanged()) await run.drafts();
       request.progress?.(null);
       return { cursor, cost: gmail.cost };
+    },
+
+    async mirrorBuckets(request: MirrorRequest): Promise<MirrorResult> {
+      const gmail = connectGmail({
+        gmailUrl: gmailUrl(),
+        fetch,
+        now,
+        pacer: pacerOf(request.account),
+        accessToken: request.accessToken,
+        signal: request.signal,
+      });
+      await carryOutPlan(gmail, request);
+      return { problems: [], cost: gmail.cost };
     },
 
     // The email reader's parts (parts.ts).
@@ -483,7 +524,10 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
         continue;
       }
       const detail = item ? emailOf(item) : null;
-      let labelIds = detail ? detail.labels.map((label) => label.id) : [...(added.get(id) ?? [])];
+      // A Bucket label Commander is still to write stands in by its name (#142): not one Gmail has.
+      let labelIds = detail
+        ? detail.labels.map((label) => label.id).filter((label) => !label.startsWith(GMAIL_MIRROR_PREFIX))
+        : [...(added.get(id) ?? [])];
       let untrashed = false;
       for (const change of changes) {
         if (change.id !== id) continue;
@@ -589,10 +633,104 @@ async function labelsChangedSince(
   return changed;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Mirror Buckets (#142)
+
+const PARENT = GMAIL_MIRROR_PREFIX.slice(0, -1);
+// Shown in Gmail's label list and on messages, like a label the User makes.
+const SHOWN = { labelListVisibility: 'labelShow', messageListVisibility: 'show' } as const;
+const gmailLabel = z.object({ id: z.string().min(1), name: z.string() });
+
+// The Account's labels, by name, read once per call.
+async function labelsByName(gmail: GmailClient): Promise<Map<string, string>> {
+  const found = await gmail.get('labels', '/labels', gmailLabels);
+  return new Map((found.labels ?? []).map((label) => [label.name, label.id]));
+}
+
+// Makes a label (its `Commander` parent first, so it nests), unless it is there already.
+async function ensureLabel(gmail: GmailClient, byName: Map<string, string>, name: string): Promise<string> {
+  const known = byName.get(name);
+  if (known) return known;
+  if (name !== PARENT && name.startsWith(GMAIL_MIRROR_PREFIX)) await ensureLabel(gmail, byName, PARENT);
+  try {
+    const made = await gmail.get('createLabel', '/labels', gmailLabel, { body: { name, ...SHOWN } });
+    byName.set(name, made.id);
+    return made.id;
+  } catch (error) {
+    if (!(error instanceof LabelTaken)) throw error;
+    // Made meanwhile (another write, or the User): use it.
+    const again = (await labelsByName(gmail)).get(name);
+    if (!again) throw error;
+    byName.set(name, again);
+    return again;
+  }
+}
+
+async function deleteLabel(gmail: GmailClient, id: string) {
+  try {
+    await gmail.get('deleteLabel', `/labels/${encodeURIComponent(id)}`, z.unknown(), { method: 'DELETE' });
+  } catch (error) {
+    if (!(error instanceof LabelMissing)) throw error;
+  }
+}
+
+async function carryOutPlan(gmail: GmailClient, { plan }: MirrorRequest) {
+  const byName = await labelsByName(gmail);
+  const label = (bucket: string) => mirrorLabelName('gmail', bucket);
+  const wanted = new Set([...plan.ensure.map((each) => each.name), ...plan.rename.map((each) => each.to)]);
+  for (const { from, to } of plan.rename) {
+    const old = byName.get(label(from));
+    if (!old) {
+      await ensureLabel(gmail, byName, label(to));
+      continue;
+    }
+    if (byName.has(label(to))) {
+      // The new name is taken already (made by a write meanwhile): the old label goes.
+      await deleteLabel(gmail, old);
+    } else {
+      try {
+        await gmail.get('renameLabel', `/labels/${encodeURIComponent(old)}`, gmailLabel, {
+          method: 'PATCH',
+          body: { name: label(to) },
+        });
+        byName.set(label(to), old);
+      } catch (error) {
+        if (!(error instanceof LabelMissing)) throw error;
+        await ensureLabel(gmail, byName, label(to));
+      }
+    }
+    byName.delete(label(from));
+  }
+  for (const { name } of plan.ensure) await ensureLabel(gmail, byName, label(name));
+  let removed = false;
+  for (const { name } of plan.remove) {
+    // A Bucket of the same name still wants its label (a removed Bucket's name used again).
+    const id = byName.get(label(name));
+    if (!id || wanted.has(name)) continue;
+    await deleteLabel(gmail, id);
+    byName.delete(label(name));
+    removed = true;
+  }
+  // The parent goes with the last of Commander's labels, unless a message carries it itself.
+  const parent = byName.get(PARENT);
+  const children = [...byName.keys()].some((name) => name.startsWith(GMAIL_MIRROR_PREFIX));
+  if (removed && parent && !children) {
+    const used = await gmail.get(
+      'list',
+      `/messages${query({ labelIds: parent, maxResults: '1' })}`,
+      gmailMessageList,
+    );
+    if (!used.messages?.length) await deleteLabel(gmail, parent);
+  }
+}
+
 async function writeMessage(gmail: GmailClient, request: WriteRequest, now: () => number) {
   const id = request.externalId;
   const path = `/messages/${encodeURIComponent(id)}`;
-  const wants = request.changes.map((change) => ({ change, ...wantOf(change) }));
+  const mirror = request.changes.find((change) => change.field === BUCKET_MIRROR_FIELD);
+  const wants = request.changes
+    .filter((change) => change !== mirror)
+    .map((change) => ({ change, ...wantOf(change) }));
   const [stored] = request.stored?.([id]) ?? [];
   const held = stored ? emailOf(stored) : null;
 
@@ -620,6 +758,33 @@ async function writeMessage(gmail: GmailClient, request: WriteRequest, now: () =
     else (on ? add : remove).push(label);
   }
 
+  // The Bucket label (#142): exactly the one it names, by the Account's label names.
+  const names = new Map<string, string>(held?.labels.map((label) => [label.id, label.name]) ?? []);
+  if (mirror) {
+    const value = mirror.value as MirroredBuckets;
+    if (Array.isArray(value)) throw new WriteRejected('Commander shows one Bucket per email in Gmail.');
+    const byName = await labelsByName(gmail);
+    for (const [name, labelId] of byName) names.set(labelId, name);
+    const shown = [...labels].filter((label) => bucketOfLabel({ name: names.get(label) ?? '' }) !== null);
+    const shownValue = mirroredValue(
+      shown.map((label) => bucketOfLabel({ name: names.get(label) ?? '' }) ?? ''),
+    );
+    const changedHere =
+      shown.some((label) => changedInGmail.has(label)) ||
+      [...changedInGmail].some((label) => bucketOfLabel({ name: names.get(label) ?? '' }) !== null);
+    if (sameJson(shownValue, value)) {
+      // Gmail shows it already.
+    } else if (changedHere && !sameJson(shownValue, mirror.synced)) {
+      superseded.push({ field: mirror.field, by: null, at: now() });
+    } else {
+      const [wanted] = namesOf(value);
+      const wantedId = wanted ? await ensureLabel(gmail, byName, mirrorLabelName('gmail', wanted)) : null;
+      if (wantedId) names.set(wantedId, mirrorLabelName('gmail', wanted as string));
+      if (wantedId && !labels.has(wantedId)) add.push(wantedId);
+      for (const label of shown) if (label !== wantedId) remove.push(label);
+    }
+  }
+
   let answer: GmailMessageLabels = current;
   if (trash !== null) {
     const call = trash ? 'trash' : 'untrash';
@@ -634,7 +799,6 @@ async function writeMessage(gmail: GmailClient, request: WriteRequest, now: () =
   if (answer !== current && !answer.historyId) answer = await peek();
 
   if (!stored || !held) return { item: null, superseded };
-  const names = new Map<string, string>(held.labels.map((label) => [label.id, label.name]));
   for (const { change, label } of wants) {
     const value = change.value as EmailLabel | null;
     if (change.field.startsWith(LABEL_PREFIX) && value?.name) names.set(label, value.name);

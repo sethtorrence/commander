@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { type DashboardClears, type DashboardState, dashboardClears, dashboardState } from './ares-ranking';
 import { attachmentMaxBytes, attachmentNamePattern } from './attachments';
+import { type BucketMirroring, bucketMirroring, bucketMirroringChange, mirrorSource } from './bucket-mirror';
 import { type Bucket, type BucketChange, bucket, bucketAction, bucketChange } from './buckets';
 import {
   type CalendarSettings,
@@ -156,6 +157,12 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('change-bucket'), action: bucketAction }),
   z.object({ op: z.literal('resort'), itemIds: z.array(z.string().min(1)).min(1).max(5000) }),
   z.object({ op: z.literal('undo-resort'), entryIds: z.array(z.number().int().positive()).min(1).max(5000) }),
+  // Mirror Buckets (#142): each email Account's switch (off unless switched on), and switching it.
+  z.object({ op: z.literal('bucket-mirroring') }),
+  z.object({
+    op: z.literal('set-bucket-mirroring'),
+    change: bucketMirroringChange.extend({ source: mirrorSource }),
+  }),
   // Global search (the Ctrl+K palette): local, ranked, never waiting on a model.
   z.object({ op: z.literal('search'), query: searchQuery }),
   // Two-way sync: changes waiting to reach their Source (or that couldn't sync), and Retry for an
@@ -313,6 +320,8 @@ export type ItemStoreResults = {
   'change-bucket': BucketChange;
   resort: ActivityEntry[];
   'undo-resort': ActivityEntry[];
+  'bucket-mirroring': BucketMirroring[];
+  'set-bucket-mirroring': BucketMirroring;
   search: SearchResult;
   outgoing: OutgoingChange[];
   'retry-outgoing': OutgoingChange[];
@@ -386,6 +395,8 @@ export const itemStoreResult = {
   'change-bucket': bucketChange,
   resort: z.array(activityEntry),
   'undo-resort': z.array(activityEntry),
+  'bucket-mirroring': z.array(bucketMirroring),
+  'set-bucket-mirroring': bucketMirroring,
   search: searchResult,
   outgoing: z.array(outgoingChange),
   'retry-outgoing': z.array(outgoingChange),

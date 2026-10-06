@@ -251,6 +251,7 @@ export function ThreadReader({
   toolbar,
   footer,
   noteFor,
+  notice,
 }: {
   thread: EmailThread | null;
   summary: EmailThreadSummary | null;
@@ -263,6 +264,8 @@ export function ThreadReader({
   footer?: ReactNode;
   /** A message's note, for the User's own on their way (held for Undo, waiting, refused). */
   noteFor?: (item: Item) => ReactNode;
+  /** Above its messages: Ares's suggestion on the thread (Skip the inbox, #142). */
+  notice?: ReactNode;
 }) {
   const subject = summary?.subject || thread?.messages.at(-1)?.item.title || '';
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -294,6 +297,7 @@ export function ThreadReader({
         <h2 className="m-0 font-sans text-[26px] leading-[1.15] font-bold tracking-[-.015em] text-ink font-stretch-(--stretch-wide)">
           {subject || '(no subject)'}
         </h2>
+        {notice}
         {!thread ? (
           <p className="mt-4 text-note text-faint">Reading the thread…</p>
         ) : (

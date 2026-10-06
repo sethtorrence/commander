@@ -17,7 +17,9 @@ import {
 // taking raw MIME as JSON (`raw`) or through the upload endpoint (multipart/related), each sent
 // message or draft stored as Gmail would show it (its headers and parts read from the MIME), with
 // `messages.get?format=metadata` for a retried send's check.
-// Nothing here talks to the real Gmail.
+// Mirror Buckets (#142): each mailbox's own labels can be made (`labels.create`, 409 for a name
+// taken), renamed (`labels.patch`) and deleted (`labels.delete`, taking it off every message), as Gmail
+// does. Nothing here talks to the real Gmail.
 
 export type FakeGmailMessageInput = {
   id?: string;
@@ -68,6 +70,8 @@ export type FakeGmailSent = { id: string; threadId: string; raw: Buffer; mime: M
 
 type Mailbox = {
   email: string;
+  // The User's own labels, beside the system ones (made, renamed and deleted through labels.*).
+  labels: { id: string; name: string; type: 'user' }[];
   messages: Map<string, StoredMessage>;
   // Drafts: draft id → the id of its message (a new one each time it is saved).
   drafts: Map<string, string>;
@@ -90,6 +94,12 @@ export type FakeGmail = {
   labelsOf(email: string, id: string): string[] | null;
   // Every write Commander sent (modify, batchModify, trash, untrash), as its path and body.
   writes: { path: string; body: unknown }[];
+  // The mailbox's own labels as Gmail has them now (Commander's Bucket labels among them).
+  labels(email: string): { id: string; name: string }[];
+  // A label's id by its name, or null.
+  labelId(email: string, name: string): string | null;
+  // Makes a label, as the User would in Gmail. Returns its id.
+  createLabel(email: string, name: string): string;
   // Writes are refused (400 "Mail service not enabled", as Gmail answers an Account whose mail is
   // off) until switched back: Commander shows Couldn't sync at once, with Retry.
   refuseWrites(refusing: boolean): void;
@@ -132,8 +142,8 @@ const USER_LABELS = [
   { id: 'Label_1', name: 'Receipts', type: 'user' },
   { id: 'Label_2', name: 'Travel', type: 'user' },
 ];
-const KNOWN_LABELS = new Set([...SYSTEM_LABELS, ...USER_LABELS.map((label) => label.id)]);
 const WRITE_PATH = /^\/messages\/(batchModify|[^/]+\/(modify|trash|untrash))$/;
+const LABEL_PATH = /^\/labels\/([^/]+)$/;
 
 async function bodyOf(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
@@ -239,12 +249,14 @@ export function createFakeGmail(): FakeGmail {
   let throttled = false;
   let writesRefused = false;
   let nextId = 0x19a000000000;
+  let nextLabel = 100;
 
   const mailbox = (email: string): Mailbox => {
     let found = mailboxes.get(email);
     if (!found) {
       found = {
         email,
+        labels: USER_LABELS.map((label) => ({ ...label, type: 'user' as const })),
         messages: new Map(),
         drafts: new Map(),
         history: [],
@@ -255,6 +267,50 @@ export function createFakeGmail(): FakeGmail {
     }
     return found;
   };
+  const known = (box: Mailbox, label: string) =>
+    SYSTEM_LABELS.includes(label) || box.labels.some((each) => each.id === label);
+  const makeLabel = (box: Mailbox, name: string) => {
+    nextLabel += 1;
+    const label = { id: `Label_${nextLabel}`, name, type: 'user' as const };
+    box.labels.push(label);
+    return label;
+  };
+
+  // labels.create, labels.patch and labels.delete (#142).
+  async function labelWrite(request: IncomingMessage, response: ServerResponse, box: Mailbox, path: string) {
+    const body = (await bodyOf(request)) as { name?: string } | undefined;
+    fake.writes.push({ path: `${request.method} ${path}`, body });
+    const notFound = () =>
+      json(response, 404, googleError(404, 'NOT_FOUND', 'notFound', 'Requested entity was not found.'));
+    const taken = () =>
+      json(response, 409, googleError(409, 'ALREADY_EXISTS', 'duplicate', 'Label name exists or conflicts'));
+    if (request.method === 'POST' && path === '/labels') {
+      const name = body?.name?.trim();
+      if (!name)
+        return json(response, 400, googleError(400, 'INVALID_ARGUMENT', 'invalidArgument', 'No name'));
+      if (box.labels.some((each) => each.name === name)) return taken();
+      return json(response, 200, makeLabel(box, name));
+    }
+    const id = decodeURIComponent(LABEL_PATH.exec(path)?.[1] ?? '');
+    const label = box.labels.find((each) => each.id === id);
+    if (!label) return notFound();
+    if (request.method === 'PATCH') {
+      const name = body?.name?.trim();
+      if (name && box.labels.some((each) => each.name === name && each.id !== id)) return taken();
+      if (name) label.name = name;
+      return json(response, 200, label);
+    }
+    if (request.method === 'DELETE') {
+      box.labels = box.labels.filter((each) => each.id !== id);
+      for (const message of box.messages.values()) {
+        if (!message.labelIds.includes(id)) continue;
+        message.labelIds = message.labelIds.filter((each) => each !== id);
+        message.json = { ...(message.json as object), labelIds: message.labelIds };
+      }
+      return void response.writeHead(204).end();
+    }
+    return json(response, 405, {});
+  }
   const record = (box: Mailbox, entry: Omit<HistoryRecord, 'id'>) => {
     box.historyId += 1;
     box.history.push({ id: box.historyId, ...entry });
@@ -336,7 +392,7 @@ export function createFakeGmail(): FakeGmail {
     }
     const add = body?.addLabelIds ?? [];
     const remove = body?.removeLabelIds ?? [];
-    const unknown = [...add, ...remove].find((label) => !KNOWN_LABELS.has(label));
+    const unknown = [...add, ...remove].find((label) => !known(box, label));
     if (unknown) {
       const message = `Invalid label: ${unknown}`;
       return json(response, 400, googleError(400, 'INVALID_ARGUMENT', 'invalidArgument', message));
@@ -645,6 +701,19 @@ export function createFakeGmail(): FakeGmail {
       changeLabels(box, message, add, remove);
     },
 
+    labels(email) {
+      return mailbox(email).labels.map(({ id, name }) => ({ id, name }));
+    },
+
+    labelId(email, name) {
+      return mailbox(email).labels.find((label) => label.name === name)?.id ?? null;
+    },
+
+    createLabel(email, name) {
+      const box = mailbox(email);
+      return (box.labels.find((label) => label.name === name) ?? makeLabel(box, name)).id;
+    },
+
     labelsOf(email, id) {
       const message = mailbox(email).messages.get(id);
       return message ? [...message.labelIds] : null;
@@ -686,6 +755,8 @@ export function createFakeGmail(): FakeGmail {
       if (request.method === 'POST' && WRITE_PATH.test(path)) return write(request, response, box, path);
       if (path === '/messages/send' || path === '/drafts' || path.startsWith('/drafts/'))
         return compose(request, response, box, path, url);
+      if ((request.method === 'POST' && path === '/labels') || LABEL_PATH.test(path))
+        if (request.method !== 'GET') return labelWrite(request, response, box, path);
       if (request.method !== 'GET') return json(response, 405, {});
       if (path === '/profile') {
         return json(response, 200, {
@@ -697,7 +768,7 @@ export function createFakeGmail(): FakeGmail {
       }
       if (path === '/labels') {
         return json(response, 200, {
-          labels: [...SYSTEM_LABELS.map((id) => ({ id, name: id, type: 'system' })), ...USER_LABELS],
+          labels: [...SYSTEM_LABELS.map((id) => ({ id, name: id, type: 'system' })), ...box.labels],
         });
       }
       if (path === '/messages') return json(response, 200, list(box, url));

@@ -74,6 +74,9 @@ export type OutgoingStore = {
   counts(account: string): { pending: number; failed: number };
   // The Account is being removed: its queued changes go with it.
   removeAccount(account: string): void;
+  // The Account's changes to one field still waiting (or Couldn't sync) go: the User stopped what
+  // they were for (Mirror Buckets switched off, #142). Changes on their way stay.
+  drop(account: string, field: string): void;
   // Called (after the change commits) whenever changes are queued or retried.
   onChange(listener: (account: string) => void): () => void;
 };
@@ -334,6 +337,12 @@ export function openOutgoingQueue(db: BetterSQLite3Database<typeof schema>): Out
 
     removeAccount(account) {
       db.delete(table).where(eq(table.account, account)).run();
+    },
+
+    drop(account, field) {
+      db.delete(table)
+        .where(and(eq(table.account, account), eq(table.field, field), waiting))
+        .run();
     },
 
     onChange(listener) {

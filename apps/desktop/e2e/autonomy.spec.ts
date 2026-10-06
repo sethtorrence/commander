@@ -132,6 +132,8 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
     /Write the GitHub summary.*Ask works as Auto here/,
     /Learn facts.*Ask works as Auto here/,
     /Draft replies/,
+    /Skip the inbox/,
+    /Mirror Buckets.*Below Auto nothing is written/,
     /Block time for Todos/,
     /Hold time for yourself/,
     /Block time across Accounts/,

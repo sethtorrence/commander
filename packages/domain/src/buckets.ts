@@ -5,8 +5,8 @@ import type { EmailDetail } from './email';
   Buckets (#137, decision #16): what to do with an email. The User defines them, from an editable
   starter set, each with a plain description; every email sits in exactly one Bucket or is Unsorted,
   independent of its Project ("Needs reply · TX" is normal). Buckets are views over email, never
-  folders: nothing about them reaches Gmail or Outlook unless mirroring is switched on (#142, off by
-  default).
+  folders: nothing about them reaches Gmail or Outlook unless the User asks (#142, bucket-mirror.ts):
+  a Bucket set to skip the inbox, or an Account mirroring its Buckets, both off by default.
 
   The descriptions are what Ares sorts by (#141), so they are written sharply: #31 found the
   sharpened Needs reply ("…automated emails never need a reply") lifted his accuracy from 50% to 81%.
@@ -71,12 +71,16 @@ export const bucket = z.object({
   // Its place in the User's order: 0 is the top.
   order: z.number().int().nonnegative(),
   createdAt: timestamp,
+  // Skip the inbox (#142): mail landing in it is archived at its Source (bucket-mirror.ts). Off unless
+  // the User switches it on.
+  skipInbox: z.boolean(),
 });
 export type Bucket = z.infer<typeof bucket>;
 
 const bucketDraft = z.object({
   name: z.string().trim().min(1, 'A Bucket needs a name').max(BUCKET_NAME_MAX, 'That name is too long'),
   description: z.string().trim().max(BUCKET_DESCRIPTION_MAX, 'That description is too long'),
+  skipInbox: z.boolean().optional(),
 });
 export type BucketDraft = z.input<typeof bucketDraft>;
 

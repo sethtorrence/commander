@@ -3,6 +3,7 @@ import type {
   GitHubWatch,
   ItemDetail,
   ItemStatus,
+  MirrorPlan,
   Source,
   SourceItem,
 } from '@commander/domain';
@@ -198,6 +199,18 @@ export type FreeBusyResult = {
   cost: SyncCost;
 };
 
+// Mirror Buckets (#142): the labels (Gmail) or categories (Outlook) to make, rename and delete before an
+// Account's writes, as the Item store planned them. Nothing else about the User's own labels is touched.
+export type MirrorRequest = {
+  account: string;
+  plan: MirrorPlan;
+  accessToken(): Promise<AccessToken>;
+  signal: AbortSignal;
+};
+
+// What couldn't be done but needn't hold anything up (Outlook's colours without MailboxSettings).
+export type MirrorResult = { problems: string[]; cost: SyncCost };
+
 export type SourceAdapter = {
   source: Source;
   cadence: Cadence;
@@ -217,6 +230,9 @@ export type SourceAdapter = {
   fetchPart?(request: PartRequest): Promise<FetchedPart>;
   // Calendar Sources: other people's free/busy, where the provider shares it. Rejects as `sync` does.
   freeBusy?(request: FreeBusyRequest): Promise<FreeBusyResult>;
+  // Email Sources (#142): carries out an Account's Bucket label plan. Safe to run again. Rejects as
+  // `write` does.
+  mirrorBuckets?(request: MirrorRequest): Promise<MirrorResult>;
 };
 
 // The Source asked Commander to slow down: a 429, or a quota answer under another status (Gmail

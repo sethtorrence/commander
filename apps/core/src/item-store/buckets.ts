@@ -30,6 +30,7 @@ const toBucket = (row: BucketRow): Bucket => ({
   description: row.description,
   order: row.position,
   createdAt: row.createdAt,
+  skipInbox: row.skipInbox,
 });
 
 export function bucketsIn(

@@ -1,9 +1,16 @@
 import {
+  BUCKET_MIRROR_FIELD,
+  bucketOfCategory,
   type EmailAttachment,
   type EmailDetail,
   type EmailFolder,
   emailStatus,
   isSystemFolder,
+  type MirroredBuckets,
+  mirrorColourOf,
+  mirroredValue,
+  mirrorLabelName,
+  namesOf,
   normaliseContentId,
   type SourceItem,
 } from '@commander/domain';
@@ -14,6 +21,8 @@ import {
   CursorExpired,
   type FetchedPart,
   type FieldChange,
+  type MirrorRequest,
+  type MirrorResult,
   PartNotFound,
   type PartRequest,
   PartTooLarge,
@@ -84,6 +93,14 @@ import {
 // when archived. The message is read first: what Outlook already has isn't sent, and a field Outlook
 // changed since Commander last synced it, later than the User's change (its `lastModifiedDateTime`),
 // is left as Outlook has it and reported as superseded: the newer change wins, per field.
+//
+// Mirror Buckets (#142): `bucket-mirror` keeps exactly one "Commander: <Bucket>" category on a message
+// beside the User's own, in the same PATCH (its `categories`). An Account's category plan works on the
+// mailbox's master list (`/me/outlook/masterCategories`, which needs MailboxSettings.ReadWrite): makes
+// each Bucket's category with Outlook's preset colours (wrapping after 25), makes a renamed Bucket's anew
+// and deletes the old one (categories can't be renamed), and deletes a removed Bucket's. Without the
+// permission the categories still go on messages, without colours. Only "Commander: …" categories are
+// ever made or deleted, and none of it runs unless the Item store queued it for a mirroring Account.
 //
 // Reading (#134): attachments and inline images through `/messages/{id}/attachments/{id}/$value`.
 //
@@ -390,10 +407,65 @@ export function createOutlookSource({
       return { ...(await writeMessage(api, request, mailbox)), cost: api.cost };
     },
 
+    async mirrorBuckets(request: MirrorRequest): Promise<MirrorResult> {
+      const api = connect(request);
+      return { problems: await carryOutPlan(api, request), cost: api.cost };
+    },
+
     fetchPart(request: PartRequest) {
       return fetchOutlookPart(connect(request), request);
     },
   };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Mirror Buckets (#142): the master list of categories
+
+const MASTER_CATEGORIES = '/me/outlook/masterCategories';
+const masterCategory = z.object({ id: z.string().min(1), displayName: z.string() });
+const masterCategories = z.object({ value: z.array(masterCategory) });
+const NO_PERMISSION =
+  'Outlook wouldn’t let Commander change its categories (Grant access in Settings → Accounts gives it MailboxSettings.ReadWrite), so they show without colours.';
+
+async function carryOutPlan(api: GraphMail, { plan }: MirrorRequest): Promise<string[]> {
+  const category = (bucket: string) => mirrorLabelName('outlook', bucket);
+  try {
+    const listed = await api.send('GET', MASTER_CATEGORIES, undefined, masterCategories);
+    const byName = new Map(listed.value.map((each) => [each.displayName, each.id]));
+    const make = async (name: string, colour: number) => {
+      if (byName.has(category(name))) return;
+      const made = await api.send(
+        'POST',
+        MASTER_CATEGORIES,
+        { displayName: category(name), color: mirrorColourOf(colour) },
+        masterCategory,
+      );
+      byName.set(made.displayName, made.id);
+    };
+    const remove = async (name: string) => {
+      const id = byName.get(category(name));
+      if (!id) return;
+      try {
+        await api.send('DELETE', `${MASTER_CATEGORIES}/${encodeURIComponent(id)}`, undefined, z.unknown());
+      } catch (error) {
+        if (!(error instanceof GraphNotFound)) throw error;
+      }
+      byName.delete(category(name));
+    };
+    const wanted = new Set([...plan.ensure.map((each) => each.name), ...plan.rename.map((each) => each.to)]);
+    // Categories can't be renamed: the new one is made, and the old one goes (its emails move with
+    // their own writes).
+    for (const { from, to, colour } of plan.rename) {
+      await make(to, colour);
+      if (!wanted.has(from)) await remove(from);
+    }
+    for (const { name, colour } of plan.ensure) await make(name, colour);
+    for (const { name } of plan.remove) if (!wanted.has(name)) await remove(name);
+    return [];
+  } catch (error) {
+    if (error instanceof WriteRejected) return [NO_PERMISSION];
+    throw error;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -669,6 +741,7 @@ type Wants = {
   inbox?: { change: FieldChange; value: boolean };
   trash?: { change: FieldChange; value: boolean };
   folder?: { change: FieldChange; value: EmailFolder };
+  mirror?: { change: FieldChange; value: string | null };
 };
 
 function wantsOf(changes: readonly FieldChange[]): Wants {
@@ -682,6 +755,10 @@ function wantsOf(changes: readonly FieldChange[]): Wants {
     ) {
       if (typeof change.value !== 'boolean') throw new WriteRejected('That isn’t a change Outlook takes.');
       wants[change.field] = { change, value: change.value };
+    } else if (change.field === BUCKET_MIRROR_FIELD) {
+      const value = change.value as MirroredBuckets;
+      if (Array.isArray(value)) throw new WriteRejected('Commander shows one Bucket per email in Outlook.');
+      wants.mirror = { change, value };
     } else if (change.field === 'folder') {
       const folder = change.value as EmailFolder | null;
       if (!folder?.id) throw new WriteRejected('Outlook needs a folder to move this message to.');
@@ -739,6 +816,17 @@ async function writeMessage(api: GraphMail, request: WriteRequest, mailbox: Mail
     needed(wants.starred.change, wants.starred.value, now_.starred, wants.starred.change.synced)
   )
     patch.flag = { flagStatus: wants.starred.value ? 'flagged' : 'notFlagged' };
+  // The Bucket category (#142): exactly the one it names, beside the User's own categories.
+  if (wants.mirror) {
+    const shown = mirroredValue(current.categories.flatMap((each) => bucketOfCategory(each) ?? []));
+    if (needed(wants.mirror.change, wants.mirror.value, shown, wants.mirror.change.synced)) {
+      const own = current.categories.filter((each) => bucketOfCategory(each) === null);
+      patch.categories = [
+        ...own,
+        ...namesOf(wants.mirror.value).map((name) => mirrorLabelName('outlook', name)),
+      ];
+    }
+  }
   const trash =
     wants.trash && needed(wants.trash.change, wants.trash.value, now_.trash, wants.trash.change.synced)
       ? wants.trash.value

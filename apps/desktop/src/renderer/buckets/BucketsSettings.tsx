@@ -5,8 +5,9 @@ import {
   type Bucket,
   type BucketAction,
   type BucketChange,
+  suggestsSkippingTheInbox,
 } from '@commander/domain';
-import { Button, cn, Input, inputVariants, toast } from '@commander/ui';
+import { Button, cn, Input, inputVariants, Switch, toast } from '@commander/ui';
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { ItemStoreClient } from '../item-store/client';
 import { errorText } from '../projects/change-with-undo';
@@ -20,7 +21,9 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
  * Settings → Buckets (#137): what to do with an email, in the User's order, each with the plain
  * description Ares sorts by. Rename and describe in place (saved when the field is left), add,
  * remove (its emails become Unsorted and its Rules go; the toast's Undo brings it all back) and
- * reorder with the arrows. `shown` while Settings is on screen: read again each time it comes back.
+ * reorder with the arrows. Each one's Skip the inbox (#142), off unless switched on, archives mail
+ * landing in it in Gmail or Outlook (suggested for Newsletters, Receipts and Junk). `shown` while
+ * Settings is on screen: read again each time it comes back.
  */
 export function BucketsSettings({
   no,
@@ -52,6 +55,16 @@ export function BucketsSettings({
     }
   };
 
+  // Skip the inbox: what it does, said once it is on.
+  const skip = async (bucket: Bucket, on: boolean) => {
+    const done = await change({ type: 'update', bucketId: bucket.id, bucket: { skipInbox: on } });
+    if (!done || !on) return;
+    toast(
+      `${bucket.name} now skips the inbox. Mail you sort into it is archived at once; mail a Rule or Ares sorts into it is offered for archiving (Settings → Autonomy decides).`,
+      { duration: 10_000 },
+    );
+  };
+
   const remove = async (bucket: Bucket) => {
     const done = await change({ type: 'delete', bucketId: bucket.id });
     if (!done) return;
@@ -79,7 +92,9 @@ export function BucketsSettings({
         Every email sits in one Bucket, or is Unsorted, whatever its Project. Ares sorts mail by each Bucket’s
         description, so say plainly what belongs, as {BUCKET_DESCRIPTION_EXAMPLE.name} does: “
         {BUCKET_DESCRIPTION_EXAMPLE.description}” Bucket Rules (Settings → Rules) sort before he does, and
-        your own sorting beats both. Nothing here changes Gmail.
+        your own sorting beats both. Buckets stay in Commander: mail is archived in Gmail or Outlook only for
+        a Bucket you set to skip the inbox, and Bucket labels appear there only for an Account you set to
+        mirror them (Settings → Accounts).
       </p>
       {buckets.length ? (
         <ol aria-label="Buckets" className="m-0 list-none p-0">
@@ -90,6 +105,7 @@ export function BucketsSettings({
               index={index}
               last={index === buckets.length - 1}
               onChange={(action) => void change(action)}
+              onSkip={(on) => void skip(bucket, on)}
               onRemove={() => void remove(bucket)}
             />
           ))}
@@ -111,12 +127,14 @@ function BucketRow({
   index,
   last,
   onChange,
+  onSkip,
   onRemove,
 }: {
   bucket: Bucket;
   index: number;
   last: boolean;
   onChange: (action: BucketAction) => void;
+  onSkip: (on: boolean) => void;
   onRemove: () => void;
 }) {
   const [name, setName] = useState(bucket.name);
@@ -159,15 +177,32 @@ function BucketRow({
         onKeyDown={onNameKey}
         className="font-semibold"
       />
-      <textarea
-        aria-label={`Description of ${bucket.name}`}
-        rows={2}
-        value={description}
-        maxLength={BUCKET_DESCRIPTION_MAX}
-        onChange={(event) => setDescription(event.target.value)}
-        onBlur={saveDescription}
-        className={cn(inputVariants(), 'h-auto resize-y py-1.5 leading-[1.45]')}
-      />
+      <div className="flex min-w-0 flex-col gap-2">
+        <textarea
+          aria-label={`Description of ${bucket.name}`}
+          rows={2}
+          value={description}
+          maxLength={BUCKET_DESCRIPTION_MAX}
+          onChange={(event) => setDescription(event.target.value)}
+          onBlur={saveDescription}
+          className={cn(inputVariants(), 'h-auto resize-y py-1.5 leading-[1.45]')}
+        />
+        <span className="flex items-center gap-2.5 text-note text-muted">
+          <Switch
+            aria-label={`${bucket.name} skips the inbox`}
+            checked={bucket.skipInbox}
+            onCheckedChange={onSkip}
+          />
+          <span className="text-ink">Skip the inbox</span>
+          <span>
+            {bucket.skipInbox
+              ? 'Archived in Gmail or Outlook as it lands here'
+              : suggestsSkippingTheInbox(bucket.id)
+                ? 'Suggested: keeps this mail out of your inbox'
+                : 'Off'}
+          </span>
+        </span>
+      </div>
       <span className="flex items-center gap-1">
         <Button
           size="icon"

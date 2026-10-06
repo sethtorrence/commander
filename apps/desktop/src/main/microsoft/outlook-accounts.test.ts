@@ -418,3 +418,59 @@ describe('keeping Outlook secrets secret', () => {
     vi.restoreAllMocks();
   });
 });
+
+describe('Grant access for Bucket categories (#142)', () => {
+  it('starts without MailboxSettings.ReadWrite', async () => {
+    const account = await start().connectWithBrowser();
+    expect(account).not.toHaveProperty('mailboxSettings');
+  });
+
+  it('signs in again asking for MailboxSettings.ReadWrite on top of mail and calendar', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+
+    await accounts.mailboxSettings?.request(samId);
+
+    expect(microsoft.authorizeRequests.at(-1)?.scope).toBe(
+      `${OUTLOOK_SCOPES.join(' ')} MailboxSettings.ReadWrite`,
+    );
+    expect((await accounts.list())[0]).toMatchObject({
+      mailboxSettings: { granted: true },
+      sources: BOTH_ON,
+    });
+  });
+
+  it('says so when Microsoft didn’t grant it', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    microsoft.limitGrantedScopes([...OUTLOOK_SCOPES]);
+
+    await expect(accounts.mailboxSettings?.request(samId)).rejects.toThrow(/MailboxSettings\.ReadWrite/);
+    expect((await accounts.list())[0]).not.toHaveProperty('mailboxSettings');
+  });
+
+  it('keeps it through a reconnect, and asks for it again on refresh', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    await accounts.mailboxSettings?.request(samId);
+
+    await accounts.connectWithBrowser({ reconnect: samId });
+    expect(microsoft.authorizeRequests.at(-1)?.scope).toContain('MailboxSettings.ReadWrite');
+    expect((await accounts.list())[0]).toMatchObject({ mailboxSettings: { granted: true } });
+
+    clock += 2 * HOUR;
+    await accounts.accessToken(samId);
+    expect(microsoft.tokenRequests.at(-1)?.scope).toContain('MailboxSettings.ReadWrite');
+  });
+
+  it('still refreshes mail and calendar when Microsoft no longer consents to it', async () => {
+    const accounts = start();
+    await accounts.connectWithBrowser();
+    await accounts.mailboxSettings?.request(samId);
+    microsoft.refuseRefreshScopes(['MailboxSettings.ReadWrite']);
+
+    clock += 2 * HOUR;
+    await expect(accounts.accessToken(samId)).resolves.toMatchObject({ kind: 'oauth' });
+    expect(microsoft.tokenRequests.at(-1)?.scope).toBe(OUTLOOK_SCOPES.join(' '));
+  });
+});

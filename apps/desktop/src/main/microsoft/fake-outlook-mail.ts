@@ -15,7 +15,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // the reply's thread and headers), PATCHed with their fields and Commander's extended property,
 // attachments added in the request or through an upload session (PUT in chunks), sent with `send`
 // (filed in Sent Items under an id of its own, as Exchange does), deleted, and found again by the
-// extended property in one of Outlook's own folders. Nothing here talks to the real Microsoft.
+// extended property in one of Outlook's own folders. Mirror Buckets (#142): a message's `categories`
+// in the same PATCH, and the mailbox's master list of categories (`/me/outlook/masterCategories`:
+// list, make, delete), refused with 403 while the sign-in lacks MailboxSettings.ReadWrite. Nothing here talks to the real Microsoft.
 
 export type FakeMailUser = { id: string; displayName: string; userPrincipalName: string };
 
@@ -74,12 +76,17 @@ type StoredMessage = {
   // A draft (#138), and its extended properties (Commander's mark).
   isDraft: boolean;
   properties: Map<string, string>;
+  categories: string[];
 };
+
+type MasterCategory = { id: string; displayName: string; color: string };
 
 type Folder = { id: string; displayName: string; parentFolderId: string; wellKnown: string | null };
 
 type Mailbox = {
   folders: Folder[];
+  // The master list of categories (#142).
+  categories: MasterCategory[];
   messages: Map<string, StoredMessage>;
   // Per folder, the messages that left it (moved out or deleted), with the change that took them.
   left: Map<string, Map<string, number>>;
@@ -104,6 +111,14 @@ export type FakeOutlookMail = {
   messageOf(userId: string, id: string): { folder: string; isRead: boolean; flagged: boolean } | null;
   // Writes are refused (403 ErrorAccessDenied) until switched back.
   refuseWrites(refusing: boolean): void;
+  // A message's categories as Outlook has them (null: no such message).
+  categoriesOf(userId: string, id: string): string[] | null;
+  // As the User would in Outlook: sets a message's categories.
+  setCategories(userId: string, id: string, categories: string[]): void;
+  // The mailbox's master list of categories.
+  masterCategories(userId: string): MasterCategory[];
+  // The master list answers 403 (as without MailboxSettings.ReadWrite) until switched back.
+  refuseCategories(refusing: boolean): void;
   // Every delta link handed out so far stops working (410 SyncStateNotFound).
   expireDeltaLinks(): void;
   // Every message sent (#138), oldest first: the copy filed in Sent Items.
@@ -169,6 +184,7 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
   let generation = 0;
   let made = 0;
   let refusing = false;
+  let refusingCategories = false;
   // Pages of a first round still to hand out, and delta links handed out.
   const pages = new Map<string, { folderId: string; rest: StoredMessage[]; upTo: number; from: number }>();
   const deltas = new Map<string, { folderId: string; since: number; from: number; generation: number }>();
@@ -183,6 +199,7 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
           parentFolderId: ROOT,
           wellKnown: name,
         })),
+        categories: [],
         messages: new Map(),
         left: new Map(),
       };
@@ -238,7 +255,7 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       conversationId: input.conversationId ?? `AAQkFake-conv-${message.id}`,
       internetMessageId: input.messageId ?? `<${message.id}@fake.outlook.test>`,
       ...(input.withoutHeaders ? {} : { internetMessageHeaders: headers }),
-      categories: input.categories ?? [],
+      categories: [...message.categories],
       hasAttachments: message.attachments.some((each) => !each.inline),
       lastModifiedDateTime: iso(message.modifiedAt),
     };
@@ -395,6 +412,7 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       modifiedAt: Date.now(),
       version: ++version,
       attachments: [],
+      categories: [],
       isDraft: true,
       properties: new Map(),
     };
@@ -563,6 +581,40 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
     return null;
   }
 
+  // The master list of categories (#142): list, make (409 for a name taken), delete.
+  function masterCategories(mailbox: Mailbox, method: string, parts: string[], payload: unknown): Answer {
+    if (refusingCategories)
+      return {
+        status: 403,
+        body: {
+          error: { code: 'ErrorAccessDenied', message: 'Access is denied. Check credentials and try again.' },
+        },
+      };
+    if (parts.length === 3 && method === 'GET') return { status: 200, body: { value: mailbox.categories } };
+    if (parts.length === 3 && method === 'POST') {
+      const { displayName, color } = (payload ?? {}) as { displayName?: unknown; color?: unknown };
+      if (typeof displayName !== 'string' || !displayName.trim())
+        return { status: 400, body: { error: { code: 'ErrorInvalidRequest', message: 'No name' } } };
+      if (mailbox.categories.some((each) => each.displayName === displayName))
+        return { status: 409, body: { error: { code: 'ErrorAlreadyExists', message: 'Exists' } } };
+      made += 1;
+      const category = {
+        id: `fake-cat-${made}`,
+        displayName,
+        color: typeof color === 'string' ? color : 'none',
+      };
+      mailbox.categories.push(category);
+      return { status: 201, body: category };
+    }
+    if (parts.length === 4 && method === 'DELETE') {
+      const found = mailbox.categories.some((each) => each.id === parts[3]);
+      if (!found) return notFound();
+      mailbox.categories = mailbox.categories.filter((each) => each.id !== parts[3]);
+      return { status: 204 };
+    }
+    return notFound('ResourceNotFound');
+  }
+
   // Answers one read or write, for the user.
   function answer(method: string, url: URL, payload: unknown, prefer: string, user: FakeMailUser): Answer {
     const mailbox = mailboxOf(user.id);
@@ -571,6 +623,8 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
     if (path === '/me' && method === 'GET')
       return { status: 200, body: { ...user, mail: user.userPrincipalName } };
     if (parts[0] !== 'me') return notFound('ResourceNotFound');
+    if (parts[1] === 'outlook' && parts[2] === 'masterCategories')
+      return masterCategories(mailbox, method, parts, payload);
     if (parts[1] === 'mailFolders' && method === 'GET') {
       if (parts.length === 2)
         return {
@@ -638,9 +692,14 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       };
     if (parts.length === 3 && method === 'GET') return { status: 200, body: messageJson(message) };
     if (parts.length === 3 && method === 'PATCH') {
-      const change = (payload ?? {}) as { isRead?: unknown; flag?: { flagStatus?: unknown } };
+      const change = (payload ?? {}) as {
+        isRead?: unknown;
+        flag?: { flagStatus?: unknown };
+        categories?: unknown;
+      };
       if (typeof change.isRead === 'boolean') message.isRead = change.isRead;
       if (change.flag) message.flagged = change.flag.flagStatus === 'flagged';
+      if (Array.isArray(change.categories)) message.categories = change.categories.map(String);
       message.version = ++version;
       message.modifiedAt = Date.now();
       return { status: 200, body: messageJson(message) };
@@ -727,6 +786,7 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
         version: ++version,
         isDraft: false,
         properties: new Map(),
+        categories: [...(input.categories ?? [])],
         attachments: (input.attachments ?? []).map((each, index) => ({
           id: `${id.replace(/=$/, '')}-att-${index + 1}=`,
           name: each.name,
@@ -777,6 +837,21 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
     refuseWrites(next) {
       refusing = next;
     },
+    categoriesOf(userId, id) {
+      const message = mailboxOf(userId).messages.get(id);
+      return message ? [...message.categories] : null;
+    },
+    setCategories(userId, id, categories) {
+      const message = mailboxOf(userId).messages.get(id);
+      if (!message) throw new Error(`No fake message ${id}`);
+      message.categories = [...categories];
+      message.version = ++version;
+      message.modifiedAt = Date.now();
+    },
+    masterCategories: (userId) => mailboxOf(userId).categories.map((each) => ({ ...each })),
+    refuseCategories(next) {
+      refusingCategories = next;
+    },
     expireDeltaLinks() {
       generation += 1;
       pages.clear();
@@ -784,7 +859,11 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
     handles(request, url) {
       const path = url.pathname;
       if (path === '/v1.0/$batch') return request.method === 'POST';
-      return path.startsWith('/v1.0/me/mailFolders') || path.startsWith('/v1.0/me/messages');
+      return (
+        path.startsWith('/v1.0/me/mailFolders') ||
+        path.startsWith('/v1.0/me/messages') ||
+        path.startsWith('/v1.0/me/outlook/masterCategories')
+      );
     },
     async handle(request, url, response, user) {
       const method = request.method ?? 'GET';

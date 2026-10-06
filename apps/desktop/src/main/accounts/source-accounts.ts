@@ -50,6 +50,8 @@ export type AccountIdentity = {
   // Teams (#111): whether the sign-in carries the permission to read Channel posts. Absent: as the
   // Account already had it.
   channelPosts?: { granted: boolean };
+  // Outlook (#142): whether the sign-in carries MailboxSettings.ReadWrite. Absent: as the Account had it.
+  mailboxSettings?: { granted: boolean };
 };
 
 // What one Source brings to its Accounts. `S` is what its browser sign-in hands back: the tokens,
@@ -69,7 +71,8 @@ export type AccountSourceDefinition<S extends TokenSet = TokenSet> = {
       showCode: (prompt: DeviceCodePrompt) => void;
       // The Account being reconnected, if any, as Commander keeps it.
       record: AccountRecord | null;
-      // Ask for the Source's optional permissions too (Teams: Channel posts, #111).
+      // Ask for the Source's optional permissions too (Teams: Channel posts, #111; Outlook:
+      // MailboxSettings.ReadWrite, #142).
       extra: boolean;
     }): Promise<S>;
     // `record`: the Account as Commander keeps it (what it was granted decides what to ask for again).
@@ -158,6 +161,9 @@ export type SourceAccounts = {
     // Microsoft refused to share them: back to not granted (off), until asked for again.
     refused(accountId: string): Promise<void>;
   };
+  // Outlook (#142): Grant access for Mirror Buckets' categories. Signs in again asking for
+  // MailboxSettings.ReadWrite too; rejects when Microsoft didn't grant it.
+  mailboxSettings?: { request(accountId: string): Promise<void> };
 };
 
 export type SourceAccountsOptions = {
@@ -277,6 +283,8 @@ export function createSourceAccounts<S extends TokenSet>(
         }
       : existing?.channelPosts;
     if (channels) record.channelPosts = channels;
+    const mailboxSettings = identity.mailboxSettings ?? existing?.mailboxSettings;
+    if (mailboxSettings) record.mailboxSettings = mailboxSettings;
     await store.put(record);
     changed();
     return definition.summarize(record);

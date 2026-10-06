@@ -142,3 +142,36 @@ describe('Settings → Buckets', () => {
     expect(await screen.findByRole('textbox', { name: 'Name of Receipts' })).toBeTruthy();
   });
 });
+
+describe('Skip the inbox (#142)', () => {
+  const skipSwitch = (name: string) => screen.getByRole('switch', { name: `${name} skips the inbox` });
+
+  it('is off for every Bucket, suggested for Newsletters, Receipts and Junk', async () => {
+    renderSettings();
+    await screen.findByRole('textbox', { name: 'Name of FYI' });
+    for (const bucket of store.buckets())
+      expect(skipSwitch(bucket.name).getAttribute('aria-checked')).toBe('false');
+    const suggested = rows()
+      .filter((row) => within(row).queryByText(/Suggested/))
+      .map((row) => within(row).getByRole('switch').getAttribute('aria-label'));
+    expect(suggested).toEqual([
+      'Newsletters skips the inbox',
+      'Receipts skips the inbox',
+      'Junk skips the inbox',
+    ]);
+    expect(screen.getByRole('region', { name: /Buckets/ }).textContent).toContain(
+      'archived in Gmail or Outlook',
+    );
+  });
+
+  it('switching it on saves it, and says what it does', async () => {
+    renderSettings();
+    await screen.findByRole('textbox', { name: 'Name of Newsletters' });
+    fireEvent.click(skipSwitch('Newsletters'));
+    await waitFor(() =>
+      expect(store.buckets().find((bucket) => bucket.id === 'newsletters')?.skipInbox).toBe(true),
+    );
+    expect(await screen.findByText(/Newsletters now skips the inbox/)).toBeTruthy();
+    await waitFor(() => expect(skipSwitch('Newsletters').getAttribute('aria-checked')).toBe('true'));
+  });
+});
