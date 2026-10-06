@@ -1,6 +1,7 @@
 import {
   type ActivityEntry,
   type Actor,
+  addressName,
   type Filing,
   fromMessageOf,
   type Item,
@@ -79,11 +80,13 @@ export type LinearState = LinearIssueDetail['state'];
 /**
  * Where a Todo was made: for one made from a Block (origin Daily Note, or Ares suggesting it from
  * one), its Block and the day of that Block's Daily Note; for one Ares made from a Teams Chat (#110),
- * the Chat, its name and the message it came from.
+ * the Chat, its name and the message it came from; for one the User made from an email (#140), the
+ * email and who wrote it ("me" for the User's own).
  */
 export type MadeFrom =
   | { blockId: string; day: string }
-  | { chatId: string; chatName: string; messageId: string };
+  | { chatId: string; chatName: string; messageId: string }
+  | { emailId: string; sender: string };
 
 const originIs = (todo: Item, origins: readonly string[]) =>
   todo.detail?.kind === 'todo' && origins.includes(todo.detail.origin);
@@ -109,6 +112,34 @@ const EMPTY = 'A Todo can’t be empty';
 export function todosIn(itemStore: ItemStoreClient): Todos {
   // Changes made here that were recorded as several entries, by their first entry's id.
   const together = new Map<number, number[]>();
+
+  // The Todos made from an email (#140): each one's email, by its made-from Link, and who wrote it.
+  async function fromEmails(todos: readonly Item[]): Promise<Map<string, MadeFrom>> {
+    const made = todos.filter((todo) => originIs(todo, ['email']));
+    if (!made.length) return new Map();
+    const views = await Promise.all(made.map((todo) => itemStore({ op: 'get', itemId: todo.id })));
+    const emailOf = new Map(
+      views.flatMap((view) => {
+        const link = view?.links.find((each) => each.type === 'made-from' && each.to.kind === 'email');
+        return view && link ? [[view.item.id, link.to.id] as const] : [];
+      }),
+    );
+    const emailIds = [...new Set(emailOf.values())];
+    const emails = await Promise.all(
+      pages(emailIds).map((page) =>
+        itemStore({ op: 'query', query: { ids: page, includeDeleted: true, limit: 1000 } }),
+      ),
+    );
+    const senders = new Map(
+      emails.flat().map((email) => {
+        const detail = email.detail?.kind === 'email' ? email.detail : null;
+        return [email.id, detail?.sentByMe ? 'me' : addressName(detail?.from ?? null)] as const;
+      }),
+    );
+    return new Map(
+      [...emailOf].map(([todoId, emailId]) => [todoId, { emailId, sender: senders.get(emailId) ?? '' }]),
+    );
+  }
 
   return {
     async list() {
@@ -222,6 +253,7 @@ export function todosIn(itemStore: ItemStoreClient): Todos {
         if (chatName !== undefined)
           found.set(todo.id, { chatId: from.itemId, chatName, messageId: from.messageId });
       }
+      for (const [todoId, from] of await fromEmails(todos)) found.set(todoId, from);
       return found;
     },
 

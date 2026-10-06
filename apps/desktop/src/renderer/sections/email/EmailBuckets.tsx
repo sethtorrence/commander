@@ -14,8 +14,8 @@ import { stripOrder } from '../../buckets/buckets';
 
 /*
   The Email Section's Buckets (#137): the Bucket strip under the sheet header, which narrows the list
-  to one Bucket (or Unsorted) with each one's count, and the Bucket picker (`v`), which moves the
-  selected thread. Buckets are Commander's own: nothing here reaches Gmail.
+  to one Bucket (or Unsorted) with each one's count and starts Triage (#140), and the Bucket picker
+  (`v`), which moves the selected thread. Buckets are Commander's own: nothing here reaches Gmail.
 */
 
 const caps = 'font-mono text-label leading-none font-semibold uppercase tracking-caps';
@@ -23,18 +23,21 @@ const caps = 'font-mono text-label leading-none font-semibold uppercase tracking
 /**
  * All, then Needs reply, the User's other Buckets in their order, and Unsorted, each with its count
  * (the listed view's threads under the Project filter). Choosing one narrows the list; All shows
- * every Bucket.
+ * every Bucket. At the end, Triage (#140) walks the chosen Bucket, Needs reply unless one is chosen.
  */
 export function BucketStrip({
   buckets,
   counts,
   bucket,
   onBucket,
+  triage,
 }: {
   buckets: readonly Bucket[];
   counts: ReadonlyMap<string, number>;
   bucket: string | null;
   onBucket: (bucket: string | null) => void;
+  /** The Bucket Triage would walk, and starting it; absent, no Triage button (no email Account). */
+  triage?: { name: string; onStart: () => void } | undefined;
 }) {
   const choices: { id: string | null; name: string; key: string }[] = [
     { id: null, name: 'All', key: 'all' },
@@ -71,6 +74,19 @@ export function BucketStrip({
           );
         })}
       </div>
+      {triage && (
+        <button
+          type="button"
+          onClick={triage.onStart}
+          aria-keyshortcuts="Shift+T"
+          className={cn(
+            'ml-auto flex flex-none cursor-pointer items-center gap-2 border-0 border-l border-line bg-transparent px-4 whitespace-nowrap text-ink hover:bg-raise',
+            caps,
+          )}
+        >
+          Triage {triage.name} <Kbd>⇧T</Kbd>
+        </button>
+      )}
     </div>
   );
 }

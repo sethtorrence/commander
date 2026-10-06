@@ -87,7 +87,7 @@ The state of an email the Agent hasn't confidently placed in a Bucket yet.
 _Avoid_: Uncategorised, unfiled (that's for Projects), inbox
 
 **Triage**:
-A manual, keyboard-driven pass through email where you decide what happens to each message.
+A manual, keyboard-driven pass through email, one Bucket at a time, where you decide what happens to each thread with one key (reply, archive, snooze, make it a Todo, move it to another Bucket, set its Project, or skip).
 _Avoid_: Inbox zero, processing
 
 **Snooze**:
@@ -139,7 +139,7 @@ _Avoid_: Hidden (that's Teams' own flag), blocked, left
 ## Work and notes
 
 **Todo**:
-An item on your to-do lists: a Linear issue (labelled as Linear), a review asked of you or an issue assigned to you on GitHub (labelled as GitHub), a suggestion the Agent drew from your notes, calendar, email or Teams Chats, one you added yourself, or a Block you made into one in a Daily Note (`[]`).
+An item on your to-do lists: a Linear issue (labelled as Linear), a review asked of you or an issue assigned to you on GitHub (labelled as GitHub), a suggestion the Agent drew from your notes, calendar, email or Teams Chats, one you added yourself, a Block you made into one in a Daily Note (`[]`), or an email you made into one (`t`, "From email").
 _Avoid_: Task, action item
 
 **Daily Note**:

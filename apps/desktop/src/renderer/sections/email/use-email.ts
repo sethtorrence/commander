@@ -26,6 +26,23 @@ export const ACCOUNT_STORAGE_KEY = 'commander.email.account';
 export const threadId = (thread: { account: string; threadKey: string }) =>
   `${thread.account}\u0000${thread.threadKey}`;
 
+/**
+ * Does an action to a thread's messages as they are now, as one change; resolves with its entries
+ * (none when it changed nothing).
+ */
+export async function actOnThread(
+  client: EmailClient,
+  thread: Pick<EmailThreadSummary, 'account' | 'threadKey'>,
+  action: ThreadAction,
+): Promise<number[]> {
+  const found = await client.thread(thread.account, thread.threadKey);
+  const messages = (found?.messages ?? []).flatMap(({ item }) =>
+    item.detail?.kind === 'email' ? [{ id: item.id, detail: item.detail as EmailDetail }] : [],
+  );
+  const entries = await client.edit(threadActionFields(action, messages));
+  return entries.map((entry) => entry.id);
+}
+
 /** The view's threads counted by Bucket and Project, from thread summaries (search results). */
 export function facetsOf(threads: readonly EmailThreadSummary[]): EmailThreadFacet[] {
   const found = new Map<string, EmailThreadFacet>();
@@ -39,6 +56,25 @@ export function facetsOf(threads: readonly EmailThreadSummary[]): EmailThreadFac
     found.set(key, facet);
   }
   return [...found.values()];
+}
+
+/**
+ * Threads by Bucket (a Bucket's id, `unsorted`, and `all`) from a view's facets, counting those the
+ * Project filter's `include` lets through: the Bucket strip's counts, and Triage's next Bucket.
+ */
+export function bucketCountsOf(
+  facets: readonly EmailThreadFacet[],
+  include: (item: Pick<Item, 'filing'>) => boolean,
+): Map<string, number> {
+  const counted = new Map<string, number>([['all', 0]]);
+  for (const facet of facets) {
+    const filing = facet.projectId ? { projectId: facet.projectId, filedBy: 'user' as const } : null;
+    if (!include({ filing })) continue;
+    const key = facet.bucketId ?? UNSORTED;
+    counted.set(key, (counted.get(key) ?? 0) + facet.threads);
+    counted.set('all', (counted.get('all') ?? 0) + facet.threads);
+  }
+  return counted;
 }
 
 export interface EmailState {
@@ -101,6 +137,8 @@ export interface EmailState {
   act(action: ThreadAction, thread?: EmailThreadSummary): Promise<number[]>;
   /** Undoes the last change made here (an action or a filing). */
   undoLast(): Promise<void>;
+  /** Keeps a change made through another module (a Todo made from a thread) for `undoLast`. */
+  remember(entryIds: number[]): void;
   /** Whether the selected thread's changes reached Gmail or Outlook, are on their way, or couldn't sync. */
   sync: IssueSync;
   /** Sends the selected thread's changes that couldn't sync again. */
@@ -238,17 +276,7 @@ export function useEmail({
   const forProjectFilter = useMemo(() => (list ?? []).map((each) => each.latest), [list]);
 
   // The strip's counts: the view's threads (whatever the Bucket) the Project filter lets through.
-  const bucketCounts = useMemo(() => {
-    const counted = new Map<string, number>([['all', 0]]);
-    for (const facet of facets) {
-      const filing = facet.projectId ? { projectId: facet.projectId, filedBy: 'user' as const } : null;
-      if (!include({ filing })) continue;
-      const key = facet.bucketId ?? UNSORTED;
-      counted.set(key, (counted.get(key) ?? 0) + facet.threads);
-      counted.set('all', (counted.get('all') ?? 0) + facet.threads);
-    }
-    return counted;
-  }, [facets, include]);
+  const bucketCounts = useMemo(() => bucketCountsOf(facets, include), [facets, include]);
 
   const listedSelection = threads.find((each) => threadId(each) === selectedId) ?? null;
   const selected =
@@ -294,13 +322,8 @@ export function useEmail({
     async (action: ThreadAction, target: EmailThreadSummary | null, remember: boolean) => {
       const thread = target ?? selected;
       if (!thread) return [];
-      const found = await client.thread(thread.account, thread.threadKey);
-      const messages = (found?.messages ?? []).flatMap(({ item }) =>
-        item.detail?.kind === 'email' ? [{ id: item.id, detail: item.detail as EmailDetail }] : [],
-      );
-      const entries = await client.edit(threadActionFields(action, messages));
+      const ids = await actOnThread(client, thread, action);
       reload();
-      const ids = entries.map((entry) => entry.id);
       if (ids.length && remember) done.current.push(ids);
       return ids;
     },
@@ -447,6 +470,10 @@ export function useEmail({
     [client, reload],
   );
 
+  const remember = useCallback((entryIds: number[]) => {
+    if (entryIds.length) done.current.push(entryIds);
+  }, []);
+
   const undoLast = useCallback(async () => {
     const last = done.current.pop();
     if (!last) return;
@@ -487,6 +514,7 @@ export function useEmail({
     setSearch,
     act,
     undoLast,
+    remember,
     sync,
     retry,
     superseded,

@@ -28,6 +28,7 @@ import type {
 } from '@commander/domain/ipc';
 import type { ItemStoreClient } from '../../item-store/client';
 import { clockTime } from '../../settings/account-sync';
+import { type EmailTodoDraft, makeEmailTodo } from './email-todo';
 
 /*
   The Email Section's view of the app: everything it reads from the Item store, or asks of the email
@@ -35,7 +36,8 @@ import { clockTime } from '../../settings/account-sync';
   per message; the Section shows them as threads. Filing a thread files each of its messages, as one
   change the User can undo, and so does organising it (#135): archive, Trash, star, read, labels and
   snooze are edits of each message's synced fields (ADR 0003), which the Core queues for Gmail or
-  Outlook. So is moving it to a Bucket (#137), though that stays in Commander.
+  Outlook. So is moving it to a Bucket (#137), though that stays in Commander. A Todo made from an
+  email (#140) is the Todo and its made-from Link, as one change.
 */
 
 export interface EmailClient {
@@ -73,6 +75,8 @@ export interface EmailClient {
   file(itemIds: string[], projectId: string | null): Promise<ActivityEntry[]>;
   /** Undoes a change made here, all its entries at once. */
   undo(entryIds: number[]): Promise<void>;
+  /** Makes a Todo from an email (#140), with its made-from Link, as one change. Returns its entries. */
+  makeTodo(draft: EmailTodoDraft): Promise<ActivityEntry[]>;
   /** How far Ares has got sorting the mail in scope (#141), for the status line. */
   sorting(): Promise<SortingProgress>;
   /** Confirms Ares's suggested Bucket on an email: sorted there, by the User. Returns its entries. */
@@ -133,6 +137,7 @@ export function emailIn(
       const actions = [...entryIds].reverse().map((entryId): ItemAction => ({ type: 'undo', entryId }));
       if (actions.length) await itemStore({ op: 'record-all', actions });
     },
+    makeTodo: (draft) => makeEmailTodo(itemStore, draft),
     sorting: () => itemStore({ op: 'email-sorting' }),
     async confirmBucket(proposalId) {
       const record = await bridges.autonomy()({ op: 'accept', proposalId });

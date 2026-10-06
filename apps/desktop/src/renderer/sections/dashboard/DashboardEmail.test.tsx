@@ -1,14 +1,17 @@
 // @vitest-environment jsdom
 import type { ItemStore } from '@commander/core/src/item-store';
 import type { EmailDetail, SourceItem } from '@commander/domain';
+import { Toaster } from '@commander/ui';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { onReveal } from '../../frame/reveal';
+import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { ProjectsProvider } from '../../projects/context';
 import { type ProjectsClient, projectsIn } from '../../projects/projects';
 import { ShortcutProvider, ShortcutScope, useActiveScopes } from '../../shortcuts/react';
+import { makeEmailTodo } from '../email/email-todo';
 import type { LinearAccountsClient } from '../linear/linear-issues';
 import { FrameControlsProvider, SectionProvider } from '../section';
 import { dashboard as definition } from '.';
@@ -18,7 +21,8 @@ import { type DashboardClient, dashboardIn } from './dashboard';
 
 // Email on the Dashboard (#137): threads in Needs reply in Today, threads in Waiting on others with no
 // answer for 3 days in Waiting on others, ranked by the band rules; every other Bucket and Unsorted
-// mail stays in the Email Section. The clock is fixed: Thursday 1 October 2026, 11:40.
+// mail stays in the Email Section; `t` makes an email row a Todo (#140). The clock is fixed: Thursday
+// 1 October 2026, 11:40.
 
 const NOW = new Date(2026, 9, 1, 11, 40).getTime();
 const HOUR = 3_600_000;
@@ -27,6 +31,7 @@ const DAY = 24 * HOUR;
 let store: ItemStore;
 let projects: ProjectsClient;
 let client: DashboardClient;
+let itemStore: ItemStoreClient;
 let close: () => void;
 const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
 const accounts: LinearAccountsClient = {
@@ -76,6 +81,7 @@ const sortInto = (externalId: string, bucketId: string) =>
 beforeEach(() => {
   const opened = openTestItemStore(() => NOW);
   ({ store, close } = opened);
+  itemStore = opened.client;
   projects = projectsIn(opened.client);
   client = dashboardIn(opened.client, accounts, undefined, () => NOW);
   localStorage.clear();
@@ -123,13 +129,14 @@ function renderSheet() {
             <SectionProvider place={{ definition, number: 1, total: 8, active: true }}>
               <ShortcutScope scope="dashboard" group="Dashboard">
                 <Active>
-                  <DashboardSheet />
+                  <DashboardSheet makeTodo={(draft) => makeEmailTodo(itemStore, draft)} />
                 </Active>
               </ShortcutScope>
             </SectionProvider>
           </FrameControlsProvider>
         </DashboardProvider>
       </ProjectsProvider>
+      <Toaster />
     </ShortcutProvider>,
   );
 }
@@ -178,5 +185,27 @@ describe('email on the Dashboard', () => {
       fireEvent.keyDown(document.body, { key: 'e' });
     });
     await waitFor(() => expect(titles('Today')).toEqual([]));
+  });
+
+  it('t makes the email a Todo, from email and linked to it, and Ctrl+Z takes it back', async () => {
+    renderSheet();
+    await waitFor(() => expect(titles('Today')).toEqual(['Q4 offsite dates']));
+    fireEvent.click(row('Q4 offsite dates'));
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 't' });
+    });
+    const dialog = await screen.findByRole('dialog', { name: 'Make it a Todo' });
+    expect(dialog.textContent).toContain('From email · Dana Whitfield');
+    fireEvent.click(within(dialog).getByRole('button', { name: /Add Todo/ }));
+
+    await screen.findByText('Todo added: Q4 offsite dates');
+    const [todo] = store.query({ kinds: ['todo'] });
+    expect(todo).toMatchObject({ title: 'Q4 offsite dates', detail: { origin: 'email' } });
+    expect(store.get(todo?.id ?? '')?.links.map((link) => link.to.id)).toEqual([idOf('offsite')]);
+
+    act(() => {
+      fireEvent.keyDown(document.body, { key: 'z', ctrlKey: true });
+    });
+    await waitFor(() => expect(store.query({ kinds: ['todo'] })).toEqual([]));
   });
 });
