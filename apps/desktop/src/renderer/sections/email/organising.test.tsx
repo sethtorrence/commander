@@ -91,13 +91,14 @@ function mail(id: string, fields: Partial<EmailDetail> = {}): SourceItem {
 }
 
 beforeEach(() => {
+  // The clock is faked first, so the Item store keeps the same time as the window.
+  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   const opened = openTestItemStore();
   ({ store, close, changes } = opened);
   client = emailIn(opened.client);
   projects = projectsIn(opened.client);
   localStorage.clear();
   Element.prototype.scrollIntoView = () => {};
-  vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   store.saveFromSource({
     source: 'gmail',
     account: ALEX,

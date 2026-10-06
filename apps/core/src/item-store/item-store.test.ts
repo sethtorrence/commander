@@ -590,6 +590,11 @@ describe('daily snapshots', () => {
   const day = 24 * 60 * 60 * 1000;
   const snapshots = () => readdirSync(join(dir, 'snapshots')).sort();
 
+  // Snapshots are named by the local day, so start at local noon: 1 October in every time zone.
+  beforeEach(() => {
+    clock = new Date(2026, 9, 1, 12).getTime();
+  });
+
   it('copies the database once a day into a file that opens with every Item', () => {
     const store = open();
     store.saveFromSource(emails({ externalId: 'm1', title: 'Keep me safe' }));

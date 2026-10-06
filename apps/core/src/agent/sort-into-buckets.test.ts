@@ -25,7 +25,8 @@ import { sortIntoBucketsJob, staleSortingSuggestions } from './sort-into-buckets
 // real Item store, with the gate deciding. The model is a fake provider answering as GLM-5.3-Flash
 // does in JSON mode, with recorded-style replies keyed by the email's subject.
 
-const T = Date.UTC(2026, 9, 7, 9);
+// 09:00 local on Wednesday 7 October: the prompt dates email in the User's local time.
+const T = new Date(2026, 9, 7, 9).getTime();
 
 type Reply = { bucket: string; confidence: number; reason?: string; steering?: unknown };
 

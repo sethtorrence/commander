@@ -52,7 +52,8 @@ const repo = (owner: string, name: string, changes: Partial<GitHubRepo> = {}): G
   ...changes,
 });
 const api = repo('acme', 'api');
-const web = repo('acme', 'web', { pushedAt: NOW - 40 * DAY });
+// Pushed at local noon on 24 August, 40 days before NOW: that date in every time zone.
+const web = repo('acme', 'web', { pushedAt: new Date(2026, 7, 24, 12).getTime() });
 const handbook = repo('acme', 'handbook', { visibility: 'internal', pushedAt: null });
 const dotfiles = repo('octocat', 'dotfiles', { visibility: 'public' });
 const ref = ({ nodeId, owner, name }: GitHubRepo) => ({ nodeId, owner, name });
