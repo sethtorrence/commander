@@ -156,6 +156,8 @@ const typingPauseMs = Number(
 const summaryHour = Number(
   process.argv.find((arg) => arg.startsWith('--github-summary-hour='))?.split('=')[1] ?? Number.NaN,
 );
+// They may also leave out the Monday roll-up, so a test sees the same summary on any day.
+const summaryRollUp = !process.argv.includes('--github-summary-rollup=off');
 const agent = setUpAgent(itemStore, {
   gate,
   client: models.client,
@@ -172,6 +174,7 @@ const agent = setUpAgent(itemStore, {
   // the Update to mention.
   prepareWriterDetails: (itemIds) => githubOversight.prepareWriterDetails(itemIds),
   summaryHour: testHooks && Number.isFinite(summaryHour) ? summaryHour : undefined,
+  summaryRollUp: testHooks ? summaryRollUp : true,
   onSummaryWritten: () => {
     updates?.sweep();
     // The Dashboard reads its row again.

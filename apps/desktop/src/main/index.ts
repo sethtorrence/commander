@@ -104,6 +104,10 @@ function startCore(secrets: Secrets) {
     ...(testHooks && process.env.COMMANDER_TEST_SUMMARY_HOUR
       ? [`--github-summary-hour=${process.env.COMMANDER_TEST_SUMMARY_HOUR}`]
       : []),
+    // And whether the Monday roll-up is written too (tests that expect one summary turn it off).
+    ...(testHooks && process.env.COMMANDER_TEST_SUMMARY_ROLLUP === 'off'
+      ? ['--github-summary-rollup=off']
+      : []),
   ]);
   const itemStore = createItemStoreChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.itemStore, (_event, request: unknown) => itemStore.request(request));

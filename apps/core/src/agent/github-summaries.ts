@@ -33,6 +33,8 @@ export type GitHubSummariesOptions = {
   timeZone?: string;
   // The hour the daily summary is due from (05:00; the end-to-end tests start it at midnight).
   hour?: number;
+  // Whether the Monday roll-up is written too (true unless a test turns it off).
+  rollUp?: boolean;
   log?: (message: string) => void;
 };
 
@@ -51,6 +53,7 @@ export function createGitHubSummaries({
   now = Date.now,
   timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone,
   hour,
+  rollUp = true,
   log = (message) => console.warn(message),
 }: GitHubSummariesOptions): GitHubSummaries {
   let asking = 0;
@@ -83,7 +86,9 @@ export function createGitHubSummaries({
       lastDailyTo: itemStore.githubSummaries.lastDailyTo(),
       written: (cadence, day) => itemStore.githubSummaries.writtenFor(cadence, day),
       ...(hour !== undefined && { hour }),
-    }).map((each) => ({ ...each, key: `${each.cadence}:${each.day}`, choice: null }));
+    })
+      .filter((each) => rollUp || each.cadence !== 'weekly')
+      .map((each) => ({ ...each, key: `${each.cadence}:${each.day}`, choice: null }));
     // A quiet range has nothing to write about: it is looked at again on the next check.
     const wants = due.flatMap((want) => {
       const itemIds = itemsIn(want.range);

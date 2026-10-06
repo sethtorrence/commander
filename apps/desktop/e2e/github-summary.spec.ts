@@ -100,6 +100,8 @@ function environment() {
     PATH: emptyPath,
     COMMANDER_TEST_HOOKS: '1',
     COMMANDER_TEST_SUMMARY_HOUR: '0',
+    // One summary on any day: no Monday roll-up beside the daily one.
+    COMMANDER_TEST_SUMMARY_ROLLUP: 'off',
   };
 }
 

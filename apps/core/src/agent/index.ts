@@ -54,6 +54,8 @@ export type AgentOptions = {
   // each one written.
   prepareWriterDetails?: (itemIds: readonly string[]) => Promise<void>;
   summaryHour?: number;
+  // Whether the Monday roll-up is written as well as the daily summary (true unless a test turns it off).
+  summaryRollUp?: boolean;
   onSummaryWritten?: (itemId: string) => void;
   log?: (message: string) => void;
 };
@@ -208,6 +210,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     prepareWriterDetails: options.prepareWriterDetails,
     now,
     hour: options.summaryHour,
+    rollUp: options.summaryRollUp,
     log: options.log,
   });
   const summariesDue = () => void githubSummaries.due();
