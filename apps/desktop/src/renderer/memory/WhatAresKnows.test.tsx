@@ -54,7 +54,8 @@ const memoryRow = (text: string | RegExp) =>
   screen.getAllByTestId('memory').find((row) => row.textContent?.match(text)) as HTMLElement;
 
 beforeEach(() => {
-  ({ store, client, close } = openTestItemStore(() => Date.UTC(2026, 9, 4, 9, 30)));
+  // 09:30 local, so a memory learned now reads "4 Oct" in every time zone.
+  ({ store, client, close } = openTestItemStore(() => new Date(2026, 9, 4, 9, 30).getTime()));
   tl = store.changeProject({ type: 'create', project: { name: 'Titanlink', code: 'TL', accent: 'blue' } })
     .project as Project;
 });

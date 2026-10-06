@@ -33,6 +33,8 @@ const STANDUPS = 'c_tl_standups@group.calendar.google.com';
 const LONDON = 'Europe/London';
 // Monday 5 October 2026, 10:30 in London.
 const NOW = Date.UTC(2026, 9, 5, 9, 30);
+// The last sync is 10:02 on NOW's local day (the status line shows it in the computer's own zone).
+const SYNCED_AT = new Date(NOW).setHours(10, 2, 0, 0);
 const at = (iso: string) => Date.parse(iso);
 
 let store: ItemStore;
@@ -85,7 +87,7 @@ const syncStatus = (overrides: Partial<AccountSyncStatus> = {}): AccountSyncStat
   activity: 'idle',
   cadenceMinutes: 15,
   cadenceChoices: [15, 30, 60],
-  lastSyncedAt: new Date(2026, 9, 5, 10, 2).getTime(),
+  lastSyncedAt: SYNCED_AT,
   nextSyncAt: null,
   itemCount: 4,
   problem: null,
@@ -272,7 +274,8 @@ describe('the Calendar sheet', () => {
         ['Wednesday 7 October', ['All day Local-first conference', '10:00–11:00 Planning']],
       ]),
     );
-    expect(controls.setTabCount).toHaveBeenLastCalledWith('calendar', 2);
+    // The count is set in an effect, which can run just after the Agenda shows.
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('calendar', 2));
     expect(screen.getByTestId('calendar-sync-status').textContent).toBe('Synced 10:02');
   });
 
@@ -411,7 +414,7 @@ describe('the Calendar sheet', () => {
         ],
       ]),
     );
-    expect(controls.setTabCount).toHaveBeenLastCalledWith('calendar', 3);
+    await waitFor(() => expect(controls.setTabCount).toHaveBeenLastCalledWith('calendar', 3));
     await waitFor(() => expect(accounts.refreshed).toEqual([ALEX, SAM]));
 
     // The side column: each Account's calendars under its address.

@@ -293,18 +293,24 @@ describe('never ranked', () => {
 });
 
 describe('Ares’s paragraph', () => {
+  // Midday local on the fixtures' day, so "two hours ago" is today in every time zone.
+  const MIDDAY = new Date(NOW).setHours(12, 0, 0, 0);
   const paragraph = {
     personId: 'person-Priya',
     name: 'Priya',
     text: 'Priya spent the week on webhook retries. Two PRs merged.',
     itemIds: ['Priya-0'],
-    range: { from: new Date(2026, 8, 28).getTime(), to: NOW - 2 * HOUR },
-    writtenAt: NOW - 2 * HOUR,
+    range: { from: new Date(2026, 8, 28).getTime(), to: MIDDAY - 2 * HOUR },
+    writtenAt: MIDDAY - 2 * HOUR,
   };
+
+  beforeEach(() => {
+    vi.setSystemTime(MIDDAY);
+  });
 
   it('shows his paragraph through AresText with when he wrote it, and Refresh writes it again', async () => {
     const refresh = vi.fn(async () => ({
-      paragraph: { ...paragraph, text: 'Priya is waiting on Omar’s review.', writtenAt: NOW },
+      paragraph: { ...paragraph, text: 'Priya is waiting on Omar’s review.', writtenAt: MIDDAY },
       problem: null,
     }));
     renderSheet(standIn({ cards: [cardFor('Priya', 2, { paragraph })] }, refresh));
@@ -318,7 +324,7 @@ describe('Ares’s paragraph', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Refresh Ares’s paragraph about Priya' }));
     });
-    expect(refresh).toHaveBeenCalledWith('person-Priya', expect.objectContaining({ to: NOW }));
+    expect(refresh).toHaveBeenCalledWith('person-Priya', expect.objectContaining({ to: MIDDAY }));
     await waitFor(() =>
       expect(screen.getByTestId('person-paragraph-text').textContent).toBe(
         'Priya is waiting on Omar’s review.',

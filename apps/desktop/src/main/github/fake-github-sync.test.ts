@@ -135,6 +135,8 @@ it('answers a map’s sub-issues, milestones, claims and blockers as GitHub does
     parent: 1,
     state: 'CLOSED',
     stateReason: 'NOT_PLANNED',
+    // Closed yesterday, so it stays inside the first sync's 30 days whenever the test runs.
+    updatedAt: new Date(Date.now() - 86_400_000).toISOString(),
   });
   github.addIssue({
     repo: 'acme-org/api',
