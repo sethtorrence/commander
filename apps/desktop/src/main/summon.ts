@@ -6,9 +6,13 @@ import { execFile } from 'node:child_process';
 // through the pid file), the app shows its window, and the helper focuses it through Hyprland.
 // A second launch of Commander lands here too, through the single-instance lock.
 
-// The window's class (the Wayland app_id), set through app.setDesktopName in index.ts.
-export const WINDOW_CLASS = 'commander';
+// The window's class (the Wayland app_id), set through app.setDesktopName in index.ts. End-to-end
+// tests give their Commanders a class of their own (COMMANDER_WINDOW_CLASS, "commander-e2e"), so a
+// Hyprland rule can keep their windows on a workspace away from the User's.
+export const WINDOW_CLASS = process.env.COMMANDER_WINDOW_CLASS || 'commander';
 export const DESKTOP_ENTRY = `${WINDOW_CLASS}.desktop`;
+// Commander's own launcher entry (its autostart file), which stays "commander.desktop" even in tests.
+export const APP_ENTRY = 'commander.desktop';
 
 export type ConfigProvider = 'lua' | 'text';
 
@@ -27,7 +31,8 @@ export function hyprlandFocusArgs(provider: ConfigProvider): string[] {
 }
 
 export function focusThroughHyprland(): void {
-  if (!process.env.HYPRLAND_INSTANCE_SIGNATURE) return;
+  // Test Commanders never ask Hyprland for focus: it would switch the User to the test's workspace.
+  if (!process.env.HYPRLAND_INSTANCE_SIGNATURE || process.env.COMMANDER_TEST_NO_FOCUS === '1') return;
   execFile('hyprctl', ['-j', 'status'], (_error, status) => {
     execFile('hyprctl', hyprlandFocusArgs(configProvider(String(status ?? ''))), () => {});
   });

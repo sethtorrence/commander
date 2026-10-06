@@ -32,10 +32,15 @@ export async function launchCommander(
 ): Promise<LaunchedCommander> {
   const userDataDir = options.userDataDir ?? mkdtempSync(join(tmpdir(), 'commander-e2e-'));
   const args = ['.', `--user-data-dir=${userDataDir}`, ...(options.args ?? [])];
+  await keepTestWindowsOnTheirOwnWorkspace();
   const app = await electron.launch({
     args,
     env: {
       ...(process.env as Record<string, string>),
+      COMMANDER_WINDOW_CLASS: E2E_WINDOW_CLASS,
+      // Nor do they focus themselves through Hyprland (a second launch, a tray click), which would
+      // switch the User's screen to that workspace.
+      ...(process.env.COMMANDER_E2E_WORKSPACE === 'here' ? {} : { COMMANDER_TEST_NO_FOCUS: '1' }),
       COMMANDER_TEST_PRESENCE: 'here',
       COMMANDER_TEST_EMBEDDINGS: 'fake',
       ...options.env,
@@ -58,6 +63,30 @@ export async function launchCommander(
 }
 
 const hyprctl = (args: string[]) => promisify(execFile)('hyprctl', args).then(({ stdout }) => stdout.trim());
+
+// Test Commanders open on a workspace of their own, without taking focus, so a test run never lands
+// on the screen the User is working on. Their windows have their own class (never the User's real
+// Commander's "commander"), and a Hyprland window rule, added at runtime and never to the User's
+// config files (it goes on Hyprland's next config reload), sends that class to workspace 4.
+// COMMANDER_E2E_WORKSPACE picks another; set it to "here" to watch the windows instead.
+const E2E_WINDOW_CLASS = 'commander-e2e';
+let workspaceRule: Promise<void> | null = null;
+function keepTestWindowsOnTheirOwnWorkspace(): Promise<void> {
+  const workspace = process.env.COMMANDER_E2E_WORKSPACE ?? '4';
+  if (!process.env.HYPRLAND_INSTANCE_SIGNATURE || workspace === 'here') return Promise.resolve();
+  workspaceRule ??= (async () => {
+    const status = await hyprctl(['-j', 'status']).catch(() => '');
+    const rule =
+      configProvider(status) === 'lua'
+        ? [
+            'eval',
+            `hl.window_rule({ match = { class = "^(${E2E_WINDOW_CLASS})$" }, workspace = "${workspace} silent" })`,
+          ]
+        : ['keyword', 'windowrule', `workspace ${workspace} silent, class:^(${E2E_WINDOW_CLASS})$`];
+    await hyprctl(rule).catch(() => '');
+  })();
+  return workspaceRule;
+}
 
 /** The workspace Hyprland has Commander's window on, or null while it hasn't mapped it. */
 async function hyprlandWorkspace(pid: number): Promise<string | null> {

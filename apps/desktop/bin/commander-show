@@ -40,7 +40,7 @@ kill -USR1 "$pid" || not_running
 # Outside Hyprland the app's own show and focus are all there is.
 [ -n "$HYPRLAND_INSTANCE_SIGNATURE" ] || exit 0
 
-window='class:^(commander)$'
+window="class:^(${COMMANDER_WINDOW_CLASS:-commander})\$"
 case $(hyprctl -j status 2>/dev/null) in
   *'"configProvider"'*'"lua"'*) set -- dispatch "hl.dsp.focus({ window = \"$window\" })" ;;
   *) set -- dispatch focuswindow "$window" ;;

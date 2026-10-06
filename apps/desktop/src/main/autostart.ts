@@ -1,12 +1,12 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { DESKTOP_ENTRY } from './summon';
+import { APP_ENTRY } from './summon';
 
 // "Start at login" on Linux: an XDG autostart entry in ~/.config/autostart. The entry existing
 // *is* the setting, so it is off until the User turns it on. Commander starts hidden in the tray.
 
 export function autostartPath(env: Partial<Record<'XDG_CONFIG_HOME', string>>, home: string): string {
-  return join(env.XDG_CONFIG_HOME || join(home, '.config'), 'autostart', DESKTOP_ENTRY);
+  return join(env.XDG_CONFIG_HOME || join(home, '.config'), 'autostart', APP_ENTRY);
 }
 
 export function launchAtLoginCommand(app: {
