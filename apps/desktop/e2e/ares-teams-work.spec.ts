@@ -12,7 +12,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares turns Chats into work and words end to end (#110): a fake Microsoft Graph and a fake
@@ -126,7 +126,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function setUpAres(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -139,6 +139,7 @@ async function setUpAres(window: Page) {
 }
 
 async function connectTeams(window: Page) {
+  await settingsPage(window, 'Accounts');
   const teams = window.getByTestId('accounts-panel').getByTestId('source-teams');
   await teams.getByRole('button', { name: 'Connect Teams' }).click();
   await expect(teams.getByTestId('account-status')).toHaveText('Connected');
@@ -214,7 +215,7 @@ test('a request arrives → suggested Todo → Add → in Todos; a waiting Chat 
   ]);
 
   // Every call is on the Usage page, under its job's name.
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const usage = window.getByTestId('usage-panel');
   await usage.getByRole('button', { name: 'Refresh' }).click();
   for (const name of ['Suggest Todos from Teams', 'Suggest Teams replies', 'Draft a reply'])
@@ -222,6 +223,7 @@ test('a request arrives → suggested Todo → Add → in Todos; a waiting Chat 
 
   // The Settings grid never allows Reply in Teams above Ask. (Pop-ups close when another window takes
   // focus mid-test, so open it again until the check holds.)
+  await settingsPage(window, 'Autonomy');
   const grid = window.getByRole('table', { name: 'Autonomy settings' });
   const replyInTeams = grid.getByRole('combobox', { name: 'Reply in Teams', exact: true });
   await expect(replyInTeams).toHaveText('Same');

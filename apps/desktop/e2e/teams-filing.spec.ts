@@ -12,7 +12,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Rules and Ares file Teams Chats, end to end (#108): a fake Microsoft Graph (never the real one)
@@ -66,6 +66,7 @@ function model(request: FakeRequest): FakeReply {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
+  await settingsPage(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -78,6 +79,7 @@ async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
 }
 
 async function createProject(window: Page, name: string, code: string) {
+  await settingsPage(window, 'Projects');
   const form = window.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill(name);
   await form.getByLabel('Badge code').fill(code);
@@ -148,7 +150,7 @@ test('a Rule files a Chat as it syncs; Ares files or suggests the rest; Confirm 
   });
   const window = await commander.window();
   await standInForTheBrowser(commander.app);
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   await connectFakeModel(window, server);
   await createProject(window, 'Titanlink', 'TL');
   await createProject(window, 'Tactics', 'TX');
@@ -165,6 +167,7 @@ test('a Rule files a Chat as it syncs; Ares files or suggests the rest; Confirm 
   ]);
 
   // Connect Teams: five Chats sync, the Rule files one, and Ares files the others as they arrive.
+  await settingsPage(window, 'Accounts');
   const teams = window.getByTestId('accounts-panel').getByTestId('source-teams');
   await teams.getByRole('button', { name: 'Connect Teams' }).click();
   await expect(teams.getByTestId('account-sync').getByTestId('account-synced')).toHaveText(/· 5 chats$/);
@@ -225,7 +228,7 @@ test('a Rule files a Chat as it syncs; Ares files or suggests the rest; Confirm 
   ).toBeVisible();
 
   // The Rule editor offers the people in synced Chats (never the User).
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await window.getByRole('button', { name: 'New Rule', exact: true }).click();
   await editor.getByRole('combobox', { name: 'Field 1' }).selectOption('teams.person');
   const people = editor.getByRole('combobox', { name: 'Value 1' });

@@ -5,7 +5,7 @@ import { launchCommander } from './launch-commander';
 test('Commander launches and Settings → Diagnostics shows the core heartbeat climbing', async () => {
   const { app } = await launchCommander();
   const window = await app.firstWindow();
-  await openSettings(window);
+  await openSettings(window, 'Diagnostics');
 
   const beats = window.getByTestId('core-heartbeat');
   await expect(beats).toHaveText(/\d+/, { timeout: 10_000 });
@@ -21,7 +21,7 @@ test('on a Wayland session Commander runs as a native Wayland client with the ke
   test.skip(!process.env.WAYLAND_DISPLAY, 'needs a Wayland session');
   const { app } = await launchCommander();
   const window = await app.firstWindow();
-  await openSettings(window);
+  await openSettings(window, 'Diagnostics');
 
   await expect(window.getByTestId('display-server')).toHaveText('wayland');
   if (process.env.HYPRLAND_INSTANCE_SIGNATURE) {

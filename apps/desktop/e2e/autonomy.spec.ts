@@ -93,7 +93,7 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
   const first = await launchCommander(testHooks);
   let window = await first.window();
   await registerSuggestTodos(first.app);
-  await openSettings(window);
+  await openSettings(window, 'Autonomy');
   const grid = window.getByRole('table', { name: 'Autonomy settings' });
   await expect(grid).toBeVisible();
 
@@ -155,7 +155,7 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
   const second = await launchCommander({ ...testHooks, userDataDir: first.userDataDir });
   window = await second.window();
   await registerSuggestTodos(second.app);
-  await openSettings(window);
+  await openSettings(window, 'Autonomy');
   await expect(window.getByRole('combobox', { name: 'Suggest Todos' })).toHaveText('Ask');
   await expect(window.getByRole('combobox', { name: 'Delete · Everywhere' })).toHaveText('Ask');
   await expect(window.getByRole('combobox', { name: 'Tidy your Sources · Email' })).toHaveText('Auto');

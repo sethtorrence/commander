@@ -35,7 +35,7 @@ async function pointAtFakeLinear(linear: FakeLinear) {
 }
 
 async function openAccounts(window: Page): Promise<Locator> {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await expect(panel).toBeVisible();
   return panel;

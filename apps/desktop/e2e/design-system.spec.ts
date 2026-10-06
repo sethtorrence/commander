@@ -1,12 +1,14 @@
 import { expect, type Page, test } from '@playwright/test';
-import { openSettings } from './frame';
 import { launchCommander } from './launch-commander';
 
 const PLATES = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
 
+// Settings links to the gallery only in development builds, and these tests run a built Commander,
+// so they go to its route directly.
 async function openGallery(window: Page) {
-  await openSettings(window);
-  await window.getByRole('link', { name: /design gallery/i }).click();
+  await window.evaluate(() => {
+    globalThis.location.hash = '#/design';
+  });
   await expect(window.getByTestId('design-gallery')).toBeVisible();
 }
 

@@ -7,7 +7,7 @@ import {
 } from '@commander/models/testing';
 import { type ElectronApplication, expect, type Locator, type Page, test } from '@playwright/test';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares sorts email, end to end (#141), against a fake Google and Gmail and a fake OpenAI-compatible
@@ -50,6 +50,7 @@ function model(request: FakeRequest): FakeReply {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
+  await settingsPage(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -132,8 +133,9 @@ test('consent → one sorted, one Unsorted with a suggestion → Change → agai
   const window = await commander.window();
   await standInForTheBrowser(commander.app);
 
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await connectFakeModel(window, server);
+  await settingsPage(window, 'Accounts');
   const googleSource = window.getByTestId('accounts-panel').getByTestId('source-google');
   await googleSource.getByRole('button', { name: 'Connect Google' }).click();
   await expect(googleSource.getByTestId('account-synced')).toHaveText(/· 2 emails$/);
@@ -203,10 +205,11 @@ test('consent → one sorted, one Unsorted with a suggestion → Change → agai
   await expect(bucketOf(section, 'Acme weekly #6')).toHaveText('Newsletters');
 
   // The Rule is first in Settings → Rules, and every call is on the Usage page under its job's name.
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await expect(window.getByRole('list', { name: 'Rules' }).getByRole('listitem').first()).toContainText(
     'from is news@acme.test',
   );
+  await settingsPage(window, 'Ares');
   const usage = window.getByTestId('usage-panel');
   await usage.getByRole('button', { name: 'Refresh' }).click();
   await expect(usage.getByTestId('usage-by-job')).toContainText('Sort into Buckets');

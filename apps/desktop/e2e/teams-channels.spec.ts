@@ -5,7 +5,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings } from './frame';
+import { openSettings, settingsPage } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Channel posts end to end (#111), against a fake Microsoft identity platform and Graph on this
@@ -95,7 +95,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 }
 
 async function connectTeams(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const teams = window.getByTestId('accounts-panel').getByTestId('source-teams');
   await teams.getByRole('button', { name: 'Connect Teams' }).click();
   await expect(teams.getByTestId('account-status')).toHaveText('Connected');
@@ -109,6 +109,7 @@ test('consent, Sync Channel posts on, a post mentioning the User on the Dashboar
   await connectTeams(window);
 
   // Off: what Channel posts need, the permissions, the steps and the admin consent link.
+  await settingsPage(window, 'Teams');
   const settings = window.getByTestId('channel-posts-settings');
   await settings.scrollIntoViewIfNeeded();
   await expect(settings).toContainText('Channel posts need the delegated permission ChannelMessage.Read.All');
@@ -126,7 +127,7 @@ test('consent, Sync Channel posts on, a post mentioning the User on the Dashboar
   await expect(teamsSection.getByRole('region', { name: 'Channels' })).toHaveCount(0);
 
   // The tenant needs an administrator first: Request access says so, with the link to send.
-  await openSettings(window);
+  await openSettings(window, 'Teams');
   microsoft.requireAdminConsent('AADSTS65001');
   await settings.getByRole('button', { name: 'Request access' }).click();
   await expect(settings.getByRole('alert')).toContainText('needs an administrator');

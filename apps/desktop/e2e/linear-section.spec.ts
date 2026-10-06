@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { type ElectronApplication, expect, type Locator, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear, viewerOf } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 import { pickOption } from './pick-option';
 
@@ -116,7 +116,7 @@ test.afterEach(async () => {
 });
 
 async function connect(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -146,6 +146,7 @@ test('switch views, filter, open an issue and file it into a Project', async () 
   const window = await commander.window();
   const openedExternally = await catchTheBrowser(app);
   await connect(window);
+  await settingsPage(window, 'Projects');
   const newProject = window.getByRole('form', { name: 'New Project' });
   await newProject.getByLabel('Name').fill('Longtail');
   await newProject.getByLabel('Badge code').fill('LT');

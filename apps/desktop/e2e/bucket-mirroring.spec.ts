@@ -1,6 +1,6 @@
 import { type ElectronApplication, expect, type Locator, type Page, test } from '@playwright/test';
 import { ALEX, type FakeGoogle, startFakeGoogle } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Buckets in Gmail (#142) end to end, against a fake Google and Gmail on this machine (never the real
@@ -104,7 +104,7 @@ test('mirroring on → sort → label appears → label changed in Gmail → Buc
   const window = await commander.window();
   await standInForTheBrowser(commander.app);
 
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const account = window.getByTestId('accounts-panel').getByTestId('source-google');
   await account.getByRole('button', { name: 'Connect Google' }).click();
   await expect(account.getByTestId('account-synced')).toHaveText(/· 3 emails$/);
@@ -121,7 +121,7 @@ test('mirroring on → sort → label appears → label changed in Gmail → Buc
   expect(google.gmail.writes.filter((write) => write.path.includes('labels'))).toEqual([]);
 
   // Settings → Accounts: Mirror Buckets to Gmail, after Commander says what will happen.
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const mirroring = account.getByTestId('bucket-mirroring');
   await expect(mirroring).toContainText('Commander’s Buckets may differ from how you organise mail in Gmail');
   await mirroring.getByRole('switch', { name: 'Mirror Buckets to Gmail' }).click();
@@ -149,7 +149,7 @@ test('mirroring on → sort → label appears → label changed in Gmail → Buc
   await expect(bucketOf(section, 'Offsite photos')).toHaveText('Newsletters');
 
   // A Bucket Rule sorts the digests into Newsletters, and Gmail shows it.
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await window.getByRole('button', { name: 'New Rule', exact: true }).click();
   const editor = window.getByRole('dialog', { name: 'New Rule' });
   await editor.getByRole('combobox', { name: 'Target' }).selectOption({ label: 'A Bucket (email)' });
@@ -165,6 +165,7 @@ test('mirroring on → sort → label appears → label changed in Gmail → Buc
   await expect.poll(() => commanderLabels(ids.update as string)).toEqual(['Commander/Newsletters']);
 
   // Settings → Buckets: Newsletters skips the inbox. Nothing is archived yet: Ares suggests it.
+  await settingsPage(window, 'Email');
   await window.getByRole('switch', { name: 'Newsletters skips the inbox' }).click();
   await expect(window.getByRole('switch', { name: 'Newsletters skips the inbox' })).toHaveAttribute(
     'aria-checked',

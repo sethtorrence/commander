@@ -80,7 +80,7 @@ async function withGoogle() {
       await fetch(url);
     };
   });
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const section = window.getByTestId('accounts-panel').getByTestId('source-google');
   await section.getByRole('button', { name: 'Connect Google' }).click();
   await expect(section.getByTestId('account-status')).toHaveText('Connected');

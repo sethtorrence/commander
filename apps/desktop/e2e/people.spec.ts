@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { type FakeGitHub, OCTOCAT, startFakeGitHub } from '../src/main/github/fake-github-server';
 import { ACME, type FakeLinear, startFakeLinear, viewerOf } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 import { pickOption } from './pick-option';
 
@@ -81,7 +81,7 @@ test.afterEach(async () => {
 });
 
 async function connectBoth(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const panel = window.getByTestId('accounts-panel');
   await panel.getByLabel('Linear personal API key').fill(API_KEY);
   await panel.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -121,6 +121,7 @@ test('one Person across Linear and GitHub: shown by name, found with Ctrl+K, ren
   await connectBoth(window);
 
   // Settings → People: Priya once, with her Linear user, her GitHub login and her address.
+  await settingsPage(window, 'People');
   const people = window.getByTestId('people-settings');
   const priya = personRow(people, 'Priya Patel');
   await expect(priya).toHaveCount(1);

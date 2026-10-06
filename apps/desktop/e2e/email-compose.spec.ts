@@ -73,7 +73,7 @@ async function withGoogle() {
       await fetch(url);
     };
   });
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const section = window.getByTestId('accounts-panel').getByTestId('source-google');
   await section.getByRole('button', { name: 'Connect Google' }).click();
   await expect(section.getByTestId('account-status')).toHaveText('Connected');
@@ -109,7 +109,7 @@ async function withOutlook() {
       if (url.startsWith(login)) await fetch(url);
     };
   }, microsoft.loginUrl);
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const outlook = window.getByTestId('accounts-panel').getByTestId('source-outlook');
   await outlook.getByRole('button', { name: 'Connect Outlook' }).click();
   await expect(outlook.getByTestId('account-status').first()).toHaveText('Connected');
@@ -268,7 +268,7 @@ test('the hold: kept in the tray, sent on quit; offline waits in the Outbox; a r
   const app = commander?.app as ElectronApplication;
 
   // Settings → Email: Undo send.
-  await openSettings(window);
+  await openSettings(window, 'Email');
   await pickOption(window.getByRole('combobox', { name: 'Undo send' }), '5 seconds');
   await expect(async () => {
     await window.keyboard.press('Escape');

@@ -24,6 +24,7 @@ import { DashboardProvider, useDashboard } from '../sections/dashboard/context';
 import { type DashboardClient, dashboardAccountsIn, dashboardIn } from '../sections/dashboard/dashboard';
 import { peopleViewIn } from '../sections/github/people';
 import { FrameControlsProvider, HeaderSlotProvider, SectionProvider } from '../sections/section';
+import { SETTINGS, type SettingsPlace, showInSettings } from '../settings/pages';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { ShortcutScope, useActiveScopes, useShortcuts } from '../shortcuts/react';
 import { isTypingTarget } from '../shortcuts/registry';
@@ -36,7 +37,6 @@ import { RulerCursor } from './RulerCursor';
 import { requestReveal } from './reveal';
 import { useAresStatus } from './use-ares-status';
 
-const SETTINGS = 'settings';
 const pad = (n: number) => String(n).padStart(2, '0');
 
 function SectionView({
@@ -185,9 +185,11 @@ export function Frame() {
     setLastSection(id);
     window.scrollTo({ top: 0 });
   }, []);
-  const openSettings = useCallback(() => {
+  // Settings, on the page the User left it at, or at a page or group (settings/pages.ts).
+  const openSettings = useCallback((place?: SettingsPlace) => {
     setOpen(SETTINGS);
     window.scrollTo({ top: 0 });
+    if (place) showInSettings(place);
   }, []);
   const closeSettings = useCallback(() => openSection(lastSection), [openSection, lastSection]);
 
@@ -227,19 +229,11 @@ export function Frame() {
     if (personReturnTo === SETTINGS) openSettings();
     else openSection(personReturnTo);
   }, [personReturnTo, openSettings, openSection]);
-  // Open on a line of an Update: its Item where it lives, its Section, or Settings (at Accounts, for
-  // an Account to reconnect).
+  // Open on a line of an Update: its Item where it lives, its Section, or Settings at the group it is
+  // about (Accounts, for an Account to reconnect).
   const openUpdateLine = useCallback(
     (target: OpenTarget) => {
-      if (target.kind === 'settings') {
-        openSettings();
-        if (target.part === 'accounts') {
-          requestAnimationFrame(() =>
-            document.querySelector('[data-testid="accounts-panel"]')?.scrollIntoView({ block: 'start' }),
-          );
-        }
-        return;
-      }
+      if (target.kind === 'settings') return openSettings({ group: target.group });
       openSection(target.sectionId);
       if (target.kind === 'item') requestReveal(target.sectionId, target.itemId, target.focus);
       // A place in a Section rather than an Item (the Email Section's Unsorted view, #141).
@@ -278,7 +272,10 @@ export function Frame() {
       setCounts((now) => (now[id] === count ? now : { ...now, [id]: count })),
     [],
   );
-  const controls = useMemo(() => ({ openSection, setTabCount }), [openSection, setTabCount]);
+  const controls = useMemo(
+    () => ({ openSection, openSettings, setTabCount }),
+    [openSection, openSettings, setTabCount],
+  );
 
   useActiveScopes([open]);
   useShortcuts([
@@ -331,7 +328,7 @@ export function Frame() {
         open={open}
         counts={counts}
         onOpen={openSection}
-        onOpenSettings={openSettings}
+        onOpenSettings={() => openSettings()}
         onCloseSettings={closeSettings}
         temporary={
           <>

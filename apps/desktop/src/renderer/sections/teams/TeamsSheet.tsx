@@ -19,6 +19,7 @@ import type { ItemChanges } from '../../item-store/changes';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
+import { SettingsLink } from '../../settings/SettingsLink';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
@@ -349,7 +350,10 @@ export function TeamsSheet({
         status={{ ...status, checking }}
       />
       {state.loaded && state.accounts.length === 0 && state.total === 0 ? (
-        <EmptySheet>No Teams Account connected yet. Connect one in Settings → Accounts (,).</EmptySheet>
+        <EmptySheet>
+          No Teams Account connected yet. Connect one in{' '}
+          <SettingsLink to={{ group: 'accounts' }}>Settings → Accounts</SettingsLink>.
+        </EmptySheet>
       ) : (
         <PickBadgeProvider value={badges.open}>
           <div className={cn('flex-1', open && 'grid grid-cols-[minmax(0,5fr)_minmax(0,11fr)]')}>

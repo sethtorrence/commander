@@ -19,7 +19,8 @@ import type { PaletteQuery } from './query';
   (a tag, the label, a hint on the right):
 
   - Jump: Sections and today's Daily Note; then Projects (their pages); then People (#117), which
-    open their pages (#122)
+    open their pages (#122); then the Settings pages (#199), once something is typed ("settings"
+    lists them all)
   - search results grouped by kind, the group holding the best hit first, those found by meaning
     alone (#73) marked "related"; then Memory (#74): what Ares knows that matches, each opening What
     Ares knows at the memory
@@ -36,6 +37,7 @@ import type { PaletteQuery } from './query';
 export type PaletteAction =
   | { type: 'section'; sectionId: string }
   | { type: 'today' }
+  | { type: 'settings'; page: string }
   | { type: 'project'; projectId: string }
   | { type: 'person'; personId: string }
   | { type: 'memory'; memoryId: string }
@@ -65,6 +67,8 @@ export interface PaletteContext {
   /** The Core's answer for `query.search`, or null when there is none (yet). */
   result: SearchResult | null;
   sections: readonly { id: string; label: string; code: string }[];
+  /** The Settings pages, in sidebar order. */
+  settingsPages?: readonly { id: string; label: string }[];
   /** The open Section's id. */
   current: string;
   projects: readonly Project[];
@@ -223,6 +227,19 @@ export function paletteGroups(context: PaletteContext): PaletteGroup[] {
     );
     add('Projects', (query.search ? (result?.projects ?? []) : context.projects).map(projectRow));
     if (query.search) add('People', (result?.people ?? []).map(personRow));
+    if (typed.length)
+      add(
+        'Settings',
+        (context.settingsPages ?? [])
+          .map((page, index) => ({
+            key: `settings:${page.id}`,
+            tag: `Set ${pad(index + 1)}`,
+            label: page.label,
+            hint: 'Settings',
+            action: { type: 'settings' as const, page: page.id },
+          }))
+          .filter((row) => matches(typed, `${row.label} settings`)),
+      );
   }
 
   if (query.search && result) {

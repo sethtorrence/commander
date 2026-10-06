@@ -9,7 +9,7 @@ import {
 } from '@commander/models/testing';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Memory end to end (#74): a fake Linear (never the real one) and a fake OpenAI-compatible server
@@ -56,6 +56,7 @@ async function freePort(): Promise<number> {
 }
 
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
+  await settingsPage(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -68,6 +69,7 @@ async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
 }
 
 async function createProject(window: Page, name: string, code: string) {
+  await settingsPage(window, 'Projects');
   const form = window.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill(name);
   await form.getByLabel('Badge code').fill(code);
@@ -112,10 +114,11 @@ test('correct a filing → the example in What Ares knows → a similar issue fi
     },
   });
   const window = await commander.window();
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await connectFakeModel(window, server);
   await createProject(window, 'Titanlink', 'TL');
   await createProject(window, 'Tactics', 'TX');
+  await settingsPage(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel');
   await accounts.getByLabel('Linear personal API key').fill(API_KEY);
   await accounts.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -138,7 +141,7 @@ test('correct a filing → the example in What Ares knows → a similar issue fi
   await window.keyboard.press('Escape');
 
   // What Ares knows, opened from Settings → Ares: the correction is an example, the User's own.
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   await window.getByTestId('open-what-ares-knows').click();
   const known = window.getByTestId('what-ares-knows');
   await expect(known).toBeVisible();
@@ -159,7 +162,7 @@ test('correct a filing → the example in What Ares knows → a similar issue fi
 
   // A similar issue arrives: Ares files it under Tactics himself, because of the example.
   linear.issues.add(ACME.id, { identifier: 'OPS-2', title: 'Pager rota for November', team: OPS });
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await accounts.getByRole('button', { name: 'Sync now' }).click();
   await expect(accounts.getByTestId('account-synced')).toHaveText(/2 issues/);
   await window.keyboard.press('Escape');

@@ -1,4 +1,4 @@
-// Settings → Notes → Markdown copy folder (#53), kept in the Item store's database so the Item store
+// Settings → Data → Markdown copy folder (#53), kept in the Item store's database so the Item store
 // stays its only writer. A setting, not an Item: changing it is not in the activity log.
 import { eq } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';

@@ -35,7 +35,7 @@ test('open a Project page, rename the Project from it, and archive it', async ()
   const tabs = window.getByRole('navigation', { name: 'Sections' });
   const page = window.getByTestId('project-page');
 
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await createProject(window, 'Longtail', 'LT');
   await createProject(window, 'Titanlink', 'TL');
   await expect(window.getByRole('list', { name: 'Projects' }).getByRole('listitem')).toHaveCount(2);
@@ -78,7 +78,7 @@ test('open a Project page, rename the Project from it, and archive it', async ()
   await expect(todos).toBeVisible();
 
   // So does Settings → Projects; Esc goes back to Settings.
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await window.getByTestId('settings').getByRole('button', { name: 'Open the Longtail page' }).click();
   await expect(page).toBeVisible();
 
@@ -126,7 +126,7 @@ test('open a Project page, rename the Project from it, and archive it', async ()
   await window.keyboard.press('Escape');
 
   // Unarchive brings it back to the filter bar.
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await archived.getByRole('button', { name: 'Unarchive' }).click();
   await tab(window, 'Todos').click();
   await expect(
@@ -139,7 +139,7 @@ test('open a Project page, rename the Project from it, and archive it', async ()
 test('merge one Project into another from its page, and undo it', async () => {
   const commander = await launchCommander();
   const window = await commander.window();
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await createProject(window, 'Longtail', 'LT');
   await createProject(window, 'Tactics', 'TX');
   await expect(window.getByRole('list', { name: 'Projects' }).getByRole('listitem')).toHaveCount(2);

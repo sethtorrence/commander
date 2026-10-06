@@ -7,6 +7,7 @@ import { useCommands } from '../../palette/commands';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
+import { SettingsLink } from '../../settings/SettingsLink';
 import { useShortcuts } from '../../shortcuts/react';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
 import { sectionFor } from '../todos/links';
@@ -199,7 +200,10 @@ export function LinearSheet({
         onClear={state.clearFilters}
       />
       {state.loaded && state.accounts.length === 0 && groups.every((group) => !group.issues.length) ? (
-        <EmptySheet>No Linear Account connected yet. Connect one in Settings → Accounts (,).</EmptySheet>
+        <EmptySheet>
+          No Linear Account connected yet. Connect one in{' '}
+          <SettingsLink to={{ group: 'accounts' }}>Settings → Accounts</SettingsLink>.
+        </EmptySheet>
       ) : (
         <PickBadgeProvider value={badges.open}>
           <div className={cn('flex-1', detailOpen && 'grid grid-cols-[minmax(0,9fr)_minmax(0,7fr)]')}>

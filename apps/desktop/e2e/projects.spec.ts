@@ -40,7 +40,7 @@ test('create a Project, file a Todo with b, filter by it, and undo the filing', 
   const window = await commander.window();
 
   // Settings → Projects: create Longtail and Titanlink; a taken code is refused.
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   const settings = window.getByTestId('settings');
   await expect(settings.getByRole('radio', { name: 'blue' })).toBeChecked();
   await createProject(window, 'Longtail', 'lt');
@@ -118,7 +118,7 @@ test('create a Project, file a Todo with b, filter by it, and undo the filing', 
 test('a Todo added under a selected Project is filed there, and the filter survives a restart', async () => {
   const first = await launchCommander();
   let window = await first.window();
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await createProject(window, 'Longtail', 'LT');
   await createProject(window, 'Tactics', 'TX');
   await expect(window.getByRole('list', { name: 'Projects' }).getByRole('listitem')).toHaveCount(2);
@@ -151,7 +151,7 @@ test('a Todo added under a selected Project is filed there, and the filter survi
 test('b and the p keys are in the cheat sheet and never fire while typing', async () => {
   const commander = await launchCommander();
   const window = await commander.window();
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await createProject(window, 'Longtail', 'LT');
   await expect(window.getByRole('list', { name: 'Projects' }).getByRole('listitem')).toHaveCount(1);
   const todos = await openTodos(window);

@@ -15,6 +15,7 @@ import {
 } from '@commander/ui';
 import { useCallback, useEffect, useState } from 'react';
 import { errorText } from '../projects/change-with-undo';
+import { SettingsLink } from '../settings/SettingsLink';
 import type { MirroringClient } from './mirroring';
 
 /**
@@ -99,7 +100,9 @@ export function BucketMirroringSetting({
       </p>
       {state?.paused && (
         <p className="m-0 mt-1 text-note leading-[19px] text-ink">
-          Paused: Mirror Buckets is below Auto in Settings → Autonomy, so nothing is written to {where}.
+          Paused: Mirror Buckets is below Auto in{' '}
+          <SettingsLink to={{ group: 'autonomy' }}>Settings → Autonomy</SettingsLink>, so nothing is written
+          to {where}.
         </p>
       )}
       {problem && (

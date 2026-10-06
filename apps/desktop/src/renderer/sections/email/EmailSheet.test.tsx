@@ -28,7 +28,7 @@ let client: EmailClient;
 let changes: ItemChanges;
 let projects: ProjectsClient;
 let close: () => void;
-const controls = { openSection: vi.fn(), setTabCount: vi.fn() };
+const controls = { openSection: vi.fn(), openSettings: vi.fn(), setTabCount: vi.fn() };
 
 function fakeAccounts(initial: GoogleAccountSummary[]) {
   let accounts = initial;
@@ -187,6 +187,7 @@ beforeEach(() => {
   localStorage.clear();
   controls.openSection.mockReset();
   controls.setTabCount.mockReset();
+  controls.openSettings.mockReset();
   Element.prototype.scrollIntoView = () => {};
   vi.useFakeTimers({ now: NOW, toFake: ['Date'] });
   store.saveFromSource({ source: 'gmail', account: ALEX, items: [offsite, answer, booked, receipt] });
@@ -389,13 +390,13 @@ describe('the Email sheet', () => {
     });
   });
 
-  it('says how to connect an email Account when there is none', async () => {
+  it('says how to connect an email Account when there is none, with a way to Settings → Accounts', async () => {
     accounts = fakeAccounts([]);
     renderSheet();
 
-    await screen.findByText(
-      'No email Account connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).',
-    );
+    await screen.findByText(/No email Account connected yet\. Connect a Google or Outlook Account in/);
+    fireEvent.click(screen.getByRole('button', { name: 'Settings → Accounts' }));
+    expect(controls.openSettings).toHaveBeenCalledWith({ group: 'accounts' });
     // With nothing to count, the Email tab shows no count.
     expect(controls.setTabCount).not.toHaveBeenCalledWith('email', 0);
     expect(controls.setTabCount).toHaveBeenLastCalledWith('email', null);

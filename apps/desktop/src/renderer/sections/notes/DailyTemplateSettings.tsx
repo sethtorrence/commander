@@ -15,7 +15,6 @@ import { SettingRow, SettingsGroup } from '../../settings/parts';
 import { useOutlineLinks } from './BlockLinks';
 import { TEMPLATE_DAY, templateIn } from './daily-template';
 import { dayKey } from './days';
-import { MarkdownCopySetting } from './MarkdownCopySetting';
 import { createNotebook } from './notebook';
 import { focusText, OutlineContext, type OutlineControls, OutlineView } from './OutlineView';
 import type { Caret } from './outline';
@@ -98,7 +97,6 @@ export function DailyTemplateSettings({ no }: { no: string }) {
             : 'The daily template has no top-level “Meetings” Block, so new days get no meeting chips. Add one above to bring them back.'}
         </p>
       </SettingRow>
-      <MarkdownCopySetting />
     </SettingsGroup>
   );
 }

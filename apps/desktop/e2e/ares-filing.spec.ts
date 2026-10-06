@@ -9,7 +9,7 @@ import {
 } from '@commander/models/testing';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { ACME, type FakeLinear, startFakeLinear } from '../src/main/linear/fake-linear-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares files Items into Projects, end to end: a fake Linear (never the real one) and a fake
@@ -62,6 +62,7 @@ async function freePort(): Promise<number> {
 
 // Points Ares's model at the fake server and saves a made-up key in the keyring.
 async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
+  await settingsPage(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -74,6 +75,7 @@ async function connectFakeModel(window: Page, server: FakeOpenAIServer) {
 }
 
 async function createProject(window: Page, name: string, code: string) {
+  await settingsPage(window, 'Projects');
   const form = window.getByRole('form', { name: 'New Project' });
   await form.getByLabel('Name').fill(name);
   await form.getByLabel('Badge code').fill(code);
@@ -121,12 +123,13 @@ test('new issues → dashed Badge → Change, again and again → a Rule suggest
     },
   });
   const window = await commander.app.firstWindow();
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   await connectFakeModel(window, server);
   await createProject(window, 'Titanlink', 'TL');
   await createProject(window, 'Tactics', 'TX');
 
   // Connect Linear: the sync brings seven issues no Rule files, and Ares files them as they arrive.
+  await settingsPage(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel');
   await accounts.getByLabel('Linear personal API key').fill(API_KEY);
   await accounts.getByRole('button', { name: 'Connect', exact: true }).click();
@@ -205,7 +208,7 @@ test('new issues → dashed Badge → Change, again and again → a Rule suggest
   await expect(waiting.getByRole('img', { name: 'Tactics' })).toBeVisible();
 
   // The Rule is first in Settings → Rules, and the suggestion is settled.
-  await openSettings(window);
+  await openSettings(window, 'Projects');
   await expect(window.getByRole('list', { name: 'Rules' }).getByRole('listitem').first()).toContainText(
     'team is OPS',
   );

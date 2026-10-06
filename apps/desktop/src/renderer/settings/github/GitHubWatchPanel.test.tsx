@@ -125,7 +125,8 @@ describe('Settings → GitHub', () => {
   it('asks for a GitHub Account first when there is none', async () => {
     accounts = { accounts: [], sources: [] };
     panel();
-    expect(await screen.findByText(/Connect a GitHub Account in Accounts/)).toBeTruthy();
+    expect(await screen.findByText(/Connect a GitHub Account in/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Accounts' })).toBeTruthy();
     expect(requests).toEqual([]);
   });
 

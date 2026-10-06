@@ -74,7 +74,7 @@ test('Grant access → mirroring on → sort → category appears → category c
   const window = await commander.window();
   await standInForTheBrowser(commander.app);
 
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const outlook = window.getByTestId('accounts-panel').getByTestId('source-outlook');
   await outlook.getByRole('button', { name: 'Connect Outlook' }).click();
   await expect(outlook.getByTestId('account-status').first()).toHaveText('Connected');

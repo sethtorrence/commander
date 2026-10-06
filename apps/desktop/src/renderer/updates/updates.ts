@@ -12,6 +12,7 @@ import {
   type UpdatesResults,
   type UpdateViewLine,
 } from '@commander/domain';
+import type { SettingsGroupId } from '../settings/pages';
 
 /** What the window may ask of Ares's Updates (window.commander.updates). */
 export type UpdatesClient = <R extends UpdatesRequest>(request: R) => Promise<UpdatesResults[R['op']]>;
@@ -52,8 +53,8 @@ export type OpenTarget =
   | { kind: 'item'; sectionId: string; itemId: string; focus?: string }
   // `focus`: where in the Section (the Email Section's Unsorted view, #141).
   | { kind: 'section'; sectionId: string; focus?: string }
-  // `part`: where in Settings (Accounts, for an Account to reconnect).
-  | { kind: 'settings'; part?: 'accounts' };
+  // `group`: the Settings group the line is about (Accounts, for an Account to reconnect).
+  | { kind: 'settings'; group: SettingsGroupId };
 
 // Sections with a tab of their own.
 const OPENABLE: readonly UpdateSection[] = [
@@ -93,15 +94,13 @@ export function openTarget(
       ...(reply && row.focus ? { focus: row.focus } : {}),
     };
   }
-  if (
-    about?.kind === 'cap-warning' ||
-    about?.kind === 'autonomy-change' ||
-    about?.kind === 'rule-suggestion' ||
-    about?.kind === 'bucket-rule-suggestion' ||
-    about?.kind === 'bucket-suggestion'
-  )
-    return { kind: 'settings' };
-  if (about?.kind === 'reconnect') return { kind: 'settings', part: 'accounts' };
+  // The cap is set in Settings → Ares; a Rule into a Bucket is a Rule like any other.
+  if (about?.kind === 'cap-warning') return { kind: 'settings', group: 'ares' };
+  if (about?.kind === 'autonomy-change') return { kind: 'settings', group: 'autonomy' };
+  if (about?.kind === 'rule-suggestion' || about?.kind === 'bucket-rule-suggestion')
+    return { kind: 'settings', group: 'rules' };
+  if (about?.kind === 'bucket-suggestion') return { kind: 'settings', group: 'buckets' };
+  if (about?.kind === 'reconnect') return { kind: 'settings', group: 'accounts' };
   const first = line.itemIds[0];
   const single = line.itemIds.length === 1 || about?.kind === 'chained';
   if (first && single) return { kind: 'item', sectionId: sectionOf(line.section), itemId: first };

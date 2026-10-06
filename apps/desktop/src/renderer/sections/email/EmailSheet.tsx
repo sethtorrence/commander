@@ -21,6 +21,7 @@ import { useCommands } from '../../palette/commands';
 import { BadgePicker, type PickerTarget } from '../../projects/BadgePicker';
 import { ItemBadge, SectionProjectFilter, useAccentBar, waitingSuggestion } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
+import { SettingsLink } from '../../settings/SettingsLink';
 import { type ShortcutSpec, useShortcuts } from '../../shortcuts/react';
 import type { AutonomyClient } from '../ares/activity';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
@@ -891,7 +892,8 @@ export function EmailSheet({
       )}
       {noAccounts ? (
         <EmptySheet>
-          No email Account connected yet. Connect a Google or Outlook Account in Settings → Accounts (,).
+          No email Account connected yet. Connect a Google or Outlook Account in{' '}
+          <SettingsLink to={{ group: 'accounts' }}>Settings → Accounts</SettingsLink>.
         </EmptySheet>
       ) : (
         <div className={cn('flex-1', open && 'grid grid-cols-[minmax(0,3fr)_minmax(0,5fr)]')}>

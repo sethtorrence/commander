@@ -49,7 +49,7 @@ const openedUrls = (app: ElectronApplication) =>
   app.evaluate(() => (globalThis as unknown as { openedUrls: string[] }).openedUrls);
 
 async function openGitHubAccounts(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const section = window.getByTestId('accounts-panel').getByTestId('source-github');
   await expect(section).toBeVisible();
   return section;

@@ -16,6 +16,10 @@ _Avoid_: Bucket (that's for email), priority, Rule (that files Items into Projec
 A notebook-style tab dedicated to one kind of work (Notes, Todos, Linear, Email, Calendar, GitHub, Teams, Ares), holding that work's full view.
 _Avoid_: Tab, module, page, app
 
+**Settings**:
+Everything the User sets, opened as a temporary tab from the tabs' right edge (or `,`) and arranged in pages chosen from its sidebar (General, Accounts, Ares, Autonomy, Projects, Email, Data, …), each page holding numbered groups; a link elsewhere ("Settings → Accounts") opens it at a page and group.
+_Avoid_: Preferences, options; Section (Settings isn't one)
+
 ## Sources
 
 **Source**:

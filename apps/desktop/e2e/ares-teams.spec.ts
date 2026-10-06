@@ -12,7 +12,7 @@ import {
   SAM,
   startFakeMicrosoft,
 } from '../src/main/microsoft/fake-microsoft-server';
-import { openSettings } from './frame';
+import { openSettings, settingsPage } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Ares on Teams end to end (#109): a fake Microsoft Graph and a fake OpenAI-compatible server
@@ -115,7 +115,7 @@ async function standInForTheBrowser(app: ElectronApplication) {
 // Points Ares's model at the fake server, saves a made-up key in the keyring, and makes five
 // messages from others a busy Chat.
 async function setUpAres(window: Page) {
-  await openSettings(window);
+  await openSettings(window, 'Ares');
   const ares = window.getByTestId('ares-settings');
   for (const tier of ['Quick', 'Deep']) {
     await ares.getByRole('textbox', { name: `${tier} base URL` }).fill(server.baseUrl);
@@ -129,6 +129,7 @@ async function setUpAres(window: Page) {
 }
 
 async function connectTeams(window: Page) {
+  await settingsPage(window, 'Accounts');
   const teams = window.getByTestId('accounts-panel').getByTestId('source-teams');
   await teams.getByRole('button', { name: 'Connect Teams' }).click();
   await expect(teams.getByTestId('account-status')).toHaveText('Connected');

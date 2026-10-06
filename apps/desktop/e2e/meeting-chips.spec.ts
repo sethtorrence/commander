@@ -5,7 +5,7 @@ import {
   type FakeGoogle,
   startFakeGoogle,
 } from '../src/main/google/fake-google-server';
-import { openSettings, tab } from './frame';
+import { openSettings, settingsPage, tab } from './frame';
 import { type LaunchedCommander, launchCommander } from './launch-commander';
 
 // Today's meetings end to end (#128), against a fake Google on this machine: connect Google → today's
@@ -100,7 +100,7 @@ async function connectGoogle(): Promise<{ app: ElectronApplication; window: Page
       if (url.startsWith(authorize)) await fetch(url);
     };
   }, google.authorizeUrl);
-  await openSettings(window);
+  await openSettings(window, 'Accounts');
   const accounts = window.getByTestId('accounts-panel').getByTestId('source-google');
   await accounts.getByRole('button', { name: 'Connect Google' }).click();
   await expect(accounts.getByTestId('calendar-switches').getByRole('switch')).toHaveCount(1);
@@ -218,6 +218,7 @@ test('the heads-up is off by default; turned on, it comes 2 minutes before a mee
     );
 
   // Off by default: the Core looks every 10 seconds, and says nothing.
+  await settingsPage(window, 'Calendar');
   const headsUp = window.getByRole('switch', { name: 'Notify me 2 minutes before a meeting' });
   await expect(headsUp).toHaveAttribute('aria-checked', 'false');
   await tab(window, 'Calendar').click();
@@ -229,7 +230,7 @@ test('the heads-up is off by default; turned on, it comes 2 minutes before a mee
   expect(await shown()).toEqual([]);
 
   // On: it comes within the next look, with the meeting's title and time, and only once.
-  await openSettings(window);
+  await openSettings(window, 'Calendar');
   await headsUp.click();
   await expect(headsUp).toHaveAttribute('aria-checked', 'true');
   await expect.poll(shown, { timeout: 20_000 }).toEqual([

@@ -27,6 +27,7 @@ export interface PaletteProps {
   /** The same search with meaning merged in (#73), or null while search by meaning isn't ready. */
   searchByMeaning?(query: SearchQuery): Promise<SearchResult | null>;
   sections: PaletteContext['sections'];
+  settingsPages?: PaletteContext['settingsPages'];
   current: string;
   projects: readonly Project[];
   /** The commands to offer, read when it opens. */
@@ -123,6 +124,7 @@ export function Palette(props: PaletteProps) {
         query,
         result: query.search ? (answer?.result ?? null) : null,
         sections: props.sections,
+        settingsPages: props.settingsPages,
         current: props.current,
         projects: props.projects,
         commands,
@@ -135,6 +137,7 @@ export function Palette(props: PaletteProps) {
       query,
       answer,
       props.sections,
+      props.settingsPages,
       props.current,
       props.projects,
       commands,
