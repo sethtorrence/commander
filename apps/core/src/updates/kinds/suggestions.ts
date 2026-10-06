@@ -3,10 +3,13 @@
 // he suggests and on which Item, that nothing happens until the User says, and how to say it.
 import {
   type AutonomyLevel,
+  BUCKET_FIELD,
   chatReply,
+  type EmailBucket,
   MESSAGE_FIELD,
   type ProposalRecord,
   ruleSuggestionText,
+  SORT_INTO_BUCKETS,
 } from '@commander/domain';
 import type { LineContext, LineKind, RowFacts } from './types';
 import { cut, listed, namedWhere, nameOf, plural } from './words';
@@ -33,6 +36,9 @@ export function suggests(record: ProposalRecord | null, context: LineContext): s
         break;
       }
       case 'edit-fields': {
+        // Sorting an email into a Bucket (#141).
+        const bucket = step.fields[BUCKET_FIELD] as EmailBucket | null | undefined;
+        if (bucket?.bucketId) return `sorting it into ${context.bucketName?.(bucket.bucketId) ?? 'a Bucket'}`;
         const reply = Object.entries(step.fields).find(([field]) => field.startsWith(MESSAGE_FIELD))?.[1];
         if (chatReply.safeParse(reply).success) return 'sending a reply in Teams';
         const answer = ANSWERS[String(step.fields.response)];
@@ -98,6 +104,10 @@ export const suggestionLines: LineKind<'suggestions'> = {
       const item = context.item(itemId);
       return item ? [nameOf(item)] : [];
     });
+    // "12 emails I wasn't sure about" (#141): each waits in Unsorted with his suggested Bucket.
+    if (about.action === SORT_INTO_BUCKETS) {
+      return `${about.name}: ${count} emails I wasn’t sure about${names.length ? `: ${listed(names)}` : ''}. Each waits in Unsorted with the Bucket I’d put it in: confirm it or change it.`;
+    }
     return `${about.name}: ${count} suggestions I wasn’t sure about${names.length ? `, on ${listed(names)}` : ''}. Nothing happens unless you accept them; each is below.`;
   },
   facts: ({ about }) => [

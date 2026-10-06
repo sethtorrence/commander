@@ -21,6 +21,7 @@ import {
   useState,
 } from 'react';
 import { useCommands } from '../palette/commands';
+import { type NewBucketSuggestion, SuggestedNewBucket } from './SuggestedNewBucket';
 import { type RuleSuggestion, SuggestedRule } from './SuggestedRule';
 import { UpdatePanel } from './UpdatePanel';
 import { type OpenTarget, openTarget, type UpdatesClient } from './updates';
@@ -78,6 +79,8 @@ export function UpdatesProvider({
   const [panel, setPanel] = useState<PanelState>({ mode: 'closed' });
   // A Rule Ares suggested, accepted: its editor is open (SuggestedRule).
   const [ruleSuggestion, setRuleSuggestion] = useState<RuleSuggestion | null>(null);
+  // A Bucket Ares suggested adding (#141), accepted: its dialog is open (SuggestedNewBucket).
+  const [bucketSuggestion, setBucketSuggestion] = useState<NewBucketSuggestion | null>(null);
   // The last answer wins: asking again while one is on its way drops the older one.
   const asked = useRef(0);
 
@@ -137,10 +140,20 @@ export function UpdatesProvider({
       if (!client || panel.mode !== 'update' || !panel.view) return;
       // Accepting a Rule suggestion opens the Rule editor, filled in; the line is done once it is saved.
       const about = line.queued?.about;
-      if (action === 'accept' && about?.kind === 'rule-suggestion') {
+      if (
+        action === 'accept' &&
+        (about?.kind === 'rule-suggestion' || about?.kind === 'bucket-rule-suggestion')
+      ) {
         asked.current++;
         setPanel({ mode: 'closed' });
         setRuleSuggestion({ about, queuedId: line.queuedId, at: Date.now() });
+        return;
+      }
+      // Accepting a Bucket Ares suggests opens it, editable; nothing is added until it is saved.
+      if (action === 'accept' && about?.kind === 'bucket-suggestion') {
+        asked.current++;
+        setPanel({ mode: 'closed' });
+        setBucketSuggestion({ about, queuedId: line.queuedId, at: Date.now() });
         return;
       }
       try {
@@ -208,6 +221,12 @@ export function UpdatesProvider({
       {ruleSuggestion && (
         <SuggestedRule
           suggestion={ruleSuggestion}
+          onSaved={(queuedId) => void client?.({ op: 'act', queuedId, action: 'done' }).catch(report)}
+        />
+      )}
+      {bucketSuggestion && (
+        <SuggestedNewBucket
+          suggestion={bucketSuggestion}
           onSaved={(queuedId) => void client?.({ op: 'act', queuedId, action: 'done' }).catch(report)}
         />
       )}

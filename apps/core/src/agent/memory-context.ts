@@ -3,7 +3,8 @@
 //
 // - `aboutItem`: how an example names an Item (its Source facts, the kind of thing a Rule matches:
 //   a Linear issue's identifier, team, Linear project and labels; a Chat's people; an event's
-//   organiser and calendar; a GitHub Item's repo, labels and author, #118), the words it is found by (those, its title and its people), and its
+//   organiser and calendar; a GitHub Item's repo, labels and author, #118; an email's sender and
+//   mailing list, #141), the words it is found by (those, its title and its people), and its
 //   people's handles. An example's words never carry the Item's free text, so they can go in the
 //   User's own block.
 // - `recall`: looks up the memories about what a job is working on and hands them over as at most
@@ -14,7 +15,14 @@
 //   outweighs the Item's own facts, and Rules and the User's filing never reach Ares at all.
 //   Given the embedding of what the job is working on (`meaning`, #73), memories are found by meaning
 //   too, so one phrased differently from the Item still reaches the prompt.
-import { type Item, identitiesOf, type MemoryKind, teamsUserOf } from '@commander/domain';
+import {
+  emailSubject,
+  type Item,
+  identitiesOf,
+  type MemoryKind,
+  senderDomains,
+  teamsUserOf,
+} from '@commander/domain';
 import type { ItemStore, QueryVector, RecalledMemory } from '../item-store';
 import type { PromptData } from './prompt';
 
@@ -101,10 +109,27 @@ export function aboutItem(item: Item): AboutItem {
         : `GitHub ${detail.kind === 'pull-request' ? 'pull request' : 'issue'} ${repo}#${detail.number}`;
     subject = `${name} (${facts.join(' · ')})`;
     words.push(repo, detail.repo.owner, detail.repo.name, ...labels, detail.author ?? '');
+  } else if (detail?.kind === 'email') {
+    // An email (#141) by its sender's address and mailing list, never its words nor the sender's
+    // display name; found by its sender, domains, list and subject too.
+    subject = emailSubject(detail);
+    words.push(
+      detail.from?.address.toLowerCase() ?? '',
+      ...senderDomains(detail),
+      detail.listId ?? '',
+      detail.subject,
+    );
   } else if (detail?.kind === 'block') {
     subject = `“${cut(detail.text, MAX_TITLE)}”`;
   }
-  const handles = identitiesOf(item).map((identity) => identity.handle);
+  // An email's person is its sender: its recipients (the User among them) say nothing about it.
+  const sender = detail?.kind === 'email' ? detail.from?.address.trim().toLowerCase() : undefined;
+  const handles =
+    detail?.kind === 'email'
+      ? sender
+        ? [sender]
+        : []
+      : identitiesOf(item).map((identity) => identity.handle);
   return { subject, words: words.filter(Boolean).join(' '), handles };
 }
 

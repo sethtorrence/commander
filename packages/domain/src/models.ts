@@ -61,6 +61,9 @@ export const modelSettings = z.object({
   busyChatMessages: z.number().int().min(2).max(1000).optional(),
   // Search by meaning (#73): the local embedding model downloaded and used. On when not set.
   searchByMeaning: z.boolean().optional(),
+  // Gmail and the cloud (#141): each Gmail Account's answer to "Let Ares read mail from …?", by
+  // Account id. No answer yet: Ares leaves the Account's mail alone, and the Email Section asks.
+  cloudMail: z.record(z.string().min(1), z.enum(['allowed', 'declined'])).optional(),
 });
 export type ModelSettings = z.infer<typeof modelSettings>;
 

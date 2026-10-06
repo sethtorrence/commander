@@ -34,6 +34,7 @@ import {
   threadingOf,
   threadMessages,
   threadSnoozedUntil,
+  UNSORTED,
 } from '@commander/domain';
 import { and, asc, desc, eq, inArray, isNull, lte, type SQL, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
@@ -92,9 +93,10 @@ type ThreadRow = ThreadFlags & {
   unread: number;
   // Its latest message, or when it came back from a snooze if later: the inbox sorts by this.
   sortAt: number;
-  // Its latest message's Bucket (null: Unsorted) and Project (null: Unfiled).
+  // Its latest message's Bucket (null: Unsorted) and Project (null: Unfiled), and its id.
   bucketId: string | null;
   projectId: string | null;
+  latestId: string | null;
 };
 
 // The value of an aggregate keyed by the latest message (see latestOf), or null when it has none.
@@ -109,7 +111,14 @@ export function emailsIn(
     withDetails,
     now,
     search,
-  }: { withDetails: (rows: ItemRow[]) => Item[]; now: () => number; search: () => Search },
+    suggested = () => new Set<string>(),
+  }: {
+    withDetails: (rows: ItemRow[]) => Item[];
+    now: () => number;
+    search: () => Search;
+    // The emails with Ares's suggested Bucket waiting (#141): the Unsorted view lists them first.
+    suggested?: (itemIds: readonly string[]) => Set<string>;
+  },
 ) {
   const { emailDetails, emailMessageIds, emailBodies, items } = schema;
 
@@ -401,6 +410,7 @@ export function emailsIn(
         >`group_concat(case when ${emailDetails.inTrash} then null else (select group_concat(json_extract(label.value, '$.id'), ${SEPARATOR}) from json_each(${emailDetails.data}, '$.labels') label) end, ${SEPARATOR})`,
         bucket: latestOf(sql`json_extract(${emailDetails.data}, '$.bucket.bucketId')`),
         project: latestOf(sql`${items.projectId}`),
+        latestId: latestOf(sql`${items.id}`),
       })
       .from(emailDetails)
       .innerJoin(items, eq(items.id, emailDetails.itemId))
@@ -429,6 +439,7 @@ export function emailsIn(
               labels: new Set(row.labels ? row.labels.split(SEPARATOR) : []),
               bucketId: afterKey(row.bucket),
               projectId: afterKey(row.project),
+              latestId: afterKey(row.latestId),
             },
           ]
         : [],
@@ -476,6 +487,12 @@ export function emailsIn(
     const rows = (
       bucket === undefined ? inView : inView.filter((row) => inBucket(row.bucketId, bucket))
     ).sort(newestFirst);
+    // Unsorted lists the threads waiting on Ares's suggested Bucket first (#141), newest first within.
+    if (bucket === UNSORTED) {
+      const waiting = suggested(rows.flatMap((row) => (row.latestId ? [row.latestId] : [])));
+      const first = (row: ThreadRow) => (row.latestId && waiting.has(row.latestId) ? 0 : 1);
+      rows.sort((a, b) => first(a) - first(b) || newestFirst(a, b));
+    }
     return {
       threads: summaries(rows.slice(0, query.limit ?? THREADS_MAX)),
       unreadThreads: rows.filter((row) => row.unread > 0).length,

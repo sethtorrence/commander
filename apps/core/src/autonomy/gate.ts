@@ -12,10 +12,12 @@ import {
   type AutonomySettings,
   type AutonomyTarget,
   autonomyTarget,
+  BUCKET_FIELD,
   createdIn,
   decide,
   HARD_LIMITS,
   isAllowed,
+  onlyBucketFields,
   type Proposal,
   type ProposalOutcome,
   type ProposalQuery,
@@ -125,8 +127,9 @@ export function openGate({
     };
     for (const step of parsed.itemActions) {
       if (step.type === 'delete' && action.actionKind !== 'delete') refuse('deletes', 'delete');
-      // Synced fields exist only to write back to a Source.
-      if (step.type === 'edit-fields' && action.actionKind === 'organise') {
+      // Synced fields exist only to write back to a Source. An email's Bucket (#141) is Commander's
+      // own field, never written back, so sorting is Organise.
+      if (step.type === 'edit-fields' && action.actionKind === 'organise' && !onlyBucketFields(step.fields)) {
         refuse('changes an Item at its Source', 'tidy-sources');
       }
       // An event goes in one of the User's calendars, at its Source.
@@ -153,6 +156,18 @@ export function openGate({
         return false;
       const filedBy = itemStore.get(step.itemId)?.item.filing?.filedBy;
       return filedBy === 'user' || filedBy === 'rule';
+    });
+  }
+
+  // Sorting precedence (#137, #141): the User's sorting, then a Rule's, then Ares's. The steps that
+  // would move an email the User or a Rule sorted: Ares never moves those.
+  function overridesSorting(steps: ProposalRecord['itemActions']): boolean {
+    return steps.some((step) => {
+      if (step.type !== 'edit-fields' || typeof step.itemId !== 'string' || !(BUCKET_FIELD in step.fields))
+        return false;
+      const detail = itemStore.get(step.itemId)?.item.detail;
+      const sortedBy = detail?.kind === 'email' ? detail.bucket?.sortedBy : undefined;
+      return sortedBy === 'user' || sortedBy === 'rule';
     });
   }
 
@@ -237,8 +252,8 @@ export function openGate({
 
   function acceptOne(proposalId: number, changes?: AcceptChanges): ProposalRecord {
     const record = requirePending(proposalId);
-    // Filed by the User or a Rule since Ares suggested it: his suggestion no longer stands.
-    if (overridesFiling(record.itemActions)) {
+    // Filed (or sorted) by the User or a Rule since Ares suggested it: his suggestion no longer stands.
+    if (overridesFiling(record.itemActions) || overridesSorting(record.itemActions)) {
       return itemStore.autonomy.settleProposal(record.id, { status: 'dismissed', entryIds: [] });
     }
     return itemStore.autonomy.settleProposal(record.id, {
@@ -370,6 +385,9 @@ export function openGate({
       checkStepsFitKind(parsed, action);
       if (overridesFiling(parsed.itemActions)) {
         throw new GateError('invalid', 'Ares never re-files an Item you or a Rule filed');
+      }
+      if (overridesSorting(parsed.itemActions)) {
+        throw new GateError('invalid', 'Ares never moves an email you or a Rule sorted');
       }
       if (!itemStore.get(parsed.itemId)) throw new GateError('not-found', `No Item ${parsed.itemId}`);
       if (followsAChain(parsed.causedBy?.entryId) || reachesBeyondOutsideCause(parsed)) parsed.chained = true;

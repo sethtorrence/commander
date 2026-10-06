@@ -22,6 +22,7 @@ const TIMEOUTS: Record<ModelsOp, number> = {
   'set-meaning': 10_000,
   // Embedding the query gives up after 2 s on its own; then a quick search.
   'search-meaning': 10_000,
+  'set-cloud-mail': 10_000,
 };
 
 export function createModelsChannel(send: (message: CoreModelsRequest) => void) {

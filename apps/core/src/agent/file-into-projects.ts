@@ -48,6 +48,11 @@
 //   suggestion on the pull request waits, the request and its Todo wear its dashed Badge too.
 //   Filed in the GitHub Section. Fingerprint: the title, repo, labels, milestone and author, not
 //   the body or comments.
+// - Emails (#141): the latest message of each inbox thread from the last SORT_DAYS days (a thread's
+//   Project is its latest message's), Unfiled, that no Rule matches, from Accounts whose mail Ares may
+//   read (Gmail only with the User's consent). Described by its sender, recipients, the sender's
+//   domain, subject and a trimmed slice of its text (never its HTML or attachments). Filed in the
+//   Email Section. Fingerprint: the subject, sender and mailing list.
 // - Calendar events (#127): live events from yesterday to EVENT_DAYS_AHEAD days ahead, Unfiled, that
 //   no Rule matches, the User hasn't declined and Commander didn't put in the calendar itself. A
 //   recurring series is asked about once, by its next instance (each instance is its own Item): its
@@ -59,6 +64,8 @@ import {
   chatPeople,
   decide,
   describeRule,
+  type EmailAddress,
+  type EmailDetail,
   type EventDetail,
   type EventPerson,
   FILE_INTO_PROJECTS,
@@ -67,7 +74,10 @@ import {
   githubIdentifier,
   type Item,
   type LinearIssueDetail,
+  mayReadMail,
   type Project,
+  SORT_DAYS,
+  senderDomains,
   teamsUserOf,
 } from '@commander/domain';
 import { z } from 'zod';
@@ -76,6 +86,7 @@ import { aboutItem, type MeaningLookup, recall } from './memory-context';
 import type { PromptData } from './prompt';
 import type { AgentJob, JobInput } from './runner';
 import { bySeries, seriesFiling, seriesKey } from './series-filing';
+import { trimmedText } from './sort-into-buckets';
 
 // At most this many Items a run, one call each; the rest wait for the next trigger.
 export const MAX_ITEMS = 20;
@@ -129,6 +140,7 @@ The data holds the User's Projects (each with its two-letter code and name, and 
 - a Teams channel post: its team and channel (with where the User filed other posts there), who posted, the post and its latest replies;
 - a calendar event: its title, the calendar it is on, its organiser and attendees, and some of its description;
 - a GitHub pull request, issue or release: its repo and org, title, labels, author (with where the User filed the author's other GitHub Items), and some of its body or release notes;
+- an email: its sender and the sender's domain, its recipients, subject, mailing list and some of its text;
 and the Projects of Items linked to it.
 
 It may also hold what Ares knows about Items like it: the User's answers to his earlier filing (examples: "… belongs to TX (Tactics), not TL (Titanlink)"), facts about People and Projects, and the User's preferences; and, marked as background, facts Ares picked up that the User hasn't confirmed.
@@ -178,6 +190,17 @@ const postOf = (item: Item): ChannelPostDetail | null =>
 
 const eventOf = (item: Item): EventDetail | null => (item.detail?.kind === 'event' ? item.detail : null);
 
+const emailOf = (item: Item): EmailDetail | null => (item.detail?.kind === 'email' ? item.detail : null);
+
+// "Dana Whitfield <dana@northwind.test>", or the address alone.
+const addressText = (address: EmailAddress) => {
+  const name = address.name?.trim();
+  return name && name !== address.address ? `${name} <${address.address}>` : address.address;
+};
+const MAX_RECIPIENTS = 6;
+const recipients = (list: readonly EmailAddress[]) =>
+  `${list.slice(0, MAX_RECIPIENTS).map(addressText).join(', ')}${list.length > MAX_RECIPIENTS ? ` and ${list.length - MAX_RECIPIENTS} more` : ''}`;
+
 const githubOf = githubFiledDetail;
 type GitHubFiled = NonNullable<ReturnType<typeof githubOf>>;
 
@@ -207,7 +230,15 @@ const personText = (person: EventPerson) =>
 
 // The Autonomy Section an Item is filed in.
 const sectionOf = (item: Item): AutonomySection =>
-  chatOf(item) || postOf(item) ? 'teams' : eventOf(item) ? 'calendar' : githubOf(item) ? 'github' : 'linear';
+  chatOf(item) || postOf(item)
+    ? 'teams'
+    : eventOf(item)
+      ? 'calendar'
+      : githubOf(item)
+        ? 'github'
+        : emailOf(item)
+          ? 'email'
+          : 'linear';
 
 // A Chat's messages that say something: no system events, nothing deleted.
 const spoken = (chat: ChatDetail) => chat.messages.filter((message) => message.from && !message.deleted);
@@ -243,6 +274,10 @@ export function filingFingerprint(item: Item): string {
       event.calendar.id,
       event.organiser?.email.toLowerCase() ?? null,
     ]);
+  }
+  const email = emailOf(item);
+  if (email) {
+    return JSON.stringify([title, item.account, email.from?.address.toLowerCase() ?? null, email.listId]);
   }
   const github = githubOf(item);
   if (github) {
@@ -320,6 +355,17 @@ export function fileIntoProjectsJob(
     return changed !== null && changed > now() - GITHUB_DAYS * DAY_MS;
   }
 
+  // An email Ares may look at (besides being its thread's latest in the inbox, Unfiled and unmatched):
+  // from the last SORT_DAYS days, from an Account whose mail he may read.
+  function emailInScope(item: Item): boolean {
+    const email = emailOf(item);
+    return (
+      !!email &&
+      email.sentAt >= now() - SORT_DAYS * DAY_MS &&
+      mayReadMail(itemStore.models.settings(), item.source, item.account)
+    );
+  }
+
   // Whether the User's Autonomy settings have filing Off in the Item's Section.
   const off = (item: Item) =>
     decide(
@@ -340,6 +386,7 @@ export function fileIntoProjectsJob(
     return (
       !!item &&
       (githubInScope(item) ||
+        emailInScope(item) ||
         ((item.kind === 'linear-issue' || !!chatOf(item) || !!postOf(item) || eventInScope(item)) &&
           item.status === 'open')) &&
       item.deletedAt === null &&
@@ -531,7 +578,25 @@ export function fileIntoProjectsJob(
     ].join('\n');
   }
 
+  function emailFacts(item: Item, email: EmailDetail): string {
+    const text = itemStore.emailBody(item.id)?.text ?? email.snippet;
+    const domains = senderDomains(email);
+    const linked = linkedProjects(item);
+    return [
+      `From: ${email.from ? addressText(email.from) : '(unknown sender)'}`,
+      ...(domains.length ? [`Sender’s domain: ${domains.at(-1)}`] : []),
+      ...(email.to.length ? [`To: ${recipients(email.to)}`] : []),
+      ...(email.cc.length ? [`Cc: ${recipients(email.cc)}`] : []),
+      `Subject: ${email.subject || '(no subject)'}`,
+      ...(email.listId ? [`Mailing list: ${email.listId}`] : []),
+      `Text: ${trimmedText(text, MAX_DESCRIPTION) || '(no text)'}`,
+      ...(linked.length ? [`Linked Items’ Projects: ${linked.join(', ')}`] : []),
+    ].join('\n');
+  }
+
   function factsOf(item: Item): string {
+    const email = emailOf(item);
+    if (email) return emailFacts(item, email);
     const chat = chatOf(item);
     if (chat) return chatFacts(item, chat);
     const post = postOf(item);
@@ -583,6 +648,7 @@ export function fileIntoProjectsJob(
     if (chatOf(item)) return `${ref} · Teams Chat`;
     if (postOf(item)) return `${ref} · Teams channel post`;
     if (eventOf(item)) return `${ref} · Calendar event`;
+    if (emailOf(item)) return `${ref} · Email`;
     const github = githubOf(item);
     if (github) return `${ref} · ${githubName(github)}`;
     return `${ref} · Linear issue ${issueOf(item)?.identifier ?? ''}`.trim();
@@ -598,7 +664,7 @@ export function fileIntoProjectsJob(
       action: FILE_INTO_PROJECTS,
       actionKind: 'organise',
       section: null,
-      hint: 'Linear issues, Teams Chats and channel posts, calendar events and GitHub pull requests, issues and releases no Rule files, into the Project they belong to',
+      hint: 'Linear issues, Teams Chats and channel posts, calendar events, GitHub pull requests, issues and releases, and emails no Rule files, into the Project they belong to',
     },
     triggers: { 'items-arrived': true, idle: true },
 
@@ -640,7 +706,17 @@ export function fileIntoProjectsJob(
           limit: 1000,
         })
         .filter(githubInScope);
-      const unfiled = [...issuesAndChats, ...events, ...github];
+      // Emails (#141): each inbox thread's latest message lately, Unfiled, newest first; none while
+      // the User has no Project to file them under (mail is plentiful, and each costs a call). When
+      // mail arrives, only that mail: the rest of a new Account's download waits for the catch-up.
+      const catchingUp = !arrived.size || triggers.some((trigger) => trigger.kind !== 'items-arrived');
+      const emails = itemStore.projects().length
+        ? itemStore.emailSorting
+            .scope(now() - SORT_DAYS * DAY_MS)
+            .filter((item) => item.filing === null && emailInScope(item))
+            .filter((item) => catchingUp || arrived.has(item.id))
+        : [];
+      const unfiled = [...issuesAndChats, ...events, ...github, ...emails];
       const ordered = [
         ...unfiled.filter((item) => arrived.has(item.id)),
         ...unfiled.filter((item) => !arrived.has(item.id)),

@@ -258,3 +258,46 @@ describe('a line’s Items', () => {
     );
   });
 });
+
+describe('Ares sorting email (#141)', () => {
+  it('“12 emails I wasn’t sure about” opens the Email Section’s Unsorted view', () => {
+    const unsure = line({
+      section: 'email',
+      itemIds: ['e1', 'e2'],
+      about: {
+        kind: 'suggestions',
+        action: 'sort-into-buckets',
+        name: 'Sort into Buckets',
+        actionKind: 'organise',
+        proposalIds: [4, 5],
+      },
+    });
+    expect(openTarget(unsure)).toEqual({ kind: 'section', sectionId: 'email', focus: 'unsorted' });
+    expect(acceptLabel(unsure)).toBe('Accept all 2');
+  });
+
+  it('a Bucket Rule suggestion is made in the Rule editor; a new Bucket is added in its dialog', () => {
+    const rule = line({
+      section: 'email',
+      itemIds: ['e1'],
+      about: {
+        kind: 'bucket-rule-suggestion',
+        field: 'gmail.domain',
+        value: 'stripe.com',
+        label: 'stripe.com',
+        bucketId: 'receipts',
+        name: 'Receipts',
+        count: 5,
+      },
+    });
+    expect(acceptLabel(rule)).toBe('Make the Rule…');
+    expect(openTarget(rule)).toEqual({ kind: 'settings' });
+    const bucket = line({
+      section: 'email',
+      itemIds: [],
+      about: { kind: 'bucket-suggestion', name: 'Investors', description: 'From investors', reason: 'x' },
+    });
+    expect(acceptLabel(bucket)).toBe('Add Bucket…');
+    expect(openTarget(bucket)).toEqual({ kind: 'settings' });
+  });
+});

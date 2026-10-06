@@ -17,6 +17,7 @@ export * from './email';
 export * from './email-actions';
 export * from './email-reader';
 export * from './email-rules';
+export * from './email-sorting';
 export * from './email-threads';
 export * from './filing';
 export * from './focus-time';

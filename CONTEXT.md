@@ -79,7 +79,7 @@ _Avoid_: Uncategorised, inbox, misc
 ## Email
 
 **Bucket**:
-What to do with an email (e.g. Needs reply, FYI, Newsletters), defined by the User with a plain description; each email sits in exactly one Bucket, independent of its Project.
+What to do with an email (e.g. Needs reply, FYI, Newsletters), defined by the User with a plain description; each email sits in exactly one Bucket, independent of its Project. A dashed one on an Unsorted email is Ares's suggested Bucket, waiting for the User to Confirm or Change it.
 _Avoid_: Folder, label, category, tab
 
 **Unsorted**:

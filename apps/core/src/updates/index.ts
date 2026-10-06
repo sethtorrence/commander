@@ -210,6 +210,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       projectCode: (projectId) =>
         itemStore.projects({ includeArchived: true }).find((project) => project.id === projectId)?.code ??
         null,
+      bucketName: (bucketId) => itemStore.buckets().find((bucket) => bucket.id === bucketId)?.name ?? null,
       warning: (itemId) => itemStore.injectionWarnings.warning(itemId),
       todoOf(issueId) {
         todos ??= new Map(

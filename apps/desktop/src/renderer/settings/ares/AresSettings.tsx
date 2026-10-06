@@ -27,6 +27,7 @@ import { WHAT_ARES_KNOWS } from '../../memory/WhatAresKnows';
 import { useOpenSection } from '../../sections/section';
 import { Readout, ReadoutRow, SettingRow, SettingsGroup } from '../parts';
 import { AresJobs } from './AresJobs';
+import { CloudMailRow } from './CloudMailRow';
 import { formatLatency, formatUsd, meaningStatusLine } from './format';
 import { UsagePanel } from './UsagePanel';
 
@@ -562,6 +563,7 @@ export function AresSettings({ no, usageNo }: { no: string; usageNo: string }) {
         <ModelSettingsForm onSaved={refreshUsage} />
         <AresJobs />
         <SearchByMeaningRow />
+        <CloudMailRow />
         <WhatAresKnowsRow />
       </SettingsGroup>
       <UsagePanel no={usageNo} version={usageVersion} />

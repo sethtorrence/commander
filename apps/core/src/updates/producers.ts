@@ -16,6 +16,8 @@
 // - Teams (teams.ts): busy Chats, summarised when the Update is put together.
 // - Rule suggestions (rule-suggestions.ts): "Always file Linear team OPS under TX?", once the User's
 //   answers to Ares's filing point one Source field value at one Project often enough.
+// - Bucket Rule suggestions (bucket-rule-suggestions.ts): "Always put mail from stripe.com in
+//   Receipts?", once the User's answers to Ares's sorting point one sender at one Bucket often enough.
 // - GitHub (github.ts): Ares's latest unseen GitHub summary, daily or the Monday roll-up (#121).
 //
 // Later producers (meeting prep, the GitHub summary, missed send-later) call the queue's `enqueue`
@@ -32,6 +34,7 @@ import {
 } from '@commander/domain';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
+import { createBucketRuleSuggestions } from './bucket-rule-suggestions';
 import { createGitHubSummaryWatch } from './github';
 import { createLinearWatch, type WatchedAccount } from './linear';
 import type { UpdateQueue } from './queue';
@@ -270,6 +273,8 @@ export function createProducers({
 
   // "Always file Linear team OPS under TX?" (rule-suggestions.ts).
   const ruleSuggestions = createRuleSuggestions({ itemStore, queue });
+  // "Always put mail from stripe.com in Receipts?" (bucket-rule-suggestions.ts, #141).
+  const bucketRuleSuggestions = createBucketRuleSuggestions({ itemStore, queue });
   const githubSummaries = createGitHubSummaryWatch({ itemStore, queue });
 
   return {
@@ -282,6 +287,7 @@ export function createProducers({
       linear.sweep();
       teams.sweep();
       ruleSuggestions.sweep();
+      bucketRuleSuggestions.sweep();
       githubSummaries.sweep();
     },
   };

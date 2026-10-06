@@ -4,7 +4,20 @@
 // when a Source has synced; it works out for itself when the machine has been idle long enough for
 // catch-up work. The main process's idle and lock reports (Updates, #70) call `idle()` too, and the
 // User coming back calls `active()`: the daily GitHub summary may be due (#121).
-import { type CoreMessage, DRAFT_REPLIES, type Enqueue, SUGGEST_TEAMS_REPLIES } from '@commander/domain';
+//
+// The backfill (#141): a new Account's 30 days of mail are sorted (and filed) in the background while
+// the machine stays idle. After the idle catch-up, "Sort into Buckets" and "File into Projects" are
+// asked again (their `due` trigger), a bounded batch at a time with a pause between, newest first,
+// for as long as each found work last time and the User stays away. A run with nothing to do, a
+// failed or over-cap call, or the User coming back ends it.
+import {
+  type CoreMessage,
+  DRAFT_REPLIES,
+  type Enqueue,
+  FILE_INTO_PROJECTS,
+  SORT_INTO_BUCKETS,
+  SUGGEST_TEAMS_REPLIES,
+} from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
@@ -23,8 +36,10 @@ import { proposeEventsJob } from './propose-events';
 import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
 import { createSeriesFiling } from './series-filing';
+import { sortIntoBucketsJob, staleSortingSuggestions } from './sort-into-buckets';
 import { spotStuckLinearJob } from './spot-stuck-linear';
 import { clearAnswered, spotWaitingJob } from './spot-waiting';
+import { suggestBucketsJob } from './suggest-buckets';
 import { suggestChatTodosJob } from './suggest-chat-todos';
 import { dismissAnsweredInvitations, suggestInvitationRepliesJob } from './suggest-invitation-replies';
 import { dismissSettledReplies, suggestTeamsRepliesJob } from './suggest-teams-replies';
@@ -60,6 +75,9 @@ export type AgentOptions = {
   onSummaryWritten?: (itemId: string) => void;
   // Search by meaning (#73): what a job is working on, embedded, to look Memory up by meaning too.
   meaning?: MeaningLookup;
+  // The backfill (#141): the pause between batches while idle, and the most emails a run sorts.
+  backfillPauseMs?: number;
+  maxEmailsPerRun?: number;
   log?: (message: string) => void;
 };
 
@@ -87,6 +105,10 @@ const RANK_DASHBOARD_NAME = 'Rank the Dashboard';
 // The Items whose changes may move the Dashboard: Todos, and the Linear issues behind them.
 const RANKED_KINDS = new Set(['todo', 'linear-issue']);
 const IDLE_CHECK_MS = 30_000;
+// The backfill's pause between batches: low priority, never a burst.
+const BACKFILL_PAUSE_MS = 5_000;
+// The jobs the backfill keeps going while idle.
+const BACKFILL_JOBS = [SORT_INTO_BUCKETS, FILE_INTO_PROJECTS];
 
 export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   const now = options.now ?? Date.now;
@@ -116,6 +138,12 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       spotStuckLinearJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}), me: options.me }),
       spotWaitingJob(itemStore, { now, me: options.me, onChanged: flagsChanged }),
       fileIntoProjectsJob(itemStore, { now, meaning: options.meaning }),
+      sortIntoBucketsJob(itemStore, {
+        now,
+        meaning: options.meaning,
+        ...(options.maxEmailsPerRun && { maxItems: options.maxEmailsPerRun }),
+      }),
+      suggestBucketsJob(itemStore, { now, enqueue: options.enqueue ?? (() => {}) }),
       prepareMeetingsJob(itemStore, {
         now,
         enqueue: options.enqueue ?? (() => {}),
@@ -163,6 +191,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
   const dismissStale = () => {
     try {
       filing.dismissStale();
+      for (const id of staleSortingSuggestions(itemStore)) options.gate.dismiss(id);
       dismissAnsweredInvitations(itemStore, options.gate, now());
       dismissSettledReplies(itemStore, options.gate);
     } catch (error) {
@@ -195,9 +224,30 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
 
   let lastChange = now();
   let caughtUp = false;
+  // Whether the User is away (the machine idle), for the backfill.
+  let away = false;
+  let backfillTimer: ReturnType<typeof setTimeout> | null = null;
+  const backfill = () => {
+    if (!away || backfillTimer) return;
+    const due = BACKFILL_JOBS.filter((job) => itemStore.agent.job(job).lastOutcome === 'ok');
+    if (!due.length) return;
+    backfillTimer = setTimeout(() => {
+      backfillTimer = null;
+      if (!away) return;
+      for (const job of due) runner.trigger({ kind: 'due', job });
+      void runner.settled().then(backfill);
+    }, options.backfillPauseMs ?? BACKFILL_PAUSE_MS);
+  };
+  const back = () => {
+    away = false;
+    if (backfillTimer) clearTimeout(backfillTimer);
+    backfillTimer = null;
+  };
   const idle = () => {
+    away = true;
     learn({ appearances: true });
     runner.trigger({ kind: 'idle' });
+    void runner.settled().then(backfill);
   };
   const watch = setInterval(
     () => {
@@ -235,6 +285,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     userChanged(itemIds) {
       lastChange = now();
       caughtUp = false;
+      back();
       dismissStale();
       fileSeries();
       const blocks = itemIds.filter((id) => itemStore.get(id)?.item.kind === 'block');
@@ -272,11 +323,15 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     },
 
     idle,
-    active: summariesDue,
+    active() {
+      back();
+      summariesDue();
+    },
     githubSummaries,
 
     stop() {
       clearInterval(watch);
+      back();
       runner.stop();
     },
   };

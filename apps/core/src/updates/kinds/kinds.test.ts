@@ -580,3 +580,68 @@ describe('a Rule suggestion', () => {
     );
   });
 });
+
+describe('Ares sorting email (#141)', () => {
+  const sorting = {
+    ...context,
+    bucketName: (bucketId: string) => (bucketId === 'receipts' ? 'Receipts' : null),
+  };
+  const email = (id: string, subject: string) =>
+    base(id, 'email', subject, { source: 'gmail', account: 'google:alex' });
+  add(email('e1', 'Your order has shipped'), email('e2', 'Acme weekly'));
+  const sort = (id: number, itemId: string) =>
+    suggestion(id, itemId, {
+      action: 'sort-into-buckets',
+      section: 'email',
+      itemActions: [
+        { type: 'edit-fields', itemId, fields: { bucket: { bucketId: 'receipts', sortedBy: 'ares' } } },
+      ],
+    });
+  sort(41, 'e1');
+  sort(42, 'e2');
+  const about: QueuedAbout = {
+    kind: 'suggestions',
+    action: 'sort-into-buckets',
+    name: 'Sort into Buckets',
+    actionKind: 'organise',
+    proposalIds: [41],
+  };
+
+  it('one email he wasn’t sure about: the Bucket he would put it in', () => {
+    expect(lineTemplate(line(about, ['e1']), sorting)).toContain(
+      'Sort into Buckets: I wasn’t sure about sorting it into Receipts, on “Your order has shipped”',
+    );
+  });
+
+  it('several: “2 emails I wasn’t sure about”, each waiting in Unsorted', () => {
+    expect(lineTemplate(line({ ...about, proposalIds: [41, 42] }, ['e1', 'e2']), sorting)).toMatch(
+      /^Sort into Buckets: 2 emails I wasn’t sure about: .*Your order has shipped.* and .*Acme weekly.*\. Each waits in Unsorted with the Bucket I’d put it in: confirm it or change it\.$/,
+    );
+  });
+
+  it('a Bucket Rule suggestion, and a Bucket he suggests adding', () => {
+    expect(
+      template({
+        kind: 'bucket-rule-suggestion',
+        field: 'gmail.list',
+        value: 'weekly.acme.test',
+        label: 'weekly.acme.test',
+        bucketId: 'newsletters',
+        name: 'Newsletters',
+        count: 5,
+      }),
+    ).toBe(
+      'You put 5 emails from the list weekly.acme.test in Newsletters. Always put mail from the list weekly.acme.test in Newsletters? A Bucket Rule would do it for you from now on: make the Rule, or dismiss this and I won’t ask again.',
+    );
+    expect(
+      template({
+        kind: 'bucket-suggestion',
+        name: 'Investors',
+        description: 'Updates and questions from our investors',
+        reason: 'You moved three investor emails I put elsewhere.',
+      }),
+    ).toBe(
+      'A Bucket you might want: “Investors” (Updates and questions from our investors). You moved three investor emails I put elsewhere. Nothing changes unless you add it; you can edit it first, or dismiss this.',
+    );
+  });
+});
