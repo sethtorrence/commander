@@ -228,6 +228,8 @@ describe('sync messages', () => {
         sources: ['gmail'],
         name: null,
         addresses: ['sam@acme.test'],
+        // The name the Account has for the User: a message's From line (#138).
+        ownName: 'Sam',
         needsReconnect: true,
       },
     ]);

@@ -146,7 +146,18 @@ function Attachments({
   );
 }
 
-function Message({ item, body, reader }: { item: Item; body: EmailBody | null; reader: EmailReaderClient }) {
+function Message({
+  item,
+  body,
+  reader,
+  note,
+}: {
+  item: Item;
+  body: EmailBody | null;
+  reader: EmailReaderClient;
+  /** How the message stands, when it is one of the User's on its way (#138). */
+  note?: ReactNode;
+}) {
   const detail = item.detail as EmailDetail;
   const [asText, setAsText] = useState(!body?.html);
   useEffect(() => setAsText(!body?.html), [body?.html]);
@@ -179,7 +190,8 @@ function Message({ item, body, reader }: { item: Item; body: EmailBody | null; r
           Shown as text · {addressName(detail.from)} sent HTML
         </p>
       )}
-      <Attachments itemId={item.id} attachments={detail.attachments} reader={reader} />
+      {!note && <Attachments itemId={item.id} attachments={detail.attachments} reader={reader} />}
+      {note}
     </article>
   );
 }
@@ -237,6 +249,8 @@ export function ThreadReader({
   reader,
   onClose,
   toolbar,
+  footer,
+  noteFor,
 }: {
   thread: EmailThread | null;
   summary: EmailThreadSummary | null;
@@ -245,6 +259,10 @@ export function ThreadReader({
   onClose: () => void;
   /** The thread's actions (#135), in its header beside Close. */
   toolbar?: ReactNode;
+  /** Below the messages: the reply being written (#138). */
+  footer?: ReactNode;
+  /** A message's note, for the User's own on their way (held for Undo, waiting, refused). */
+  noteFor?: (item: Item) => ReactNode;
 }) {
   const subject = summary?.subject || thread?.messages.at(-1)?.item.title || '';
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -281,7 +299,7 @@ export function ThreadReader({
         ) : (
           thread.messages.map(({ item, body }) =>
             shown(item.id) ? (
-              <Message key={item.id} item={item} body={body} reader={reader} />
+              <Message key={item.id} item={item} body={body} reader={reader} note={noteFor?.(item)} />
             ) : (
               <CollapsedMessage
                 key={item.id}
@@ -291,6 +309,7 @@ export function ThreadReader({
             ),
           )
         )}
+        {footer}
       </div>
       <LinkTarget reader={reader} />
     </section>

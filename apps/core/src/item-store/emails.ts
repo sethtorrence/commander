@@ -150,6 +150,7 @@ export function emailsIn(
       inTrash: detail.inTrash ?? false,
       snoozedUntil: detail.snooze && !detail.snooze.returned ? detail.snooze.until : null,
       returnedFrom: detail.snooze?.returned ? detail.snooze.until : null,
+      draft: detail.draft ?? false,
       data,
     };
     db.insert(emailDetails)
@@ -187,6 +188,8 @@ export function emailsIn(
           eq(items.source, source as Item['source'] & string),
           eq(items.account, account),
           isNull(items.deletedAt),
+          // Drafts (#138) thread among the mail they answer, but never move it.
+          eq(emailDetails.draft, false),
           where,
         ),
       )
@@ -328,7 +331,12 @@ export function emailsIn(
           .from(items)
           .innerJoin(emailDetails, eq(emailDetails.itemId, items.id))
           .where(
-            and(eq(items.account, account), isNull(items.deletedAt), inArray(emailDetails.threadKey, chunk)),
+            and(
+              eq(items.account, account),
+              isNull(items.deletedAt),
+              eq(emailDetails.draft, false),
+              inArray(emailDetails.threadKey, chunk),
+            ),
           )
           .orderBy(asc(emailDetails.sentAt), asc(items.id))
           .all();
@@ -418,6 +426,8 @@ export function emailsIn(
         and(
           isNull(items.deletedAt),
           eq(items.kind, 'email'),
+          // Drafts (#138) are never part of a view: they show in Drafts.
+          eq(emailDetails.draft, false),
           account ? eq(items.account, account) : undefined,
         ),
       )
@@ -641,6 +651,24 @@ export function emailsIn(
     };
   }
 
+  /** Every live draft (#138), of one Account or all, newest first. */
+  function drafts(account?: string): Item[] {
+    const rows = db
+      .select({ item: items })
+      .from(items)
+      .innerJoin(emailDetails, eq(emailDetails.itemId, items.id))
+      .where(
+        and(
+          isNull(items.deletedAt),
+          eq(emailDetails.draft, true),
+          account ? eq(items.account, account) : undefined,
+        ),
+      )
+      .orderBy(desc(items.updatedAt))
+      .all();
+    return withDetails(rows.map((row) => row.item));
+  }
+
   // The external ids of an Account's live Items from a Source (for a re-sync to tell what's gone).
   function externalIds(source: string, account: string): string[] {
     return db
@@ -673,6 +701,7 @@ export function emailsIn(
     labelsOf,
     dueSnoozes,
     nextSnoozeAt,
+    drafts,
   };
 }
 

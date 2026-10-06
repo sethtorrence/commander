@@ -25,16 +25,20 @@ import {
   type ChatSettingAction,
   type CommanderEventDraft,
   type CommanderEventMove,
+  type ComposeBody,
+  type ComposeDraft,
   compactForLog,
   type DailyNotePage,
   type DailyNoteProjects,
   type DailyNoteQuery,
   type DailyTemplate,
   DELETE_FIELD,
+  type DraftEntry,
   dailyNoteQuery,
   decide,
   describeRule,
   type EmailBody,
+  type EmailComposeSettings,
   type EmailDetail,
   type EmailLabel,
   type EmailSearchQuery,
@@ -75,6 +79,7 @@ import {
   type MentionQuery,
   mayReadMail,
   mentionQuery,
+  type OutboxEntry,
   type Project,
   type ProjectAction,
   type ProjectBlock,
@@ -92,6 +97,7 @@ import {
   rulePreviewRequest,
   rulesFor,
   type SaveResult,
+  SEND_FIELD,
   SORT_INTO_BUCKETS,
   type Source,
   type SourceBatch,
@@ -130,6 +136,7 @@ import {
   movedDetail,
   queueCommanderEventChanges,
 } from './commander-events';
+import { type ComposeContext, type ComposeRecord, composeIn } from './compose';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
 import { type EmailImagesStore, emailImagesIn } from './email-images';
@@ -194,6 +201,7 @@ export type { CalendarStore, ListedCalendar } from './calendars';
 export type { ChannelSettingsStore } from './channel-settings';
 export type { ChatSettingsStore } from './chat-settings';
 export type { BusyCopies, BusyCopy } from './commander-events';
+export type { ComposeContext, ComposeRecord } from './compose';
 export type { DashboardStore, StoredClear } from './dashboard';
 export type { FilingFeedbackStore } from './filing-feedback';
 export type { FocusSettingsStore } from './focus-settings';
@@ -370,6 +378,10 @@ export type ItemStore = {
   emailThread(account: string, threadKey: string): EmailThread | null;
   // One email's bodies (the reader's HTML among them), or null when none were kept.
   emailBody(itemId: string): EmailBody | null;
+  // Writing email (#138, compose.ts): drafts saved and messages sent (held for Undo) through the
+  // outgoing queue, the Drafts and Outbox views, Settings → Email's default Account and Undo time, and
+  // each Account's signature.
+  compose: ComposeApi;
   // Organising email (#135): each view's counts, Section search, and an Account's labels.
   emailViews(query?: EmailViewQuery): EmailViewCounts;
   emailSearch(query: EmailSearchQuery): EmailSearchResult;
@@ -454,6 +466,33 @@ export type ItemStore = {
     decline(itemId: string, suggestedProjectId: string, context: ActionContext): ActivityEntry;
   };
   close(): void;
+};
+
+// Writing email (#138): what the Core's compose side asks of the Item store, each change in a
+// transaction of its own.
+export type ComposeApi = {
+  // Commander's record of a message written in its composer, or null.
+  record(itemId: string): ComposeRecord | null;
+  save(draft: ComposeDraft, context: ComposeContext): { itemId: string };
+  send(draft: ComposeDraft, context: ComposeContext, sendAt: number): { itemId: string; sendAt: number };
+  undoSend(itemId: string, context: ActionContext): Item;
+  discard(itemId: string, context: ActionContext): void;
+  retry(itemId: string): void;
+  outbox(): OutboxEntry[];
+  drafts(account?: string): DraftEntry[];
+  // The draft's text as the Source last answered Commander's save of it, or null.
+  answeredText(itemId: string): string | null;
+  // Every live email's addresses, for address suggestions.
+  addressHistory(): Pick<EmailDetail, 'from' | 'to' | 'cc' | 'bcc' | 'sentByMe' | 'sentAt'>[];
+  // Attachments messages not yet sent still need.
+  attachmentsInUse(): Set<string>;
+  // Commander is quitting: held messages are due now. Returns the Accounts they belong to.
+  releaseHeld(): string[];
+  settings: { read(): EmailComposeSettings; save(settings: EmailComposeSettings): EmailComposeSettings };
+  signatures: {
+    read(account: string): ComposeBody | null;
+    save(account: string, body: ComposeBody): ComposeBody;
+  };
 };
 
 export class ItemStoreError extends Error {
@@ -1765,6 +1804,66 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     invalid: (message) => new ItemStoreError('invalid', message),
   });
 
+  // Messages written in Commander (compose.ts, #138).
+  const compose = composeIn({
+    db,
+    now,
+    readItem,
+    insert: (identity, state, at, chosenId) => insertItem(identity, state, at, chosenId),
+    writeState,
+    log,
+    outgoing,
+    emails,
+    invalid: (message) => new ItemStoreError('invalid', message),
+  });
+
+  const composeApi: ComposeApi = {
+    record: (itemId) => compose.record(itemId),
+    save: sqlite.transaction((draft: ComposeDraft, context: ComposeContext) =>
+      compose.save(draft, { ...context, by: actionContext.parse(context).by }, now()),
+    ),
+    send: sqlite.transaction((draft: ComposeDraft, context: ComposeContext, sendAt: number) =>
+      compose.send(draft, { ...context, by: actionContext.parse(context).by }, sendAt, now()),
+    ),
+    undoSend: sqlite.transaction((itemId: string, rawContext: ActionContext) =>
+      compose.undoSend(itemId, actionContext.parse(rawContext), now()),
+    ),
+    discard: sqlite.transaction((itemId: string, rawContext: ActionContext) =>
+      compose.discard(itemId, actionContext.parse(rawContext), now()),
+    ),
+    retry: (itemId) => compose.retry(itemId),
+    outbox: () => compose.outbox(now()),
+    drafts: (account) => compose.drafts(account),
+    answeredText: (itemId) => compose.answeredText(itemId),
+    addressHistory() {
+      const { emailDetails, items } = schema;
+      return db
+        .select({ data: emailDetails.data })
+        .from(emailDetails)
+        .innerJoin(items, eq(items.id, emailDetails.itemId))
+        .where(and(isNull(items.deletedAt), eq(emailDetails.draft, false)))
+        .all()
+        .map(({ data }) => ({
+          from: data.from,
+          to: data.to,
+          cc: data.cc,
+          bcc: data.bcc,
+          sentByMe: data.sentByMe,
+          sentAt: data.sentAt,
+        }));
+    },
+    attachmentsInUse: () => compose.attachmentsInUse(),
+    releaseHeld: () => outgoing.releaseHeld(SEND_FIELD, now()),
+    settings: {
+      read: () => compose.settings.read(),
+      save: (settings) => compose.settings.save(settings, now()),
+    },
+    signatures: {
+      read: (account) => compose.signatures.read(account),
+      save: (account, body) => compose.signatures.save(account, body, now()),
+    },
+  };
+
   const createEvent = sqlite.transaction((draft: CommanderEventDraft, rawContext: ActionContext) => {
     const context = actionContext.parse(rawContext);
     return commanderEvents.create(
@@ -2096,9 +2195,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     for (const handed of [...threaded.items, ...threaded.moved]) {
       const at = now();
       const incoming = withItemRefs(batch.source, batch.account, handed);
-      const existing =
-        findBySourceIdentity(batch.source, batch.account, incoming.externalId) ??
-        madeInCommander(batch.source, batch.account, incoming);
+      const existing = sourceIdentityOf(batch.source, batch.account, incoming, at);
       if (existing && existing.deletedAt !== null && outgoing.queued(existing.id, DELETE_FIELD)) {
         // Deleted in Commander (an undone Send to Linear), on its way to being deleted at the Source.
         result.unchanged.push(existing.id);
@@ -2115,7 +2212,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
           ...withQueuedOnTop(
             outgoing,
             existing.id,
-            { status: incoming.status, detail: stillCommanders(existing.detail, incoming.detail) },
+            {
+              status: incoming.status,
+              detail: stillSending(existing, stillCommanders(existing.detail, incoming.detail)),
+            },
             before.detail,
           ),
         };
@@ -2171,6 +2271,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     for (const externalId of batch.deleted) {
       const existing = findBySourceIdentity(batch.source, batch.account, externalId);
       if (!existing || existing.deletedAt !== null) continue;
+      // A message written in Commander, sent, still under the id of the draft it was (#138): the draft
+      // going is its sending, not the message's deletion. The sent copy's sync names it again.
+      if (
+        existing.kind === 'email' &&
+        existing.detail?.kind === 'email' &&
+        !existing.detail.draft &&
+        compose.record(existing.id)?.sendAt
+      )
+        continue;
       const at = now();
       const before = stateOf(existing);
       const after: ItemState = { ...before, deletedAt: at };
@@ -2243,6 +2352,81 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       .run();
     outgoing.rekey(made.id, incoming.externalId);
     return { ...made, externalId: incoming.externalId };
+  }
+
+  // The Item a Source Item is: the one holding its external id, or one Commander made that the Source
+  // now has (an event, or a message written in Commander).
+  function sourceIdentityOf(
+    source: Source,
+    account: string,
+    incoming: z.output<typeof sourceBatch>['items'][number],
+    at: number,
+  ): Item | undefined {
+    const found = findBySourceIdentity(source, account, incoming.externalId);
+    return (
+      writtenInCommander(source, account, incoming, found, at) ??
+      found ??
+      madeInCommander(source, account, incoming)
+    );
+  }
+
+  // A message written in Commander (#138) that the Source now has: its draft or the sent message, as the
+  // Source's answer names it (`commanderItemId`), or (a crash came between sending and saving that
+  // answer) as a sync brings it, matched by its Message-ID. The same Item takes the Source's id, so the
+  // message shows once in its thread. Should a copy have been saved as an Item of its own first, that
+  // copy gives way (a tombstone) to the message's Item.
+  function writtenInCommander(
+    source: Source,
+    account: string,
+    incoming: z.output<typeof sourceBatch>['items'][number],
+    found: Item | undefined,
+    at: number,
+  ): Item | undefined {
+    if (incoming.detail?.kind !== 'email') return undefined;
+    let target: Item | null = null;
+    if (incoming.commanderItemId) {
+      const named = readItem(incoming.commanderItemId);
+      if (
+        named?.kind === 'email' &&
+        named.source === source &&
+        named.account === account &&
+        compose.record(named.id)
+      )
+        target = named;
+    } else if (!found) target = compose.matchMessage(source, account, incoming.detail.messageId);
+    if (!target) return undefined;
+    if (incoming.commanderItemId && incoming.detail.draft && incoming.body)
+      compose.answered(target.id, incoming.body.text);
+    if (found?.id === target.id) return found;
+    if (found) {
+      // The copy saved first goes, out of the way of the identity.
+      const before = stateOf(found);
+      db.update(schema.items)
+        .set({ externalId: `superseded:${found.id}` })
+        .where(eq(schema.items.id, found.id))
+        .run();
+      const gone = { ...found, externalId: `superseded:${found.id}` };
+      const after = writeState(gone, { ...before, deletedAt: before.deletedAt ?? at }, at);
+      emails.deleteBodies([found.id]);
+      log(
+        { by: { kind: 'source', source, account }, action: 'tombstone', itemId: found.id, before, after },
+        at,
+      );
+    }
+    db.update(schema.items)
+      .set({ externalId: incoming.externalId })
+      .where(eq(schema.items.id, target.id))
+      .run();
+    outgoing.rekey(target.id, incoming.externalId);
+    return { ...target, externalId: incoming.externalId };
+  }
+
+  // A message on its way to the Source stays sent, whatever a late answer to saving its draft says.
+  function stillSending(held: Item, incoming: ItemDetail | null): ItemDetail | null {
+    if (incoming?.kind !== 'email' || !incoming.draft || !outgoing.queued(held.id, SEND_FIELD))
+      return incoming;
+    const { draft: _draft, ...sent } = incoming;
+    return held.detail?.kind === 'email' ? { ...sent, sentAt: held.detail.sentAt } : sent;
   }
 
   // An event Commander made stays marked as its own, even if the Source's copy has lost the marker.
@@ -2475,6 +2659,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     emailThreads: (query) => emails.threads(query),
     emailThread: (account, threadKey) => emails.threadView(account, threadKey),
     emailBody: (itemId) => emails.readBody(itemId),
+    compose: composeApi,
     emailViews: (query) => emails.viewCounts(query),
     emailSearch: (query) => emails.searchThreads(query),
     emailLabels: (account) => emails.labelsOf(account),

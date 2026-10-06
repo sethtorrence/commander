@@ -1,5 +1,12 @@
-import { type EmailDetail, type EmailLabel, emailStatus, type SourceItem } from '@commander/domain';
+import {
+  type EmailDetail,
+  type EmailLabel,
+  emailStatus,
+  isPendingEventExternalId,
+  type SourceItem,
+} from '@commander/domain';
 import { z } from 'zod';
+import { isComposeWrite } from '../email-send/compose-write';
 import {
   type Cadence,
   CursorExpired,
@@ -13,6 +20,7 @@ import {
   type WriteRequest,
 } from '../source';
 import { connectGmail, createPacer, type GmailClient, MessageGone, type Pacer } from './client';
+import { DRAFT_PREFIX, syncGmailDrafts, writeCompose } from './compose';
 import { labelName, readGmailMessage } from './message';
 import { fetchGmailPart } from './parts';
 import {
@@ -54,6 +62,10 @@ import {
 //   Item carries) is left as Gmail has it, reported as superseded. Gmail's history carries no times,
 //   so "newer" means "made in Gmail after Commander last saw the message": the User changed what they
 //   saw, and Gmail's change came on top of it or unseen.
+// - Drafts (#138) are Items of their own, `draft:<draft id>` (compose.ts), listed with `drafts.list`
+//   whenever a sync sees a draft change (a first download that met one, or history touching a message
+//   labelled DRAFT or a held draft's message), and fetched only where their message changed. Messages
+//   written in Commander are saved as drafts and sent through the outgoing queue (compose.ts).
 
 export const GMAIL_CADENCE: Cadence = { defaultMinutes: 15, choices: [5, 10, 15, 30, 60] };
 
@@ -184,6 +196,8 @@ export function createGmailSource({
         accessToken: request.accessToken,
         signal: request.signal,
       });
+      if (isComposeWrite(request.changes))
+        return { ...(await writeCompose(gmail, request, now)), cost: gmail.cost };
       return { ...(await writeMessage(gmail, request, now)), cost: gmail.cost };
     },
 
@@ -218,6 +232,8 @@ export function createGmailSource({
           });
         }
       }
+      // Drafts, when this sync met a change to one (#138).
+      if (run.draftsChanged()) await run.drafts();
       request.progress?.(null);
       return { cursor, cost: gmail.cost };
     },
@@ -259,6 +275,16 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
   }
 
   const heldIds = () => request.heldIds?.() ?? [];
+  // Whether this sync met a change to a draft (#138), so the drafts are listed once it is done.
+  let draftsChanged = false;
+  async function drafts() {
+    const ids = heldIds().filter((id) => id.startsWith(DRAFT_PREFIX));
+    const held = new Map(
+      [...storedById(ids).values()].map((item) => [item.externalId, emailOf(item)?.sourceVersion ?? null]),
+    );
+    const found = await syncGmailDrafts(gmail, held);
+    if (found.items.length || found.deleted.length) request.save(found);
+  }
   const storedById = (ids: string[]) =>
     new Map((ids.length ? (request.stored?.(ids) ?? []) : []).map((item) => [item.externalId, item]));
 
@@ -306,7 +332,10 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
           if (error instanceof MessageGone) continue;
           throw error;
         }
-        if ((message.labelIds ?? []).some((label) => SKIPPED.has(label))) continue;
+        if ((message.labelIds ?? []).some((label) => SKIPPED.has(label))) {
+          if (message.labelIds?.includes('DRAFT')) draftsChanged = true;
+          continue;
+        }
         const item = readGmailMessage(message, names);
         if (keep(item)) batch.push(item);
         if (pending >= SAVE_EVERY) flush();
@@ -362,7 +391,11 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
       // to Trash, where they stay (with the labels they had).
       const listedIds = new Set(listed);
       const trashed = new Set(await listIds({ labelIds: 'TRASH', q: after, includeSpamTrash: 'true' }));
-      const unlisted = [...storedById(heldIds().filter((id) => !listedIds.has(id))).values()].filter(
+      // Drafts, and messages written in Commander not yet sent, are never among the listed messages.
+      const messageIds = heldIds().filter(
+        (id) => !id.startsWith(DRAFT_PREFIX) && !isPendingEventExternalId(id),
+      );
+      const unlisted = [...storedById(messageIds.filter((id) => !listedIds.has(id))).values()].filter(
         (item) => (emailOf(item)?.sentAt ?? 0) >= windowStart,
       );
       for (const item of unlisted) {
@@ -425,6 +458,19 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
     }
     const ids = [...new Set([...added.keys(), ...deleted, ...changes.map((change) => change.id)])];
     const held = storedById(ids);
+    // A draft saved, sent or deleted (#138): the drafts are listed once this sync is done.
+    const draftMessages = new Set(
+      [...storedById(heldIds().filter((id) => id.startsWith(DRAFT_PREFIX))).values()].flatMap((item) => {
+        const version = emailOf(item)?.sourceVersion;
+        return version ? [version] : [];
+      }),
+    );
+    if (
+      [...added.values()].some((labels) => labels.includes('DRAFT')) ||
+      changes.some((change) => [...change.add, ...change.remove].includes('DRAFT')) ||
+      ids.some((id) => draftMessages.has(id))
+    )
+      draftsChanged = true;
     const gone: string[] = [];
     const relabel: SourceItem[] = [];
     const fetch: string[] = [];
@@ -460,6 +506,13 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
       } else if (!item && untrashed && !labelIds.some((label) => SKIPPED.has(label))) {
         fetch.push(id);
         restored.add(id);
+      } else if (
+        !item &&
+        changes.some((change) => change.id === id && change.remove.includes('DRAFT')) &&
+        !labelIds.some((label) => SKIPPED.has(label))
+      ) {
+        // A draft sent in Gmail: the message it became.
+        fetch.push(id);
       }
     }
     if (relabel.length || gone.length) request.save({ items: relabel, deleted: gone });
@@ -472,7 +525,7 @@ function gmailRun(gmail: GmailClient, request: SyncRequest) {
     return next;
   }
 
-  return { download, history, heldIds };
+  return { download, history, heldIds, drafts, draftsChanged: () => draftsChanged };
 }
 
 // ---------------------------------------------------------------------------------------------

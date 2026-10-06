@@ -17,6 +17,7 @@ import { setUpAccounts } from './accounts/set-up-accounts';
 import { attachmentSchemePrivileges, serveAttachment } from './attachments-protocol';
 import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
+import { createComposeChannel } from './compose-channel';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { setUpEmailReader } from './email-reader';
 import { emailReaderSchemePrivileges } from './email-reader/protocol';
@@ -149,6 +150,9 @@ function startCore(secrets: Secrets) {
   // Ares's Updates: the window asks (`U`, the header button, the palette), the Core answers.
   const updates = createUpdatesChannel((message) => core.postMessage(message));
   ipcMain.handle(ipc.updates, (_event, request: unknown) => updates.request(request));
+  // Writing email (#138): the window's composer, answered by the Core.
+  const compose = createComposeChannel((message) => core.postMessage(message));
+  ipcMain.handle(ipc.compose, (_event, request: unknown) => compose.request(request));
   // Whether the User is at the machine, from powerMonitor, for "You're here / away" and having the
   // Update ready on return.
   // The end-to-end tests stand in for powerMonitor (their input never reaches the system).
@@ -189,7 +193,7 @@ function startCore(secrets: Secrets) {
   }
   core.on('message', (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
-    if (markdownCopy.settle(raw) || updates.settle(raw)) return;
+    if (markdownCopy.settle(raw) || updates.settle(raw) || compose.settle(raw)) return;
     if (emailReader?.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.
     if (models(raw)) return;
@@ -206,7 +210,7 @@ function startCore(secrets: Secrets) {
     }
     window?.webContents.send(ipc.coreMessage, parsed.message);
   });
-  return core;
+  return { core, sendHeld: () => compose.sendHeld() };
 }
 
 app.whenReady().then(() => {
@@ -252,7 +256,9 @@ app.whenReady().then(() => {
   });
   if (process.env.ELECTRON_RENDERER_URL) window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else window.loadFile(join(__dirname, '../renderer/index.html'));
-  tray = runInBackground(window, startCore(secrets));
+  const started = startCore(secrets);
+  // Quitting sends the messages held for Undo first (#138).
+  tray = runInBackground(window, started.core, { sendHeld: started.sendHeld });
   tray.setQueued(queued);
   if (testHooks) {
     // The tray's menu, for the end-to-end tests: its labels, and choosing one.

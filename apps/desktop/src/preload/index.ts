@@ -2,6 +2,9 @@ import type {
   AutonomyRequest,
   AutonomyResponse,
   AutonomyResults,
+  ComposeRequest,
+  ComposeResponse,
+  ComposeResults,
   CoreMessage,
   EmailReaderRequest,
   EmailReaderResponse,
@@ -124,6 +127,13 @@ const commander = {
     return () => {
       ipcRenderer.off(ipc.emailLinkHover, handler);
     };
+  },
+  // Writing email (#138): composers, drafts, sending (held for Undo), the Outbox, address suggestions,
+  // attachments, and Settings → Email's writing settings and signatures. Rejects with the reason.
+  async compose<R extends ComposeRequest>(request: R): Promise<ComposeResults[R['op']]> {
+    const response: ComposeResponse<R['op']> = await ipcRenderer.invoke(ipc.compose, request);
+    if (!response.ok) throw new Error(response.error);
+    return response.result;
   },
   startAtLogin: (): Promise<boolean> => ipcRenderer.invoke(ipc.startAtLogin),
   setStartAtLogin: (enabled: boolean): Promise<boolean> => ipcRenderer.invoke(ipc.setStartAtLogin, enabled),

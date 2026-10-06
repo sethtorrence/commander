@@ -394,6 +394,102 @@
           }
         }
       }
+    },
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/drafts?maxResults=500"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "drafts": [
+            {
+              "id": "r-8133071950",
+              "message": {
+                "id": "19a5d4e5f6a7b8d1",
+                "threadId": "19a5d4e5f6a7b8d1"
+              }
+            },
+            {
+              "id": "r-2290017466",
+              "message": {
+                "id": "19a7f6a7b8c9d0d2",
+                "threadId": "19a7f6a7b8c9d0d2"
+              }
+            }
+          ],
+          "resultSizeEstimate": 2
+        }
+      }
+    },
+    {
+      "request": {
+        "path": "/gmail/v1/users/me/drafts/r-2290017466?format=full"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=UTF-8"
+        },
+        "body": {
+          "id": "r-2290017466",
+          "message": {
+            "id": "19a7f6a7b8c9d0d2",
+            "threadId": "19a7f6a7b8c9d0d2",
+            "labelIds": ["DRAFT"],
+            "snippet": "Half-written",
+            "sizeEstimate": 2014,
+            "historyId": "4990",
+            "internalDate": "1790964000000",
+            "payload": {
+              "partId": "",
+              "mimeType": "text/plain",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Delivered-To",
+                  "value": "alex@gmail.test"
+                },
+                {
+                  "name": "MIME-Version",
+                  "value": "1.0"
+                },
+                {
+                  "name": "Date",
+                  "value": "Fri, 02 Oct 2026 18:00:00 +0000"
+                },
+                {
+                  "name": "Message-ID",
+                  "value": "<CAKa=draft@mail.gmail.test>"
+                },
+                {
+                  "name": "Subject",
+                  "value": "Notes for Lee"
+                },
+                {
+                  "name": "From",
+                  "value": "Alex Kim <alex@gmail.test>"
+                },
+                {
+                  "name": "To",
+                  "value": "lee@northwind.test"
+                },
+                {
+                  "name": "Content-Type",
+                  "value": "text/plain; charset=\"UTF-8\""
+                }
+              ],
+              "body": {
+                "size": 14,
+                "data": "SGFsZi13cml0dGVuDQo"
+              }
+            }
+          }
+        }
+      }
     }
   ],
   "quiet": [

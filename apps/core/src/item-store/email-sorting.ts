@@ -152,7 +152,7 @@ export function emailSortingIn(
       })
       .from(emailDetails)
       .innerJoin(items, eq(items.id, emailDetails.itemId))
-      .where(and(isNull(items.deletedAt), eq(items.kind, 'email')))
+      .where(and(isNull(items.deletedAt), eq(items.kind, 'email'), eq(emailDetails.draft, false)))
       .groupBy(items.account, emailDetails.threadKey)
       .all()
       .filter((row) => Number(row.latestAt) >= since && !!row.inbox)

@@ -10,8 +10,12 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // keep their id when moved, with their internet headers (none on the User's own sent mail), HTML or
 // text bodies and attachments (metadata, and bytes through `$value`); JSON batches (`/$batch`) of
 // those reads; and what organising mail writes: `PATCH /me/messages/{id}` (isRead, flag) and
-// `POST /me/messages/{id}/move` (to a folder id or a well-known name). Nothing here talks to the real
-// Microsoft.
+// `POST /me/messages/{id}/move` (to a folder id or a well-known name). Writing email (#138): drafts
+// made with `POST /me/messages` or `createReply` / `createReplyAll` / `createForward` (in Drafts, with
+// the reply's thread and headers), PATCHed with their fields and Commander's extended property,
+// attachments added in the request or through an upload session (PUT in chunks), sent with `send`
+// (filed in Sent Items under an id of its own, as Exchange does), deleted, and found again by the
+// extended property in one of Outlook's own folders. Nothing here talks to the real Microsoft.
 
 export type FakeMailUser = { id: string; displayName: string; userPrincipalName: string };
 
@@ -23,6 +27,8 @@ export type FakeOutlookMessageInput = {
   folder?: string;
   from: FakeOutlookAddress;
   to: FakeOutlookAddress[];
+  cc?: FakeOutlookAddress[];
+  bcc?: FakeOutlookAddress[];
   subject: string;
   text?: string;
   html?: string;
@@ -65,6 +71,9 @@ type StoredMessage = {
   // The change that last touched it.
   version: number;
   attachments: Attachment[];
+  // A draft (#138), and its extended properties (Commander's mark).
+  isDraft: boolean;
+  properties: Map<string, string>;
 };
 
 type Folder = { id: string; displayName: string; parentFolderId: string; wellKnown: string | null };
@@ -97,6 +106,22 @@ export type FakeOutlookMail = {
   refuseWrites(refusing: boolean): void;
   // Every delta link handed out so far stops working (410 SyncStateNotFound).
   expireDeltaLinks(): void;
+  // Every message sent (#138), oldest first: the copy filed in Sent Items.
+  sent: {
+    id: string;
+    subject: string;
+    to: string[];
+    attachments: { name: string; size: number }[];
+    inReplyTo: string | null;
+    conversationId: string;
+  }[];
+  // Sends are refused (400 ErrorInvalidRecipients, with this reason) until null again.
+  refuseSends(reason: string | null): void;
+  // A user's drafts in Drafts.
+  drafts(userId: string): { id: string; subject: string }[];
+  // An upload session's PUT (no token: the URL carries its own authorisation, as Graph's do).
+  handlesUpload(request: IncomingMessage, url: URL): boolean;
+  upload(request: IncomingMessage, url: URL, response: ServerResponse): Promise<void>;
   // Whether a request is the mail part's to answer.
   handles(request: IncomingMessage, url: URL): boolean;
   handle(request: IncomingMessage, url: URL, response: ServerResponse, user: FakeMailUser): Promise<void>;
@@ -203,11 +228,11 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       from: recipient(input.from),
       sender: recipient(input.from),
       toRecipients: input.to.map(recipient),
-      ccRecipients: [],
-      bccRecipients: [],
+      ccRecipients: (input.cc ?? []).map(recipient),
+      bccRecipients: (input.bcc ?? []).map(recipient),
       replyTo: [],
       isRead: message.isRead,
-      isDraft: false,
+      isDraft: message.isDraft,
       flag: { flagStatus: message.flagged ? 'flagged' : 'notFlagged' },
       parentFolderId: message.folderId,
       conversationId: input.conversationId ?? `AAQkFake-conv-${message.id}`,
@@ -313,6 +338,231 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
     return { status: 200, body: { value: page.map(messageJson), '@odata.deltaLink': finish(upTo, from) } };
   }
 
+  // ---------------------------------------------------------------------------------------------
+  // Writing email (#138)
+
+  let sendsRefused: string | null = null;
+  const sessions = new Map<
+    string,
+    {
+      userId: string;
+      messageId: string;
+      name: string;
+      type: string;
+      size: number;
+      chunks: Buffer[];
+      received: number;
+    }
+  >();
+
+  // The extended property a `$filter` asks for: `singleValueExtendedProperties/Any(ep: ep/id eq '…' and ep/value eq '…')`.
+  function marker(query: URLSearchParams): { id: string; value: string } | null {
+    const match = /ep\/id eq '([^']+)' and ep\/value eq '([^']+)'/.exec(query.get('$filter') ?? '');
+    return match ? { id: match[1] as string, value: match[2] as string } : null;
+  }
+
+  const addressesOf = (list: unknown): FakeOutlookAddress[] =>
+    Array.isArray(list)
+      ? list.flatMap((each) => {
+          const address = (each as { emailAddress?: { address?: string; name?: string } }).emailAddress;
+          return address?.address
+            ? [{ name: address.name ?? address.address, address: address.address }]
+            : [];
+        })
+      : [];
+
+  function newDraft(
+    mailbox: Mailbox,
+    user: FakeMailUser,
+    input: Partial<FakeOutlookMessageInput>,
+  ): StoredMessage {
+    const drafts = resolve(mailbox, 'drafts') as Folder;
+    const id = `AAMkFake-msg-draft-${++made}=`;
+    const draft: StoredMessage = {
+      id,
+      folderId: drafts.id,
+      input: {
+        from: { name: user.displayName, address: user.userPrincipalName },
+        to: [],
+        subject: '',
+        date: Date.now(),
+        messageId: `<draft-${made}@fake.outlook.test>`,
+        withoutHeaders: true,
+        ...input,
+      },
+      isRead: true,
+      flagged: false,
+      modifiedAt: Date.now(),
+      version: ++version,
+      attachments: [],
+      isDraft: true,
+      properties: new Map(),
+    };
+    mailbox.messages.set(id, draft);
+    return draft;
+  }
+
+  // A PATCH (or a create's body) on a draft: its subject, body, recipients and extended properties.
+  function applyDraft(draft: StoredMessage, payload: unknown) {
+    const change = (payload ?? {}) as {
+      subject?: unknown;
+      body?: { contentType?: string; content?: string };
+      toRecipients?: unknown;
+      ccRecipients?: unknown;
+      bccRecipients?: unknown;
+      singleValueExtendedProperties?: { id: string; value: string }[];
+    };
+    const input = { ...draft.input };
+    if (typeof change.subject === 'string') input.subject = change.subject;
+    if (change.body) {
+      if (change.body.contentType === 'html') {
+        input.html = change.body.content ?? '';
+        input.text = undefined;
+      } else input.text = change.body.content ?? '';
+    }
+    if (change.toRecipients) input.to = addressesOf(change.toRecipients);
+    if (change.ccRecipients) input.cc = addressesOf(change.ccRecipients);
+    if (change.bccRecipients) input.bcc = addressesOf(change.bccRecipients);
+    for (const property of change.singleValueExtendedProperties ?? [])
+      draft.properties.set(property.id, property.value);
+    draft.input = input;
+    draft.version = ++version;
+    draft.modifiedAt = Date.now();
+  }
+
+  function addAttachment(message: StoredMessage, name: string, type: string, bytes: Buffer) {
+    message.attachments.push({
+      id: `${message.id.replace(/=$/, '')}-att-${message.attachments.length + 1}-${++made}=`,
+      name,
+      type,
+      bytes,
+      contentId: null,
+      inline: false,
+    });
+    message.version = ++version;
+  }
+
+  function composeAnswer(
+    mailbox: Mailbox,
+    message: StoredMessage,
+    method: string,
+    parts: string[],
+    payload: unknown,
+    user: FakeMailUser,
+  ): Answer | null {
+    const action = parts[3];
+    if (
+      method === 'POST' &&
+      (action === 'createReply' || action === 'createReplyAll' || action === 'createForward')
+    ) {
+      const original = message.input;
+      const prefix = action === 'createForward' ? 'FW: ' : 'RE: ';
+      const to =
+        action === 'createForward'
+          ? []
+          : action === 'createReplyAll'
+            ? [original.from, ...original.to.filter((each) => each.address !== user.userPrincipalName)]
+            : [original.from];
+      const draft = newDraft(mailbox, user, {
+        subject: `${prefix}${original.subject.replace(/^(re|fw|fwd):\s*/i, '')}`,
+        to,
+        html: `<div><br></div><hr><div>${original.html ?? original.text ?? ''}</div>`,
+        conversationId: original.conversationId ?? `AAQkFake-conv-${message.id}`,
+        ...(action === 'createForward'
+          ? {}
+          : {
+              inReplyTo: original.messageId ?? `<${message.id}@fake.outlook.test>`,
+              references: [original.references, original.messageId ?? `<${message.id}@fake.outlook.test>`]
+                .filter(Boolean)
+                .join(' '),
+            }),
+      });
+      // Outlook copies a forwarded message's attachments into the forward.
+      if (action === 'createForward')
+        for (const each of message.attachments.filter((one) => !one.inline))
+          addAttachment(draft, each.name, each.type, each.bytes);
+      return { status: 201, body: messageJson(draft) };
+    }
+    if (!message.isDraft) return null;
+    if (parts.length === 3 && method === 'PATCH') {
+      applyDraft(message, payload);
+      return { status: 200, body: messageJson(message) };
+    }
+    if (parts.length === 3 && method === 'DELETE') {
+      mailbox.messages.delete(message.id);
+      const left = mailbox.left.get(message.folderId) ?? new Map<string, number>();
+      left.set(message.id, ++version);
+      mailbox.left.set(message.folderId, left);
+      return { status: 204 };
+    }
+    if (action === 'attachments' && method === 'POST' && parts.length === 4) {
+      const file = (payload ?? {}) as { name?: string; contentType?: string; contentBytes?: string };
+      addAttachment(
+        message,
+        file.name ?? 'attachment',
+        file.contentType ?? 'application/octet-stream',
+        Buffer.from(file.contentBytes ?? '', 'base64'),
+      );
+      return { status: 201, body: { id: message.attachments.at(-1)?.id } };
+    }
+    if (action === 'attachments' && method === 'DELETE' && parts[4]) {
+      message.attachments = message.attachments.filter((each) => each.id !== parts[4]);
+      return { status: 204 };
+    }
+    if (action === 'attachments' && parts[4] === 'createUploadSession' && method === 'POST') {
+      const item =
+        ((payload ?? {}) as { AttachmentItem?: { name?: string; size?: number; contentType?: string } })
+          .AttachmentItem ?? {};
+      const token = `session-${++made}`;
+      sessions.set(token, {
+        userId: user.id,
+        messageId: message.id,
+        name: item.name ?? 'attachment',
+        type: item.contentType ?? 'application/octet-stream',
+        size: item.size ?? 0,
+        chunks: [],
+        received: 0,
+      });
+      const origin = graphUrl().replace(/\/v1\.0$/, '');
+      return {
+        status: 201,
+        body: { uploadUrl: `${origin}/fake-upload/${token}?authtoken=fake`, nextExpectedRanges: ['0-'] },
+      };
+    }
+    if (action === 'send' && method === 'POST') {
+      if (sendsRefused)
+        return { status: 400, body: { error: { code: 'ErrorInvalidRecipients', message: sendsRefused } } };
+      const sentItems = resolve(mailbox, 'sentitems') as Folder;
+      // Exchange files the sent message in Sent Items under an id of its own.
+      const id = `AAMkFake-msg-sent-${++made}=`;
+      const copy: StoredMessage = {
+        ...message,
+        id,
+        folderId: sentItems.id,
+        isDraft: false,
+        input: { ...message.input, date: Date.now() },
+        version: ++version,
+        modifiedAt: Date.now(),
+        properties: new Map(message.properties),
+      };
+      mailbox.messages.delete(message.id);
+      const left = mailbox.left.get(message.folderId) ?? new Map<string, number>();
+      left.set(message.id, version);
+      mailbox.left.set(message.folderId, left);
+      mailbox.messages.set(id, copy);
+      fake.sent.push({
+        id,
+        subject: copy.input.subject,
+        to: copy.input.to.map((each) => each.address),
+        attachments: copy.attachments.map((each) => ({ name: each.name, size: each.bytes.length })),
+        inReplyTo: copy.input.inReplyTo ?? null,
+        conversationId: copy.input.conversationId ?? `AAQkFake-conv-${message.id}`,
+      });
+      return { status: 202 };
+    }
+    return null;
+  }
+
   // Answers one read or write, for the user.
   function answer(method: string, url: URL, payload: unknown, prefer: string, user: FakeMailUser): Answer {
     const mailbox = mailboxOf(user.id);
@@ -345,6 +595,14 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
         };
       if (parts[3] === 'messages' && parts[4] === 'delta')
         return delta(mailbox, folder, url.searchParams, prefer);
+      if (parts[3] === 'messages' && parts.length === 4 && marker(url.searchParams)) {
+        // Writing email (#138): the messages carrying Commander's mark, in one of Outlook's own folders.
+        const { id: property, value } = marker(url.searchParams) as { id: string; value: string };
+        const marked = [...mailbox.messages.values()].filter(
+          (each) => each.folderId === folder.id && each.properties.get(property) === value,
+        );
+        return { status: 200, body: { value: marked.map(messageJson) } };
+      }
       if (parts[3] === 'messages' && parts.length === 4) {
         const from = fromFilter(url.searchParams);
         const inFolder = [...mailbox.messages.values()].filter(
@@ -360,9 +618,17 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       }
       return notFound('ResourceNotFound');
     }
+    if (parts[1] === 'messages' && parts.length === 2 && method === 'POST') {
+      // A new message's draft (#138).
+      const draft = newDraft(mailbox, user, { subject: '', to: [] });
+      applyDraft(draft, payload);
+      return { status: 201, body: messageJson(draft) };
+    }
     if (parts[1] !== 'messages' || !parts[2]) return notFound('ResourceNotFound');
     const message = mailbox.messages.get(parts[2]);
     if (!message) return notFound();
+    const composing = composeAnswer(mailbox, message, method, parts, payload, user);
+    if (composing) return composing;
     if (method !== 'GET' && refusing)
       return {
         status: 403,
@@ -400,6 +666,46 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
   const fake: FakeOutlookMail = {
     requests: [],
     writes: [],
+    sent: [],
+    refuseSends(reason) {
+      sendsRefused = reason;
+    },
+    drafts(userId) {
+      const mailbox = mailboxOf(userId);
+      const drafts = resolve(mailbox, 'drafts') as Folder;
+      return [...mailbox.messages.values()]
+        .filter((each) => each.folderId === drafts.id)
+        .map((each) => ({ id: each.id, subject: each.input.subject }));
+    },
+    handlesUpload(request, url) {
+      return request.method === 'PUT' && url.pathname.startsWith('/fake-upload/');
+    },
+    async upload(request, url, response) {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(chunk as Buffer);
+      const bytes = Buffer.concat(chunks);
+      const session = sessions.get(url.pathname.slice('/fake-upload/'.length));
+      const range = /bytes (\d+)-(\d+)\/(\d+)/.exec(String(request.headers['content-range'] ?? ''));
+      fake.requests.push(`PUT ${url.pathname} ${request.headers['content-range'] ?? ''}`);
+      if (!session || !range || Number(range[1]) !== session.received) {
+        response
+          .writeHead(400, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ error: { code: 'InvalidRange' } }));
+        return;
+      }
+      session.chunks.push(bytes);
+      session.received += bytes.length;
+      if (session.received < session.size) {
+        response
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ nextExpectedRanges: [`${session.received}-`] }));
+        return;
+      }
+      const message = mailboxOf(session.userId).messages.get(session.messageId);
+      if (message) addAttachment(message, session.name, session.type, Buffer.concat(session.chunks));
+      sessions.delete(url.pathname.slice('/fake-upload/'.length));
+      response.writeHead(201).end();
+    },
     folders: (userId) => mailboxOf(userId).folders.map((each) => ({ ...each })),
     addFolder(userId, displayName, parent = ROOT) {
       const id = `AAMkFake-fld-own-${++made}=`;
@@ -419,6 +725,8 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
         flagged: input.flagged ?? false,
         modifiedAt: input.date,
         version: ++version,
+        isDraft: false,
+        properties: new Map(),
         attachments: (input.attachments ?? []).map((each, index) => ({
           id: `${id.replace(/=$/, '')}-att-${index + 1}=`,
           name: each.name,

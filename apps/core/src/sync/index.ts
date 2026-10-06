@@ -50,6 +50,8 @@ export type KnownAccount = {
   sources: readonly Source[];
   name: string | null;
   addresses?: readonly string[];
+  // The name the Account has for the User (a message's From line, #138), when known.
+  ownName?: string | null;
   needsReconnect: boolean;
 };
 
@@ -77,6 +79,8 @@ export type SyncOptions = {
   log?: (message: string) => void;
   // The Accounts changed, or whether one needs reconnecting did.
   onAccountsChanged?: () => void;
+  // A message written in Commander (#138): an attachment's bytes, for its draft or its sending.
+  attachment?: (id: string) => Promise<Uint8Array>;
 };
 
 // Each calendar Account's calendars and the User's switches live in the Item store.
@@ -115,6 +119,7 @@ export function setUpSync(
     random,
     log = (message) => console.warn(message),
     onAccountsChanged,
+    attachment,
   }: SyncOptions,
 ) {
   // Where Linear lives, from the main process (a fake on this machine in the end-to-end tests).
@@ -148,6 +153,7 @@ export function setUpSync(
       source === 'github' && githubWatch ? githubWatch(account, githubApiUrl) : null,
     onSignInRefused: (account) => send({ type: 'account-refused', account }),
     onChannelPostsRefused: (account) => send({ type: 'channel-posts-refused', account }),
+    ...(attachment ? { attachment } : {}),
     random,
     log,
   });
@@ -162,6 +168,7 @@ export function setUpSync(
       sources: 'sources' in account ? account.sources : [account.source],
       name: account.name ?? null,
       addresses: (account.own?.handles ?? []).filter((handle) => /^[^\s@]+@[^\s@]+$/.test(handle)),
+      ...(account.own?.name ? { ownName: account.own.name } : {}),
       needsReconnect: account.needsReconnect || gone.has(account.id),
     }));
   }

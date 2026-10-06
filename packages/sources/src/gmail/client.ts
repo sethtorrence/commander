@@ -39,9 +39,27 @@ export const UNITS = {
   modify: 5,
   trash: 5,
   untrash: 5,
+  // Writing email (#138): a message's headers read back (`format=metadata`), sending, and drafts.
+  meta: 5,
+  send: 100,
+  'drafts.list': 5,
+  'drafts.get': 5,
+  'drafts.create': 10,
+  'drafts.update': 15,
+  'drafts.delete': 10,
 } as const;
 // The calls that write, or read for a write: Gmail refusing one refuses the change itself.
-const WRITE_CALLS = new Set<GmailCall>(['peek', 'modify', 'trash', 'untrash']);
+const WRITE_CALLS = new Set<GmailCall>([
+  'peek',
+  'modify',
+  'trash',
+  'untrash',
+  'send',
+  'drafts.create',
+  'drafts.update',
+]);
+// The draft calls whose 404 means the draft is gone (deleted, or sent, in Gmail).
+const DRAFT_CALLS = new Set<GmailCall>(['drafts.get', 'drafts.update', 'drafts.delete']);
 
 // The pace: up to BURST units at once, refilled at RATE units a minute.
 export const BURST_UNITS = 500;
@@ -91,6 +109,14 @@ export class MessageGone extends Error {
   override name = 'MessageGone';
 }
 
+// A draft Gmail no longer has (deleted, or sent, in Gmail).
+export class DraftGone extends Error {
+  override name = 'DraftGone';
+}
+
+// The most of a raw message sent as JSON (`raw`); larger ones go through Gmail's upload endpoint.
+export const JSON_RAW_MAX = 4 * 1024 * 1024;
+
 export type GmailClientOptions = {
   // Gmail's base, like https://gmail.googleapis.com (a fake on this machine in tests).
   gmailUrl: string;
@@ -106,6 +132,8 @@ export type GmailCall = keyof typeof UNITS;
 export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal }: GmailClientOptions) {
   const cost: SyncCost = { requests: 0, complexity: 0 };
   const base = `${gmailUrl.replace(/\/$/, '')}/gmail/v1/users/me`;
+  // Gmail's media upload endpoint, for messages too large to send as JSON (up to its 35 MB cap).
+  const uploadBase = `${gmailUrl.replace(/\/$/, '')}/upload/gmail/v1/users/me`;
 
   async function reasonOf(response: Response): Promise<{ reasons: string[]; message: string | null }> {
     const parsed = googleError.safeParse(await response.json().catch(() => null));
@@ -117,26 +145,41 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
 
   /**
    * Asks for a path under the User's mailbox (`/messages?…`), parsed with `shape`, as one `call`: a
-   * GET, or a POST with a JSON body (`messages.modify`) or none (`messages.trash`).
+   * GET, or a POST with a JSON body (`messages.modify`) or none (`messages.trash`); or another method
+   * (`drafts.update` PUTs, `drafts.delete` DELETEs). `upload`: a raw message for Gmail's upload
+   * endpoint, sent with the JSON body as its metadata (multipart/related).
    */
   async function get<T>(
     call: GmailCall,
     path: string,
     shape: z.ZodType<T>,
-    post?: { body?: unknown },
+    post?: { body?: unknown; method?: 'POST' | 'PUT' | 'DELETE'; upload?: Uint8Array },
   ): Promise<T> {
     await pacer.take(UNITS[call], signal);
     const token = await accessToken();
     let response: Response;
+    const method = post ? (post.method ?? 'POST') : undefined;
+    let url = `${base}${path}`;
+    let contentType: string | null = post?.body !== undefined ? 'application/json' : null;
+    let body: string | Blob | undefined = post?.body !== undefined ? JSON.stringify(post.body) : undefined;
+    if (post?.upload) {
+      const boundary = `commander-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+      url = `${uploadBase}${path}${path.includes('?') ? '&' : '?'}uploadType=multipart`;
+      contentType = `multipart/related; boundary=${boundary}`;
+      const head = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(post.body ?? {})}\r\n--${boundary}\r\nContent-Type: message/rfc822\r\n\r\n`;
+      const tail = `\r\n--${boundary}--`;
+      const encoder = new TextEncoder();
+      body = new Blob([encoder.encode(head), post.upload as Uint8Array<ArrayBuffer>, encoder.encode(tail)]);
+    }
     try {
-      response = await fetch(`${base}${path}`, {
-        ...(post ? { method: 'POST' } : {}),
+      response = await fetch(url, {
+        ...(method ? { method } : {}),
         headers: {
           authorization: `Bearer ${token.token}`,
           accept: 'application/json',
-          ...(post?.body !== undefined ? { 'content-type': 'application/json' } : {}),
+          ...(contentType ? { 'content-type': contentType } : {}),
         },
-        ...(post?.body !== undefined ? { body: JSON.stringify(post.body) } : {}),
+        ...(body !== undefined ? { body } : {}),
         signal,
       });
     } catch (error) {
@@ -146,6 +189,10 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
     cost.requests += 1;
     cost.complexity = (cost.complexity ?? 0) + UNITS[call];
     if (response.ok) {
+      if (response.status === 204) {
+        const empty = shape.safeParse(null);
+        if (empty.success) return empty.data;
+      }
       const parsed = shape.safeParse(await response.json().catch(() => null));
       if (!parsed.success)
         throw new SourceUnavailable('Gmail sent an answer Commander didn’t understand.', cost);
@@ -166,10 +213,14 @@ export function connectGmail({ gmailUrl, fetch, now, pacer, accessToken, signal 
     if (response.status === 404 && call === 'history') {
       throw new CursorExpired('Gmail no longer has the history since Commander’s last sync.');
     }
-    if (response.status === 404 && (call === 'get' || call === 'attachment')) throw new MessageGone(path);
+    if (response.status === 404 && (call === 'get' || call === 'attachment' || call === 'meta'))
+      throw new MessageGone(path);
+    if (response.status === 404 && DRAFT_CALLS.has(call)) throw new DraftGone(path);
     if (WRITE_CALLS.has(call) && response.status === 404)
       throw new WriteRejected('Gmail no longer has this message.');
-    if (WRITE_CALLS.has(call) && response.status === 400)
+    if (call === 'send' && (response.status === 400 || response.status === 413))
+      throw new WriteRejected(`Gmail refused to send this message${message ? `: ${message}` : '.'}`);
+    if (WRITE_CALLS.has(call) && (response.status === 400 || response.status === 413))
       throw new WriteRejected(`Gmail refused this change${message ? `: ${message}` : '.'}`);
     throw new SourceUnavailable(`Gmail couldn’t answer just now (HTTP ${response.status}).`, cost);
   }

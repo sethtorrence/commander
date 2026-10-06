@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@commander/domain": "workspace:*",
+    "nodemailer": "^10.0.15",
     "zod": "^4.6.5"
   }
 }
