@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type EmailAddress, type EmailDetail, emailAddress, normaliseMessageId } from './email';
+import { scheduledEntry, sendLaterHeldBy } from './email-send-later';
 
 /*
   Writing email (#138, decision #15): new mail, reply, reply all and forward, with simple formatting
@@ -37,6 +38,9 @@ export type ComposeMode = z.infer<typeof composeMode>;
 // it (saved to the Source's Drafts folder), and its sending. Discarding a draft queues `delete`.
 export const DRAFT_FIELD = 'draft';
 export const SEND_FIELD = 'send';
+// Send later (#139): a message Microsoft holds in Exchange's Outbox, taken back out before its time
+// (cancelled, or about to go again at another time).
+export const CANCEL_SEND_FIELD = 'cancel-send';
 
 // ---------------------------------------------------------------------------------------------
 // The body
@@ -531,6 +535,8 @@ export const composeState = composeDraft.extend({
   from: emailAddress,
   // The quoted history below a reply (or the forwarded message), as plain text, shown folded.
   quote: z.string().nullable(),
+  // Send later (#139): the time a scheduled message taken back to edit was to go, offered again.
+  sendLater: timestamp.nullable().optional(),
 });
 export type ComposeState = z.infer<typeof composeState>;
 
@@ -555,6 +561,9 @@ export const outgoingMessage = z.object({
   references: z.array(z.string()),
   sourceThreadId: z.string().nullable(),
   replyToExternalId: z.string().nullable(),
+  // Send later held by Microsoft (#139): the Source holds the message until this time (Outlook's
+  // deferred send). Absent or null: it goes at once.
+  deferUntil: timestamp.nullable().optional(),
 });
 export type OutgoingMessage = z.infer<typeof outgoingMessage>;
 
@@ -638,6 +647,18 @@ export const composeRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('discard'), itemId: id }),
   // Sends a refused message again.
   z.object({ op: z.literal('retry'), itemId: id }),
+  // Send later (#139): the message goes at `sendAt` (held by Microsoft, or sent from Commander then).
+  z.object({ op: z.literal('schedule'), draft: composeDraft, sendAt: timestamp }),
+  // Every scheduled message, soonest first.
+  z.object({ op: z.literal('scheduled') }),
+  // Change time.
+  z.object({ op: z.literal('reschedule'), itemId: id, sendAt: timestamp }),
+  // Send now, a scheduled (or missed) message.
+  z.object({ op: z.literal('send-now'), itemId: id }),
+  // Cancel: it won't go, and is a draft again.
+  z.object({ op: z.literal('cancel-scheduled'), itemId: id }),
+  // Edit: taken back into the composer as a draft, its time offered again.
+  z.object({ op: z.literal('edit-scheduled'), itemId: id }),
   z.object({ op: z.literal('drafts'), account: id.optional() }),
   z.object({ op: z.literal('outbox') }),
   // Address suggestions for what was typed in To, Cc or Bcc.
@@ -676,6 +697,12 @@ export const composeResult = {
   'undo-send': composeState,
   discard: z.object({}),
   retry: z.object({}),
+  schedule: z.object({ itemId: id, sendAt: timestamp, heldBy: sendLaterHeldBy }),
+  scheduled: z.array(scheduledEntry),
+  reschedule: z.object({}),
+  'send-now': z.object({}),
+  'cancel-scheduled': z.object({}),
+  'edit-scheduled': composeState,
   drafts: z.array(draftEntry),
   outbox: z.array(outboxEntry),
   suggest: z.array(emailAddress),

@@ -8,6 +8,7 @@ import type {
   EmailAddress,
   EmailDetail,
   OutboxEntry,
+  ScheduledEntry,
   SourceItem,
 } from '@commander/domain';
 import type { GoogleAccountSummary } from '@commander/domain/ipc';
@@ -30,7 +31,9 @@ import type { ComposeClient } from './compose';
 // Writing email in the Email Section (#138): r, Shift+R, f and c open the composer (a reply below its
 // thread, new mail as a sheet), the draft saves after a pause, attachments show their size under the
 // 35 MB cap, Send hands the message to the Core with "Sending… Undo", and Undo opens it again as it
-// was; the Drafts and Outbox views list what waits. The Core is a stand-in here.
+// was; the Drafts and Outbox views list what waits. Send later (#139): a time picked beside Send shows
+// the running notice for a Gmail Account (not for an Outlook work Account) and Schedule hands it over;
+// Scheduled lists what waits, with Edit, Change time, Send now and Cancel. The Core is a stand-in here.
 
 const ALEX = 'google:alex';
 const NOW = new Date(2026, 9, 3, 15, 0).getTime();
@@ -101,14 +104,16 @@ function mail(id: string, fields: Partial<EmailDetail> = {}): SourceItem {
 
 // The Core, as far as the composer can tell.
 function fakeCompose() {
-  const calls: { op: string; draft?: ComposeDraft; itemId?: string }[] = [];
+  const calls: { op: string; draft?: ComposeDraft; itemId?: string; sendAt?: number }[] = [];
   let drafts: DraftEntry[] = [];
   let outbox: OutboxEntry[] = [];
+  let scheduled: ScheduledEntry[] = [];
+  let newAccount = ALEX;
   let attached = 0;
   const base = (fields: Partial<ComposeState>): ComposeState => ({
     itemId: null,
     mode: 'new',
-    account: ALEX,
+    account: newAccount,
     replyToItemId: null,
     to: [],
     cc: [],
@@ -161,6 +166,28 @@ function fakeCompose() {
     async retry(itemId) {
       calls.push({ op: 'retry', itemId });
     },
+    async schedule(draft, sendAt) {
+      calls.push({ op: 'schedule', draft, sendAt });
+      return {
+        itemId: draft.itemId ?? 'draft-1',
+        sendAt,
+        heldBy: draft.account.startsWith('outlook:') ? 'microsoft' : 'commander',
+      };
+    },
+    scheduled: async () => scheduled,
+    async reschedule(itemId, sendAt) {
+      calls.push({ op: 'reschedule', itemId, sendAt });
+    },
+    async sendNow(itemId) {
+      calls.push({ op: 'send-now', itemId });
+    },
+    async cancelScheduled(itemId) {
+      calls.push({ op: 'cancel-scheduled', itemId });
+    },
+    async editScheduled(itemId) {
+      calls.push({ op: 'edit-scheduled', itemId });
+      return base({ itemId, to: [dana], subject: 'Venue options', sendLater: NOW + 26 * 60 * 60_000 });
+    },
     drafts: async () => drafts,
     outbox: async () => outbox,
     suggest: async (text: string): Promise<EmailAddress[]> =>
@@ -187,6 +214,12 @@ function fakeCompose() {
     },
     setOutbox: (next: OutboxEntry[]) => {
       outbox = next;
+    },
+    setScheduled: (next: ScheduledEntry[]) => {
+      scheduled = next;
+    },
+    setNewAccount: (account: string) => {
+      newAccount = account;
     },
   };
 }
@@ -421,5 +454,153 @@ describe('writing email', () => {
     );
     fireEvent.click(within(entry).getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(fake.calls).toContainEqual({ op: 'retry', itemId: 'o1' }));
+  });
+});
+
+describe('send later (#139)', () => {
+  // Saturday 3 October 2026, 15:00 local: Tomorrow morning is Sunday 08:00.
+  const TOMORROW_EIGHT = new Date(2026, 9, 4, 8).getTime();
+  const NOTICE = 'Ares has to be running (the window or the tray) at that time to send this.';
+
+  async function newMessage() {
+    await ready();
+    press('c');
+    const sheet = await screen.findByRole('region', { name: 'New message' });
+    fireEvent.change(within(sheet).getByRole('combobox', { name: 'To' }), {
+      target: { value: 'dana@northwind.test,' },
+    });
+    fireEvent.change(within(sheet).getByRole('textbox', { name: 'Subject' }), {
+      target: { value: 'Venue options' },
+    });
+    return sheet;
+  }
+
+  async function pick(sheet: HTMLElement, choice: RegExp) {
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Send later' }));
+    const picker = await screen.findByTestId('send-later-picker');
+    fireEvent.click(within(picker).getByRole('button', { name: choice }));
+    await waitFor(() => expect(screen.queryByTestId('send-later-picker')).toBeNull());
+  }
+
+  it('on a Gmail Account, the menu and the composer say Ares has to be running, every time a time is picked', async () => {
+    const sheet = await newMessage();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Send later' }));
+    const picker = await screen.findByTestId('send-later-picker');
+    expect(
+      within(picker)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^Tomorrow morning/),
+        expect.stringMatching(/^Monday morning/),
+      ]),
+    );
+    expect(within(picker).getByTestId('send-later-notice').textContent).toBe(NOTICE);
+    fireEvent.click(within(picker).getByRole('button', { name: /^Tomorrow morning/ }));
+
+    await waitFor(() =>
+      expect(within(sheet).getByTestId('compose-send-at').textContent).toBe('tomorrow 08:00'),
+    );
+    expect(within(sheet).getByTestId('send-later-notice').textContent).toBe(NOTICE);
+    // Picked again: said again.
+    await pick(sheet, /^Monday morning/);
+    expect(within(sheet).getByTestId('send-later-notice').textContent).toBe(NOTICE);
+    expect(within(sheet).getByRole('button', { name: 'Schedule' })).toBeTruthy();
+  });
+
+  it('Schedule hands it over to go then, closes the composer and says when, with Undo', async () => {
+    const sheet = await newMessage();
+    await pick(sheet, /^Tomorrow morning/);
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Schedule' }));
+
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'New message' })).toBeNull());
+    const call = fake.calls.find((each) => each.op === 'schedule');
+    expect(call?.sendAt).toBe(TOMORROW_EIGHT);
+    expect(call?.draft?.subject).toBe('Venue options');
+    expect(fake.calls.map((each) => each.op)).not.toContain('send');
+    expect(await screen.findByText('Scheduled for tomorrow 08:00')).toBeTruthy();
+  });
+
+  it('× goes back to sending now', async () => {
+    const sheet = await newMessage();
+    await pick(sheet, /^Tomorrow morning/);
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Send now instead' }));
+    expect(within(sheet).queryByTestId('compose-send-later')).toBeNull();
+    expect(within(sheet).getByRole('button', { name: 'Send' })).toBeTruthy();
+  });
+
+  it('on an Outlook work Account there is no running notice: Microsoft holds it', async () => {
+    fake.setNewAccount('outlook:3f6a1c2e-0000-4000-8000-00000000c0de:u-alex');
+    const sheet = await newMessage();
+    await pick(sheet, /^Tomorrow morning/);
+
+    expect(within(sheet).queryByTestId('send-later-notice')).toBeNull();
+    expect(within(sheet).getByTestId('send-later-held').textContent).toBe(
+      'Microsoft holds it and sends it at that time, even with Commander closed.',
+    );
+  });
+
+  it('Scheduled lists each message with its time, Account and who holds it, and its actions reach the Core', async () => {
+    fake.setScheduled([
+      {
+        itemId: 'm1',
+        account: ALEX,
+        subject: 'Venue options',
+        to: [dana],
+        sendAt: TOMORROW_EIGHT,
+        heldBy: 'commander',
+        state: 'waiting',
+        error: null,
+      },
+      {
+        itemId: 'm2',
+        account: ALEX,
+        subject: 'Report',
+        to: [dana],
+        sendAt: NOW - 6 * 60 * 60_000,
+        heldBy: 'commander',
+        state: 'missed',
+        error: null,
+      },
+    ]);
+    await ready();
+    const tab = await screen.findByRole('tab', { name: /^Scheduled/ });
+    await waitFor(() => expect(tab.textContent).toBe('Scheduled2'));
+    fireEvent.click(tab);
+
+    const entries = await screen.findAllByTestId('scheduled-entry');
+    expect(entries.map((entry) => within(entry).getByTestId('scheduled-time').textContent)).toEqual([
+      'tomorrow 08:00',
+      'today 09:00',
+    ]);
+    expect(within(entries[0] as HTMLElement).getByTestId('scheduled-held-by').textContent).toBe(
+      'Sends from Commander',
+    );
+    expect(entries[0]?.textContent).toContain('alex@gmail.test');
+    expect(within(entries[1] as HTMLElement).getByTestId('scheduled-line').textContent).toBe(
+      'Missed: it was due today 09:00, while Commander wasn’t running',
+    );
+
+    fireEvent.click(within(entries[1] as HTMLElement).getByRole('button', { name: 'Send now' }));
+    fireEvent.click(within(entries[0] as HTMLElement).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(entries[0] as HTMLElement).getByRole('button', { name: 'Change time' }));
+    const picker = await screen.findByTestId('send-later-picker');
+    fireEvent.click(within(picker).getByRole('button', { name: /^Monday morning/ }));
+    await waitFor(() =>
+      expect(fake.calls.filter((call) => call.itemId).map((call) => `${call.op}:${call.itemId}`)).toEqual([
+        'send-now:m2',
+        'cancel-scheduled:m1',
+        'reschedule:m1',
+      ]),
+    );
+    expect(fake.calls.find((call) => call.op === 'reschedule')?.sendAt).toBe(
+      new Date(2026, 9, 5, 8).getTime(),
+    );
+
+    fireEvent.click(within(entries[0] as HTMLElement).getByRole('button', { name: 'Edit' }));
+    const composer = await screen.findByRole('region', { name: 'New message' });
+    // Its time is offered again.
+    expect(within(composer).getByTestId('compose-send-at').textContent).toBe('tomorrow 17:00');
   });
 });

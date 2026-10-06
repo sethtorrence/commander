@@ -12,6 +12,11 @@
 // Every send is held for the Undo time in the outgoing queue, here in the Core, so closing the window to
 // the tray never cancels one; Commander quitting asks for held messages to go first (compose-send-held),
 // and answers once they have gone or can't (offline, refused), within the time the main process allows.
+//
+// Send later (#139): scheduling (held by Microsoft for an Outlook work Account, else sent from Commander
+// at its time by the send-later clock, ../send-later), the Scheduled view, and Edit, Change time, Send
+// now and Cancel. Quitting also waits for scheduled messages still being handed to Microsoft, so they
+// go even with Commander closed.
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -29,6 +34,7 @@ import {
   draftBody,
   type EmailAddress,
   type EmailDetail,
+  heldByFor,
   type Item,
   quotedText,
   replyRecipients,
@@ -104,6 +110,9 @@ export type ComposeOptions = {
   reader?: Pick<EmailReader, 'answer'>;
   send: (message: unknown) => void;
   onItemsChanged?: (itemIds: string[]) => void;
+  // A message was scheduled, rescheduled, sent now or taken back (#139): the send-later clock looks
+  // again, and so do Ares's producers (a missed send's line).
+  onScheduleChanged?: () => void;
   now?: () => number;
 };
 
@@ -116,6 +125,7 @@ export function setUpCompose({
   reader,
   send,
   onItemsChanged = () => {},
+  onScheduleChanged = () => {},
   now = Date.now,
 }: ComposeOptions) {
   let book: { at: number; entries: AddressSeen[] } | null = null;
@@ -302,6 +312,25 @@ export function setUpCompose({
     return { ...state, body, itemId: saved.itemId };
   }
 
+  // A scheduled message's change, shown at once and heard by the send-later clock.
+  function scheduleChanged(itemId: string) {
+    onItemsChanged([itemId]);
+    onScheduleChanged();
+  }
+
+  // Send now: a scheduled (or missed) message goes at once, with no Undo hold.
+  function sendNow(itemId: string) {
+    store.compose.sendScheduled(itemId, user);
+    scheduleChanged(itemId);
+  }
+
+  function discard(itemId: string) {
+    const scheduled = store.compose.record(itemId)?.scheduledAt != null;
+    store.compose.discard(itemId, user);
+    if (scheduled) scheduleChanged(itemId);
+    else onItemsChanged([itemId]);
+  }
+
   async function answer(request: ComposeRequest): Promise<unknown> {
     switch (request.op) {
       case 'open':
@@ -334,13 +363,42 @@ export function setUpCompose({
         return stateOf(request.itemId);
       }
       case 'discard':
-        store.compose.discard(request.itemId, user);
-        onItemsChanged([request.itemId]);
+        discard(request.itemId);
         return {};
       case 'retry':
         store.compose.retry(request.itemId);
         onItemsChanged([request.itemId]);
         return {};
+      case 'schedule': {
+        const scheduled = store.compose.schedule(
+          request.draft,
+          await contextFor(request.draft),
+          request.sendAt,
+          heldByFor(request.draft.account),
+        );
+        scheduleChanged(scheduled.itemId);
+        return scheduled;
+      }
+      case 'scheduled':
+        return store.compose.scheduled();
+      case 'reschedule':
+        store.compose.reschedule(request.itemId, request.sendAt);
+        scheduleChanged(request.itemId);
+        return {};
+      case 'send-now':
+        sendNow(request.itemId);
+        return {};
+      case 'cancel-scheduled':
+        store.compose.unschedule(request.itemId);
+        scheduleChanged(request.itemId);
+        return {};
+      case 'edit-scheduled': {
+        const was = store.compose.record(request.itemId)?.scheduledAt ?? null;
+        store.compose.unschedule(request.itemId);
+        scheduleChanged(request.itemId);
+        const state = await stateOf(request.itemId);
+        return { ...state, sendLater: was !== null && was > now() ? was : null };
+      }
       case 'drafts':
         return store.compose.drafts(request.account);
       case 'outbox':
@@ -367,20 +425,28 @@ export function setUpCompose({
     }
   }
 
-  // Commander is quitting: held messages go now; answers once none is left to go that can.
+  // Commander is quitting: held messages go now, and scheduled ones Microsoft is to hold reach it;
+  // answers once none is left to go that can.
   async function sendHeldNow(): Promise<void> {
     store.compose.releaseHeld();
     for (;;) {
       const waiting = store.compose
         .outbox()
         .filter((entry) => entry.state !== 'failed' && (entry.state === 'sending' || canSend(entry.account)));
-      if (!waiting.length) return;
+      const handing = store.compose
+        .scheduled()
+        .filter((entry) => entry.state === 'handing' && canSend(entry.account));
+      if (!waiting.length && !handing.length) return;
       await new Promise((resolve) => setTimeout(resolve, QUIT_POLL_MS));
     }
   }
 
   return {
     answer,
+
+    // A missed send-later's Send now and Discard, from the Update (#139).
+    sendNow,
+    discard,
 
     // A message from the main process. Returns true when it was one of compose's, handled here.
     handle(raw: unknown): boolean {

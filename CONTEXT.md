@@ -114,6 +114,14 @@ _Avoid_: Send delay, send later (that's scheduling a send)
 The messages sent that haven't gone yet: held for Undo send, waiting for a connection, or refused by the Source (with its reason, and Retry).
 _Avoid_: Queue, pending mail, sending
 
+**Send later**:
+Sending a message at a time the User picks: **held by Microsoft** for an Outlook work Account (Exchange keeps it in its Outbox and sends it with Commander closed), or **sent from Commander** for Gmail (and personal Outlook.com, for now) at that time while Commander runs, the window or the tray. A time Commander missed (closed, or the machine asleep) is never sent late by surprise: Ares asks about it in the next Update.
+_Avoid_: Schedule send (as a noun), delay send, Undo send (that's the few seconds every send waits)
+
+**Scheduled**:
+The Email Section's view of the messages waiting for their send-later time, each with its time, Account and who holds it, and Edit, Change time, Send now and Cancel; a missed one waits there until the User decides.
+_Avoid_: Outbox (that's what was sent and hasn't gone yet), queue, pending
+
 ## Teams
 
 **Chat**:

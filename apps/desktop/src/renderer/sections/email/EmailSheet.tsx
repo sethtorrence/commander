@@ -3,6 +3,8 @@ import {
   type EmailLabel,
   type EmailThreadSummary,
   NEEDS_REPLY,
+  SCHEDULED_FOCUS,
+  SEND_LATER_EDIT_FOCUS,
   type ThreadAction,
   UNSORTED,
 } from '@commander/domain';
@@ -26,6 +28,7 @@ import { CloudMailQuestions } from './CloudMail';
 import { Composer } from './compose/Composer';
 import { DraftList, OutboxList, OutboxNote } from './compose/ComposeViews';
 import { type ComposeClient, noCompose } from './compose/compose';
+import { ScheduledList } from './compose/SendLater';
 import { useCompose } from './compose/use-compose';
 import { BucketPicker, BucketStrip } from './EmailBuckets';
 import {
@@ -471,9 +474,9 @@ export function EmailSheet({
   >(null);
   const [typed, setTyped] = useState('');
   const searchBox = useRef<HTMLInputElement>(null);
-  // Writing email (#138): the composer, the Undo toast, and the Drafts and Outbox views.
+  // Writing email (#138): the composer, the Undo toast, and the Drafts, Outbox and Scheduled (#139) views.
   const writing = useCompose({ client: compose, changes });
-  const [special, setSpecial] = useState<'drafts' | 'outbox' | null>(null);
+  const [special, setSpecial] = useState<'drafts' | 'outbox' | 'scheduled' | null>(null);
   // A reply is written below its thread's messages while that thread is open; elsewhere as a sheet.
   const replyTo = writing.composer?.state.replyToItemId ?? null;
   const inline =
@@ -582,6 +585,13 @@ export function EmailSheet({
     if (!itemId && focus === UNSORTED) {
       state.setView('inbox');
       state.setBucket(UNSORTED);
+      return;
+    }
+    // A missed send-later's Update line (#139): Scheduled, or (its Edit) the message in the composer.
+    if (focus === SCHEDULED_FOCUS || focus === SEND_LATER_EDIT_FOCUS) {
+      setSpecial('scheduled');
+      setOpen(false);
+      if (itemId && focus === SEND_LATER_EDIT_FOCUS) void writing.editScheduled(itemId);
       return;
     }
     void state.reveal(itemId);
@@ -845,6 +855,7 @@ export function EmailSheet({
           [
             ['drafts', 'Drafts', writing.drafts.length],
             ['outbox', 'Outbox', writing.outbox.length],
+            ['scheduled', 'Scheduled', writing.scheduled.length],
           ] as const
         ).map(([view, name, count]) => (
           <button
@@ -908,6 +919,16 @@ export function EmailSheet({
               <OutboxList
                 outbox={writing.outbox}
                 onUndo={(itemId) => void writing.undo(itemId)}
+                onRetry={(itemId) => void writing.retry(itemId)}
+              />
+            ) : special === 'scheduled' ? (
+              <ScheduledList
+                scheduled={writing.scheduled}
+                accountName={accountName}
+                onEdit={(itemId) => void writing.editScheduled(itemId)}
+                onReschedule={(itemId, sendAt) => void writing.reschedule(itemId, sendAt)}
+                onSendNow={(itemId) => void writing.sendNow(itemId)}
+                onCancel={(itemId) => void writing.cancelScheduled(itemId)}
                 onRetry={(itemId) => void writing.retry(itemId)}
               />
             ) : state.threads.length ? (
@@ -981,6 +1002,7 @@ export function EmailSheet({
                     placement="inline"
                     onClose={writing.close}
                     onSent={writing.sent}
+                    onScheduled={writing.scheduledSent}
                     onState={writing.track}
                     {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
                   />
@@ -1099,6 +1121,7 @@ export function EmailSheet({
           placement="sheet"
           onClose={writing.close}
           onSent={writing.sent}
+          onScheduled={writing.scheduledSent}
           onState={writing.track}
           {...(onSaveBeforeQuit ? { onSaveBeforeQuit } : {})}
         />

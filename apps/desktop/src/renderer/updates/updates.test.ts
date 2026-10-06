@@ -1,6 +1,14 @@
 import type { QueuedLine, UpdateRow, UpdateViewLine } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
-import { acceptLabel, foldedSummary, lineRows, lineStatus, openTarget, rowName } from './updates';
+import {
+  acceptLabel,
+  foldedSummary,
+  lineRows,
+  lineStatus,
+  openTarget,
+  ROW_ACTION_LABELS,
+  rowName,
+} from './updates';
 
 const queued = (overrides: Partial<QueuedLine> = {}): QueuedLine => ({
   id: 1,
@@ -299,5 +307,34 @@ describe('Ares sorting email (#141)', () => {
     });
     expect(acceptLabel(bucket)).toBe('Add Bucket…');
     expect(openTarget(bucket)).toEqual({ kind: 'settings' });
+  });
+});
+
+describe('a missed send-later (#139)', () => {
+  const missed = line({
+    group: 'now',
+    mergeKey: 'missed-send:m1:5',
+    about: { kind: 'missed-send', itemId: 'm1', dueAt: 1, missedAt: 5 },
+    itemIds: ['m1'],
+    section: 'email',
+  });
+  const message = row('m1', { section: 'email', actions: ['send-now', 'edit', 'discard'] });
+
+  it('opens Scheduled, and its Edit opens the message in the composer', () => {
+    expect(openTarget(missed)).toEqual({ kind: 'section', sectionId: 'email', focus: 'scheduled' });
+    expect(openTarget(missed, message)).toEqual({ kind: 'section', sectionId: 'email', focus: 'scheduled' });
+    expect(openTarget(missed, message, { edit: true })).toEqual({
+      kind: 'item',
+      sectionId: 'email',
+      itemId: 'm1',
+      focus: 'edit-scheduled',
+    });
+  });
+
+  it('has nothing to accept: its Send now, Edit and Discard are on its message', () => {
+    expect(acceptLabel(missed)).toBeNull();
+    expect(ROW_ACTION_LABELS['send-now']).toBe('Send now');
+    expect(ROW_ACTION_LABELS.edit).toBe('Edit');
+    expect(ROW_ACTION_LABELS.discard).toBe('Discard');
   });
 });

@@ -148,7 +148,7 @@ async function replyWithAttachment(window: Page, section: Locator, words: string
   await window.keyboard.type(words);
   await composer.getByTestId('compose-attach-input').setInputFiles(PDF);
   await expect(composer.getByTestId('compose-attachment')).toContainText('plan.pdf');
-  await composer.getByRole('button', { name: 'Send' }).click();
+  await composer.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(composer).toHaveCount(0);
 }
 
@@ -170,7 +170,7 @@ test('Gmail: reply with an attachment → Undo → send again → the message in
   await window.waitForTimeout(6_000);
   expect(gmail.sent).toHaveLength(0);
 
-  await again.getByRole('button', { name: 'Send' }).click();
+  await again.getByRole('button', { name: 'Send', exact: true }).click();
   await expect.poll(() => gmail.sent.length, { timeout: 30_000 }).toBe(1);
   const [sent] = gmail.sent;
   expect(sent?.threadId).toBe(threadId);
@@ -197,7 +197,7 @@ test('Outlook: reply with an attachment → Undo → send again → the message 
   await toastSaying(window, 'Sending…').getByRole('button', { name: 'Undo' }).click();
   const again = section.getByRole('region', { name: 'Reply' });
   await expect(again.getByTestId('compose-attachment')).toContainText('plan.pdf');
-  await again.getByRole('button', { name: 'Send' }).click();
+  await again.getByRole('button', { name: 'Send', exact: true }).click();
 
   await expect.poll(() => mail.sent.length, { timeout: 30_000 }).toBe(1);
   expect(mail.sent[0]).toMatchObject({

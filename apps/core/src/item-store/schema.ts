@@ -41,6 +41,7 @@ import type {
   RuleTarget,
   RuleWhen,
   SchedulingSettings,
+  SendLaterHeldBy,
   Source,
   SourceCatalog,
   SummaryCadence,
@@ -1097,7 +1098,10 @@ export const memoryProgress = sqliteTable('memory_progress', {
 // and saving the Source's answer is matched by it. `sendAt`: when it goes once the User pressed Send,
 // the end of its Undo time (null while a draft). `sourceText`: the draft's text as the Source answered
 // Commander's last save of it; text that differs since was changed in Gmail or Outlook, and the
-// composer opens that instead. Not Item state: never in the activity log.
+// composer opens that instead. Send later (#139): `scheduledAt`, when the User chose it to go (null
+// unless scheduled), `heldBy` who keeps it until then (Microsoft in Exchange's Outbox, or Commander
+// here in the Core), and `missedAt`, when Commander found its time passed while it wasn't running (null
+// unless missed). Not Item state: never in the activity log.
 export const emailCompose = sqliteTable(
   'email_compose',
   {
@@ -1113,9 +1117,15 @@ export const emailCompose = sqliteTable(
     messageId: text('message_id').notNull(),
     sendAt: integer('send_at'),
     sourceText: text('source_text'),
+    scheduledAt: integer('scheduled_at'),
+    heldBy: text('held_by').$type<SendLaterHeldBy>(),
+    missedAt: integer('missed_at'),
     updatedAt: integer('updated_at').notNull(),
   },
-  (t) => [index('email_compose_message_id').on(t.messageId)],
+  (t) => [
+    index('email_compose_message_id').on(t.messageId),
+    index('email_compose_scheduled_at').on(t.scheduledAt),
+  ],
 );
 
 // Settings → Email's writing settings (#138), in a single row: the Account new mail goes from, and how

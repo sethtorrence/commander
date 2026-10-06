@@ -15,7 +15,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // the reply's thread and headers), PATCHed with their fields and Commander's extended property,
 // attachments added in the request or through an upload session (PUT in chunks), sent with `send`
 // (filed in Sent Items under an id of its own, as Exchange does), deleted, and found again by the
-// extended property in one of Outlook's own folders. Mirror Buckets (#142): a message's `categories`
+// extended property in one of Outlook's own folders. Send later held by Microsoft (#139): a draft sent
+// with a deferred-send time still to come (`SystemTime 0x3FEF`) waits in the Outbox, as Exchange keeps
+// it, until the test lets it go (`releaseOutbox`); one there can be deleted. Mirror Buckets (#142): a message's `categories`
 // in the same PATCH, and the mailbox's master list of categories (`/me/outlook/masterCategories`:
 // list, make, delete), refused with 403 while the sign-in lacks MailboxSettings.ReadWrite. Nothing here talks to the real Microsoft.
 
@@ -132,6 +134,10 @@ export type FakeOutlookMail = {
   }[];
   // Sends are refused (400 ErrorInvalidRecipients, with this reason) until null again.
   refuseSends(reason: string | null): void;
+  // Send later (#139): the messages Exchange holds in a user's Outbox, with when each is to go.
+  outbox(userId: string): { id: string; subject: string; to: string[]; deferredUntil: string | null }[];
+  // Exchange sends what it holds (as at its time): each goes to Sent Items, keeping its id.
+  releaseOutbox(userId: string): void;
   // A user's drafts in Drafts.
   drafts(userId: string): { id: string; subject: string }[];
   // An upload session's PUT (no token: the URL carries its own authorisation, as Graph's do).
@@ -154,6 +160,8 @@ const WELL_KNOWN: [string, string][] = [
 const ROOT = 'AAMkFake-fld-msgfolderroot=';
 const folderId = (name: string) => `AAMkFake-fld-${name}=`;
 const DEFAULT_PAGE = 10;
+// Send later (#139): when Exchange is to send a message it holds (MAPI PidTagDeferredSendTime).
+const DEFERRED_SEND = 'SystemTime 0x3FEF';
 
 type Answer = { status: number; body?: unknown; bytes?: Buffer; type?: string };
 const notFound = (code = 'ErrorItemNotFound'): Answer => ({
@@ -501,6 +509,12 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
           addAttachment(draft, each.name, each.type, each.bytes);
       return { status: 201, body: messageJson(draft) };
     }
+    // Send later (#139): a message Exchange holds in the Outbox can be deleted before it goes.
+    const outbox = resolve(mailbox, 'outbox') as Folder;
+    if (parts.length === 3 && method === 'DELETE' && message.folderId === outbox.id) {
+      mailbox.messages.delete(message.id);
+      return { status: 204 };
+    }
     if (!message.isDraft) return null;
     if (parts.length === 3 && method === 'PATCH') {
       applyDraft(message, payload);
@@ -551,12 +565,15 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       if (sendsRefused)
         return { status: 400, body: { error: { code: 'ErrorInvalidRecipients', message: sendsRefused } } };
       const sentItems = resolve(mailbox, 'sentitems') as Folder;
+      // A deferred send still to come waits in the Outbox (send later, #139).
+      const deferred = Date.parse(message.properties.get(DEFERRED_SEND) ?? '');
+      const held = Number.isFinite(deferred) && deferred > Date.now();
       // Exchange files the sent message in Sent Items under an id of its own.
-      const id = `AAMkFake-msg-sent-${++made}=`;
+      const id = held ? `AAMkFake-msg-outbox-${++made}=` : `AAMkFake-msg-sent-${++made}=`;
       const copy: StoredMessage = {
         ...message,
         id,
-        folderId: sentItems.id,
+        folderId: held ? outbox.id : sentItems.id,
         isDraft: false,
         input: { ...message.input, date: Date.now() },
         version: ++version,
@@ -568,17 +585,21 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       left.set(message.id, version);
       mailbox.left.set(message.folderId, left);
       mailbox.messages.set(id, copy);
-      fake.sent.push({
-        id,
-        subject: copy.input.subject,
-        to: copy.input.to.map((each) => each.address),
-        attachments: copy.attachments.map((each) => ({ name: each.name, size: each.bytes.length })),
-        inReplyTo: copy.input.inReplyTo ?? null,
-        conversationId: copy.input.conversationId ?? `AAQkFake-conv-${message.id}`,
-      });
+      if (!held) recordSent(copy, message.id);
       return { status: 202 };
     }
     return null;
+  }
+
+  function recordSent(copy: StoredMessage, draftId: string) {
+    fake.sent.push({
+      id: copy.id,
+      subject: copy.input.subject,
+      to: copy.input.to.map((each) => each.address),
+      attachments: copy.attachments.map((each) => ({ name: each.name, size: each.bytes.length })),
+      inReplyTo: copy.input.inReplyTo ?? null,
+      conversationId: copy.input.conversationId ?? `AAQkFake-conv-${draftId}`,
+    });
   }
 
   // The master list of categories (#142): list, make (409 for a name taken), delete.
@@ -728,6 +749,28 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
     sent: [],
     refuseSends(reason) {
       sendsRefused = reason;
+    },
+    outbox(userId) {
+      const mailbox = mailboxOf(userId);
+      const outbox = resolve(mailbox, 'outbox') as Folder;
+      return [...mailbox.messages.values()]
+        .filter((each) => each.folderId === outbox.id)
+        .map((each) => ({
+          id: each.id,
+          subject: each.input.subject,
+          to: each.input.to.map((one) => one.address),
+          deferredUntil: each.properties.get(DEFERRED_SEND) ?? null,
+        }));
+    },
+    releaseOutbox(userId) {
+      const mailbox = mailboxOf(userId);
+      const outbox = resolve(mailbox, 'outbox') as Folder;
+      const sentItems = resolve(mailbox, 'sentitems') as Folder;
+      for (const each of [...mailbox.messages.values()].filter((one) => one.folderId === outbox.id)) {
+        each.input = { ...each.input, date: Date.now() };
+        moveTo(mailbox, each, sentItems);
+        recordSent(each, each.id);
+      }
     },
     drafts(userId) {
       const mailbox = mailboxOf(userId);

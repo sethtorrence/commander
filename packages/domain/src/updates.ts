@@ -39,8 +39,7 @@ export const UPDATE_SECTION_NAMES: Record<UpdateSection, string> = {
 // A Linear issue a queued line is about, by its Item and its identifier (ENG-418).
 const linearIssueOnLine = z.object({ itemId, identifier: z.string().min(1) });
 
-// What a queued line is about, by what queued it. Later producers (meeting prep, the GitHub summary,
-// missed send-later) add their own kind here.
+// What a queued line is about, by what queued it. Later producers add their own kind here.
 export const queuedAbout = z.discriminatedUnion('kind', [
   // Ask suggestions of one action Ares wasn't sure about, merged into one line.
   z.object({
@@ -175,6 +174,16 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     description: z.string().trim().max(500),
     reason: z.string().trim().max(300),
   }),
+  // A Gmail message (or a personal Outlook one) whose send-later time passed while Commander was
+  // closed or the machine asleep (#139): "Your email to Dana was due at 09:00. Send it now?", with Send
+  // now, Edit and Discard. It never went by itself; the line goes once the User decides, here or in
+  // Scheduled. `missedAt` tells one miss from a later one of the same message.
+  z.object({
+    kind: z.literal('missed-send'),
+    itemId,
+    dueAt: timestamp,
+    missedAt: timestamp,
+  }),
 ]);
 export type QueuedAbout = z.infer<typeof queuedAbout>;
 export type QueuedKind = QueuedAbout['kind'];
@@ -249,10 +258,21 @@ export type GivenUpdate = z.infer<typeof givenUpdate>;
 
 // What the User can do to one Item of a line, right there in the Update (#186). Open and Reply open
 // it where it lives (Reply at the message waiting on them); the rest the Core carries out.
-export const updateRowActions = ['open', 'reply', 'accept', 'dismiss', 'tick', 'not-an-instruction'] as const;
+// A missed send-later (#139) offers Send now, Edit (the composer, opened in the window) and Discard.
+export const updateRowActions = [
+  'open',
+  'reply',
+  'accept',
+  'dismiss',
+  'tick',
+  'not-an-instruction',
+  'send-now',
+  'edit',
+  'discard',
+] as const;
 export const updateRowAction = z.enum(updateRowActions);
 export type UpdateRowAction = z.infer<typeof updateRowAction>;
-export const rowActions = ['accept', 'dismiss', 'tick', 'not-an-instruction'] as const;
+export const rowActions = ['accept', 'dismiss', 'tick', 'not-an-instruction', 'send-now', 'discard'] as const;
 export const rowAction = z.enum(rowActions);
 export type RowAction = z.infer<typeof rowAction>;
 

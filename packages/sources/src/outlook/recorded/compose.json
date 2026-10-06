@@ -1457,5 +1457,808 @@
         "headers": {}
       }
     }
+  ],
+  "sendDeferred": [
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=",
+        "body": {
+          "subject": "RE: Q4 offsite dates",
+          "body": {
+            "contentType": "html",
+            "content": "<div dir=\"ltr\"><div>Thursday works for me.</div></div>"
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "address": "dana@northwind.test",
+                "name": "Dana Whitfield"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderMessage",
+              "value": "7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6"
+            },
+            {
+              "id": "SystemTime 0x3FEF",
+              "value": "2026-10-08T08:00:00.000Z"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "id": "AAMkAGI2-msg-draft-commander=",
+          "receivedDateTime": "2026-10-07T09:00:10Z",
+          "sentDateTime": "2026-10-07T09:00:10Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Thursday works for me.",
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-drafts=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=/attachments?$select=id,name,contentType,size,isInline"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=?$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "id": "AAMkAGI2-msg-draft-commander=",
+          "receivedDateTime": "2026-10-07T09:00:10Z",
+          "sentDateTime": "2026-10-07T09:00:10Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Thursday works for me.",
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-drafts=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=/send"
+      },
+      "response": {
+        "status": 202,
+        "headers": {}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-sentitems=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-outbox=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": [
+            {
+              "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+              "id": "AAMkAGI2-msg-outbox-commander=",
+              "receivedDateTime": "2026-10-07T09:00:10Z",
+              "sentDateTime": "2026-10-07T09:00:10Z",
+              "subject": "RE: Q4 offsite dates",
+              "bodyPreview": "Thursday works for me.",
+              "body": {
+                "contentType": "html",
+                "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Dana Whitfield",
+                    "address": "dana@northwind.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-outbox=",
+              "conversationId": "AAQkAGI2-conv-offsite=",
+              "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+              "categories": [],
+              "hasAttachments": false,
+              "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "cancelHeld": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-outbox=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": [
+            {
+              "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+              "id": "AAMkAGI2-msg-outbox-commander=",
+              "receivedDateTime": "2026-10-07T09:00:10Z",
+              "sentDateTime": "2026-10-07T09:00:10Z",
+              "subject": "RE: Q4 offsite dates",
+              "bodyPreview": "Thursday works for me.",
+              "body": {
+                "contentType": "html",
+                "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Dana Whitfield",
+                    "address": "dana@northwind.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-outbox=",
+              "conversationId": "AAQkAGI2-conv-offsite=",
+              "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+              "categories": [],
+              "hasAttachments": false,
+              "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/messages/AAMkAGI2-msg-outbox-commander="
+      },
+      "response": {
+        "status": 204,
+        "headers": {}
+      }
+    }
+  ],
+  "cancelTooLate": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-outbox=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-sentitems=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": [
+            {
+              "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+              "id": "AAMkAGI2-msg-sent-commander=",
+              "receivedDateTime": "2026-10-07T09:00:10Z",
+              "sentDateTime": "2026-10-07T09:00:10Z",
+              "subject": "RE: Q4 offsite dates",
+              "bodyPreview": "Thursday works for me.",
+              "body": {
+                "contentType": "html",
+                "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Dana Whitfield",
+                    "address": "dana@northwind.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-sentitems=",
+              "conversationId": "AAQkAGI2-conv-offsite=",
+              "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+              "categories": [],
+              "hasAttachments": true,
+              "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-sent-commander=/attachments?$select=id,name,contentType,size,isInline,contentId"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": [
+            {
+              "@odata.type": "#microsoft.graph.fileAttachment",
+              "id": "AAMkAGI2-att-plan-sent=",
+              "name": "plan.pdf",
+              "contentType": "application/pdf",
+              "size": 9,
+              "isInline": false,
+              "contentId": null
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "rescheduleHeld": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-outbox=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": [
+            {
+              "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+              "id": "AAMkAGI2-msg-outbox-commander=",
+              "receivedDateTime": "2026-10-07T09:00:10Z",
+              "sentDateTime": "2026-10-07T09:00:10Z",
+              "subject": "RE: Q4 offsite dates",
+              "bodyPreview": "Thursday works for me.",
+              "body": {
+                "contentType": "html",
+                "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Dana Whitfield",
+                    "address": "dana@northwind.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-outbox=",
+              "conversationId": "AAQkAGI2-conv-offsite=",
+              "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+              "categories": [],
+              "hasAttachments": false,
+              "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "DELETE",
+        "path": "/me/messages/AAMkAGI2-msg-outbox-commander="
+      },
+      "response": {
+        "status": 204,
+        "headers": {}
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/messages/AAMkAGI2-msg-offsite-2=/createReply",
+        "body": {}
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "id": "AAMkAGI2-msg-draft-commander=",
+          "receivedDateTime": "2026-10-07T09:00:10Z",
+          "sentDateTime": "2026-10-07T09:00:10Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Thursday works for me.",
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-drafts=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "PATCH",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=",
+        "body": {
+          "subject": "RE: Q4 offsite dates",
+          "body": {
+            "contentType": "html",
+            "content": "<div dir=\"ltr\"><div>Thursday works for me.</div></div>"
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "address": "dana@northwind.test",
+                "name": "Dana Whitfield"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "singleValueExtendedProperties": [
+            {
+              "id": "String {00020329-0000-0000-C000-000000000046} Name CommanderMessage",
+              "value": "7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6"
+            },
+            {
+              "id": "SystemTime 0x3FEF",
+              "value": "2026-10-09T08:00:00.000Z"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "id": "AAMkAGI2-msg-draft-commander=",
+          "receivedDateTime": "2026-10-07T09:00:10Z",
+          "sentDateTime": "2026-10-07T09:00:10Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Thursday works for me.",
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-drafts=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=/attachments?$select=id,name,contentType,size,isInline"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=?$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+          "id": "AAMkAGI2-msg-draft-commander=",
+          "receivedDateTime": "2026-10-07T09:00:10Z",
+          "sentDateTime": "2026-10-07T09:00:10Z",
+          "subject": "RE: Q4 offsite dates",
+          "bodyPreview": "Thursday works for me.",
+          "body": {
+            "contentType": "html",
+            "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+          },
+          "from": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "sender": {
+            "emailAddress": {
+              "name": "Sam Rivera",
+              "address": "sam@contoso.test"
+            }
+          },
+          "toRecipients": [
+            {
+              "emailAddress": {
+                "name": "Dana Whitfield",
+                "address": "dana@northwind.test"
+              }
+            }
+          ],
+          "ccRecipients": [],
+          "bccRecipients": [],
+          "replyTo": [],
+          "isRead": true,
+          "isDraft": true,
+          "flag": {
+            "flagStatus": "notFlagged"
+          },
+          "parentFolderId": "AAMkAGI2-fld-drafts=",
+          "conversationId": "AAQkAGI2-conv-offsite=",
+          "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+          "categories": [],
+          "hasAttachments": false,
+          "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/me/messages/AAMkAGI2-msg-draft-commander=/send"
+      },
+      "response": {
+        "status": 202,
+        "headers": {}
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-sentitems=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": []
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/me/mailFolders/AAMkAGI2-fld-outbox=/messages?$filter=singleValueExtendedProperties/Any(ep: ep/id eq 'String {00020329-0000-0000-C000-000000000046} Name CommanderMessage' and ep/value eq '7f1c2a10-3b4c-4d5e-8f90-a1b2c3d4e5f6')&$select=id,receivedDateTime,sentDateTime,subject,bodyPreview,body,from,sender,toRecipients,ccRecipients,bccRecipients,replyTo,isRead,isDraft,flag,parentFolderId,conversationId,internetMessageId,categories,hasAttachments,lastModifiedDateTime"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+        },
+        "body": {
+          "value": [
+            {
+              "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages/$entity",
+              "id": "AAMkAGI2-msg-outbox-commander=",
+              "receivedDateTime": "2026-10-07T09:00:10Z",
+              "sentDateTime": "2026-10-07T09:00:10Z",
+              "subject": "RE: Q4 offsite dates",
+              "bodyPreview": "Thursday works for me.",
+              "body": {
+                "contentType": "html",
+                "content": "<html><body><div dir=\"ltr\"><div>Thursday works for me.</div></div></body></html>"
+              },
+              "from": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "sender": {
+                "emailAddress": {
+                  "name": "Sam Rivera",
+                  "address": "sam@contoso.test"
+                }
+              },
+              "toRecipients": [
+                {
+                  "emailAddress": {
+                    "name": "Dana Whitfield",
+                    "address": "dana@northwind.test"
+                  }
+                }
+              ],
+              "ccRecipients": [],
+              "bccRecipients": [],
+              "replyTo": [],
+              "isRead": true,
+              "isDraft": false,
+              "flag": {
+                "flagStatus": "notFlagged"
+              },
+              "parentFolderId": "AAMkAGI2-fld-outbox=",
+              "conversationId": "AAQkAGI2-conv-offsite=",
+              "internetMessageId": "<PH0PR11MB5000-commander-reply@PH0PR11MB5000.namprd11.prod.outlook.com>",
+              "categories": [],
+              "hasAttachments": false,
+              "lastModifiedDateTime": "2026-10-07T09:00:10Z"
+            }
+          ]
+        }
+      }
+    }
   ]
 }

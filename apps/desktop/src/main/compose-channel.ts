@@ -25,6 +25,13 @@ const TIMEOUTS: Record<ComposeOp, number> = {
   'undo-send': 10_000,
   discard: 10_000,
   retry: 10_000,
+  // Send later (#139): scheduling saves like a send; Edit opens like a draft.
+  schedule: 60_000,
+  scheduled: 10_000,
+  reschedule: 10_000,
+  'send-now': 60_000,
+  'cancel-scheduled': 10_000,
+  'edit-scheduled': 120_000,
   drafts: 10_000,
   outbox: 10_000,
   suggest: 10_000,

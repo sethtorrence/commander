@@ -25,6 +25,7 @@ import { setUpMeetings } from './meetings';
 import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
 import { setUpScheduler } from './scheduling';
+import { type SendLater, setUpSendLater } from './send-later';
 import { setUpSkipInbox } from './skip-inbox';
 import { setUpSnooze } from './snooze';
 import { setUpSync } from './sync';
@@ -138,6 +139,9 @@ const emailReader = setUpEmailReader({
   testHooks: process.argv.includes('--test-hooks'),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
 });
+// Send later's clock (#139), set up below once Ares's queue is: it sends Commander's scheduled mail at
+// its time, and finds a time missed while Commander was closed.
+let sendLater: SendLater | undefined;
 // Writing email (#138): drafts saved and messages sent through the outgoing queue, each send held for
 // the Undo time here in the Core (so closing the window keeps it), and sent before Commander quits.
 const compose = setUpCompose({
@@ -153,6 +157,10 @@ const compose = setUpCompose({
   reader: emailReader,
   send: (message) => port.postMessage(message),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
+  onScheduleChanged: () => {
+    sendLater?.changed();
+    updates?.sweep();
+  },
 });
 compose.sweep();
 setInterval(() => compose.sweep(), 60 * 60 * 1000);
@@ -277,9 +285,28 @@ updates = setUpUpdates({
   // Draft a reply (#143) looks Memory up by meaning too.
   meaning: (text) => meaning?.queryVector(text, 'embed-lookup') ?? Promise.resolve(null),
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
+  // A missed send-later's Send now and Discard (#139).
+  sendLater: { sendNow: (itemId) => compose.sendNow(itemId), discard: (itemId) => compose.discard(itemId) },
 });
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
 sync.engine.onSynced(() => updates?.sweep());
+
+// Send later (#139): Commander's scheduled mail goes at its time while Commander runs and the machine is
+// awake; a time that passed while it was closed (found now) or asleep (found on waking) is missed, and
+// Ares asks about it in the next Update. The end-to-end tests may move its clock, or start it moved.
+const sendLaterOffsetMs = Number(
+  process.argv.find((arg) => arg.startsWith('--send-later-clock-offset-ms='))?.split('=')[1] ?? Number.NaN,
+);
+sendLater = setUpSendLater({
+  store: itemStore,
+  testHooks,
+  offsetMs: Number.isFinite(sendLaterOffsetMs) ? sendLaterOffsetMs : 0,
+  onChanged: (itemIds) => {
+    port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage);
+    updates?.sweep();
+  },
+});
+sync.onSystemState((state) => sendLater?.systemState(state));
 
 // Conversations with Ares (#191): the User's messages answered on the Deep tier, streamed to the window
 // as he writes. The end-to-end tests may treat their fake model (on this machine) as a cloud one, so
@@ -336,6 +363,7 @@ const snooze = setUpSnooze({ store: itemStore, send: (message) => port.postMessa
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;
   if (snooze.handle(data)) return;
+  if (sendLater?.handle(data)) return;
   if (models.handle(data)) return;
   if (sync.handle(data)) return;
   if (markdownCopy.handle(data)) return;
@@ -423,6 +451,7 @@ const closeStore = () => {
   conversations.stop();
   meetings.stop();
   snooze.stop();
+  sendLater?.stop();
   updates?.stop();
   sync.stop();
   markdownCopy.stop();
