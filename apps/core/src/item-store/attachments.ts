@@ -66,7 +66,8 @@ export function attachmentsUsedIn(sqlite: Database.Database): Set<string> {
   return used;
 }
 
-function attachmentsUsedInFile(path: string): Set<string> {
+/** The attachments the live Blocks of a database file use. */
+export function attachmentsUsedInFile(path: string): Set<string> {
   const sqlite = new Database(path, { readonly: true, fileMustExist: true });
   try {
     return attachmentsUsedIn(sqlite);

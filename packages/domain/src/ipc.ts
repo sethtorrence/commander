@@ -32,6 +32,8 @@ export const ipc = {
   windowFrameChanged: 'window-frame-changed',
   // Settings → Data → Markdown copy folder; see markdown-copy-messages.ts for the validated contract.
   markdownCopy: 'markdown-copy',
+  // Settings → Data → Snapshots and Export (#202); see backups-messages.ts for the validated contract.
+  backups: 'backups',
   // Ares's Updates; see updates-messages.ts for the validated contract. Main tells the window when
   // the tray's "Ask for an update" was chosen (askForUpdate), and the window runs the Update Skill.
   updates: 'updates',

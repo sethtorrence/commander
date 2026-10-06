@@ -4,6 +4,7 @@ export * from './ares-ranking';
 export * from './attachments';
 export * from './autonomy';
 export * from './autonomy-messages';
+export * from './backups-messages';
 export * from './block-links';
 export * from './block-projects';
 export * from './bucket-mirror';

@@ -113,43 +113,12 @@ async function writeAtomically(dir: string, name: string, write: (temp: string) 
   }
 }
 
-export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
-  const { store, send } = options;
-  const debounceMs = options.debounceMs ?? 2000;
-  const retryMs = options.retryMs ?? 15_000;
-  const now = options.now ?? Date.now;
-
-  let folder = store.markdownCopyFolder.read();
-  let status: MarkdownCopyStatus = folder
-    ? { folder, state: 'writing', problem: null, lastWrittenAt: null }
-    : { folder: null, state: 'off', problem: null, lastWrittenAt: null };
-
-  // What is waiting to be written.
-  const pendingDays = new Set<string>();
-  // Items changed, whose days are worked out when writing (a sync can change thousands of Items).
-  const pendingItems = new Set<string>();
-  let pendingAll = !!folder;
-  let timer: NodeJS.Timeout | null = null;
-  let running: Promise<void> | null = null;
-  let stopped = false;
-
-  function setStatus(next: MarkdownCopyStatus) {
-    if (isDeepStrictEqual(next, status)) return;
-    status = next;
-    send({ type: 'markdown-copy-status', status });
-  }
-
-  function schedule(delay: number) {
-    if (!folder || stopped) return;
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(() => {
-      timer = null;
-      void run();
-    }, delay);
-  }
-
-  // ---- reading a day from the Item store ----
-
+/**
+ * Writes Daily Notes as Markdown files (the copy's format), each with the images it shows in
+ * `attachments/` beside it. The Markdown copy keeps a folder up to date with it; Export everything
+ * (#202) writes every day once.
+ */
+export function dailyNoteFiles(store: ItemStore, attachmentsDir: string) {
   function projectsLookup(): CopyProjects {
     const refs = new Map<string, ReturnType<ItemStore['projectRef']>>();
     const ref = (id: string) => {
@@ -181,29 +150,6 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     });
   }
 
-  // The day an Item's change shows on: a Daily Note's own, a Block's note's, a Todo's Block's.
-  function dayOf(itemId: string, depth = 0): string | null {
-    const view = store.get(itemId);
-    const detail = view?.item.detail;
-    if (!view || !detail || depth > 2) return null;
-    if (detail.kind === 'daily-note') return detail.day;
-    if (detail.kind === 'block') return dayOf(detail.dailyNoteId, depth + 1);
-    if (view.item.kind === 'todo') {
-      const made = view.links.find((link) => link.type === 'made-from' && link.to.kind === 'block');
-      return made ? dayOf(made.to.id, depth + 1) : null;
-    }
-    return null;
-  }
-
-  // The days whose meeting chips (or other `[[` links) show an event that changed.
-  function meetingDaysOf(itemId: string): string[] {
-    const item = store.get(itemId)?.item;
-    if (item?.kind !== 'event') return [];
-    return store.mentions({ targets: [{ targetType: 'item', id: itemId }] }).map((found) => found.day);
-  }
-
-  // ---- writing ----
-
   async function writeImages(into: string, blocks: CopyBlock[]) {
     const names = new Set(blocks.flatMap((block) => attachmentsIn(block.text)));
     if (!names.size) return;
@@ -212,7 +158,7 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     for (const name of names) {
       // Named by their content, so one already there is this image.
       if (await exists(join(dir, name))) continue;
-      const from = join(options.attachmentsDir, name);
+      const from = join(attachmentsDir, name);
       try {
         await writeAtomically(dir, name, (temp) => copyFile(from, temp));
       } catch (error) {
@@ -263,6 +209,67 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     }
   }
 
+  return { projectsLookup, writeDay, allDays };
+}
+
+export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
+  const { store, send } = options;
+  const debounceMs = options.debounceMs ?? 2000;
+  const retryMs = options.retryMs ?? 15_000;
+  const now = options.now ?? Date.now;
+
+  let folder = store.markdownCopyFolder.read();
+  let status: MarkdownCopyStatus = folder
+    ? { folder, state: 'writing', problem: null, lastWrittenAt: null }
+    : { folder: null, state: 'off', problem: null, lastWrittenAt: null };
+
+  // What is waiting to be written.
+  const pendingDays = new Set<string>();
+  // Items changed, whose days are worked out when writing (a sync can change thousands of Items).
+  const pendingItems = new Set<string>();
+  let pendingAll = !!folder;
+  let timer: NodeJS.Timeout | null = null;
+  let running: Promise<void> | null = null;
+  let stopped = false;
+
+  function setStatus(next: MarkdownCopyStatus) {
+    if (isDeepStrictEqual(next, status)) return;
+    status = next;
+    send({ type: 'markdown-copy-status', status });
+  }
+
+  function schedule(delay: number) {
+    if (!folder || stopped) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      void run();
+    }, delay);
+  }
+
+  const files = dailyNoteFiles(store, options.attachmentsDir);
+
+  // The day an Item's change shows on: a Daily Note's own, a Block's note's, a Todo's Block's.
+  function dayOf(itemId: string, depth = 0): string | null {
+    const view = store.get(itemId);
+    const detail = view?.item.detail;
+    if (!view || !detail || depth > 2) return null;
+    if (detail.kind === 'daily-note') return detail.day;
+    if (detail.kind === 'block') return dayOf(detail.dailyNoteId, depth + 1);
+    if (view.item.kind === 'todo') {
+      const made = view.links.find((link) => link.type === 'made-from' && link.to.kind === 'block');
+      return made ? dayOf(made.to.id, depth + 1) : null;
+    }
+    return null;
+  }
+
+  // The days whose meeting chips (or other `[[` links) show an event that changed.
+  function meetingDaysOf(itemId: string): string[] {
+    const item = store.get(itemId)?.item;
+    if (item?.kind !== 'event') return [];
+    return store.mentions({ targets: [{ targetType: 'item', id: itemId }] }).map((found) => found.day);
+  }
+
   async function writePending() {
     const into = folder;
     if (!into) return;
@@ -279,10 +286,10 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
     try {
       const info = await stat(into);
       if (!info.isDirectory()) throw Object.assign(new Error('Not a folder'), { code: 'ENOTDIR' });
-      const projects = projectsLookup();
+      const projects = files.projectsLookup();
       let wrote = false;
       const targets = all
-        ? allDays()
+        ? files.allDays()
         : days.flatMap((day) => {
             const note = store.dailyNotes({ from: day, to: day, limit: 1 }).notes[0];
             return note ? [{ day, id: note.item.id }] : [];
@@ -290,7 +297,7 @@ export function setUpMarkdownCopy(options: MarkdownCopyOptions) {
       for (const { day, id } of targets) {
         // The folder changed (or the copy was turned off) meanwhile: that change writes everything.
         if (folder !== into || stopped) return;
-        if (await writeDay(into, day, id, projects)) wrote = true;
+        if (await files.writeDay(into, day, id, projects)) wrote = true;
       }
       if (folder !== into) return;
       const lastWrittenAt = wrote ? now() : status.lastWrittenAt;
