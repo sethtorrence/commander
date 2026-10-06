@@ -7,6 +7,7 @@ import {
 } from '@commander/domain';
 import { AresText, CheckIcon, cn, Kbd, Led } from '@commander/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
@@ -301,6 +302,7 @@ function Row({
             {tag.text}
           </span>
           <ItemWarning item={item} className="h-[19px]" />
+          {!suggestion && <AskAres item={item} className="size-[19px]" />}
           {/* A reason may be Ares's words: shown as AresText, linking only what the Item holds. */}
           <span className="ml-1 text-note leading-[19px] text-muted" data-testid="row-reason">
             <AresText
@@ -548,6 +550,9 @@ function ActionBar({
         <Kbd>E</Kbd>
         Clear
       </button>
+      {!row.suggestion && (
+        <AskAres item={row.item} variant="pane" className="ml-2.5 h-7 px-2.5 text-label-lg" />
+      )}
       <span className="ml-3.5 font-mono text-label leading-none font-medium uppercase tracking-label text-faint">
         Clear hides it here. It stays in its Section.
       </span>

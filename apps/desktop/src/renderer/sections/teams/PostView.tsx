@@ -1,6 +1,7 @@
 import { type ActivityEntry, channelPlace, type OutgoingChange, REPLY_FIELD } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import type { ReactNode } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { ItemBadge, ItemProject, waitingSuggestion } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
@@ -93,6 +94,7 @@ export function PostView({
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {waitingSuggestion(post) && <ItemProject item={post} />}
               <ItemWarning item={post} variant="pane" />
+              <AskAres item={post} variant="pane" />
             </div>
             <section aria-label="Post" className="mt-[18px]">
               <ol className="m-0 list-none border border-line p-0">

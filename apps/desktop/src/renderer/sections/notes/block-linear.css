@@ -1,6 +1,7 @@
 /*
   A Block's Linear issue chip (after the Todo tag, in the same pill shape) and its margin menu, which
-  shows at the end of the row while the row is pointed at or being written in.
+  shows at the end of the row while the row is pointed at or being written in, as does its Ares
+  button (#193).
 */
 @layer components {
   .n-issue {
@@ -68,6 +69,14 @@
   .n-menu-item:focus-visible {
     background: var(--ink);
     color: var(--sheet);
+  }
+  .n-ares {
+    margin: 5px 0 0 4px;
+    visibility: hidden;
+  }
+  .n-row:hover > .n-ares,
+  .n-row:focus-within > .n-ares {
+    visibility: visible;
   }
   .n-menu-item kbd {
     font: 500 9px / 1 var(--mono);

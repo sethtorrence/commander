@@ -16,6 +16,7 @@ import { SuggestedBucket } from '../../buckets/SuggestedBucket';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
+import { AskAres, useAresKey } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { useCommands } from '../../palette/commands';
 import { BadgePicker, type PickerTarget } from '../../projects/BadgePicker';
@@ -352,6 +353,7 @@ function ThreadRow({
       </div>
       <div className="mt-1 flex min-w-0 items-center gap-2">
         <ItemWarning item={thread.latest} />
+        <AskAres item={thread.latest} />
         {bucket === null && suggestedBucket ? (
           <SuggestedBucket name={suggestedBucket} onConfirm={onConfirmBucket} onChange={onChangeBucket} />
         ) : (
@@ -713,6 +715,7 @@ export function EmailSheet({
     setTyped('');
   };
 
+  const aresKey = useAresKey(selected?.latest);
   const keys: ShortcutSpec[] = [
     { keys: 'j', label: 'Next thread', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous thread', run: () => state.moveSelection(-1) },
@@ -758,6 +761,7 @@ export function EmailSheet({
     { keys: 'Shift+R', label: 'Reply all', when: () => !!selected, run: () => write('reply-all') },
     { keys: 'f', label: 'Forward', when: () => !!selected, run: () => write('forward') },
     { keys: 'd', label: 'Draft a reply (Ares)', when: () => !!selected, run: draftSelected },
+    aresKey,
     { keys: 't', label: 'Make it a Todo', when: () => !!selected, run: () => void makeTodo() },
     {
       keys: 'Shift+T',

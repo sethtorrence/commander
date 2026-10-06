@@ -3,6 +3,7 @@ import { Button, cn, toast } from '@commander/ui';
 import { useEffect, useRef, useState } from 'react';
 import { requestReveal, useReveal } from '../../frame/reveal';
 import type { ItemChanges } from '../../item-store/changes';
+import { useAresKey } from '../../links/AresButton';
 import { useCommands } from '../../palette/commands';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
@@ -154,6 +155,7 @@ export function TodosSheet({
     { label: 'Send Todo to Linear', keys: 'l', when: () => canSend, run: sendToLinear },
   ]);
 
+  const aresKey = useAresKey(selected);
   useShortcuts([
     { keys: 'j', label: 'Next Todo', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous Todo', run: () => state.moveSelection(-1) },
@@ -165,6 +167,7 @@ export function TodosSheet({
     { keys: 'Ctrl+z', label: 'Undo', run: () => undo() },
     { keys: 'n', label: 'New Todo', run: () => input.current?.focus() },
     { keys: 'b', label: 'File under a Project', run: () => selected && badges.open(selected) },
+    aresKey,
     { keys: 's', label: 'Set Linear state…', when: () => !!issue, run: chooseLinearState },
   ]);
 

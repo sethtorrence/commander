@@ -16,6 +16,12 @@ const KEYS: [ReactNode, string][] = [
   [<Kbd key="z">Ctrl Z</Kbd>, 'Undo'],
   [<Kbd key="b">B</Kbd>, 'Project'],
   [<Kbd key="l">L</Kbd>, 'Linear'],
+  [
+    <Kbd key="a" tone="signal">
+      A
+    </Kbd>,
+    'Ares',
+  ],
 ];
 
 /** The Section's main keys at a glance, beside its title. All of them are in the `?` cheat sheet. */

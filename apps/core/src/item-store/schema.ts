@@ -1179,6 +1179,9 @@ export const conversations = sqliteTable(
     dailyOf: text('daily_of'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
+    // The Item it was started from with the Ares button (#193). Not a foreign key: a Conversation
+    // stays when its Item goes, and says so.
+    aboutItemId: text('about_item_id'),
   },
   (t) => [
     uniqueIndex('conversations_daily_of').on(t.dailyOf),

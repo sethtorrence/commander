@@ -1,5 +1,6 @@
 import { cn } from '@commander/ui';
 import { type ReactNode, useEffect, useRef } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePickBadge } from '../../projects/BadgePicker';
 import { ItemBadge, useAccentBar, waitingSuggestion } from '../../projects/badges';
@@ -131,6 +132,7 @@ export function EventRow({
       <span className="mt-[5px] ml-3 flex flex-none items-center gap-1.5">
         <ClashMark clashes={clashes} />
         <ItemWarning item={event} />
+        <AskAres item={event} />
         {!compact && event.detail.location && (
           <Tag title={event.detail.location}>{event.detail.location}</Tag>
         )}

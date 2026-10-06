@@ -209,8 +209,12 @@ A named ability Ares can use, on request or when he judges it is wanted (e.g. Up
 _Avoid_: Tool, command, feature, plugin
 
 **Conversation**:
-One thread of typed back-and-forth between the User and Ares; several can run at once.
+One thread of typed back-and-forth between the User and Ares; several can run at once. One started with the Ares button is about that Item, which Ares has in front of him with every message.
 _Avoid_: Chat, session, thread (alone)
+
+**Ares button**:
+The AI mark on an Item's row or detail pane (or `a` on the focused Item) that opens a small pop-up beside it, starting a new Conversation about that Item; **Open in Ares** carries it on in the Ares Section.
+_Avoid_: AI button, assistant button, chat bubble
 
 **Memory**:
 What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from; one he picked up from outside content is unconfirmed, only ever background to him, until the User confirms it. The User sees and changes it on What Ares knows.

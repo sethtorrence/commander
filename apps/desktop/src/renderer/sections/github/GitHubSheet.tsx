@@ -4,6 +4,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { requestReveal, useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
+import { useAresKey } from '../../links/AresButton';
 import { usePeople } from '../../people/context';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
@@ -155,6 +156,7 @@ export function GitHubSheet({
     setDetailOpen(true);
   };
 
+  const aresKey = useAresKey(listShown ? selected : null);
   useShortcuts([
     {
       keys: 'j',
@@ -182,6 +184,7 @@ export function GitHubSheet({
     },
     { keys: 'b', label: 'File under a Project', when: () => listShown, run: () => file() },
     { keys: 'Ctrl+z', label: 'Undo', run: () => state.undo() },
+    aresKey,
   ]);
   // From the palette (or a Link): open a pull request or issue, whatever the view and filters hid.
   // Ares's GitHub summary (the Dashboard's row, the Update's Open) opens in the summary panel (#121).

@@ -1,6 +1,7 @@
 import type { ActivityEntry, ChatMessage, ChatReply, OutgoingChange } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useEffect, useRef } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePeople } from '../../people/context';
 import { PersonName } from '../../people/PersonName';
@@ -357,6 +358,7 @@ export function ChatView({
                 {waitingSuggestion(chat) && <ItemProject item={chat} />}
                 {chat.muted && <Mark title="Muted: kept and synced, but not counted as unread">Muted</Mark>}
                 <ItemWarning item={chat} variant="pane" />
+                <AskAres item={chat} variant="pane" />
               </div>
               {readFailed && <CouldntSync change={readFailed} onRetry={onRetry} />}
               {ares}

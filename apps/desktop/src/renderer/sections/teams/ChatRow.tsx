@@ -1,6 +1,7 @@
 import type { ChatType } from '@commander/domain';
 import { cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePeople } from '../../people/context';
 import { usePickBadge } from '../../projects/BadgePicker';
@@ -175,6 +176,7 @@ export function ChatRow({
           )}
           {chat.muted && <Mark title="Muted">Muted</Mark>}
           <ItemWarning item={chat} />
+          <AskAres item={chat} />
         </span>
         <span className="ml-auto flex-none font-mono text-label-lg leading-5 tracking-mono text-muted tabular-nums">
           {latest ? whenShort(latest.at) : ''}

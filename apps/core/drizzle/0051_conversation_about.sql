@@ -1,0 +1,1 @@
+ALTER TABLE `conversations` ADD `about_item_id` text;

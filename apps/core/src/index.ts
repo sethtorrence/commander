@@ -11,6 +11,7 @@ import { answerAutonomyRequest } from './autonomy/requests';
 import { setUpBusyCopies } from './busy-copies';
 import { composeFiles, setUpCompose } from './compose';
 import { setUpConversations } from './conversations';
+import { createAboutReader } from './conversations/about';
 import { setUpEmailReader } from './email-reader';
 import { workerSanitiser } from './email-reader/sanitiser';
 import { setUpGitHubDiscussion } from './github-discussion';
@@ -324,7 +325,7 @@ sendLater = setUpSendLater({
 sync.onSystemState((state) => sendLater?.systemState(state));
 
 // Conversations with Ares (#191): the User's messages answered on the Deep tier, streamed to the window
-// as he writes, with his Skills (#192). A steering flag's mark shows at once in open views. The
+// as he writes, with his Skills (#192), and about the Item the Ares button was pressed on (#193). A steering flag's mark shows at once in open views. The
 // end-to-end tests may treat their fake model (on this machine) as a cloud one, so two Conversations
 // answer at once.
 const conversations = setUpConversations({
@@ -336,6 +337,8 @@ const conversations = setUpConversations({
   oneAtATime: testHooks && process.argv.includes('--test-model-in-cloud') ? () => false : undefined,
   skills,
   item: (itemId) => itemStore.get(itemId)?.item ?? null,
+  // The Item a pop-up Conversation was started from (#193), handed to him with every message.
+  readAbout: createAboutReader({ itemStore }),
   injectionWarnings: itemStore.injectionWarnings,
   refusals: itemStore.refusals,
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),

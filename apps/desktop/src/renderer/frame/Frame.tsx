@@ -20,6 +20,8 @@ import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
 import { ProjectPageTab } from '../projects/page/ProjectPageTab';
 import { type ProjectsClient, projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
+import { AresPopupHost } from '../sections/ares/AresPopup';
+import { CONVERSATIONS_REVEAL } from '../sections/ares/conversations';
 import { FindTimeHost } from '../sections/calendar/FindTime';
 import { DashboardProvider, useDashboard } from '../sections/dashboard/context';
 import { type DashboardClient, dashboardAccountsIn, dashboardIn } from '../sections/dashboard/dashboard';
@@ -69,7 +71,8 @@ function SectionView({
  * What the whole window shares: the Projects with the one Project filter, People (who each handle
  * in an Item is, for every row and pane that shows people), the Dashboard's ranked
  * list (read by the Dashboard, the header's band meter and the Project pages), Ares's Updates
- * (the quiet count, and the Update the User asks for), and Not an instruction on every warning mark.
+ * (the quiet count, and the Update the User asks for), Not an instruction on every warning mark, and
+ * the pop-up every Ares button on an Item opens (#193).
  */
 function FrameProviders({
   projects,
@@ -78,6 +81,7 @@ function FrameProviders({
   dashboard,
   open,
   onOpenUpdateLine,
+  onExpandConversation,
   children,
 }: {
   projects: ProjectsClient;
@@ -86,6 +90,7 @@ function FrameProviders({
   dashboard: DashboardClient;
   open: string;
   onOpenUpdateLine: (target: OpenTarget) => void;
+  onExpandConversation: (conversationId: string) => void;
   children: ReactNode;
 }) {
   const people = useMemo(() => peopleIn(window.commander.itemStore), []);
@@ -100,7 +105,15 @@ function FrameProviders({
             onAskForUpdate={window.commander.onAskForUpdate}
             onOpen={onOpenUpdateLine}
           >
-            <WarningActionsProvider value={warnings}>{children}</WarningActionsProvider>
+            <WarningActionsProvider value={warnings}>
+              <AresPopupHost
+                client={window.commander.conversations}
+                onCoreMessage={window.commander.onCoreMessage}
+                onExpand={onExpandConversation}
+              >
+                {children}
+              </AresPopupHost>
+            </WarningActionsProvider>
           </UpdatesProvider>
         </DashboardProvider>
       </ProjectsProvider>
@@ -244,6 +257,14 @@ export function Frame() {
     },
     [openSettings, openSection],
   );
+  // The Ares button's pop-up moves its Conversation into the Ares Section (#193).
+  const expandConversation = useCallback(
+    (conversationId: string) => {
+      openSection('ares');
+      requestReveal(CONVERSATIONS_REVEAL, conversationId);
+    },
+    [openSection],
+  );
   // A meeting's heads-up was clicked (the main process shows the window): its event, in Calendar.
   useEffect(
     () =>
@@ -313,6 +334,7 @@ export function Frame() {
       dashboard={dashboard}
       open={open === PROJECT_PAGE_SCOPE ? `${open}:${page}` : open}
       onOpenUpdateLine={openUpdateLine}
+      onExpandConversation={expandConversation}
     >
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
       <FrameHeader

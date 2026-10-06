@@ -2,6 +2,7 @@ import type { ActivityEntry, LinearIssueDetail } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useRef } from 'react';
 import { shortDate } from '../../frame/calendar';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePeople } from '../../people/context';
 import { PersonName } from '../../people/PersonName';
@@ -317,6 +318,7 @@ export function IssueDetail({
               · updated {whenShort(detail.updatedAt)}
             </p>
             <ItemWarning item={issue} variant="pane" className="mt-3" />
+            <AskAres item={issue} variant="pane" className="mt-3" />
             <dl className="mt-3.5 mb-0 border-t border-line">
               {FIELDS.map((field) => {
                 const shown = fieldValue(field.key, detail, mine, people);
