@@ -145,6 +145,9 @@ export const item = z.object({
   // Present when the Item (or, for a Todo, the Item behind it) holds instructions aimed at Ares: the
   // warning mark, shown wherever the Item is (injectionWarningText). Absent otherwise.
   injectionWarning: z.object({ at: timestamp }).optional(),
+  // Present when Ares sent the Item to no model because it holds one of the User's keys or sign-in
+  // tokens (#201), while its words stay as they were: the small note (refusalText). Absent otherwise.
+  refusal: z.object({ at: timestamp }).optional(),
   // Present while Ares has suggested a Project for the Item (or, for a Todo, the Item behind it) and
   // is waiting for the User: the dashed Badge, with Confirm and Change (#71). Absent otherwise.
   filingSuggestion: z.object({ proposalId: z.number().int().positive(), projectId: id }).optional(),
@@ -332,11 +335,15 @@ export type ItemChange = z.infer<typeof itemChange>;
 
 // `injection-warning`: Ares found instructions aimed at him in an outside Item and ignored them
 // (recorded by Ares, never undone; the Update counts them).
+// `refusal`: Ares sent the Item to no model because it holds one of the User's keys or sign-in tokens
+// (#201). Recorded by Ares, never undone, and the Update counts them; it never holds the secret.
 // `correction` and `confirmation`: the User answered Ares's filing (#71), changing it or keeping it;
 // before is his suggestion and after the User's choice, both as `{ filing }`. Never undone: they are
 // what he learns from. A `correction` is also the User's "Not waiting on you" on a Chat Ares flagged
 // (#109): before is his flag as `{ waiting }`, after is null; that one can be undone (the flag comes
-// back), and an undone one isn't an example for Memory.
+// back), and an undone one isn't an example for Memory. And it is the User's Not an instruction on a
+// warning mark (#186): before is the mark as `{ injectionWarning }`, after is null; that one can be
+// undone too (#201: the mark comes back, while the Item's words are the same).
 export const activityAction = z.enum([
   'create',
   'update',
@@ -346,6 +353,7 @@ export const activityAction = z.enum([
   'unlink',
   'undo',
   'injection-warning',
+  'refusal',
   'correction',
   'confirmation',
 ]);

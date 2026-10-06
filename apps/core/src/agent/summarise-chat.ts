@@ -25,11 +25,12 @@ import {
 } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
-import type { InjectionWarningStore } from '../item-store';
+import type { InjectionWarningStore, RefusalStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput } from '../safety/output';
+import { heedRefusal } from '../safety/refusal';
 import { heedSteering, steeringFlag } from '../safety/steering-flag';
-import { buildPrompt, PromptRefused } from './prompt';
+import { buildPrompt, type PromptParts, refusalOf } from './prompt';
 
 // The newest messages a summary reads, each cut short.
 const MAX_MESSAGES = 150;
@@ -92,10 +93,15 @@ export type SummariseOptions = {
   me?: (account: string) => string | null;
   secrets?: KnownSecrets;
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
-  // Items the steering flag marked, so open views catch up.
+  // Where a Chat left unsent for holding a key or token is recorded as skipped (#201).
+  refusals?: Pick<RefusalStore, 'record'>;
+  // Items the steering flag marked (or noted as skipped), so open views catch up.
   onItemsChanged?: (itemIds: string[]) => void;
   signal?: AbortSignal;
 };
+
+// What the User knows this by, where a Chat it skipped says so.
+const SUMMARISE_NAME = 'Summarise a Chat';
 
 /** Ares couldn't summarise the Chat: the window says why, in plain words. */
 export class SummaryFailed extends Error {
@@ -129,16 +135,19 @@ async function ask(
   options: SummariseOptions,
 ): Promise<string> {
   const me = chat.account ? (options.me?.(chat.account) ?? null) : null;
+  const parts: PromptParts = { instructions, data: [chatBlock(chat, messages, me)] };
+  // Left unsent for holding one of the User's keys or tokens: the Chat is noted as skipped (#201).
+  const refused = (error: unknown) => {
+    const refusal = refusalOf(error, parts, options.secrets);
+    if (!refusal) return null;
+    heedRefusal(refusal, SUMMARISE_NAME, options.refusals, options.onItemsChanged);
+    return new SummaryFailed(`Ares couldn’t summarise it: ${refusal.message}`);
+  };
   let prompt: ReturnType<typeof buildPrompt>;
   try {
-    prompt = buildPrompt(
-      { instructions, data: [chatBlock(chat, messages, me)] },
-      { secrets: options.secrets },
-    );
+    prompt = buildPrompt(parts, { secrets: options.secrets });
   } catch (error) {
-    if (error instanceof PromptRefused)
-      throw new SummaryFailed(`Ares couldn’t summarise it: ${error.message}`);
-    throw error;
+    throw refused(error) ?? error;
   }
   let reply: z.infer<typeof REPLY>;
   try {
@@ -152,6 +161,8 @@ async function ask(
     });
     reply = answer.json;
   } catch (error) {
+    const refusal = refused(error);
+    if (refusal) throw refusal;
     const why =
       error instanceof ModelError && error.kind === 'invalid-reply'
         ? 'his reply didn’t make sense'

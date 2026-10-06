@@ -47,8 +47,14 @@ import {
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
 import { buildConversationPrompt, PromptRefused } from '../agent/prompt';
-import type { ConversationStore, InjectionWarningStore, RemovedConversation } from '../item-store';
+import type {
+  ConversationStore,
+  InjectionWarningStore,
+  RefusalStore,
+  RemovedConversation,
+} from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
+import { heedRefusal } from '../safety/refusal';
 import { heedSteering, type SteeringFlag } from '../safety/steering-flag';
 import { type AnswerReader, pieceBetween, readAnswer } from './answer';
 import { createFairQueue, type QueueTicket } from './fair-queue';
@@ -104,6 +110,10 @@ export const UNFINISHED_PROBLEM =
 
 /** Why an answer failed, in Ares's voice. Never the provider's own words. */
 export function problemFor(error: unknown): string {
+  // Something a Skill found held it (#201): that Item is noted as skipped, where it is.
+  if (error instanceof PromptRefused && error.itemIds.length) {
+    return 'Something my Skills found holds what looks like one of your keys or sign-in tokens, so I didn’t send it anywhere. Ask without it, or open it yourself.';
+  }
   if (error instanceof PromptRefused) {
     return 'Your message held one of your sign-in tokens or keys, so I didn’t send it anywhere. Take it out, then send it again.';
   }
@@ -147,6 +157,8 @@ export type ConversationsOptions = {
   item?: (itemId: string) => Item | null;
   // Where a steering flag marks an Item, and who hears that it did.
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
+  // Where an Item a Skill found, left unsent for holding a key or token, is noted as skipped (#201).
+  refusals?: Pick<RefusalStore, 'record'>;
   onItemsChanged?: (itemIds: string[]) => void;
   log?: (message: string) => void;
 };
@@ -341,6 +353,8 @@ export function setUpConversations(options: ConversationsOptions): Conversations
         if (!(error instanceof ModelError) && !(error instanceof PromptRefused)) {
           log(`A Conversation’s answer failed: ${error instanceof Error ? error.message : error}`);
         }
+        if (error instanceof PromptRefused)
+          heedRefusal(error, 'Conversation', options.refusals, options.onItemsChanged);
         changed(
           store.saveAnswer(turnId, {
             ...rests,

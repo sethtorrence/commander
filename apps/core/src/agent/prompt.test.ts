@@ -1,8 +1,9 @@
 import type { Item, ItemDetail } from '@commander/domain';
+import { ModelError } from '@commander/models';
 import { describe, expect, it } from 'vitest';
 import { createKnownSecrets } from '../safety/known-secrets';
 import { stripInternalWording } from '../safety/output';
-import { buildConversationPrompt, buildPrompt, type PromptParts, PromptRefused } from './prompt';
+import { buildConversationPrompt, buildPrompt, type PromptParts, PromptRefused, refusalOf } from './prompt';
 
 // The prompt builder every job's prompt goes through: Ares's instructions on their own in the system
 // message, the material in delimited, labelled data blocks marked by where it came from, with
@@ -163,6 +164,57 @@ describe('buildPrompt', () => {
       expect(String(error)).not.toContain(token);
       expect(String(error)).toContain('nothing was sent');
     }
+  });
+
+  it('names the Items whose material held it (#201), so the User can see what was skipped', () => {
+    const secrets = createKnownSecrets();
+    const token = 'lin_oauth_9f8e7d6c5b4a39281706f5e4d3c2b1a0';
+    secrets.remember(token);
+    const leaky = issue('issue-leaky');
+    const mine = block(`my token ${token}`);
+    const refusal = (parts: PromptParts) => {
+      try {
+        build(parts, secrets);
+      } catch (error) {
+        return error instanceof PromptRefused ? error : null;
+      }
+      return null;
+    };
+    // An outside Item's block, and a block of the User's naming only the Item whose words hold it.
+    expect(
+      refusal({
+        instructions: 'x',
+        data: [
+          { label: 'Issue', from: leaky, text: `Fix it\nthe token is ${token}` },
+          { label: 'Notes', from: [mine, block()], text: `- my token ${token}\n- other` },
+          { label: 'Plain', from: issue('issue-plain'), text: 'Fix it' },
+        ],
+      })?.itemIds,
+    ).toEqual(['issue-leaky', mine.id]);
+    // Held by the instructions or the User's settings: no Item to name.
+    expect(refusal({ instructions: `use ${token}`, data: [] })?.itemIds).toEqual([]);
+    expect(
+      refusal({ instructions: 'x', data: [{ label: 'Buckets', from: 'user-settings', text: token }] })
+        ?.itemIds,
+    ).toEqual([]);
+  });
+
+  it('tells a refusal by the models wiring from any other failure, naming the Items again', () => {
+    const secrets = createKnownSecrets();
+    const key = 'kettle42orchard7violet9';
+    const parts: PromptParts = {
+      instructions: 'x',
+      data: [{ label: 'Issue', from: issue('issue-k'), text: key }],
+    };
+    const wiring = new ModelError('bad-request', 'The prompt held one of your sign-in tokens or keys.');
+    // Not known when the prompt was built; known once the wiring borrowed it.
+    expect(refusalOf(wiring, parts, secrets)).toBeNull();
+    secrets.remember(key);
+    expect(refusalOf(wiring, parts, secrets)?.itemIds).toEqual(['issue-k']);
+    expect(refusalOf(new ModelError('timeout', 'slow'), parts, secrets)).toBeNull();
+    expect(refusalOf(new Error('boom'), parts, secrets)).toBeNull();
+    const own = new PromptRefused(['issue-k']);
+    expect(refusalOf(own, parts)).toBe(own);
   });
 
   it('blanks credential-like text in every block, the User’s and outside ones', () => {

@@ -24,10 +24,11 @@ import type { Item, ItemKind, QueuedLine } from '@commander/domain';
 import { UPDATE_GROUP_NAMES } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
-import { type BuiltPrompt, buildPrompt, type PromptData, PromptRefused } from '../agent/prompt';
-import type { InjectionWarningStore } from '../item-store';
+import { type BuiltPrompt, buildPrompt, type PromptData, type PromptParts, refusalOf } from '../agent/prompt';
+import type { InjectionWarningStore, RefusalStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput } from '../safety/output';
+import { heedRefusal } from '../safety/refusal';
 import { heedSteering, steeringFlag } from '../safety/steering-flag';
 import { checkGrounded } from './grounding';
 import {
@@ -114,7 +115,9 @@ export type ComposeOptions = {
   context: LineContext;
   secrets?: KnownSecrets;
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
-  // Items the steering flag marked, so open views catch up.
+  // Where Items left unsent for holding a key or token are recorded as skipped (#201).
+  refusals?: Pick<RefusalStore, 'record'>;
+  // Items the steering flag marked (or noted as skipped), so open views catch up.
   onItemsChanged?: (itemIds: string[]) => void;
   log?: (message: string) => void;
   timeoutMs?: number;
@@ -179,15 +182,24 @@ export async function compose(lines: readonly QueuedLine[], options: ComposeOpti
   if (!sent.length) return { texts, voice: 'template' };
 
   const handed = sent.map((line, index) => hand(line, `E${index + 1}`, context));
+  const parts: PromptParts = {
+    instructions: instructionsFor(sent),
+    data: handed.flatMap((each) => each.data),
+  };
+  // Left unsent for holding one of the User's keys or tokens: its Items are noted as skipped (#201),
+  // and every line keeps its plain sentence.
+  const refused = (error: unknown) => {
+    const refusal = refusalOf(error, parts, options.secrets);
+    if (!refusal) return false;
+    heedRefusal(refusal, 'Put Updates together', options.refusals, options.onItemsChanged);
+    log(`Put Updates together: ${refusal.message}`);
+    return true;
+  };
   let prompt: BuiltPrompt;
   try {
-    prompt = buildPrompt(
-      { instructions: instructionsFor(sent), data: handed.flatMap((each) => each.data) },
-      { secrets: options.secrets },
-    );
+    prompt = buildPrompt(parts, { secrets: options.secrets });
   } catch (error) {
-    if (!(error instanceof PromptRefused)) throw error;
-    log(`Put Updates together: ${error.message}`);
+    if (!refused(error)) throw error;
     return { texts, voice: 'template' };
   }
 
@@ -205,6 +217,7 @@ export async function compose(lines: readonly QueuedLine[], options: ComposeOpti
     });
     reply = answer.json;
   } catch (error) {
+    if (refused(error)) return { texts, voice: 'template' };
     const kind = error instanceof ModelError ? error.kind : 'failed';
     log(`Put Updates together used the plain sentences (${kind}): ${message(error)}`);
     return { texts, voice: 'template' };

@@ -40,6 +40,7 @@ import {
   type GivenUpdate,
   HARD_LIMITS,
   isAllowed,
+  NOT_AN_INSTRUCTION,
   type PersonParagraphAnswer,
   type PersonParagraphRequest,
   type PresenceReport,
@@ -274,6 +275,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
             context: lineContext(),
             secrets: options.secrets,
             injectionWarnings: itemStore.injectionWarnings,
+            refusals: itemStore.refusals,
             onItemsChanged: options.onItemsChanged,
             log,
           }),
@@ -452,7 +454,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       case 'not-an-instruction':
         itemStore.injectionWarnings.clear(itemId, {
           by: { kind: 'user' },
-          why: 'Not an instruction aimed at Ares',
+          why: NOT_AN_INSTRUCTION,
         });
         options.onItemsChanged?.([itemId]);
         return withoutRow(queuedId, itemId, 'done');
@@ -522,6 +524,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       me: options.me,
       secrets: options.secrets,
       injectionWarnings: itemStore.injectionWarnings,
+      refusals: itemStore.refusals,
       onItemsChanged: options.onItemsChanged,
     });
   }
@@ -541,6 +544,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       me: options.me,
       secrets: options.secrets,
       injectionWarnings: itemStore.injectionWarnings,
+      refusals: itemStore.refusals,
       onItemsChanged: options.onItemsChanged,
     });
   }
@@ -552,6 +556,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       meaning: options.meaning,
       secrets: options.secrets,
       injectionWarnings: itemStore.injectionWarnings,
+      refusals: itemStore.refusals,
       onItemsChanged: options.onItemsChanged,
     });
   }

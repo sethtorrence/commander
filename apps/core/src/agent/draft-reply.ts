@@ -16,12 +16,13 @@
 import { type ChatDraft, DRAFT_REPLY, type Item, MAX_REPLY_LENGTH } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
-import type { InjectionWarningStore } from '../item-store';
+import type { InjectionWarningStore, RefusalStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
 import { cleanOutput } from '../safety/output';
+import { heedRefusal } from '../safety/refusal';
 import { heedSteering, steeringFlag } from '../safety/steering-flag';
 import { type Chat, chatBlock, isChat, longDay, numbered, spokenIn } from './chat-material';
-import { buildPrompt, type PromptParts, PromptRefused } from './prompt';
+import { buildPrompt, type PromptParts, refusalOf } from './prompt';
 
 // The latest messages a draft reads.
 const MAX_MESSAGES = 30;
@@ -81,10 +82,15 @@ export type DraftOptions = {
   me?: (account: string) => string | null;
   secrets?: KnownSecrets;
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
-  // Items the steering flag marked, so open views catch up.
+  // Where a Chat left unsent for holding a key or token is recorded as skipped (#201).
+  refusals?: Pick<RefusalStore, 'record'>;
+  // Items the steering flag marked (or noted as skipped), so open views catch up.
   onItemsChanged?: (itemIds: string[]) => void;
   signal?: AbortSignal;
 };
+
+// What the User knows this by, where a Chat it skipped says so.
+const DRAFT_REPLY_NAME = 'Draft a reply';
 
 /** Ares couldn't draft a reply: the window says why, in plain words. */
 export class DraftFailed extends Error {
@@ -97,13 +103,19 @@ export async function draftReply(item: Item, options: DraftOptions): Promise<Cha
   const at = (options.now ?? Date.now)();
   const me = item.account ? (options.me?.(item.account) ?? null) : null;
   if (!spokenIn(item).length) throw new DraftFailed('There is nothing in this Chat to reply to yet');
+  const parts = draftPrompt(item, me, at);
+  // Left unsent for holding one of the User's keys or tokens: the Chat is noted as skipped (#201).
+  const refused = (error: unknown) => {
+    const refusal = refusalOf(error, parts, options.secrets);
+    if (!refusal) return null;
+    heedRefusal(refusal, DRAFT_REPLY_NAME, options.refusals, options.onItemsChanged);
+    return new DraftFailed(`Ares couldn’t draft a reply: ${refusal.message}`);
+  };
   let prompt: ReturnType<typeof buildPrompt>;
   try {
-    prompt = buildPrompt(draftPrompt(item, me, at), { secrets: options.secrets });
+    prompt = buildPrompt(parts, { secrets: options.secrets });
   } catch (error) {
-    if (error instanceof PromptRefused)
-      throw new DraftFailed(`Ares couldn’t draft a reply: ${error.message}`);
-    throw error;
+    throw refused(error) ?? error;
   }
   let reply: z.infer<typeof REPLY>;
   try {
@@ -117,6 +129,8 @@ export async function draftReply(item: Item, options: DraftOptions): Promise<Cha
     });
     reply = answer.json;
   } catch (error) {
+    const refusal = refused(error);
+    if (refusal) throw refusal;
     const why =
       error instanceof ModelError && error.kind === 'invalid-reply'
         ? 'his reply didn’t make sense'

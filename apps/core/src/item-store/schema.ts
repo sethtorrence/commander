@@ -692,6 +692,25 @@ export const injectionWarnings = sqliteTable('injection_warnings', {
   clearEntryId: integer('clear_entry_id').references((): AnySQLiteColumn => activity.id),
 });
 
+// Refusals (#201): the Items Ares sent to no model because they hold one of the User's keys or
+// sign-in tokens, each with its latest refusal activity entry (which the Update counts), while their
+// words stay as they were: the small note on the Item. A row goes when the Item's words change. It
+// keeps a fingerprint of the words, never the words or the secret.
+export const refusals = sqliteTable('refusals', {
+  itemId: text('item_id')
+    .primaryKey()
+    .references(() => items.id),
+  // When Ares last skipped it.
+  at: integer('at').notNull(),
+  entryId: integer('entry_id')
+    .notNull()
+    .references(() => activity.id),
+  // The job that would have sent it ("Sort into Buckets").
+  job: text('job'),
+  // A fingerprint (SHA-256) of the Item's words when it was skipped.
+  contentHash: text('content_hash').notNull(),
+});
+
 // Ares's latest ranking of the Dashboard (#72): one row per Item he ranked (or pending suggestion,
 // `suggestion:12`, which is not an Item yet, so no reference), with a fingerprint of the Item as he
 // saw it. Each run replaces it whole; `dashboard_ranked` says when.
@@ -751,13 +770,15 @@ export const updates = sqliteTable('updates', {
   lines: text('lines', { mode: 'json' }).$type<UpdateLine[]>().notNull(),
 });
 
-// Where the Updates stand, in a single row: how far the producers have looked (Ares's proposals and
-// the injection-warning entries), and the User's presence across restarts (when they last did
-// something, and the longest stretch without since the last Update).
+// Where the Updates stand, in a single row: how far the producers have looked (Ares's proposals, the
+// injection-warning entries and the refusals), and the User's presence across restarts (when they
+// last did something, and the longest stretch without since the last Update).
 export const updateState = sqliteTable('update_state', {
   id: integer('id').primaryKey(),
   proposalsCursor: integer('proposals_cursor'),
   warningsCursor: integer('warnings_cursor'),
+  // The newest refusal activity entry they have counted (#201).
+  refusalsCursor: integer('refusals_cursor'),
   lastInputAt: integer('last_input_at'),
   longestGapMs: integer('longest_gap_ms').notNull().default(0),
   lastGivenAt: integer('last_given_at'),

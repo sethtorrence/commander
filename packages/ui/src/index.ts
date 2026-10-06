@@ -58,7 +58,7 @@ export { Switch } from './components/switch';
 export { ThemeToggle } from './components/theme-toggle';
 export { Toaster, ToastView, toast } from './components/toast';
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/tooltip';
-export { WarningMark } from './components/warning-mark';
+export { RefusalNote, WarningMark } from './components/warning-mark';
 export { cn } from './lib/cn';
 export {
   ACCENT_NAMES,

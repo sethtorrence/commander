@@ -2,7 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ActionContext, Item, LinearIssueDetail } from '@commander/domain';
-import { createModelClient, type ModelProviderAdapter, type ProviderRequest } from '@commander/models';
+import {
+  createModelClient,
+  ModelError,
+  type ModelProviderAdapter,
+  type ProviderRequest,
+} from '@commander/models';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { type Gate, openGate } from '../autonomy/gate';
@@ -27,9 +32,19 @@ let script: string[];
 let logged: string[];
 let changed: string[][];
 let note: string;
+// As the models wiring does (models/index.ts): a key borrowed for the call, found in its messages.
+let lateKey: { secrets: KnownSecrets; key: string } | null;
 
 const provider: ModelProviderAdapter = {
   async send(request) {
+    if (lateKey) {
+      lateKey.secrets.remember(lateKey.key);
+      if (lateKey.secrets.foundIn(request.messages.map((message) => message.content).join('\n')))
+        throw new ModelError(
+          'bad-request',
+          'The prompt held one of your sign-in tokens or keys, so nothing was sent.',
+        );
+    }
     calls.push(request);
     return {
       text: script.shift() ?? '{"suggestions":[]}',
@@ -174,7 +189,11 @@ function issueJob(
   };
 }
 
-async function run(job: AgentJob<Input, z.infer<typeof reply>>, secrets?: KnownSecrets) {
+async function run(
+  job: AgentJob<Input, z.infer<typeof reply>>,
+  secrets?: KnownSecrets,
+  { refusals = false }: { refusals?: boolean } = {},
+) {
   runner = createJobRunner({
     jobs: [job],
     client: createModelClient({
@@ -186,6 +205,7 @@ async function run(job: AgentJob<Input, z.infer<typeof reply>>, secrets?: KnownS
     gate,
     store: store.agent,
     injectionWarnings: store.injectionWarnings,
+    ...(refusals && { refusals: store.refusals }),
     secrets,
     now: () => clock,
     log: (message) => logged.push(message),
@@ -210,6 +230,7 @@ beforeEach(() => {
   script = [];
   logged = [];
   changed = [];
+  lateKey = null;
   runner = null;
   store = openItemStore({
     path: join(dir, 'commander.db'),
@@ -257,6 +278,87 @@ describe('the prompt', () => {
       lastProblem: expect.stringContaining('nothing was sent'),
     });
     expect(logged.join('\n')).not.toContain('Ab12Cd34');
+  });
+});
+
+// One issue per call, as the jobs that read outside Items one at a time do.
+function oneByOne(issues: string[]): AgentJob<Input, z.infer<typeof reply>> {
+  return {
+    ...issueJob(issues),
+    batch: (input) =>
+      input.issues.map((id) => ({
+        items: input.items.filter((item) => item.itemId === id),
+        issues: [id],
+        blocks: [],
+      })),
+  };
+}
+
+describe('a refusal (#201)', () => {
+  const KEY = 'lin_api_Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78';
+  const SKIPPED =
+    'Ares skipped this issue: it holds what looks like one of your keys or sign-in tokens. None of it went to a model.';
+  const refusals = (itemId: string) =>
+    store.activity({ itemId }).filter((entry) => entry.action === 'refusal');
+
+  it('notes the Item that held the key as skipped, never the key, and the run goes on without it', async () => {
+    const secrets = createKnownSecrets();
+    secrets.remember(KEY);
+    const leaky = saveIssue('ENG-7', 'Rotate the deploy key', `The old key was ${KEY}, please rotate.`);
+    const plain = saveIssue('ENG-8', 'Fix the export');
+    said({ suggestions: [{ on: 'I1', title: 'Fix the CSV export', confidence: 0.95 }] });
+    await run(oneByOne([leaky, plain]), secrets, { refusals: true });
+
+    // Only the other issue went to the model, and Ares carried on with it.
+    expect(calls).toHaveLength(1);
+    expect(JSON.stringify(calls)).not.toContain(KEY);
+    expect(JSON.stringify(calls)).toContain('Fix the export');
+    expect(todos()).toEqual(['Fix the CSV export']);
+    expect(runner?.jobs()[0]?.lastOutcome).toBe('ok');
+
+    // Its history, its note and open views say so; nothing recorded holds the key.
+    expect(refusals(leaky)).toEqual([
+      expect.objectContaining({ by: { kind: 'ares' }, why: SKIPPED, changes: [] }),
+    ]);
+    expect(itemOf(leaky).refusal).toEqual({ at: clock });
+    expect(itemOf(plain).refusal).toBeUndefined();
+    expect(changed).toContainEqual([leaky]);
+    expect(JSON.stringify(store.activity({}))).not.toContain('Ab12Cd34');
+    expect(logged.join('\n')).not.toContain('Ab12Cd34');
+
+    // Asked again, the same words: still not sent, and not noted twice.
+    runner?.run('issue-todos');
+    await runner?.settled();
+    expect(JSON.stringify(calls)).not.toContain(KEY);
+    expect(refusals(leaky)).toHaveLength(1);
+  });
+
+  it('notes it too when the models wiring refuses a key it learned of only as the call was made', async () => {
+    const secrets = createKnownSecrets();
+    // A key no credential pattern blanks, so it reaches the wiring's own check.
+    const plainKey = 'kettle42orchard7violet9';
+    lateKey = { secrets, key: plainKey };
+    const leaky = saveIssue('ENG-9', 'Rotate the deploy key', `The old key was ${plainKey}.`);
+    await run(oneByOne([leaky]), secrets, { refusals: true });
+
+    expect(calls).toEqual([]);
+    expect(refusals(leaky)).toEqual([expect.objectContaining({ why: SKIPPED })]);
+    expect(itemOf(leaky).refusal).toEqual({ at: clock });
+    expect(runner?.jobs()[0]?.lastOutcome).toBe('ok');
+  });
+
+  it('fails the run as before when the refused part is about other Items too', async () => {
+    const secrets = createKnownSecrets();
+    secrets.remember(KEY);
+    const leaky = saveIssue('ENG-10', 'Rotate the deploy key', `The old key was ${KEY}.`);
+    const plain = saveIssue('ENG-11', 'Fix the export');
+    await run(issueJob([leaky, plain]), secrets, { refusals: true });
+
+    expect(calls).toEqual([]);
+    expect(runner?.jobs()[0]).toMatchObject({ lastOutcome: 'failed' });
+    // Only the Item that held it is noted.
+    expect(refusals(leaky)).toHaveLength(1);
+    expect(refusals(plain)).toEqual([]);
   });
 });
 

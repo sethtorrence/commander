@@ -39,6 +39,7 @@ import {
 } from './github-oversight';
 import { type GitHubPeopleView, githubPeopleView } from './github-people';
 import { summaryCadence, summaryWriterState } from './github-summary';
+import { type FlaggedItems, flaggedItems } from './injection-warnings';
 import {
   type ActivityEntry,
   activityEntry,
@@ -200,6 +201,12 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // "Not waiting on you" (#109): the User clears Ares's waiting flag on a Chat by hand. A correction
   // in the activity log (kept as an example for Memory), undone like any change.
   z.object({ op: z.literal('clear-chat-waiting'), itemId: z.string().min(1) }),
+  // Not an instruction from an Item's warning mark (#201), where it is listed or opened: the mark
+  // goes, as the User's correction (undone like any change), and so does its Update line. A Todo's
+  // clears the mark of the Item behind it. The Flagged Items list in the Ares Section: every marked
+  // Item, those cleared lately, and those Ares skipped lately because they hold a key or token.
+  z.object({ op: z.literal('clear-injection-warning'), itemId: z.string().min(1) }),
+  z.object({ op: z.literal('flagged-items') }),
   // Channel posts (#111): each Teams Account's teams and channels as its last sync listed them, each
   // with whether the User excluded it; and excluding a team or channel (deleting its posts, in the
   // activity log, by the User) or including it again.
@@ -340,6 +347,8 @@ export type ItemStoreResults = {
   'chat-settings': ChatSetting[];
   'change-chat-setting': ChatSettingChange;
   'clear-chat-waiting': ActivityEntry;
+  'clear-injection-warning': ActivityEntry;
+  'flagged-items': FlaggedItems;
   'channel-choices': ChannelChoices[];
   'change-channel-setting': ChannelChoices;
   events: Item[];
@@ -416,6 +425,8 @@ export const itemStoreResult = {
   'chat-settings': z.array(chatSetting),
   'change-chat-setting': chatSettingChange,
   'clear-chat-waiting': activityEntry,
+  'clear-injection-warning': activityEntry,
+  'flagged-items': flaggedItems,
   'channel-choices': z.array(channelChoices),
   'change-channel-setting': channelChoices,
   events: z.array(item),

@@ -146,6 +146,7 @@ export async function summaries(
             me,
             secrets,
             injectionWarnings: itemStore.injectionWarnings,
+            refusals: itemStore.refusals,
             onItemsChanged,
             signal: controller.signal,
           });

@@ -5,6 +5,7 @@ import type { QueuedAbout, QueuedKind, QueuedLine, UpdateRow } from '@commander/
 import { capLines, prepLines, summaryLines } from './ares';
 import { bucketRuleLines, bucketSuggestionLines, missedSendLines } from './email';
 import { leftLines, reconnectLines, stuckLines } from './linear';
+import { refusalLines } from './refusals';
 import { autonomyLines, chainedLines, ruleLines, suggestionLines } from './suggestions';
 import { chatLines } from './teams';
 import type { LineContext, LineKind, LineKinds, RowFacts } from './types';
@@ -18,6 +19,7 @@ export const LINE_KINDS: LineKinds = {
   suggestions: suggestionLines,
   chained: chainedLines,
   'injection-warnings': warningLines,
+  refusals: refusalLines,
   'cap-warning': capLines,
   'autonomy-change': autonomyLines,
   'linear-left': leftLines,

@@ -3,6 +3,7 @@ import { type SectionDefinition, SectionSheet, useSection } from '../section';
 import { ActivityPage } from './ActivityPage';
 import { Conversations } from './Conversations';
 import { FilingRecord } from './FilingRecord';
+import { FlaggedItems } from './FlaggedItems';
 import { WhatAresCanDo } from './WhatAresCanDo';
 
 // Reloads Ares's activity whenever the Core says he did or suggested something.
@@ -19,12 +20,19 @@ const onMemoryChange = (listener: () => void) =>
     if (message.type === 'ares-status' && !message.working) listener();
   });
 
+// The Flagged Items list may have changed: an Item was marked, cleared or skipped (#201).
+const onItemsChanged = (listener: () => void) =>
+  window.commander.onCoreMessage((message) => {
+    if (message.type === 'items-changed') listener();
+  });
+
 // Ares's answers stream in, and his turns change, as core messages.
 const onCoreMessage = (listener: Parameters<typeof window.commander.onCoreMessage>[0]) =>
   window.commander.onCoreMessage(listener);
 
 // The Ares Section: Ares's activity page (opened from the header's Ares status module, too), What
-// Ares knows (#74), Conversations with him (#191) and What Ares can do (#192).
+// Ares knows (#74), Conversations with him (#191), What Ares can do (#192) and the Items flagged for
+// text aimed at him or skipped for holding a key (#201).
 function AresSection() {
   const { active } = useSection();
   return (
@@ -41,6 +49,7 @@ function AresSection() {
       <WhatAresKnows no="A3" client={window.commander.itemStore} shown={active} onRefresh={onMemoryChange} />
       <Conversations client={window.commander.conversations} shown={active} onCoreMessage={onCoreMessage} />
       <WhatAresCanDo client={window.commander.conversations} shown={active} />
+      <FlaggedItems client={window.commander.itemStore} shown={active} onRefresh={onItemsChanged} />
     </SectionSheet>
   );
 }

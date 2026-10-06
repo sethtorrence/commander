@@ -12,6 +12,10 @@
 //   when the Item's words change and the patterns find nothing.
 // - `clear` is the User's Not an instruction (#186): the mark goes, logged as their correction, and
 //   stays gone while the Item's words stay the same (neither the patterns nor a flag put it back).
+//   They choose it from the mark itself, the Update or the Flagged Items list (#201), and can undo it
+//   (`undo`): the mark comes back, while what was found is still what it was cleared for.
+// - `flagged` lists the marks standing, newest first, with what read like an instruction, and those
+//   the User cleared lately (#201).
 // - Marks from flags made before they had to quote (found nothing, quoted nothing) are dropped when
 //   the store opens: they don't meet the rule.
 import { createHash } from 'node:crypto';
@@ -19,10 +23,12 @@ import {
   type ActionContext,
   type ActivityEntry,
   type CausedBy,
+  type FlaggedItems,
   type Item,
   injectionWarningText,
+  NOT_AN_INSTRUCTION,
 } from '@commander/domain';
-import { and, asc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { findSteering, passageOf, quotedIn } from '../safety/steering';
 import { trustOf } from '../safety/trust';
@@ -39,20 +45,42 @@ export type InjectionWarningStore = {
   // The mark standing on an Item: what in it read like an instruction, as it is written there
   // (null when nothing can be quoted), or null when it isn't marked.
   warning(itemId: string): { quote: string | null } | null;
-  // Not an instruction: the User clears the mark. Returns their correction.
+  // Not an instruction: the User clears the mark (a Todo's: the mark of the Item behind it). Returns
+  // their correction.
   clear(itemId: string, context: ActionContext): ActivityEntry;
+  // The Flagged Items list (#201): every mark standing, newest first, those cleared lately, and the
+  // Items Ares skipped lately because they hold a key or token (refusals.ts).
+  flaggedItems(): FlaggedItems;
+};
+
+export type Flagged = {
+  itemId: string;
+  quote: string | null;
+  at: number;
+  via: 'pattern' | 'ares';
+  clearedAt: number | null;
+  clearEntryId: number | null;
 };
 
 type Warning = { itemId: string; why: string; causedBy: CausedBy | null; after: unknown };
 type Correction = { itemId: string; context: ActionContext; before: unknown };
 
-export type InjectionWarnings = InjectionWarningStore & {
+export type InjectionWarnings = Omit<InjectionWarningStore, 'flaggedItems'> & {
   // Checks an Item just saved from its Source. `causedBy` is the save's activity entry; `extra`, text
   // it holds outside its detail (an email's body).
   check(item: Item, at: number, causedBy: number | null, extra?: string): void;
   // When each of these Items was marked (the marks standing now).
   marked(itemIds: readonly string[]): Map<string, number>;
+  // The marks standing, newest first, and those cleared since `clearedSince`, newest first.
+  flagged(clearedSince: number): { marked: Flagged[]; cleared: Flagged[] };
+  // Whether an activity entry is the User's Not an instruction.
+  isClearing(entry: Pick<typeof schema.activity.$inferSelect, 'action' | 'before'>): boolean;
+  // Undoes the User's Not an instruction (its correction entry): the mark comes back, with the undo
+  // logged as theirs. Throws when the Item's words changed since (the mark it cleared is gone).
+  undo(cleared: typeof schema.activity.$inferSelect, entry: UndoEntry, at: number): ActivityEntry;
 };
+
+type UndoEntry = { by: ActionContext['by']; why?: string | null; causedBy?: CausedBy | null };
 
 /** Thrown when there is no mark to clear. */
 export class InjectionWarningError extends Error {
@@ -60,7 +88,7 @@ export class InjectionWarningError extends Error {
 }
 
 // Every word an Item holds: its title and each piece of text in its detail.
-function wordsOf(item: Item): string {
+export function wordsOf(item: Item): string {
   const words = [item.title];
   const collect = (value: unknown) => {
     if (typeof value === 'string') words.push(value);
@@ -71,9 +99,8 @@ function wordsOf(item: Item): string {
   return words.join('\n');
 }
 
-const fingerprint = (text: string) => createHash('sha256').update(text).digest('hex');
+export const fingerprint = (text: string) => createHash('sha256').update(text).digest('hex');
 const MAX_QUOTE = 500;
-export const NOT_AN_INSTRUCTION = 'Not an instruction aimed at Ares';
 
 export function injectionWarningsIn(
   db: BetterSQLite3Database<typeof schema>,
@@ -83,6 +110,7 @@ export function injectionWarningsIn(
     extraOf = () => '',
     record,
     correct,
+    undone,
     toEntry,
   }: {
     now: () => number;
@@ -93,6 +121,8 @@ export function injectionWarningsIn(
     record: (warning: Warning, at: number) => ActivityEntry;
     // Logs the User's Not an instruction, a correction.
     correct: (correction: Correction, at: number) => ActivityEntry;
+    // Logs the undoing of one, by whoever undid it.
+    undone: (undo: { itemId: string; undoes: number; entry: UndoEntry }, at: number) => ActivityEntry;
     toEntry: (row: typeof schema.activity.$inferSelect) => ActivityEntry;
   },
 ): InjectionWarnings {
@@ -106,6 +136,14 @@ export function injectionWarningsIn(
   db.delete(injectionWarnings)
     .where(and(eq(injectionWarnings.via, 'ares'), sql`json_array_length(${injectionWarnings.found}) = 0`))
     .run();
+
+  // What in a marked Item read like an instruction, as it is written there (null when nothing can be quoted).
+  function quoteOf(row: typeof injectionWarnings.$inferSelect): string | null {
+    const [first] = row.found;
+    if (!first) return null;
+    const item = readItem(row.itemId);
+    return item ? passageOf(allWords(item), first) : first;
+  }
 
   function warn(item: Item, found: string[], causedBy: number | null, at: number): ActivityEntry {
     return record(
@@ -210,10 +248,31 @@ export function injectionWarningsIn(
     warning(itemId) {
       const row = rowOf(itemId);
       if (!row || row.clearedAt !== null) return null;
-      const [first] = row.found;
-      const item = readItem(itemId);
-      if (!first) return { quote: null };
-      return { quote: item ? passageOf(allWords(item), first) : first };
+      return { quote: quoteOf(row) };
+    },
+
+    flagged(clearedSince) {
+      const flagged = (row: typeof injectionWarnings.$inferSelect): Flagged => ({
+        itemId: row.itemId,
+        quote: quoteOf(row),
+        at: row.at,
+        via: row.via,
+        clearedAt: row.clearedAt,
+        clearEntryId: row.clearEntryId,
+      });
+      const marked = db
+        .select()
+        .from(injectionWarnings)
+        .where(isNull(injectionWarnings.clearedAt))
+        .orderBy(desc(injectionWarnings.at), desc(injectionWarnings.entryId))
+        .all();
+      const cleared = db
+        .select()
+        .from(injectionWarnings)
+        .where(gte(injectionWarnings.clearedAt, clearedSince))
+        .orderBy(desc(injectionWarnings.clearedAt), desc(injectionWarnings.clearEntryId))
+        .all();
+      return { marked: marked.map(flagged), cleared: cleared.map(flagged) };
     },
 
     clear(itemId, context) {
@@ -233,6 +292,34 @@ export function injectionWarningsIn(
         .where(eq(injectionWarnings.itemId, itemId))
         .run();
       return entry;
+    },
+
+    isClearing: (entry) =>
+      entry.action === 'correction' &&
+      typeof entry.before === 'object' &&
+      entry.before !== null &&
+      'injectionWarning' in entry.before,
+
+    undo(cleared, entry, at) {
+      const row = rowOf(cleared.itemId);
+      const item = readItem(cleared.itemId);
+      // What it was cleared for must still be there: found by the patterns again, or quoted.
+      const words = item ? allWords(item) : '';
+      const stillThere =
+        row?.via === 'pattern'
+          ? findSteering(words).some((snippet) => row.found.includes(snippet))
+          : !!row && row.found.some((quote) => quotedIn(words, quote));
+      if (!row || row.clearEntryId !== cleared.id || !stillThere) {
+        throw new InjectionWarningError(
+          'The mark can’t come back: the words it was for have changed since, and were checked again',
+        );
+      }
+      const logged = undone({ itemId: cleared.itemId, undoes: cleared.id, entry }, at);
+      db.update(injectionWarnings)
+        .set({ clearedAt: null, clearEntryId: null })
+        .where(eq(injectionWarnings.itemId, cleared.itemId))
+        .run();
+      return logged;
     },
 
     marked(itemIds) {

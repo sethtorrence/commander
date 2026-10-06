@@ -167,6 +167,7 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     gate: options.gate,
     store: itemStore.agent,
     injectionWarnings: itemStore.injectionWarnings,
+    refusals: itemStore.refusals,
     secrets: options.secrets,
     onItemsChanged: options.onItemsChanged,
     now,

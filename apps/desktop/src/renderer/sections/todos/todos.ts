@@ -15,6 +15,7 @@ import {
   type Source,
 } from '@commander/domain';
 import type { ItemStoreClient } from '../../item-store/client';
+import { describeWarningEntry } from '../../links/warning-entries';
 import { describeFiling, describeFilingAnswer } from '../../projects/projects';
 
 /*
@@ -362,8 +363,9 @@ export function describeEntry(
 ): string {
   const who = byWhom(entry.by);
   if (from && entry.action === 'create' && entry.by.kind === 'ares') return `Added by Ares from ${from}`;
-  // A steering warning says it in its own words (#69).
-  if (entry.action === 'injection-warning') return entry.why ?? 'Instructions aimed at Ares, ignored';
+  // A steering warning or a refusal says it in its own words (#69, #201), as does Not an instruction.
+  const warning = describeWarningEntry(entry, history);
+  if (warning) return warning;
   // The User's answer to Ares's filing (#71).
   if (entry.action === 'correction' || entry.action === 'confirmation')
     return describeFilingAnswer(entry, projects);
