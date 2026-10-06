@@ -85,11 +85,13 @@ import {
   type Rule,
   type RuleChange,
   type RulePreview,
+  type RuleValues,
   rule,
   ruleAction,
   ruleChange,
   rulePreview,
   rulePreviewRequest,
+  ruleValues,
 } from './rules';
 import {
   type FindTimeResult,
@@ -142,6 +144,8 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('rules') }),
   z.object({ op: z.literal('change-rule'), action: ruleAction }),
   z.object({ op: z.literal('preview-rule'), request: rulePreviewRequest }),
+  // Values the Rule editor offers that synced Items may not have yet: watched GitHub repos (#118).
+  z.object({ op: z.literal('rule-values') }),
   z.object({ op: z.literal('refile'), itemIds: z.array(z.string().min(1)).min(1).max(1000) }),
   z.object({ op: z.literal('undo-refile'), entryIds: z.array(z.number().int().positive()).min(1).max(1000) }),
   // Buckets (#137): the User's list and its changes, and re-sorting held mail by the Bucket Rules.
@@ -284,6 +288,7 @@ export type ItemStoreResults = {
   rules: Rule[];
   'change-rule': RuleChange;
   'preview-rule': RulePreview;
+  'rule-values': RuleValues;
   refile: ActivityEntry[];
   'undo-refile': ActivityEntry[];
   buckets: Bucket[];
@@ -352,6 +357,7 @@ export const itemStoreResult = {
   rules: z.array(rule),
   'change-rule': ruleChange,
   'preview-rule': rulePreview,
+  'rule-values': ruleValues,
   refile: z.array(activityEntry),
   'undo-refile': z.array(activityEntry),
   buckets: z.array(bucket),

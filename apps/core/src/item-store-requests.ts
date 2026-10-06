@@ -87,6 +87,8 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.changeRule(request.action) };
       case 'preview-rule':
         return { ok: true, result: store.previewRule(request.request) };
+      case 'rule-values':
+        return { ok: true, result: store.ruleValues() };
       case 'refile':
         return { ok: true, result: store.refile(request.itemIds) };
       case 'buckets':

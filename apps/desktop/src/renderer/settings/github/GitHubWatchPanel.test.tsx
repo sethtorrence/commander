@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { ItemStore } from '@commander/core/src/item-store';
 import {
   defaultOversightSettings,
   type GitHubAccess,
@@ -8,12 +9,19 @@ import {
   type GitHubWatchResponse,
   type GitHubWatchView,
   isWatched,
+  type Project,
   setOrgWatched,
   setRepoWatched,
 } from '@commander/domain';
 import type { AccountsState, GitHubAccountSummary } from '@commander/domain/ipc';
+import { Toaster } from '@commander/ui';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { ItemStoreClient } from '../../item-store/client';
+import { openTestItemStore } from '../../item-store/test-item-store';
+import { ProjectsProvider } from '../../projects/context';
+import { projectsIn } from '../../projects/projects';
+import { ShortcutProvider } from '../../shortcuts/react';
 import { GitHubWatchPanel } from './GitHubWatchPanel';
 
 // Settings → GitHub over a stand-in for the main process (and the Core behind it).
@@ -294,5 +302,113 @@ describe('Settings → GitHub', () => {
     expect(org('acme').getByRole('checkbox', { name: 'Watch whole org' })).toBeTruthy();
     expect(screen.queryByText('Commander isn’t installed here.')).toBeNull();
     expect(screen.getByTestId('github-watch-summary').textContent).toBe('Not watching any repos yet.');
+  });
+});
+
+// The Projects column (#118): beside each watched repo, the Project a repo-only Rule files it into,
+// and Map to Project…, a shortcut into the one Rules list, against a real Item store.
+describe('Settings → GitHub, mapping repos to Projects', () => {
+  let store: ItemStore;
+  let close: () => void;
+  let lt: Project;
+  let tl: Project;
+
+  const repoTerm = (each: GitHubRepo) => ({
+    field: 'github.repo',
+    op: 'is' as const,
+    value: each.nodeId,
+    label: `${each.owner}/${each.name}`,
+  });
+  const repoRule = (project: Project, each: GitHubRepo) => ({
+    target: { kind: 'project' as const, projectId: project.id },
+    when: { join: 'and' as const, terms: [repoTerm(each)] },
+  });
+
+  beforeEach(() => {
+    let client: ItemStoreClient;
+    ({ store, client, close } = openTestItemStore());
+    Object.assign(window.commander, { itemStore: client });
+    const project = (name: string, code: string) =>
+      store.changeProject({ type: 'create', project: { name, code, accent: 'teal' } }).project as Project;
+    lt = project('Longtail', 'LT');
+    tl = project('Titanlink', 'TL');
+    // "repo is acme/api → TL", and a Rule naming dotfiles among other things (not a repo Rule).
+    store.changeRule({ type: 'create', rule: repoRule(tl, api) });
+    store.changeRule({
+      type: 'create',
+      rule: {
+        target: { kind: 'project', projectId: lt.id },
+        when: {
+          join: 'and',
+          terms: [repoTerm(dotfiles), { field: 'github.label', op: 'is', value: 'infra', label: 'infra' }],
+        },
+      },
+    });
+  });
+
+  afterEach(() => close());
+
+  const mapped = () =>
+    render(
+      <ShortcutProvider>
+        <ProjectsProvider client={projectsIn(window.commander.itemStore)} storage={localStorage}>
+          <GitHubWatchPanel no="13" now={() => NOW} />
+        </ProjectsProvider>
+        <Toaster />
+      </ShortcutProvider>,
+    );
+  const row = (name: string) => within(screen.getByTestId(`github-repo-${name}`));
+
+  it('shows the Project a repo Rule files each watched repo into', async () => {
+    mapped();
+    await waitFor(() => expect(row('acme/api').getByRole('img', { name: 'Titanlink' })).toBeTruthy());
+    expect(row('acme/api').getByRole('button', { name: 'Map acme/api to a Project' })).toBeTruthy();
+    // Watched, with no Rule naming it alone.
+    expect(row('octocat/dotfiles').queryByRole('img')).toBeNull();
+    expect(
+      row('octocat/dotfiles').getByRole('button', { name: 'Map octocat/dotfiles to a Project' }),
+    ).toBeTruthy();
+    // Not watched: nothing to map.
+    expect(row('acme/web').queryByRole('button', { name: /^Map / })).toBeNull();
+  });
+
+  it('Map to Project… on an unmapped repo opens a new repo Rule in the Rule editor, saved in the one list', async () => {
+    mapped();
+    fireEvent.click(await screen.findByRole('button', { name: 'Map octocat/dotfiles to a Project' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New Rule' });
+    expect((within(dialog).getByRole('combobox', { name: 'Field 1' }) as HTMLSelectElement).value).toBe(
+      'github.repo',
+    );
+    expect((within(dialog).getByRole('combobox', { name: 'Value 1' }) as HTMLSelectElement).value).toBe(
+      dotfiles.nodeId,
+    );
+    // Which Project is the User's to choose.
+    const into = within(dialog).getByRole('combobox', { name: 'Files into' }) as HTMLSelectElement;
+    expect(into.value).toBe('');
+    fireEvent.change(into, { target: { value: lt.id } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save Rule' }));
+
+    await waitFor(() => expect(store.rules()).toHaveLength(3));
+    expect(store.rules().at(-1)).toMatchObject(repoRule(lt, dotfiles));
+    await waitFor(() => expect(row('octocat/dotfiles').getByRole('img', { name: 'Longtail' })).toBeTruthy());
+  });
+
+  it('Map to Project… on a mapped repo edits its Rule', async () => {
+    mapped();
+    await waitFor(() => expect(row('acme/api').getByRole('img', { name: 'Titanlink' })).toBeTruthy());
+    const ruleId = store.rules()[0]?.id;
+    fireEvent.click(row('acme/api').getByRole('button', { name: 'Map acme/api to a Project' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Rule' });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: 'Files into' }), {
+      target: { value: lt.id },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save Rule' }));
+
+    await waitFor(() => expect(row('acme/api').getByRole('img', { name: 'Longtail' })).toBeTruthy());
+    expect(store.rules()).toHaveLength(2);
+    expect(store.rules().find((rule) => rule.id === ruleId)?.target).toEqual({
+      kind: 'project',
+      projectId: lt.id,
+    });
   });
 });

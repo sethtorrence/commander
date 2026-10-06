@@ -24,6 +24,7 @@ export * from './github-discussion';
 export * from './github-finishes';
 export * from './github-open-work';
 export * from './github-oversight';
+export * from './github-rules';
 export * from './github-skill-issues';
 export * from './github-summary';
 export * from './github-watch';

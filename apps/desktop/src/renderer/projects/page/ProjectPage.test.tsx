@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { onReveal } from '../../frame/reveal';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
+import { API, GITHUB, issue, NOW, pull } from '../../sections/github/test-work';
 import { ShortcutProvider, ShortcutScope, useActiveScopes } from '../../shortcuts/react';
 import { ProjectsProvider } from '../context';
 import { projectsIn } from '../projects';
@@ -126,6 +127,35 @@ describe('the Project page', () => {
     expect(filingRow('Filed by Ares').textContent).toMatch(/01$/);
     expect(filingRow('By Rule').textContent).toMatch(/00$/);
     expect(filingRow('Follows its source').textContent).toMatch(/00$/);
+  });
+
+  it('counts the open pull requests and issues a repo Rule files here, and opens GitHub from the count', async () => {
+    store.changeRule({
+      type: 'create',
+      rule: {
+        target: { kind: 'project', projectId: lt.id },
+        when: {
+          join: 'and',
+          terms: [{ field: 'github.repo', op: 'is', value: API.nodeId, label: 'acme/api' }],
+        },
+      },
+    });
+    store.saveFromSource({
+      source: 'github',
+      account: GITHUB,
+      items: [
+        pull({ number: 12, title: 'Retry webhooks' }),
+        pull({ number: 9, title: 'Old merge', state: 'merged', mergedAt: NOW }),
+        issue({ number: 30, title: 'Webhooks drop on 502' }),
+      ],
+    });
+    const { onOpenSection } = await renderLoadedPage();
+    await waitFor(() =>
+      expect(within(counts()).getByRole('button', { name: /GitHub/ }).textContent).toMatch(/02$/),
+    );
+    fireEvent.click(within(counts()).getByRole('button', { name: /GitHub/ }));
+    expect(onOpenSection).toHaveBeenCalledWith('github');
+    expect(filingRow('By Rule').textContent).toMatch(/03$/);
   });
 
   it('ticks with x, moves with j and k, and re-files with b, like the Todos Section', async () => {

@@ -26,14 +26,18 @@ import {
   Input,
 } from '@commander/ui';
 import { type FormEvent, useCallback, useEffect, useState } from 'react';
+import type { ItemStoreClient } from '../../item-store/client';
 import { SettingRow, SettingsGroup } from '../parts';
 import { OversightSettings } from './OversightSettings';
+import { RepoProjectsCell, RepoProjectsProvider } from './RepoProjects';
 
 // Settings → GitHub (#113): per GitHub Account, the orgs and repos it can reach, and which of them
 // Commander watches. Orgs come as groups with Watch whole org (repos made there later included),
 // each repo with a checkbox; personal repos have their own group. Changes save at once; unwatching
-// repos that have Items in Commander asks first. The Core does the asking of GitHub and the keeping
-// (see apps/core/src/github-watch); the selection model is the domain's github-watch.ts.
+// repos that have Items in Commander asks first. Each watched repo shows the Project its own Rule
+// files it into, with Map to Project… (#118, RepoProjects.tsx). The Core does the asking of GitHub
+// and the keeping (see apps/core/src/github-watch); the selection model is the domain's
+// github-watch.ts.
 
 const isGitHub = (account: AccountSummary): account is GitHubAccountSummary => account.source === 'github';
 
@@ -84,6 +88,7 @@ function RepoRow({
         />
         <span className="truncate font-mono text-label-lg text-ink">{repo.name}</span>
       </label>
+      {watched && <RepoProjectsCell repo={repo} />}
       <span className="shrink-0 font-mono text-label uppercase tracking-tag text-muted">
         {repo.visibility}
       </span>
@@ -420,8 +425,16 @@ function AccountWatch({ account, now }: { account: GitHubAccountSummary; now: ()
   );
 }
 
-/** Settings → GitHub: what Commander watches, per GitHub Account. */
-export function GitHubWatchPanel({ no, now = Date.now }: { no: string; now?: () => number }) {
+/** Settings → GitHub: what Commander watches, per GitHub Account, and the Project each repo maps to. */
+export function GitHubWatchPanel({
+  no,
+  now = Date.now,
+  itemStore = window.commander.itemStore,
+}: {
+  no: string;
+  now?: () => number;
+  itemStore?: ItemStoreClient;
+}) {
   const [accounts, setAccounts] = useState<GitHubAccountSummary[] | null>(null);
 
   useEffect(() => {
@@ -444,9 +457,11 @@ export function GitHubWatchPanel({ no, now = Date.now }: { no: string; now?: () 
           </p>
         </SettingRow>
       )}
-      {accounts?.map((account) => (
-        <AccountWatch key={account.id} account={account} now={now} />
-      ))}
+      <RepoProjectsProvider itemStore={itemStore}>
+        {accounts?.map((account) => (
+          <AccountWatch key={account.id} account={account} now={now} />
+        ))}
+      </RepoProjectsProvider>
       <OversightSettings />
     </SettingsGroup>
   );

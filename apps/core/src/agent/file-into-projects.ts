@@ -1,13 +1,14 @@
-// "File into Projects" (#71, #108): Ares files what the Rules miss. A Linear issue from a team no
-// Rule covers, or a Teams Chat no Rule names, arrives already wearing the right Badge or, when he
-// isn't sure, the dashed one with Confirm and Change. A Quick job at low thinking: no tools, a reply
-// that must fit OUTPUT.
+// "File into Projects" (#71, #108, #118): Ares files what the Rules miss. A Linear issue from a team
+// no Rule covers, a Teams Chat no Rule names, or a pull request from a repo no Rule maps, arrives
+// already wearing the right Badge or, when he isn't sure, the dashed one with Confirm and Change. A
+// Quick job at low thinking: no tools, a reply that must fit OUTPUT.
 //
 // - Runs when Items arrive from a Source (and on the idle catch-up, or a request). It looks only at
-//   live, open Linear issues and Chats that are Unfiled, that no Rule matches (Rules always win over
-//   him), and that have no suggestion of his waiting; an Item the User or a Rule filed is never his
-//   to file, and one he filed stays as he filed it. Muted Chats are filed like any other (muting is
-//   about attention, not where a Chat belongs); an excluded Chat is deleted, so never looked at.
+//   live, open Linear issues and Chats (and the events and GitHub Items below) that are Unfiled,
+//   that no Rule matches (Rules always win over him), and that have no suggestion of his waiting;
+//   an Item the User or a Rule filed is never his to file, and one he filed stays as he filed it.
+//   Muted Chats are filed like any other (muting is about attention, not where a Chat belongs); an
+//   excluded Chat is deleted, so never looked at.
 //   Items whose Section has Organise Off are left out before any call. At most MAX_ITEMS a run; the
 //   rest wait for the next.
 // - Each Item gets a call of its own, in a data block of its own (ADR 0004): with one outside Item
@@ -21,6 +22,10 @@
 //     few messages, each trimmed: all untrusted Teams text, inside the Chat's own block.
 //   - A calendar event (#127) by its title, calendar, organiser, attendees (people, not rooms) and a
 //     trimmed slice of its description, inside the event's own block.
+//   - A GitHub pull request, issue or release (#118) by what it is (kind, repo#number, state), its
+//     title, repo and org, labels, milestone, author (with the Projects the User or a Rule filed the
+//     author's other GitHub Items under) and a trimmed slice of its body or release notes, inside
+//     its own block. A linked Linear issue's Project (a pull request finishing one) is a strong hint.
 //   - All with their linked Items' Projects (codes only, never their words).
 //   - And what Ares knows about Items like it (#74, memory-context.ts): the User's earlier answers to
 //     his filing (examples), facts about its People and Projects, and preferences, found by its words
@@ -36,6 +41,13 @@
 //   title and Source fields; a Chat's name, type and people, and whether it has grown past a few
 //   messages and then a full window of them (not every new message, so a busy Chat costs a few
 //   calls, not one per message); an event's title, calendar and organiser.
+// - GitHub Items (#118): live pull requests, issues and releases from watched repos, Unfiled, that no
+//   Rule matches: open ones, and closed, merged or released ones changed in the last GITHUB_DAYS
+//   (what the oversight summary covers), not years of closed history. A review request is never
+//   sent: it takes its pull request's Project (as inherited) and follows it, and while his
+//   suggestion on the pull request waits, the request and its Todo wear its dashed Badge too.
+//   Filed in the GitHub Section. Fingerprint: the title, repo, labels, milestone and author, not
+//   the body or comments.
 // - Calendar events (#127): live events from yesterday to EVENT_DAYS_AHEAD days ahead, Unfiled, that
 //   no Rule matches, the User hasn't declined and Commander didn't put in the calendar itself. A
 //   recurring series is asked about once, by its next instance (each instance is its own Item): its
@@ -50,6 +62,8 @@ import {
   type EventPerson,
   FILE_INTO_PROJECTS,
   firstMatch,
+  githubFiledDetail,
+  githubIdentifier,
   type Item,
   type LinearIssueDetail,
   type Project,
@@ -79,6 +93,9 @@ const CHAT_TYPES: Record<ChatDetail['chatType'], string> = {
   group: 'group chat',
   meeting: 'meeting chat',
 };
+// The GitHub Items Ares looks at, besides those in the Rules: open ones, and others changed lately.
+const GITHUB_KINDS = ['pull-request', 'github-issue', 'github-release'] as const;
+export const GITHUB_DAYS = 14;
 // The events Ares looks at: from a day ago to this many days ahead.
 export const EVENT_DAYS_AHEAD = 30;
 const DAY_MS = 24 * 60 * 60_000;
@@ -109,16 +126,17 @@ The data holds the User's Projects (each with its two-letter code and name, and 
 - a Linear issue: title, people, where it comes from in its Source (workspace, team, Linear project, labels), and some of its content;
 - a Teams Chat: its name and type, the people in it (with where the User filed other Chats with them), and its latest messages;
 - a calendar event: its title, the calendar it is on, its organiser and attendees, and some of its description;
+- a GitHub pull request, issue or release: its repo and org, title, labels, author (with where the User filed the author's other GitHub Items), and some of its body or release notes;
 and the Projects of Items linked to it.
 
 It may also hold what Ares knows about Items like it: the User's answers to his earlier filing (examples: "… belongs to TX (Tactics), not TL (Titanlink)"), facts about People and Projects, and the User's preferences; and, marked as background, facts Ares picked up that the User hasn't confirmed.
 
-Decide which one Project the Item belongs to, judging by its team, Linear project, labels, calendar, people (and the Projects they work on), subject and content, and its linked Items' Projects, the way the User's Rules file similar Items. An example about a similar Item (same team, Linear project, labels or people) is the User's own answer: file the Item the same way. A fact that a person works mostly on a Project is only a hint: it never outweighs the Item's own team, Linear project, labels or subject. If none fits, or you can't tell, say "unfiled".
+Decide which one Project the Item belongs to, judging by its team, Linear project, repo or org, labels, calendar, people (and the Projects they work on), subject and content, and its linked Items' Projects (a Linear issue a pull request finishes is a strong hint), the way the User's Rules file similar Items. An example about a similar Item (same team, Linear project, repo, labels or people) is the User's own answer: file the Item the same way. A fact that a person works mostly on a Project is only a hint: it never outweighs the Item's own team, Linear project, repo, labels or subject. If none fits, or you can't tell, say "unfiled".
 
 Reply with only this JSON object: {"filings":[{"itemId":"I1","projectCode":"TL","confidence":0.9,"reason":"…"}]}
 - itemId: the Item's reference, exactly as labelled.
 - projectCode: one of the Projects' codes exactly as listed, or "unfiled".
-- confidence: how sure you are, from 0 to 1. 0.9 or more only when the Item plainly belongs there (its team, Linear project or people belong to that Project alone); 0.5 to 0.8 when it is likely; below 0.5 when it is a guess.
+- confidence: how sure you are, from 0 to 1. 0.9 or more only when the Item plainly belongs there (its team, Linear project, repo or people belong to that Project alone); 0.5 to 0.8 when it is likely; below 0.5 when it is a guess.
 - reason: why, in a few plain words of your own (fewer than 12), as you would say it to the User: "Relay is a Titanlink project". No full stop.`;
 
 const cut = (text: string, length: number) => {
@@ -155,13 +173,36 @@ const chatOf = (item: Item): ChatDetail | null =>
 
 const eventOf = (item: Item): EventDetail | null => (item.detail?.kind === 'event' ? item.detail : null);
 
+const githubOf = githubFiledDetail;
+type GitHubFiled = NonNullable<ReturnType<typeof githubOf>>;
+
+// "GitHub pull request acme/titanlink-api#12", "GitHub release acme/titanlink-api v2.0".
+function githubName(detail: GitHubFiled): string {
+  switch (detail.kind) {
+    case 'pull-request':
+      return `GitHub pull request ${githubIdentifier(detail.repo, detail.number)}`;
+    case 'github-issue':
+      return `GitHub issue ${githubIdentifier(detail.repo, detail.number)}`;
+    case 'github-release':
+      return `GitHub release ${detail.repo.owner}/${detail.repo.name} ${detail.tag}`;
+  }
+}
+
+// How a linked Item's kind reads: "a Linear issue", "a pull request".
+const KIND_WORDS: Partial<Record<Item['kind'], string>> = {
+  'linear-issue': 'Linear issue',
+  'pull-request': 'pull request',
+  'github-issue': 'GitHub issue',
+  'github-release': 'GitHub release',
+};
+
 // "Dana Ruiz (dana@titanlink.test)", "you (alex@gmail.test)".
 const personText = (person: EventPerson) =>
   `${person.self ? 'you' : person.name?.trim() || person.email} (${person.email})`;
 
 // The Autonomy Section an Item is filed in.
 const sectionOf = (item: Item): AutonomySection =>
-  chatOf(item) ? 'teams' : eventOf(item) ? 'calendar' : 'linear';
+  chatOf(item) ? 'teams' : eventOf(item) ? 'calendar' : githubOf(item) ? 'github' : 'linear';
 
 // A Chat's messages that say something: no system events, nothing deleted.
 const spoken = (chat: ChatDetail) => chat.messages.filter((message) => message.from && !message.deleted);
@@ -189,6 +230,18 @@ export function filingFingerprint(item: Item): string {
       item.account,
       event.calendar.id,
       event.organiser?.email.toLowerCase() ?? null,
+    ]);
+  }
+  const github = githubOf(item);
+  if (github) {
+    return JSON.stringify([
+      title,
+      item.account,
+      github.kind,
+      github.repo.nodeId,
+      github.author?.toLowerCase() ?? null,
+      github.kind === 'github-release' ? [] : github.labels.map((label) => label.name.toLowerCase()).sort(),
+      github.kind === 'github-issue' ? (github.milestone?.title ?? null) : null,
     ]);
   }
   const issue = issueOf(item);
@@ -242,6 +295,15 @@ export function fileIntoProjectsJob(
     );
   }
 
+  // A GitHub Item Ares may look at (besides being Unfiled and unmatched): open, or changed lately.
+  function githubInScope(item: Item): boolean {
+    const github = githubOf(item);
+    if (!github) return false;
+    if (item.status === 'open') return true;
+    const changed = github.kind === 'github-release' ? github.publishedAt : github.updatedAt;
+    return changed !== null && changed > now() - GITHUB_DAYS * DAY_MS;
+  }
+
   // Whether the User's Autonomy settings have filing Off in the Item's Section.
   const off = (item: Item) =>
     decide(
@@ -255,14 +317,15 @@ export function fileIntoProjectsJob(
       itemStore.autonomy.settings(),
     ) === 'off';
 
-  // An Item Ares may file: a live, open Linear issue, Teams Chat or calendar event in scope, Unfiled,
-  // that no Rule matches and that has no suggestion of his waiting.
+  // An Item Ares may file: a live, open Linear issue, Teams Chat or calendar event in scope, or a
+  // GitHub pull request, issue or release in scope, Unfiled, that no Rule matches and that has no
+  // suggestion of his waiting.
   function candidate(item: Item | undefined, rules = itemStore.rules(), pending = waiting()): item is Item {
     return (
       !!item &&
-      (item.kind === 'linear-issue' || !!chatOf(item) || eventInScope(item)) &&
+      (githubInScope(item) ||
+        ((item.kind === 'linear-issue' || !!chatOf(item) || eventInScope(item)) && item.status === 'open')) &&
       item.deletedAt === null &&
-      item.status === 'open' &&
       item.filing === null &&
       !pending.has(item.id) &&
       !firstMatch(rules, item)
@@ -285,7 +348,7 @@ export function fileIntoProjectsJob(
         continue;
       }
       const code = codeOf(itemStore.get(other.id)?.item.filing?.projectId);
-      if (code) found.add(`${code} (a ${other.kind === 'linear-issue' ? 'Linear issue' : other.kind})`);
+      if (code) found.add(`${code} (a ${KIND_WORDS[other.kind] ?? other.kind})`);
     }
     return [...found];
   }
@@ -313,6 +376,54 @@ export function fileIntoProjectsJob(
         ? [`${person.label}: ${counts.map(([code, n]) => `${code} (${n})`).join(', ')}`]
         : [];
     });
+  }
+
+  // Where the User (or a Rule) filed the author's other GitHub Items: what links them to Projects
+  // until Memory keeps such facts. Ares's own filings don't count. Codes and counts only.
+  function authorsProjects(item: Item, author: string): string | null {
+    const counts = new Map<string, number>();
+    const login = author.toLowerCase();
+    for (const other of itemStore.query({ kinds: [...GITHUB_KINDS], source: 'github', limit: 1000 })) {
+      const filedBy = other.filing?.filedBy;
+      if (other.id === item.id || (filedBy !== 'user' && filedBy !== 'rule')) continue;
+      if (githubOf(other)?.author?.toLowerCase() !== login) continue;
+      const code = codeOf(other.filing?.projectId);
+      if (code) counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+    const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+    return sorted.length ? sorted.map(([code, n]) => `${code} (${n})`).join(', ') : null;
+  }
+
+  function githubFacts(item: Item, github: GitHubFiled): string {
+    const state =
+      github.kind === 'pull-request'
+        ? github.state === 'open' && github.draft
+          ? 'draft'
+          : github.state
+        : github.kind === 'github-issue'
+          ? github.state
+          : github.prerelease
+            ? 'pre-release'
+            : null;
+    const labels = github.kind === 'github-release' ? [] : github.labels.map((label) => label.name);
+    const milestone = github.kind === 'github-issue' ? github.milestone?.title : null;
+    const known = github.author ? authorsProjects(item, github.author) : null;
+    const body = github.kind === 'github-release' ? github.notes : github.body;
+    const linked = linkedProjects(item);
+    return [
+      `${githubName(github)}${state ? ` (${state})` : ''}`,
+      `Title: ${item.title}`,
+      `Repo: ${github.repo.owner}/${github.repo.name}`,
+      `Org: ${github.repo.owner}`,
+      ...(labels.length ? [`Labels: ${labels.join(', ')}`] : []),
+      ...(milestone ? [`Milestone: ${milestone}`] : []),
+      ...(github.author ? [`Author: ${github.author}`] : []),
+      ...(known ? [`Where the author’s other GitHub Items are filed: ${known}`] : []),
+      ...(body.trim()
+        ? [`${github.kind === 'github-release' ? 'Release notes' : 'Body'}: ${cut(body, MAX_DESCRIPTION)}`]
+        : []),
+      ...(linked.length ? [`Linked Items’ Projects: ${linked.join(', ')}`] : []),
+    ].join('\n');
   }
 
   function chatFacts(item: Item, chat: ChatDetail): string {
@@ -363,6 +474,8 @@ export function fileIntoProjectsJob(
     if (chat) return chatFacts(item, chat);
     const event = eventOf(item);
     if (event) return eventFacts(item, event);
+    const github = githubOf(item);
+    if (github) return githubFacts(item, github);
     const issue = issueOf(item);
     if (!issue) return `Title: ${item.title}`;
     const people = [
@@ -402,6 +515,14 @@ export function fileIntoProjectsJob(
       .join('\n');
   }
 
+  function labelOf(ref: string, item: Item): string {
+    if (chatOf(item)) return `${ref} · Teams Chat`;
+    if (eventOf(item)) return `${ref} · Calendar event`;
+    const github = githubOf(item);
+    if (github) return `${ref} · ${githubName(github)}`;
+    return `${ref} · Linear issue ${issueOf(item)?.identifier ?? ''}`.trim();
+  }
+
   return {
     job: FILE_INTO_PROJECTS,
     name: 'File into Projects',
@@ -412,7 +533,7 @@ export function fileIntoProjectsJob(
       action: FILE_INTO_PROJECTS,
       actionKind: 'organise',
       section: null,
-      hint: 'Linear issues, Teams Chats and calendar events no Rule files, into the Project they belong to',
+      hint: 'Linear issues, Teams Chats, calendar events and GitHub pull requests, issues and releases no Rule files, into the Project they belong to',
     },
     triggers: { 'items-arrived': true, idle: true },
 
@@ -444,7 +565,17 @@ export function fileIntoProjectsJob(
           asked.add(key);
           return true;
         });
-      const unfiled = [...issuesAndChats, ...events];
+      // GitHub pull requests, issues and releases, Unfiled: open ones, and others changed lately.
+      const github = itemStore
+        .query({
+          kinds: [...GITHUB_KINDS],
+          source: 'github',
+          projectId: null,
+          statuses: ['open', 'done'],
+          limit: 1000,
+        })
+        .filter(githubInScope);
+      const unfiled = [...issuesAndChats, ...events, ...github];
       const ordered = [
         ...unfiled.filter((item) => arrived.has(item.id)),
         ...unfiled.filter((item) => !arrived.has(item.id)),
@@ -495,11 +626,7 @@ export function fileIntoProjectsJob(
           });
         }),
         ...input.candidates.map(({ ref, item }) => ({
-          label: chatOf(item)
-            ? `${ref} · Teams Chat`
-            : eventOf(item)
-              ? `${ref} · Calendar event`
-              : `${ref} · Linear issue ${issueOf(item)?.identifier ?? ''}`.trim(),
+          label: labelOf(ref, item),
           from: item,
           text: factsOf(item),
         })),

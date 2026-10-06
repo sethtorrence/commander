@@ -29,6 +29,8 @@ export type GitHubWatchRecord = {
 
 export type GitHubWatchStore = {
   read(account: string): GitHubWatchRecord;
+  // Every Account's record, by Account.
+  list(): (GitHubWatchRecord & { account: string })[];
   // The first selection, from what the User worked in lately; never replaces one already made.
   startWith(account: string, watch: GitHubWatch): void;
   // The User's selection. `stop`: the repos it stops watching, whose Items are removed (as the
@@ -79,7 +81,15 @@ export function githubWatchIn(
     });
   };
 
-  return {
+  const store: GitHubWatchStore = {
+    list: () =>
+      db
+        .select({ account: table.account })
+        .from(table)
+        .orderBy(table.account)
+        .all()
+        .map(({ account }) => ({ account, ...store.read(account) })),
+
     read(account) {
       const found = row(account);
       // Anything unreadable (an older shape, say) reads as not there.
@@ -138,4 +148,5 @@ export function githubWatchIn(
       db.delete(table).where(eq(table.account, account)).run();
     },
   };
+  return store;
 }

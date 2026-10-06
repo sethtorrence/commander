@@ -9,7 +9,7 @@ const item = (kind: Item['kind'], status: Item['status'], filedBy: FiledBy = 'us
 });
 
 describe('a Project page’s numbers', () => {
-  it('counts open Todos, the Notes’ Blocks and the Teams Chats, by kind', () => {
+  it('counts open Todos, the Notes’ Blocks, the Teams Chats and open GitHub work, by kind', () => {
     expect(
       sectionCounts([
         item('todo', 'open'),
@@ -18,9 +18,16 @@ describe('a Project page’s numbers', () => {
         item('block', 'open'),
         item('email', 'open'),
         item('chat', 'open'),
+        // Open pull requests and issues; not merged ones, releases, or review requests (their pull
+        // request's shadow).
+        item('pull-request', 'open'),
+        item('github-issue', 'open'),
+        item('pull-request', 'done'),
+        item('github-release', 'done'),
+        item('review-request', 'open'),
       ]),
-    ).toEqual({ todos: 2, notes: 1, teams: 1 });
-    expect(sectionCounts([])).toEqual({ todos: 0, notes: 0, teams: 0 });
+    ).toEqual({ todos: 2, notes: 1, teams: 1, github: 2 });
+    expect(sectionCounts([])).toEqual({ todos: 0, notes: 0, teams: 0, github: 0 });
   });
 
   it('counts how its Items were filed: by a Rule, by Ares, by the User, or inherited', () => {
