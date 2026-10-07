@@ -19,6 +19,9 @@ export type SkillContext = {
   conversation?: { conversationId: string; turnId: number };
   // The User's message being answered, for an action's reason.
   asked?: string;
+  // Everything the User wrote in this Conversation up to that message, oldest first: where a change to
+  // Ares's own settings must find the words that asked for it (#197).
+  said?: readonly string[];
   // The Items handed to Ares for this answer, by the ref he names them by (I1, I2…).
   refs?: ReadonlyMap<string, string>;
   // What the call that chose this Skill read that the User didn't write: its outside Items, and the

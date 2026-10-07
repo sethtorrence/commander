@@ -39,6 +39,9 @@ export type InjectionWarningStore = {
   // and returns the entry, or null when the quote isn't in the Item's text, it was marked already
   // (or cleared by the User for these words), is the User's own, or doesn't exist.
   flag(itemId: string, quote: string): ActivityEntry | null;
+  // Whether an Item's own words (an email's body among them) hold a quote word for word, as `flag`
+  // reads them, whoever wrote it: where a request to change Ares's settings came from (#197).
+  quotes(itemId: string, quote: string): boolean;
   // The injection-warning entries recorded after an activity entry (all of them, from null), oldest
   // first: what the Update counts.
   since(after: number | null): ActivityEntry[];
@@ -198,6 +201,11 @@ export function injectionWarningsIn(
         .values(values)
         .onConflictDoUpdate({ target: injectionWarnings.itemId, set: values })
         .run();
+    },
+
+    quotes(itemId, quote) {
+      const item = readItem(itemId);
+      return !!item && quotedIn(allWords(item), quote);
     },
 
     flag(itemId, quote) {

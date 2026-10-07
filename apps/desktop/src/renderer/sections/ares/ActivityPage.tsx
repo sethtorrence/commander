@@ -27,6 +27,7 @@ import {
   bulkAcceptable,
   describeActivity,
   describeItemActions,
+  isSettingChange,
 } from './activity';
 import { openConversation } from './conversations';
 import { useAresActivity } from './use-ares-activity';
@@ -58,8 +59,9 @@ export function ActivityPage({
   const [filters, setFilters] = useState<AresActivityFilters>({});
   const state = useAresActivity(client, filters, shown, onAresActivity);
   const rows = state.rows ?? [];
+  // Changes to Ares's own settings (#197) are confirmed one at a time.
   const waiting = (kind: ActionKind) =>
-    rows.filter((row) => row.status === 'pending' && row.actionKind === kind);
+    rows.filter((row) => row.status === 'pending' && row.actionKind === kind && !isSettingChange(row));
 
   return (
     <SettingsGroup no="A1" title="Activity" note={`${pad(rows.length)} lines`}>
@@ -147,12 +149,13 @@ function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<type
   const pending = row.status === 'pending';
   const where = row.section ? AUTONOMY_SECTION_NAMES[row.section] : 'Everywhere';
   // Act for you and Delete are accepted one at a time, with everything they'll do in view.
-  const oneAtATime = !bulkAcceptable(row.actionKind);
+  const setting = isSettingChange(row);
+  const oneAtATime = !bulkAcceptable(row.actionKind) || setting;
   // What Ares wrote may link only to what the Items it was about say (AresText).
   const sources = [row.item?.title ?? '', row.cause?.item?.title ?? ''];
   return (
     <li
-      aria-label={`${row.name}: ${row.item?.title ?? 'an Item'}`}
+      aria-label={`${row.name}: ${setting ? (describeItemActions(row.itemActions, projectName)[0] ?? '') : (row.item?.title ?? 'an Item')}`}
       className={cn(
         'relative grid grid-cols-[minmax(0,1fr)_auto] gap-x-6 gap-y-1 border-b border-line2 py-2.5 pr-5 pl-13',
         pending && 'shadow-[inset_3px_0_0_var(--signal)]',
@@ -191,9 +194,12 @@ function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<type
             <AresText inline text={line} sources={sources} />
           </p>
         ))}
-        <p className="m-0 text-note leading-5 text-muted">
-          On <span className="text-text">{row.item?.title ?? 'an Item that has gone'}</span>
-        </p>
+        {/* A settings change only sits on today's Daily Note: it is about no Item. */}
+        {!setting && (
+          <p className="m-0 text-note leading-5 text-muted">
+            On <span className="text-text">{row.item?.title ?? 'an Item that has gone'}</span>
+          </p>
+        )}
       </div>
       <p className="m-0 min-w-0 text-note leading-5 text-text">
         <span className="text-muted">Why: </span>

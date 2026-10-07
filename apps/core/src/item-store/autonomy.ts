@@ -1,6 +1,7 @@
 // The gate's side of the Item store: the User's Autonomy settings, and Ares's proposals that the gate
-// kept (pending suggestions on their Items, and what he carried out). It shares the Item store's
-// database, so the Item store stays its only writer. The gate (../autonomy) decides; this stores.
+// kept (pending suggestions on their Items, and what he carried out), with the settings log of the
+// changes to his own settings the User confirmed (#197). It shares the Item store's database, so the
+// Item store stays its only writer. The gate (../autonomy) decides; this stores.
 import {
   type AutonomySettings,
   autonomySettings,
@@ -10,12 +11,23 @@ import {
   type ProposalRecord,
   type ProposalStatus,
   proposalQuery,
+  type SettingChange,
 } from '@commander/domain';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import * as schema from './schema';
 
 export type NewProposal = Omit<ProposalRecord, 'id' | 'at' | 'settledAt'>;
+
+// One line of the settings log: what a confirmed change set (`from`: the value just before), and when
+// it was undone, if it was.
+export type SettingChangeRecord = {
+  id: number;
+  at: number;
+  proposalId: number;
+  change: SettingChange;
+  undoneAt: number | null;
+};
 
 export type AutonomyStore = {
   // The saved settings; anything unreadable falls back to the defaults.
@@ -28,6 +40,12 @@ export type AutonomyStore = {
   proposal(proposalId: number): ProposalRecord | null;
   // Newest first.
   proposals(query?: ProposalQuery): ProposalRecord[];
+  // The settings log (#197): a change to Ares's settings that a proposal made, once, as it was made.
+  recordSettingChange(proposalId: number, change: SettingChange): SettingChangeRecord;
+  // The changes these proposals made, by proposal.
+  settingChanges(proposalIds: readonly number[]): Map<number, SettingChangeRecord>;
+  // Marks a proposal's change undone.
+  settingChangeUndone(proposalId: number): SettingChangeRecord;
 };
 
 type ProposalRow = typeof schema.proposals.$inferSelect;
@@ -49,7 +67,7 @@ export function openAutonomyStore(
   db: BetterSQLite3Database<typeof schema>,
   now: () => number,
 ): AutonomyStore {
-  const { autonomySettings: settingsTable, proposals } = schema;
+  const { autonomySettings: settingsTable, proposals, settingChanges } = schema;
 
   return {
     settings() {
@@ -124,6 +142,35 @@ export function openAutonomyStore(
         .limit(query.limit ?? 200)
         .all()
         .map(toProposal);
+    },
+
+    recordSettingChange(proposalId, change) {
+      return db
+        .insert(settingChanges)
+        .values({ at: now(), proposalId, change, undoneAt: null })
+        .returning()
+        .get();
+    },
+
+    settingChanges(proposalIds) {
+      if (!proposalIds.length) return new Map();
+      const rows = db
+        .select()
+        .from(settingChanges)
+        .where(inArray(settingChanges.proposalId, [...proposalIds]))
+        .all();
+      return new Map(rows.map((row) => [row.proposalId, row]));
+    },
+
+    settingChangeUndone(proposalId) {
+      const row = db
+        .update(settingChanges)
+        .set({ undoneAt: now() })
+        .where(eq(settingChanges.proposalId, proposalId))
+        .returning()
+        .get();
+      if (!row) throw new Error(`Proposal ${proposalId} changed no setting`);
+      return row;
     },
   };
 }

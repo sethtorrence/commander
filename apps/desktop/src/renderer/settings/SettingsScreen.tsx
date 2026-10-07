@@ -239,7 +239,7 @@ export function SettingsScreen({
             <AccountsPanel no="01" />
           </SettingsPageView>
           <SettingsPageView id="ares" page={page}>
-            <AresSettings no="01" usageNo="02" />
+            <AresSettings no="01" usageNo="02" shown={shown('ares')} />
           </SettingsPageView>
           <SettingsPageView id="autonomy" page={page}>
             <AutonomyPanel no="01" shown={shown('autonomy')} />
@@ -259,7 +259,7 @@ export function SettingsScreen({
             <BucketsSettings no="02" shown={shown('email')} />
           </SettingsPageView>
           <SettingsPageView id="calendar" page={page}>
-            <CalendarSettings no="01" />
+            <CalendarSettings no="01" shown={shown('calendar')} />
           </SettingsPageView>
           <SettingsPageView id="github" page={page}>
             <GitHubWatchPanel no="01" />
