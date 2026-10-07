@@ -18,6 +18,10 @@ import { updateSection } from './updates';
 // with every message as I1, in a data block of its own by where it came from (a Source's Item as
 // outside material, the User's own Todos and Blocks as theirs), and the pop-up can be expanded into
 // the Ares Section, where the Conversation carries on like any other.
+//
+// With action Skills (#196) an answer can also do things: each action goes to the gate under the
+// User's Autonomy settings, and the answer names the proposals, shown under it as cards (done, with
+// Undo, or waiting for the User to confirm with one key).
 
 const timestamp = z.number().int().nonnegative();
 const conversationId = z.string().min(1);
@@ -80,6 +84,9 @@ export const conversationTurn = z.object({
   updateId: z.number().int().positive().nullable(),
   // The Skills he used for this answer, in order, by name (one may run more than once).
   skills: z.array(z.string()),
+  // What his action Skills (#196) handed the gate for this answer, by proposal: each shows under it as
+  // a card, done (with Undo) or waiting for the User to confirm.
+  proposalIds: z.array(z.number().int().positive()),
 });
 export type ConversationTurn = z.infer<typeof conversationTurn>;
 

@@ -47,7 +47,12 @@ function AresSection() {
       <ActivityPage client={window.commander.autonomy} shown={active} onAresActivity={onAresActivity} />
       <FilingRecord client={window.commander.autonomy} shown={active} onAresActivity={onAresActivity} />
       <WhatAresKnows no="A3" client={window.commander.itemStore} shown={active} onRefresh={onMemoryChange} />
-      <Conversations client={window.commander.conversations} shown={active} onCoreMessage={onCoreMessage} />
+      <Conversations
+        client={window.commander.conversations}
+        autonomy={window.commander.autonomy}
+        shown={active}
+        onCoreMessage={onCoreMessage}
+      />
       <WhatAresCanDo client={window.commander.conversations} shown={active} />
       <FlaggedItems client={window.commander.itemStore} shown={active} onRefresh={onItemsChanged} />
     </SectionSheet>

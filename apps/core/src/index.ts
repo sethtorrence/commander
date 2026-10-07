@@ -28,7 +28,11 @@ import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
 import { setUpScheduler } from './scheduling';
 import { type SendLater, setUpSendLater } from './send-later';
+import { createFileSkill } from './skills/file';
 import { createFindSkill } from './skills/find';
+import { createLinearActionsSkill } from './skills/linear-actions';
+import { createManageTodosSkill } from './skills/manage-todos';
+import { createSnoozeSkill } from './skills/snooze';
 import { createSummariseTarget } from './skills/summarise';
 import { setUpSkipInbox } from './skip-inbox';
 import { setUpSnooze } from './snooze';
@@ -203,6 +207,8 @@ sync.engine.onSynced(({ itemIds }) => {
 // The gate every Ares action goes through. Test hooks (proposing from end-to-end tests) are on only
 // when the main process asks for them.
 const testHooks = process.argv.includes('--test-hooks');
+// Snooze's timer, once it is set up below.
+let snoozeChanged: (() => void) | undefined;
 const gate = openGate({
   itemStore,
   onChange: (itemIds, suggestionsOn) => {
@@ -218,6 +224,8 @@ const gate = openGate({
     updates?.sweep();
     // Mail Ares sorted into a Bucket that skips the inbox (#142). Read once the gate is set up.
     if (itemIds.length) queueMicrotask(() => skipInboxConsider(itemIds));
+    // A thread Ares snoozed (#196), or a snooze undone: the next one may be due sooner.
+    if (itemIds.length) snoozeChanged?.();
   },
 });
 
@@ -280,6 +288,23 @@ skills.register(
   }),
 );
 const summariseTarget = createSummariseTarget({ itemStore });
+// Ares's action Skills (#196): what the User tells him to do in a Conversation, each change a proposal
+// through the gate, under their Autonomy settings.
+skills.register(createManageTodosSkill({ itemStore, gate }));
+skills.register(createFileSkill({ itemStore, gate }));
+skills.register(createSnoozeSkill({ itemStore, gate }));
+skills.register(
+  createLinearActionsSkill({
+    itemStore,
+    gate,
+    me: (account) => sync.me(account),
+    linearAccounts: () =>
+      sync
+        .accounts()
+        .filter((account) => account.sources.includes('linear'))
+        .map((account) => account.account),
+  }),
+);
 
 // Ares's queue and the Update Skill. The main process reports the User's presence (powerMonitor);
 // the queued count and "You're here / away" go to the window as they change, and the machine going
@@ -402,6 +427,7 @@ sync.engine.onSynced((event) => {
 // Snoozed mail (#135) comes back at its time while Commander runs, and at start-up if its time passed
 // while Commander was closed. The end-to-end tests may move its clock on.
 const snooze = setUpSnooze({ store: itemStore, send: (message) => port.postMessage(message), testHooks });
+snoozeChanged = () => snooze.changed();
 
 port.on('message', ({ data }) => {
   if (accessTokens.settle(data)) return;

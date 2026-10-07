@@ -133,6 +133,10 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
     /Learn facts.*Ask works as Auto here/,
     /Draft replies/,
     /Learn writing style.*Ask works as Auto here/,
+    // What the User tells Ares to do in a Conversation (#196).
+    /Manage Todos/,
+    /File.*in a Conversation/,
+    /Snooze/,
     /Skip the inbox/,
     /Mirror Buckets.*Below Auto nothing is written/,
     /Block time for Todos/,
@@ -141,6 +145,7 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
     /Reply to invitations/,
     /Reply in Teams/,
     /Create events with guests/,
+    /Linear actions.*always asked first/,
   ]);
   await expect(grid.getByTestId('registered-action').nth(1)).toContainText('Ask works as Auto here');
   await expect(grid.getByTestId('registered-action').nth(2)).toContainText('Ask works as Auto here');

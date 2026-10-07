@@ -28,6 +28,7 @@ function pending(overrides: Partial<AresActivity> = {}): AresActivity {
     reason: 'You wrote “maybe book flights for the offsite” in your Daily Note.',
     causedBy: null,
     chained: false,
+    conversation: null,
     decision: 'ask',
     status: 'pending',
     settledAt: null,

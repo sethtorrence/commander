@@ -29,6 +29,42 @@ export function bulkAcceptable(kind: ActionKind): boolean {
 
 const KIND_NAMES: Partial<Record<ItemKind, string>> = { todo: 'Todo', block: 'Block', event: 'event' };
 
+const dueDay = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+const snoozeTime = new Intl.DateTimeFormat(undefined, {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+/** A due day (YYYY-MM-DD) as a line names it: "Fri 9 Oct". */
+function dueWords(day: string): string {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+  return dueDay.format(new Date(year, month - 1, date));
+}
+
+// What a change to one of a Source Item's synced fields does, where it can be told in words (#196):
+// a Linear issue's state and assignee, an email's Snooze.
+function fieldLine(field: string, value: unknown): string | null {
+  const named = value && typeof value === 'object' ? (value as { name?: unknown }).name : undefined;
+  switch (field) {
+    case 'state':
+      return typeof named === 'string' ? `Move it to ${named} in Linear` : null;
+    case 'assignee':
+      if (value === null) return 'Unassign it in Linear';
+      return typeof named === 'string' ? `Assign it to ${named} in Linear` : null;
+    case 'snooze': {
+      if (value === null) return 'Unsnooze it';
+      const until = (value as { until?: unknown }).until;
+      return typeof until === 'number' ? `Snooze the thread until ${snoozeTime.format(until)}` : null;
+    }
+    default:
+      return null;
+  }
+}
+
 // A reply to an invitation (#129), by the answer it gives: to that event, and to its whole series.
 const REPLIES: Record<string, [string, string]> = {
   accepted: ['Accept the invitation', 'Accept every event in the series'],
@@ -46,8 +82,23 @@ export function describeItemActions(
 ): string[] {
   const lines = actions.flatMap((action): string[] => {
     switch (action.type) {
-      case 'create':
-        return [`Add the ${KIND_NAMES[action.item.kind] ?? action.item.kind} “${action.item.title}”`];
+      case 'create': {
+        const detail = action.item.detail;
+        const due = detail?.kind === 'todo' && detail.dueOn ? `, due ${dueWords(detail.dueOn)}` : '';
+        const filed = action.item.filing
+          ? `, filed under ${projectName(action.item.filing.projectId) ?? action.item.filing.projectId}`
+          : '';
+        return [
+          `Add the ${KIND_NAMES[action.item.kind] ?? action.item.kind} “${action.item.title}”${due}${filed}`,
+        ];
+      }
+      case 'send-to-linear': {
+        // Send to Linear (#196): the new issue as Linear will have it.
+        const { team, title, assignee, state } = action.draft;
+        return [
+          `Send it to Linear as a new ${team.key} issue “${title}”, ${assignee ? `assigned to ${assignee.name}` : 'unassigned'}, in ${state.name}`,
+        ];
+      }
       case 'delete':
         return ['Delete it'];
       case 'create-event': {
@@ -64,9 +115,12 @@ export function describeItemActions(
           : ['Put a private Busy copy on your other calendar'];
       }
       case 'update': {
-        const { status, title, filing, people } = action.changes;
+        const { status, title, filing, people, detail } = action.changes;
+        // A Todo's due day (#196).
+        const due = detail?.kind === 'todo' ? detail.dueOn : undefined;
         return [
           ...(status ? [`Mark it ${status}`] : []),
+          ...(due ? [`Make it due ${dueWords(due)}`] : due === null ? ['Take its due day away'] : []),
           ...(title !== undefined ? [`Rename it “${title}”`] : []),
           ...(filing
             ? [`File it under ${projectName(filing.projectId) ?? filing.projectId}`]
@@ -82,7 +136,10 @@ export function describeItemActions(
         const sent = chatReply.safeParse(message);
         if (sent.success) return [`Send this reply in Teams: “${sent.data.text}”`];
         const reply = REPLIES[String(action.fields.response)];
-        if (!reply) return Object.keys(action.fields).map((field) => `Change its ${field}`);
+        if (!reply)
+          return Object.entries(action.fields).map(
+            ([field, value]) => fieldLine(field, value) ?? `Change its ${field}`,
+          );
         return [action.fields.seriesResponse ? reply[1] : reply[0]];
       }
       default:

@@ -27,11 +27,20 @@ export type RemovedConversation = {
 };
 
 // What may change on one of Ares's answers as he writes it: also what it rests on (#192), the Items
-// it links to, the Update it gave and the Skills he used.
+// it links to, the Update it gave and the Skills he used, and what his action Skills handed the gate
+// (#196).
 export type AnswerChanges = Partial<
   Pick<
     ConversationTurn,
-    'status' | 'text' | 'ownKnowledge' | 'problem' | 'endedAt' | 'links' | 'updateId' | 'skills'
+    | 'status'
+    | 'text'
+    | 'ownKnowledge'
+    | 'problem'
+    | 'endedAt'
+    | 'links'
+    | 'updateId'
+    | 'skills'
+    | 'proposalIds'
   >
 >;
 

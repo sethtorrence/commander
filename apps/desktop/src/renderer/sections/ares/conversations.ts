@@ -1,4 +1,5 @@
 import {
+  type AresActivity,
   type Conversation,
   type ConversationLink,
   type ConversationsRequest,
@@ -9,6 +10,7 @@ import {
   skillTitle,
 } from '@commander/domain';
 import type { AresTextRef } from '@commander/ui';
+import { requestReveal } from '../../frame/reveal';
 import { type OpenTarget, sectionOf } from '../../updates/updates';
 import { dayLabel, longDate, weekday } from '../notes/days';
 
@@ -55,7 +57,30 @@ const DOING: Record<string, string> = {
   find: 'Looking it up',
   update: 'Putting your Update together',
   summarise: 'Gathering what to sum up',
+  todos: 'Seeing to your Todos',
+  file: 'Filing',
+  snooze: 'Snoozing',
+  linear: 'Preparing it for Linear',
 };
+
+/** Where one of an answer's actions stands (#196), for its card. */
+export function actionStatus(row: Pick<AresActivity, 'status' | 'undoable' | 'entryIds'>): {
+  key: 'waiting' | 'done' | 'confirmed' | 'dismissed' | 'undone';
+  text: string;
+} {
+  switch (row.status) {
+    case 'pending':
+      return { key: 'waiting', text: 'Waiting for you' };
+    case 'dismissed':
+      return { key: 'dismissed', text: 'Dismissed' };
+    default: {
+      if (!row.undoable && row.entryIds.length) return { key: 'undone', text: 'Undone' };
+      return row.status === 'done'
+        ? { key: 'done', text: 'Done by Ares' }
+        : { key: 'confirmed', text: 'Confirmed by you' };
+    }
+  }
+}
 
 /** What Ares is doing before he writes, while a Skill runs: "Looking it up…". */
 export function doingOf(turn: Pick<ConversationTurn, 'status' | 'skills'>): string | null {
@@ -136,4 +161,9 @@ export function lastWritten(at: number, today: string): string {
   const day = new Date(at);
   const key = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
   return key === today ? time.format(day) : date.format(day);
+}
+
+/** Opens a Conversation in the Ares Section's Conversations, in view (an action's cause, #196). */
+export function openConversation(conversationId: string): void {
+  requestReveal(CONVERSATIONS_REVEAL, conversationId);
 }

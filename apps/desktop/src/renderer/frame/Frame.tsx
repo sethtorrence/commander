@@ -108,6 +108,7 @@ function FrameProviders({
             <WarningActionsProvider value={warnings}>
               <AresPopupHost
                 client={window.commander.conversations}
+                autonomy={window.commander.autonomy}
                 onCoreMessage={window.commander.onCoreMessage}
                 onExpand={onExpandConversation}
               >

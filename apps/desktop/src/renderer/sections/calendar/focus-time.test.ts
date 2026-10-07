@@ -37,6 +37,7 @@ function row(start: number, extra: Partial<AresActivity> = {}): AresActivity {
     reason: 'You’re free Thursday 9–11.',
     causedBy: null,
     chained: false,
+    conversation: null,
     decision: 'ask',
     status: 'pending',
     settledAt: null,

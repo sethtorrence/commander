@@ -423,7 +423,8 @@ describe('Ares choosing Skills in a Conversation', () => {
       }),
       { name: 'draft', description: 'Drafts.', inConversations: false },
     ]);
-    expect(CONVERSATION_SKILLS).toEqual(['update', 'find', 'summarise']);
+    // Those that look, then those that act (#196).
+    expect(CONVERSATION_SKILLS).toEqual(['update', 'find', 'summarise', 'todos', 'file', 'snooze', 'linear']);
   });
 });
 

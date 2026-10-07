@@ -5,6 +5,7 @@ import { domainsOf } from './email-rules';
 import type { Item } from './items';
 import type { ModelProvider, ModelSettings } from './models';
 import type { RuleDraft } from './rules';
+import { SNOOZE_FIELD } from './synced-fields';
 
 /*
   Ares sorts email into Buckets (#141, decisions #16, #19, #31): what the Bucket Rules miss, he sorts
@@ -40,6 +41,15 @@ export type BucketSuggestion = z.infer<typeof bucketSuggestion>;
 export const onlyBucketFields = (fields: Record<string, unknown>) => {
   const names = Object.keys(fields);
   return names.length > 0 && names.every((name) => name === BUCKET_FIELD);
+};
+
+/**
+ * Whether an `edit-fields` change touches only an email's own fields in Commander, its Bucket and its
+ * Snooze (#196), which never reach the Source: so Organise.
+ */
+export const onlyOwnEmailFields = (fields: Record<string, unknown>) => {
+  const names = Object.keys(fields);
+  return names.length > 0 && names.every((name) => name === BUCKET_FIELD || name === SNOOZE_FIELD);
 };
 
 // One of the User's answers to Ares's sorting: the email, his Bucket, and the User's (null: Unsorted).

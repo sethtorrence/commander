@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { eventTime } from './calendar';
 import { commanderEventDraft, meetingGuest } from './commander-events';
 import { activityEntry, causedBy, itemChanges, itemRef, linkType, newItem } from './items';
+import { linearIssueDraft } from './linear-send';
 
 // Autonomy settings: how far Ares may go on his own, per Action kind, with Section and per-action
 // overrides, under hard limits no setting can lift. Every Ares action goes through `decide`.
@@ -151,6 +152,8 @@ export const proposedItemAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('unlink'), from: stepTarget, linkType, to: stepTarget }),
   // An event Commander writes to a calendar (a focus block, a busy copy): at least Tidy your Sources.
   z.object({ type: z.literal('create-event'), event: commanderEventDraft }),
+  // A new Linear issue, as Send to Linear makes one (#196): seen by other people, so Act for you.
+  z.object({ type: z.literal('send-to-linear'), draft: linearIssueDraft }),
 ]);
 export type ProposedItemAction = z.input<typeof proposedItemAction>;
 
@@ -161,6 +164,14 @@ export function createdIn(detail: unknown): string[] {
   const { dailyNoteId, parentId, backedBy } = detail as Record<string, unknown>;
   return [dailyNoteId, parentId, backedBy].filter((id): id is string => typeof id === 'string');
 }
+
+// The Conversation an action came from (#196): the User told Ares to do it there, in the message his
+// answer `turnId` answers. Shown as its cause in Ares's activity log, and on a card in that answer.
+export const conversationCause = z.object({
+  conversationId: id,
+  turnId: z.number().int().positive(),
+});
+export type ConversationCause = z.infer<typeof conversationCause>;
 
 export const proposal = z.object({
   actionKind,
@@ -177,6 +188,8 @@ export const proposal = z.object({
   causedBy: causedBy.optional(),
   // Suggested for another Item because of outside content: always Ask, and shows its cause.
   chained: z.boolean().default(false),
+  // Asked for in a Conversation (#196).
+  conversation: conversationCause.optional(),
 });
 export type Proposal = z.input<typeof proposal>;
 
@@ -192,6 +205,7 @@ export const proposalRecord = proposal.extend({
   at: timestamp,
   causedBy: causedBy.nullable(),
   chained: z.boolean(),
+  conversation: conversationCause.nullable(),
   decision: z.enum(['ask', 'auto']),
   status: proposalStatus,
   settledAt: timestamp.nullable(),
@@ -201,6 +215,8 @@ export const proposalRecord = proposal.extend({
 export type ProposalRecord = z.infer<typeof proposalRecord>;
 
 export const proposalQuery = z.object({
+  // Only these proposals (the actions one of Ares's answers took or prepared, #196).
+  ids: z.array(z.number().int().positive()).max(100).optional(),
   itemId: id.optional(),
   // Only one registered action's proposals.
   action: z.string().min(1).optional(),
@@ -220,6 +236,8 @@ export const aresActivity = proposalRecord.extend({
   name: z.string(),
   item: itemRef.nullable(),
   cause: z.object({ item: itemRef.nullable(), entry: activityEntry.nullable() }).nullable(),
+  // The Conversation it was asked for in, with its name (null once it is deleted).
+  conversation: conversationCause.extend({ title: z.string().nullable() }).nullable(),
   undoable: z.boolean(),
 });
 export type AresActivity = z.infer<typeof aresActivity>;

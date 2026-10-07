@@ -3,8 +3,11 @@
 // (which checks the input against what the Skill needs), and what it found comes back to him for the
 // next step or his answer. This file is what the Conversation knows of Skills: which it offers (the
 // ones whose result it can hand him), how each result becomes material, how his choice is read, and
-// what he says plainly when he couldn't finish.
+// what he says plainly when he couldn't finish. Action Skills (#196) are offered the same way: what
+// they hand back is Commander's note on what came of each change, and the proposals, kept on the
+// answer and shown under it as cards.
 import {
+  ACTION_SKILLS,
   type ConversationLink,
   FIND_SKILL,
   type Item,
@@ -29,12 +32,14 @@ export const SKILL_STEPS = 3;
 // The most Items one answer is handed, however many steps found them.
 export const MAX_HANDED = 30;
 
-// The Skills a Conversation can use, in the order he is told of them. The rest (Draft) are used where
-// they live until a Conversation can hand him what they make.
+// The Skills a Conversation can use, in the order he is told of them: those that look, then those
+// that act (#196). The rest (Draft) are used where they live until a Conversation can hand him what
+// they make.
 export const CONVERSATION_SKILLS: readonly string[] = [
   UPDATE_SKILL.name,
   FIND_SKILL.name,
   SUMMARISE_SKILL.name,
+  ...ACTION_SKILLS.map((skill) => skill.name),
 ];
 
 /** The Skills the registry has that a Conversation can use. */
@@ -130,6 +135,8 @@ export type Gathered = {
   notes: string[];
   update: UpdateView | null | undefined;
   skills: string[];
+  // What his action Skills handed the gate, by proposal, in order (#196).
+  proposalIds: number[];
 };
 
 export const nothingGathered = (): Gathered => ({
@@ -138,7 +145,12 @@ export const nothingGathered = (): Gathered => ({
   notes: [],
   update: undefined,
   skills: [],
+  proposalIds: [],
 });
+
+/** The Items handed out for this answer so far, by ref: what an action Skill may name. */
+export const handedRefs = (gathered: Gathered): Map<string, string> =>
+  new Map([...gathered.items].map(([ref, { item }]) => [ref, item.id]));
 
 /** Adds what a Skill found, giving each Item not handed out before the next ref. */
 export function gather(into: Gathered, skill: string, findings: Findings): void {
@@ -152,10 +164,15 @@ export function gather(into: Gathered, skill: string, findings: Findings): void 
   }
   into.more.push(...findings.more);
   if (findings.update !== undefined) into.update = findings.update;
+  for (const proposalId of findings.proposalIds ?? [])
+    if (!into.proposalIds.includes(proposalId)) into.proposalIds.push(proposalId);
 }
 
 export const gatheredAnything = (gathered: Gathered) =>
-  gathered.items.size > 0 || gathered.more.length > 0 || gathered.update !== undefined;
+  gathered.items.size > 0 ||
+  gathered.more.length > 0 ||
+  gathered.update !== undefined ||
+  gathered.proposalIds.length > 0;
 
 /**
  * The material for his next step or answer: Commander's notes on what each Skill did (Commander's

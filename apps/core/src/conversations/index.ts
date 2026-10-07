@@ -19,6 +19,12 @@
 //   the next call. Asking for more steps than that, or a Skill failing, has Commander say plainly what
 //   he couldn't finish, with whatever the material does show after it. An Update he gives shows in
 //   the Conversation with its lines and actions (`updateId`).
+// - Acting (#196): his action Skills (Manage Todos, File, Snooze, Linear actions) hand the gate
+//   proposals, under the User's Autonomy settings, with this Conversation as their cause. Commander
+//   tells each the refs handed out so far and what the call that chose it read from outside, so an
+//   action following from outside material is chained (../skills/act.ts). The proposals are kept on
+//   the answer (`proposalIds`) and show under it as cards: done, with Undo, or waiting for the User to
+//   confirm with one key. Accepting one never starts anything further.
 // - Links: every Item handed to him has a ref (I1, I2…) for this answer; his answer names the ones
 //   its claims rest on, which become its links (`links`), each opening its Item in its Section. A ref
 //   he wasn't handed is taken out of his text.
@@ -74,6 +80,7 @@ import {
   gather,
   gatheredAnything,
   handedLinks,
+  handedRefs,
   linksIn,
   materialOf,
   nothingGathered,
@@ -271,7 +278,10 @@ export function setUpConversations(options: ConversationsOptions): Conversations
       skills: [...gathered.skills],
       links: handedLinks(gathered),
       updateId: gathered.update?.id ?? null,
+      proposalIds: [...gathered.proposalIds],
     });
+    // What the User asked, for an action's reason.
+    const asked = view?.turns.find((turn) => turn.id === replyTo)?.text;
     entry.partial = () => soFar().text;
     try {
       if (!view) throw new Error('That Conversation is no longer in Commander');
@@ -332,7 +342,15 @@ export function setUpConversations(options: ConversationsOptions): Conversations
         changed(store.saveAnswer(turnId, { ...resting(), skills: [...gathered.skills, skill] }));
         let output: unknown;
         try {
-          output = await (options.skills as SkillRegistry).run(skill, input);
+          output = await (options.skills as SkillRegistry).run(skill, input, {
+            conversation: { conversationId, turnId },
+            ...(asked !== undefined && { asked }),
+            refs: handedRefs(gathered),
+            read: {
+              outside: prompt.outside.map((block) => block.itemId),
+              background: prompt.background?.itemIds ?? null,
+            },
+          });
           if (controller.signal.aborted) throw new ModelError('cancelled', 'Stopped.');
           gather(gathered, skill, findingsOf(skill, output, options.item ?? (() => null)));
         } catch (error) {

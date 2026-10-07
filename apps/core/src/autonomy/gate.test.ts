@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ActionContext, Project, Proposal, RegisteredAction } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { deliver } from '../agent/fixtures/emails';
 import { type ItemStore, openItemStore } from '../item-store';
 import { type Gate, openGate } from './gate';
 
@@ -775,5 +776,101 @@ describe('proposals that change synced fields (an invitation’s answer, #129)',
     const organising = decline({ actionKind: 'organise', action: 'suggest-todos', section: 'notes' });
     expect(() => gate.propose(organising)).toThrow(/changes an Item at its Source/);
     expect(answerOf(invitation)).toBe('needs-action');
+  });
+});
+
+describe('actions asked for in a Conversation (#196)', () => {
+  const SNOOZE: RegisteredAction = { action: 'conversation-snooze', actionKind: 'organise', name: 'Snooze' };
+  const LINEAR: RegisteredAction = {
+    action: 'conversation-linear',
+    actionKind: 'act-for-you',
+    name: 'Linear actions',
+  };
+  const until = Date.UTC(2026, 9, 5, 8);
+  let mail: string;
+  let todo: string;
+
+  beforeEach(() => {
+    gate.registerAction(SNOOZE);
+    gate.registerAction(LINEAR);
+    deliver(store, clock, [{ id: 'm2' }]);
+    mail = store.query({ kinds: ['email'] }).find((item) => item.externalId === 'm2')?.id as string;
+    todo = created(
+      store.record(
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title: 'Write the runbook',
+            detail: { kind: 'todo', origin: 'manual', dueOn: null, backedBy: null },
+          },
+        },
+        user,
+      ),
+    );
+  });
+
+  const snooze = (fields: Record<string, unknown>): Proposal => ({
+    actionKind: 'organise',
+    action: SNOOZE.action,
+    section: 'email',
+    itemId: mail,
+    itemActions: [{ type: 'edit-fields', itemId: mail, fields }],
+    confidence: 1,
+    reason: 'You asked in a Conversation: “Snooze this until Monday”',
+  });
+
+  it('let Organise snooze an email (Commander’s own field), and nothing else of it', () => {
+    const outcome = gate.propose(snooze({ snooze: { until, returned: false } }));
+    expect(outcome.decision).toBe('auto');
+    const detail = store.get(mail)?.item.detail;
+    expect(detail?.kind === 'email' && detail.snooze).toEqual({ until, returned: false });
+    expect(store.outgoing.forItem(mail)).toEqual([]);
+    expect(() => gate.propose(snooze({ snooze: { until, returned: false }, read: true }))).toThrow(
+      /changes an Item at its Source/,
+    );
+  });
+
+  it('make a Linear issue only as Act for you', () => {
+    const send = (actionKind: 'organise' | 'act-for-you', action: string): Proposal => ({
+      actionKind,
+      action,
+      section: 'linear',
+      itemId: todo,
+      itemActions: [
+        {
+          type: 'send-to-linear',
+          draft: {
+            from: todo,
+            account: 'linear:org',
+            team: { id: 'team-eng', key: 'ENG', name: 'Engineering' },
+            title: 'Write the runbook',
+            assignee: null,
+            state: { id: 's', name: 'Todo', type: 'unstarted', color: '#e2e2e2' },
+          },
+        },
+      ],
+      confidence: 1,
+      reason: 'You asked in a Conversation',
+    });
+    expect(() => gate.propose(send('organise', 'suggest-todos'))).toThrow(/makes a Linear issue/);
+    expect(gate.propose(send('act-for-you', LINEAR.action)).decision).toBe('ask');
+  });
+
+  it('keep the Conversation they came from, named on Ares’s activity, and are found by id', () => {
+    const { conversation } = store.conversations.create('2026-10-01');
+    const asked = store.conversations.addUserTurn(conversation.id, 'Snooze this until Monday');
+    const answer = store.conversations.startAnswer(conversation.id, asked.id, 'streaming');
+    const cause = { conversationId: conversation.id, turnId: answer.id };
+    const outcome = gate.propose({ ...snooze({ snooze: { until, returned: false } }), conversation: cause });
+    const id = outcome.decision === 'auto' ? outcome.done.id : 0;
+    expect(store.autonomy.proposal(id)?.conversation).toEqual(cause);
+    gate.propose(suggestTodo());
+    expect(gate.activity({ ids: [id] })).toMatchObject([
+      { id, conversation: { ...cause, title: 'Snooze this until Monday' }, undoable: true },
+    ]);
+    // Deleting the Conversation keeps what was done from it.
+    store.conversations.remove(conversation.id);
+    expect(gate.activity({ ids: [id] })[0]?.conversation).toEqual({ ...cause, title: null });
   });
 });
