@@ -10,3 +10,6 @@ allowBuilds:
   # onnxruntime-node (search by meaning, #73) ships its CPU binaries (Node-API, so they load in Node and
   # Electron alike) in the package; its install script only fetches the optional CUDA ones.
   onnxruntime-node: false
+  # electron-builder (packaging the installed app, #208) depends on the Windows installer builder; its
+  # install script only matters on Windows.
+  electron-winstaller: false

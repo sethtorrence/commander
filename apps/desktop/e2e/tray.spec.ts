@@ -1,16 +1,14 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { type ElectronApplication, expect, type Page, test } from '@playwright/test';
-import { openSettings } from './frame';
-import { launchCommander } from './launch-commander';
+import { openSettings, tab } from './frame';
+import { commanderExecutable, launchCommander, packagedApp } from './launch-commander';
 
 // Commander is always there: closing the window hides it to the tray, the Core keeps running,
 // and commander-show (SIGUSR1) or a second launch brings the window back.
 
-const electronBinary = createRequire(import.meta.url)('electron') as string;
 const commanderShow = resolve(import.meta.dirname, '../bin/commander-show');
 
 const windows = (app: ElectronApplication) =>
@@ -96,7 +94,7 @@ test('a second launch shows the running window instead of starting another Comma
   await closeWindow(app);
   await expect.poll(() => windows(app)).toEqual([false]);
 
-  const second = spawn(electronBinary, commander.args, { cwd: resolve(import.meta.dirname, '..') });
+  const second = spawn(commanderExecutable, commander.args, { cwd: resolve(import.meta.dirname, '..') });
   const exitCode = await new Promise((done) => second.on('exit', done));
   expect(exitCode).toBe(0);
 
@@ -126,6 +124,39 @@ test('Quit stops the Core cleanly and removes the commander-show pid file', asyn
   rmSync(commander.userDataDir, { recursive: true, force: true });
 });
 
+test('SIGTERM, how `pnpm install:local` asks Commander to quit, is the tray’s Quit: typing is saved first', async () => {
+  test.skip(process.platform !== 'linux', 'reads /proc');
+  const commander = await launchCommander();
+  const { app } = commander;
+  const page = await commander.window();
+  await page.evaluate(() =>
+    window.commander.itemStore({ op: 'save-daily-template', template: { blocks: [] } }),
+  );
+  await tab(page, 'Notes').click();
+  // Typed just before the signal, inside the Daily Note's pause before saving.
+  await page.locator('[data-testid=daily-note]').first().locator('[data-block-text]').first().click();
+  await page.keyboard.type('Typed just before the update');
+  const mainPid = app.process().pid as number;
+  const core = corePid(mainPid);
+  expect(core).toBeDefined();
+
+  const exited = new Promise((done) => app.process().once('exit', done));
+  process.kill(mainPid, 'SIGTERM');
+  await exited;
+  expect(alive(core as number)).toBe(false);
+  expect(existsSync(join(commander.userDataDir, 'commander.pid'))).toBe(false);
+  expect(existsSync(join(commander.userDataDir, 'commander.db-wal'))).toBe(false);
+
+  const again = await launchCommander({ userDataDir: commander.userDataDir });
+  const titles = await (await again.window()).evaluate(() =>
+    window.commander
+      .itemStore({ op: 'query', query: { kinds: ['block'] } })
+      .then((items) => items.map((item) => item.title)),
+  );
+  expect(titles).toContain('Typed just before the update');
+  await again.close();
+});
+
 test('Start at login is off by default and toggles an autostart entry', async () => {
   test.skip(process.platform !== 'linux', 'XDG autostart is for Linux');
   const config = mkdtempSync(join(tmpdir(), 'commander-e2e-config-'));
@@ -142,6 +173,8 @@ test('Start at login is off by default and toggles an autostart entry', async ()
   await toggle.click();
   await expect(toggle).toBeChecked();
   expect(readFileSync(entry, 'utf8')).toMatch(/^Exec=.* --hidden$/m);
+  // An installed Commander starts itself at login, not Electron with a checkout's folder.
+  if (packagedApp) expect(readFileSync(entry, 'utf8')).toContain(`\nExec=${packagedApp} --hidden\n`);
 
   await toggle.click();
   await expect(toggle).not.toBeChecked();

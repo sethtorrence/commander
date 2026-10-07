@@ -1,5 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "jsx": "react-jsx", "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["node"] },
-  "include": ["src", "e2e", "electron.vite.config.ts", "playwright.config.ts"]
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    // The installer (scripts/install.ts) runs in Node directly, so it and what it imports name their files.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src", "e2e", "scripts", "electron.vite.config.ts", "playwright.config.ts"]
 }

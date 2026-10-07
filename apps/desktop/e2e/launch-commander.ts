@@ -1,7 +1,8 @@
 import { execFile } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { type ElectronApplication, _electron as electron, expect, type Page } from '@playwright/test';
 import { configProvider } from '../src/main/summon';
@@ -15,10 +16,18 @@ import { configProvider } from '../src/main/summon';
 // is at the machine (COMMANDER_TEST_PRESENCE) rather than reading the machine's real idle time.
 // Search by meaning runs on a stand-in model (COMMANDER_TEST_EMBEDDINGS), so no test downloads the
 // real one.
+//
+// COMMANDER_E2E_APP runs the tests against a packaged Commander instead (#208): the path to its
+// executable, e.g. dist/linux-unpacked/commander from `pnpm package`.
+
+export const packagedApp = process.env.COMMANDER_E2E_APP ? resolve(process.env.COMMANDER_E2E_APP) : null;
+// What a test runs to start Commander itself (a second launch): the packaged app, or Electron.
+export const commanderExecutable = packagedApp ?? (createRequire(import.meta.url)('electron') as string);
+
 export type LaunchedCommander = {
   app: ElectronApplication;
   userDataDir: string;
-  // The Electron arguments used, for launching a second instance on the same folder.
+  // The arguments used, for launching a second instance on the same folder (with commanderExecutable).
   args: string[];
   // The window once it is shown, at the size Commander asks for (see placeWindow). Tests use it
   // rather than app.firstWindow(), unless showing or hiding the window is what they test.
@@ -31,9 +40,11 @@ export async function launchCommander(
   options: { userDataDir?: string; args?: string[]; env?: Record<string, string> } = {},
 ): Promise<LaunchedCommander> {
   const userDataDir = options.userDataDir ?? mkdtempSync(join(tmpdir(), 'commander-e2e-'));
-  const args = ['.', `--user-data-dir=${userDataDir}`, ...(options.args ?? [])];
+  // A packaged app is its own app; Electron is given this one's folder.
+  const args = [...(packagedApp ? [] : ['.']), `--user-data-dir=${userDataDir}`, ...(options.args ?? [])];
   await keepTestWindowsOnTheirOwnWorkspace();
   const app = await electron.launch({
+    ...(packagedApp ? { executablePath: packagedApp } : {}),
     args,
     env: {
       ...(process.env as Record<string, string>),

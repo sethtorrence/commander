@@ -100,3 +100,12 @@ export function stopCoreOnQuit(
     });
   });
 }
+
+// `pnpm install:local` asks a running Commander to quit with SIGTERM before it replaces it
+// (scripts/install.ts). That is the tray's Quit: it saves first, and may ask while the disk is full.
+export function quitWhenAsked(
+  signals: { on(event: 'SIGTERM', listener: () => void): unknown },
+  quit: () => void,
+) {
+  signals.on('SIGTERM', quit);
+}
