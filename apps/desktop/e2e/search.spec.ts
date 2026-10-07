@@ -147,8 +147,14 @@ test('the palette jumps to Sections, runs commands, and / searches the open Sect
   await expect(paletteInput(window)).toHaveValue('in:todos ');
   await expect(palette(window).getByText('Find', { exact: true })).toBeVisible();
   await paletteInput(window).pressSequentially('re');
-  await expect(palette(window).getByRole('group')).toHaveCount(1);
+  // Only Todos are found, then the Ask Ares row, always last (#195): no Jump, Commands or
+  // Conversations.
   await expect(palette(window).getByRole('group', { name: 'Todos' })).toContainText('Renew the passport');
+  const groups = palette(window).getByRole('group');
+  await expect(groups).toHaveCount(2);
+  await expect(groups.nth(0)).toHaveAttribute('aria-label', 'Todos');
+  await expect(groups.nth(1)).toHaveAttribute('aria-label', 'Ares');
+  await expect(groups.nth(1)).toContainText('Ask Ares: “re”');
   await window.keyboard.press('Escape');
 
   // `/` is just typing in a field.
