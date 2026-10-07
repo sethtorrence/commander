@@ -91,7 +91,7 @@ export const searchByMeaningStatus = z.object({
   // While downloading.
   receivedBytes: count,
   totalBytes: count,
-  // Items and memories embedded by the model, out of all there are to embed.
+  // Items, memories and Conversation turns (#195) embedded by the model, out of all there are to embed.
   embedded: count,
   total: count,
   // Why it failed (it tries again later), or null.

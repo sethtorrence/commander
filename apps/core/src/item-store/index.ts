@@ -456,9 +456,9 @@ export type ItemStore = {
   refusals: RefusalStore;
   // Global search over the live Items, kept current by every write here.
   search: Search;
-  // Search by meaning (#73): the Items and memories whose embedding by a model is missing or out of
-  // date, and saving the embeddings the Core's meaning side made for them, written here like every
-  // other change. `onPending` hears (after the write) that something new waits to be embedded.
+  // Search by meaning (#73): the Items, memories and Conversation turns (#195) whose embedding by a
+  // model is missing or out of date, and saving the embeddings the Core's meaning side made for them,
+  // written here like every other change. `onPending` hears (after the write) that something new waits to be embedded.
   meaning: {
     pending(model: string, limit: number): MeaningWork[];
     save(model: string, done: readonly EmbeddedWork[]): void;
@@ -2884,9 +2884,15 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         );
       },
       progress(model) {
-        const items = search.meaning.progress(model);
-        const memories = memory.meaning.progress(model);
-        return { embedded: items.embedded + memories.embedded, total: items.total + memories.total };
+        const counts = [
+          search.meaning.progress(model),
+          memory.meaning.progress(model),
+          search.conversations.progress(model),
+        ];
+        return {
+          embedded: counts.reduce((sum, each) => sum + each.embedded, 0),
+          total: counts.reduce((sum, each) => sum + each.total, 0),
+        };
       },
       onPending(listener) {
         meaningListeners.add(listener);

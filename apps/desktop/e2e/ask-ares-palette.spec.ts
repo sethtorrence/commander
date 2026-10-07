@@ -127,20 +127,21 @@ test('asks Ares from Ctrl+K, finds the Conversation again by words and meaning, 
   await expect(turns.nth(1)).toHaveAttribute('data-found', 'true');
   await expect(turns.nth(0)).not.toHaveAttribute('data-found', 'true');
 
-  // Found by meaning, sharing no words with it, once his turns are embedded in the background.
+  // Found by meaning, sharing no words with it, once all four turns are embedded in the background.
+  // Waiting reads where search by meaning stands rather than searching: every query holds the
+  // background pass back a little (the palette goes first), so asking again and again would starve it.
+  // Under the stand-in model both turns are well within its floor (conversations.test.ts checks).
   await expect
     .poll(
       () =>
         window.evaluate(async () => {
-          const reply = await globalThis.window.commander.models({
-            op: 'search-meaning',
-            query: { text: 'rate limiter' },
-          });
-          return reply.ok ? (reply.result?.conversations ?? []).map((each) => each.title) : [];
+          const reply = await globalThis.window.commander.models({ op: 'meaning-status' });
+          const { embedded, total } = reply.ok ? reply.result : { embedded: 0, total: 0 };
+          return total >= 4 && embedded === total;
         }),
       { timeout: 20_000 },
     )
-    .toContain('Should we throttle the bursts?');
+    .toBe(true);
   await openPalette(window, 'rate limiter');
   const related = palette(window)
     .getByRole('group', { name: 'Conversations' })

@@ -5,6 +5,7 @@ import type { ConversationLink } from '@commander/domain';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ItemStore, openItemStore } from '../item-store';
+import { FAKE_MODEL, fakeEmbedding } from '../meaning/fake';
 import { matchingLine } from './conversation-index';
 import type { QueryVector } from './meaning-index';
 
@@ -185,6 +186,23 @@ describe('Conversations found by meaning', () => {
     store.conversations.saveAnswer(answer.id, { text: 'Your flights are booked' });
     expect(store.meaning.pending(MODEL, 10).map((work) => work.text)).toEqual(['Your flights are booked']);
     expect(found('trip', near(TRAVEL))).toMatchObject([{ turnId: answer.id }]);
+  });
+
+  it('counts the turns in how far search by meaning has got', () => {
+    talk('How do we throttle bursts on sync?', 'Back off on 429s.');
+    expect(store.meaning.progress(MODEL)).toEqual({ embedded: 0, total: 2 });
+    embedAll({ throttle: LIMITS, '429': LIMITS });
+    expect(store.meaning.progress(MODEL)).toEqual({ embedded: 2, total: 2 });
+  });
+
+  it('finds the end-to-end test’s Conversation clearly within the stand-in model’s floor', () => {
+    // ask-ares-palette.spec.ts asks "rate limiter" of these turns with the stand-in embeddings.
+    const query = fakeEmbedding('rate limiter');
+    const similarity = (text: string) =>
+      fakeEmbedding(text).reduce((sum, value, index) => sum + value * (query[index] as number), 0);
+    for (const turn of ['Should we throttle the bursts?', 'Back off when the rate limit bursts.']) {
+      expect(similarity(turn)).toBeGreaterThan(FAKE_MODEL.minSimilarity + 0.2);
+    }
   });
 });
 

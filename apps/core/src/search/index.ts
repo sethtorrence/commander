@@ -49,7 +49,7 @@ export type SearchIndex = Search & {
   meaning: Pick<MeaningIndex, 'pending' | 'save' | 'progress'>;
   // The Conversation store's hooks (put each turn written, drop a deleted Conversation's turns), and
   // what of Conversations waits to be embedded.
-  conversations: Pick<ConversationIndex, 'put' | 'drop' | 'pending' | 'save'>;
+  conversations: Pick<ConversationIndex, 'put' | 'drop' | 'pending' | 'save' | 'progress'>;
 };
 
 export type SearchSources = {
@@ -204,6 +204,7 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
       drop: conversations.drop,
       pending: conversations.pending,
       save: conversations.save,
+      progress: conversations.progress,
     },
 
     query(input, vector) {

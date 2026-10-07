@@ -37,6 +37,6 @@ export function meaningStatusLine(status: SearchByMeaningStatus): string {
     case 'ready':
       return status.embedded < status.total
         ? `Ready. Indexing in the background: ${formatTokens(status.embedded)} of ${formatTokens(status.total)}`
-        : `Ready. All ${formatTokens(status.total)} Items and memories are indexed`;
+        : `Ready. All ${formatTokens(status.total)} Items, memories and Conversation turns are indexed`;
   }
 }

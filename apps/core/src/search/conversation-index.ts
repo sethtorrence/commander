@@ -1,6 +1,6 @@
 import { type ConversationTurn, type FoundBy, LINK_MARKER } from '@commander/domain';
 import type Database from 'better-sqlite3';
-import type { EmbeddedWork, MeaningWork, QueryVector } from './meaning-index';
+import type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector } from './meaning-index';
 import { fuseRanked } from './retriever';
 import { blobOf, MEANING_HITS, nearEnough, textHash, vectorFunctions } from './vectors';
 import { wordQuery } from './words';
@@ -63,6 +63,8 @@ export type ConversationIndex = {
   // Turns whose embedding by this model is missing or out of date, newest first (keys: turn ids).
   pending(model: string, limit: number): MeaningWork[];
   save(model: string, done: readonly EmbeddedWork[]): void;
+  // How many indexed turns this model has embedded, of all there are.
+  progress(model: string): MeaningProgress;
 };
 
 /**
@@ -222,6 +224,11 @@ export function openConversationIndex(
        WHERE v.turn_id IS NULL OR v.stale = 1 OR v.model != @model
        ORDER BY w.rowid DESC LIMIT @limit`,
     ),
+    total: sqlite.prepare<[], { count: number }>('SELECT count(*) AS count FROM conversation_words'),
+    embedded: sqlite.prepare<[string], { count: number }>(
+      `SELECT count(*) AS count FROM conversation_vectors v JOIN conversation_words w ON w.rowid = v.turn_id
+       WHERE v.model = ? AND v.stale = 0`,
+    ),
     putVector: sqlite.prepare<{
       turnId: number;
       model: string;
@@ -328,5 +335,10 @@ export function openConversationIndex(
         .map((row) => ({ key: String(row.turnId), text: meaningText(row.text) })),
 
     save: (model, done) => save(model, done),
+
+    progress: (model) => ({
+      embedded: statements.embedded.get(model)?.count ?? 0,
+      total: statements.total.get()?.count ?? 0,
+    }),
   };
 }

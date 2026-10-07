@@ -34,7 +34,9 @@ test('the model gets ready in Settings → Ares, and Ctrl+K finds by meaning, ma
   await addTodos(window, ['Throttle bursts on /sync', 'Rate the new coffee place', 'Renew the passport']);
 
   await openSettings(window, 'Ares');
-  await expect(status(window)).toHaveText('Ready. All 3 Items and memories are indexed', { timeout: 20_000 });
+  await expect(status(window)).toHaveText('Ready. All 3 Items, memories and Conversation turns are indexed', {
+    timeout: 20_000,
+  });
   await expect(choice(window, 'On')).toHaveAttribute('aria-checked', 'true');
 
   await window.keyboard.press('Control+k');
