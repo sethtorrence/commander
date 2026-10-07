@@ -1,4 +1,4 @@
-import { attachmentMarkdown, type BlockLinkTarget, type Project, reachedNoCore } from '@commander/domain';
+import { attachmentMarkdown, type BlockLinkTarget, type Project, tryAgainLater } from '@commander/domain';
 import { insertLink, type LinkQuery, removeLinkAt } from '../../links/block-text';
 import { fileBlock, withTags } from './block-projects';
 import { enterTodo, makeTodo, removeTodo, tickTodo, typeTodoMark } from './block-todos';
@@ -32,8 +32,9 @@ import {
   - Typing is held back until the User pauses (typingPauseMs), then saved as one change, so the
     activity log gets one entry per pause rather than per keystroke. Every other edit flushes it
     first, and `flush()` saves whatever is held (Commander calls it before quitting).
-  - While Commander's core is down (#200), edits still apply here and their saves wait, in order,
-    until it is back (Commander calls `flush()` then too).
+  - While Commander's core is down (#200), or the disk is full (#203), edits still apply here and
+    their saves wait, in order, until it is back or there is space (Commander calls `flush()` then
+    too).
   - Each edit, and each pause in typing, is one step to undo. Undo puts the outline back here and
     asks the Item store to undo that step's activity entries; redo undoes those undos.
   - A Block can be a Todo (block-todos.ts): `[] ` typed at its start, or Ctrl+Enter, makes one;
@@ -202,16 +203,16 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     set({ days: state.days.map((d) => (d.day === day ? { ...d, ...change } : d)) });
 
   // Runs tasks against the Item store one at a time, in order. A failure is reported, and the days on
-  // screen are reloaded so they match what was saved. While Commander's core is down (#200) tasks are
-  // held instead, in order, and run once it is back (the next edit, or `flush()`, which Commander
-  // calls then).
+  // screen are reloaded so they match what was saved. While Commander's core is down (#200), or the
+  // disk is full (#203), tasks are held instead, in order, and run once it is back or there is space
+  // (the next edit, or `flush()`, which Commander calls then).
   let held: (() => Promise<void>)[] = [];
   const runHeld = async () => {
     while (held[0]) {
       try {
         await held[0]();
       } catch (error) {
-        if (reachedNoCore(error)) return;
+        if (tryAgainLater(error)) return;
         held = [];
         throw error;
       }

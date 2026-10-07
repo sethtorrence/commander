@@ -2,7 +2,12 @@
 // utilityProcess and talks to the main process only through validated messages.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { type CoreAccountRefused, type CoreMessage, createSkillRegistry } from '@commander/domain';
+import {
+  type CoreAccountRefused,
+  type CoreDatabaseHealth,
+  type CoreMessage,
+  createSkillRegistry,
+} from '@commander/domain';
 import { createAccessTokens } from './access-tokens';
 import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
@@ -11,6 +16,7 @@ import { openGate } from './autonomy/gate';
 import { createOwnSettings } from './autonomy/own-settings';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { applyPendingRestore, setUpBackups } from './backups';
+import { openOrRecover, stayInRecovery } from './backups/recovery';
 import { setUpBusyCopies } from './busy-copies';
 import { composeFiles, setUpCompose } from './compose';
 import { setUpConversations } from './conversations';
@@ -22,7 +28,6 @@ import { workerSanitiser } from './email-reader/sanitiser';
 import { setUpGitHubDiscussion } from './github-discussion';
 import { setUpGitHubOversight } from './github-oversight';
 import { setUpGitHubWatch } from './github-watch';
-import { openItemStore } from './item-store';
 import { answerItemStoreRequest } from './item-store-requests';
 import { setUpMarkdownCopy } from './markdown-copy';
 import type { Meaning } from './meaning';
@@ -63,13 +68,40 @@ mkdirSync(dataDir, { recursive: true });
 // A restore the User asked for before the relaunch (#202) is made first, while nothing has the
 // database open.
 const restored = applyPendingRestore({ dataDir });
-// Opening it takes a snapshot first when this version of Commander has migrations to run (#202).
-const itemStore = openItemStore({
-  path: join(dataDir, 'commander.db'),
-  snapshotDir: join(dataDir, 'snapshots'),
-  // Copied next to the bundled Core at build time (see electron.vite.config.ts).
-  migrationsFolder: join(import.meta.dirname, 'migrations'),
-});
+// Opening it checks it first, then takes a snapshot when this version of Commander has migrations to
+// run (#202), then runs them, all or none (#203). A full disk later holds every write until there is
+// space again; main and the window hear of it, and of it passing.
+const sendHealth = (health: CoreDatabaseHealth['health']) =>
+  port.postMessage({ type: 'database-health', health } satisfies CoreDatabaseHealth);
+const opened = openOrRecover(
+  {
+    path: join(dataDir, 'commander.db'),
+    snapshotDir: join(dataDir, 'snapshots'),
+    // Copied next to the bundled Core at build time (see electron.vite.config.ts). The end-to-end
+    // tests may give another (one with a migration that fails, #203).
+    migrationsFolder:
+      (process.argv.includes('--test-hooks') &&
+        process.argv
+          .find((arg) => arg.startsWith('--migrations-folder='))
+          ?.slice('--migrations-folder='.length)) ||
+      join(import.meta.dirname, 'migrations'),
+    onDiskFull: (full, at) => sendHealth(full ? { state: 'disk-full', since: at } : { state: 'ok' }),
+  },
+  { restored },
+);
+// A damaged database, or one this version couldn't update (#203): the Core stays in its limited
+// state (backups/recovery.ts), answering only the recovery screen, and nothing below ever runs.
+const itemStore = opened.ok
+  ? opened.store
+  : await stayInRecovery({
+      health: opened.health,
+      port,
+      dataDir,
+      snapshotDir: join(dataDir, 'snapshots'),
+      attachmentsDir: join(dataDir, 'attachments'),
+      restored,
+    });
+sendHealth({ state: 'ok' });
 
 // Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
 let updates: Updates | undefined;

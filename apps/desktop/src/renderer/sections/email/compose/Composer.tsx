@@ -5,9 +5,9 @@ import {
   type ComposeBody,
   type ComposeState,
   isBodyEmpty,
-  reachedNoCore,
   sendLaterTime,
   settleAresLink,
+  tryAgainLater,
   unkeptLinks,
 } from '@commander/domain';
 import { Button, cn, Kbd, toast } from '@commander/ui';
@@ -107,8 +107,9 @@ export function Composer({
       (error: unknown) => {
         dirty.current = true;
         setSaving('idle');
-        // Commander's core is down (#200): its banner says so, and the draft is saved once it is back.
-        if (reachedNoCore(error)) return;
+        // Commander's core is down (#200), or the disk is full (#203): its banner says so, and the
+        // draft is saved once it is back or there is space.
+        if (tryAgainLater(error)) return;
         setProblem(error instanceof Error ? error.message : String(error));
       },
     );

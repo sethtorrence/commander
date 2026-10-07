@@ -4,11 +4,18 @@
 // While the Core is down, requests fail at once with a plain reason (CORE_DOWN) instead of timing out.
 // Quitting never starts a new Core: stopCoreOnQuit (lifecycle.ts) stops it through `kill`.
 //
+// A Core that can't open the database (#203: it is damaged, or this version couldn't update it) is
+// not restarted: starting it again would fail the same way. It stays up in its limited state, beating,
+// and says so (`database-health`, handed here through setDatabase); the status carries it to the
+// window, which shows the recovery screen. Meanwhile every request fails at once with
+// DATABASE_UNAVAILABLE, except the recovery screen's own (`inRecovery`).
+//
 // Nothing is lost in a restart: sync, held sends (the outgoing queue, which never sends twice: a send
 // whose outcome isn't known is checked at the Source first), Conversations and Ares's jobs live in the
 // database, and the new Core carries on from it. Main re-sends what the Core only hears from it (the
 // Accounts to sync, the machine's state, the User's presence) through onStarted.
-import { CORE_DOWN, type CoreStatus, type CoreStop } from '@commander/domain/ipc';
+import { type DatabaseHealth, needsRecovery } from '@commander/domain';
+import { CORE_DOWN, type CoreStatus, type CoreStop, DATABASE_UNAVAILABLE } from '@commander/domain/ipc';
 
 // What the supervisor needs of Electron's UtilityProcess.
 export type CoreProcess = {
@@ -85,15 +92,19 @@ export function createCoreSupervisor({
   let restartAt: number | null = null;
   let restarts = 0;
   let lastStop: CoreStop | null = null;
+  let database: DatabaseHealth | null = null;
   let stops: number[] = [];
   let quitting = false;
   let restartTimer: ReturnType<typeof setTimeout> | null = null;
   let watchdog: ReturnType<typeof setInterval> | null = null;
-  // Resolves when the running Core stops, so requests it was answering fail at once.
+  // Resolves when the running Core stops, so requests it was answering fail at once; and when it says
+  // it is in its limited state, so requests it will never answer do too.
   let stopped: Promise<void> = new Promise(() => {});
+  let limited: Promise<void> = new Promise(() => {});
+  let resolveLimited = () => {};
   const exitListeners = new Set<() => void>();
 
-  const status = (): CoreStatus => ({ state, restartAt, restarts, lastStop });
+  const status = (): CoreStatus => ({ state, restartAt, restarts, lastStop, database });
   const setState = (next: CoreStatus['state'], at: number | null = null) => {
     state = next;
     restartAt = at;
@@ -108,9 +119,14 @@ export function createCoreSupervisor({
     if (restarted) restarts += 1;
     const core = fork();
     current = core;
+    // The new Core's word on the database is still to come.
+    database = null;
     let resolveStopped = () => {};
     stopped = new Promise((resolve) => {
       resolveStopped = resolve;
+    });
+    limited = new Promise((resolve) => {
+      resolveLimited = resolve;
     });
     let beat = false;
     let unresponsive = false;
@@ -181,16 +197,28 @@ export function createCoreSupervisor({
 
     /**
      * Runs a request to the Core: at once with CORE_DOWN's reason while it is down, and with it too
-     * if the Core stops before answering.
+     * if the Core stops before answering. While the Core is in its limited state (#203) only the
+     * recovery screen's requests (`inRecovery`) run; the rest fail with DATABASE_UNAVAILABLE.
      */
-    whileRunning<R>(run: () => Promise<R>): Promise<R | CoreDown> {
+    whileRunning<R>(run: () => Promise<R>, { inRecovery = false } = {}): Promise<R | CoreDown> {
       if (!current || state !== 'running')
         return Promise.resolve({
           ok: false,
           error: state === 'stopped' ? CORE_DOWN.stopped : CORE_DOWN.restarting,
         });
+      const unavailable: CoreDown = { ok: false, error: DATABASE_UNAVAILABLE };
+      if (needsRecovery(database) && !inRecovery) return Promise.resolve(unavailable);
       const answering = stopped.then((): CoreDown => ({ ok: false, error: CORE_DOWN.answering }));
-      return Promise.race([run(), answering]);
+      if (inRecovery) return Promise.race([run(), answering]);
+      return Promise.race([run(), answering, limited.then(() => unavailable)]);
+    },
+
+    // The running Core's word on the database (#203): its limited state, a full disk, or all well.
+    setDatabase(health: DatabaseHealth) {
+      if (!current) return;
+      database = health;
+      if (needsRecovery(health)) resolveLimited();
+      onStatus(status());
     },
 
     // Try again: Commander stopped retrying, and the User asks for a new Core now.

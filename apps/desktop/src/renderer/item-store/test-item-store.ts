@@ -1,15 +1,19 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { type ItemStore, openItemStore } from '@commander/core/src/item-store';
+import { type ItemStore, type ItemStoreOptions, openItemStore } from '@commander/core/src/item-store';
 import { answerItemStoreRequest } from '@commander/core/src/item-store-requests';
 import type { ItemChanges } from './changes';
 import type { ItemStoreClient } from './client';
 
 // For tests only: a real Item store on a temporary database, and a client that reaches it through
 // the same request handling the Core uses for the window, so every action is recorded as the User's.
-// `changes` hears which Items each change touched, as the window hears it from the Core.
-export function openTestItemStore(now?: () => number): {
+// `changes` hears which Items each change touched, as the window hears it from the Core. `options`
+// reach the store (a full disk, say).
+export function openTestItemStore(
+  now?: () => number,
+  options: Partial<ItemStoreOptions> = {},
+): {
   store: ItemStore;
   client: ItemStoreClient;
   changes: ItemChanges;
@@ -21,6 +25,7 @@ export function openTestItemStore(now?: () => number): {
     snapshotDir: join(dir, 'snapshots'),
     migrationsFolder: join(import.meta.dirname, '../../../../core/drizzle'),
     now,
+    ...options,
   });
   const listeners = new Set<(itemIds: string[]) => void>();
   const changes: ItemChanges = (listener) => {

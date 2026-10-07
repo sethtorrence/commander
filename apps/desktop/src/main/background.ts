@@ -33,10 +33,12 @@ const SEND_HELD_BEFORE_QUIT_MS = 15_000;
 
 // Returns the tray, for Ares's quiet count of what he has queued. `sendHeld`: asks the Core to send the
 // messages held for Undo (#138) before it stops.
+// `mayQuit`: asked before the tray's Quit (false keeps Commander open): while the disk is full (#203)
+// the window may hold edits it can't save yet.
 export function runInBackground(
   window: BrowserWindow,
   core: StoppableCore,
-  { sendHeld }: { sendHeld?: () => Promise<void> } = {},
+  { sendHeld, mayQuit = () => true }: { sendHeld?: () => Promise<void>; mayQuit?: () => boolean } = {},
 ): CommanderTray {
   keepInTray(window, app);
   const saving = askWindowToSave({
@@ -67,7 +69,9 @@ export function runInBackground(
       open();
       window.webContents.send(ipc.askForUpdate);
     },
-    onQuit: () => app.quit(),
+    onQuit: () => {
+      if (mayQuit()) app.quit();
+    },
   });
   const shown = tray;
   app.on('will-quit', () => shown.tray.destroy());

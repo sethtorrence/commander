@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { CORE_DOWN, type CoreStatus } from '@commander/domain';
+import { CORE_DOWN, type CoreStatus, DISK_FULL } from '@commander/domain';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { FrameControlsProvider } from '../sections/section';
@@ -12,6 +12,7 @@ const status = (state: CoreStatus['state'], restarts = 0): CoreStatus => ({
   restartAt: null,
   restarts,
   lastStop: state === 'running' && restarts === 0 ? null : { at: 1, reason: 'exited', code: 1 },
+  database: null,
 });
 
 // The bridge's Core status, pushed by hand.
@@ -59,5 +60,18 @@ describe('the Core banner', () => {
     act(() => screen.getByRole('button', { name: 'Try again' }).click());
     expect(core.restartCore).toHaveBeenCalledOnce();
     expect(screen.getByRole('button', { name: 'Try again' })).toHaveProperty('disabled', true);
+  });
+
+  it('says when the disk is full, and when there is space again (#203)', async () => {
+    const core = bridge(status('running'));
+    render(<CoreBanner bridge={core} />);
+    await act(async () => {});
+    core.push({ ...status('running'), database: { state: 'disk-full', since: 1 } });
+    const banner = screen.getByTestId('core-banner');
+    expect(banner.dataset.state).toBe('disk-full');
+    expect(banner.textContent).toBe(DISK_FULL);
+
+    core.push({ ...status('running'), database: { state: 'ok' } });
+    expect(screen.queryByTestId('core-banner')).toBeNull();
   });
 });

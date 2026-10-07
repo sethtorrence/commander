@@ -8,6 +8,9 @@
     start (or one that failed) is reported the same way.
   - Export everything into a folder the main process checked (export.ts), its progress pushed as it
     goes, and cancellable.
+  - In the Core's limited state (#203, recovery.ts) there is no Item store: no daily snapshot, the
+    export holds the database file as it is, and the recovery screen's Restore (`recover`) marks
+    the snapshot it offers.
 */
 import { rmSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -31,7 +34,8 @@ export { applyPendingRestore, restoreSnapshot } from './restore';
 type BackupFailure = Extract<Enqueue['about'], { kind: 'backup-failed' }>;
 
 export type BackupsOptions = {
-  store: ItemStore;
+  // Null in the Core's limited state (#203).
+  store: ItemStore | null;
   dataDir: string;
   snapshotDir: string;
   attachmentsDir: string;
@@ -40,6 +44,9 @@ export type BackupsOptions = {
   restored: RestoreOutcome | null;
   // Ares's queue, once it is set up: failures go in it, and a snapshot's line goes once one succeeds.
   queue(): { enqueue(input: Enqueue): unknown; resolve(id: number): unknown } | undefined;
+  // The recovery screen's Restore, in the Core's limited state: marks its snapshot for the relaunch.
+  // Throws (RestoreRefused) when it can't.
+  recover?: () => void;
   now?: () => number;
 };
 
@@ -85,7 +92,7 @@ export function setUpBackups(options: BackupsOptions) {
 
   function settle(what: BackupFailure['what']) {
     unreported.delete(what);
-    const line = store.updates.queuedWithKey(`backup-failed:${what}`);
+    const line = store?.updates.queuedWithKey(`backup-failed:${what}`);
     if (line) options.queue()?.resolve(line.id);
   }
 
@@ -106,7 +113,7 @@ export function setUpBackups(options: BackupsOptions) {
   }
 
   // What opening the database found: a failed pre-update snapshot, a restore made or failed.
-  const before = store.preUpdateSnapshot;
+  const before = store?.preUpdateSnapshot;
   if (before && !before.ok) {
     problems.set('before-update', { kind: 'before-update', at: before.at, reason: before.reason });
     report({ kind: 'backup-failed', what: 'update-snapshot', at: before.at, reason: before.reason });
@@ -178,6 +185,7 @@ export function setUpBackups(options: BackupsOptions) {
      * one after a failure clears it. Never throws.
      */
     takeDaily() {
+      if (!store) return;
       try {
         const taken = store.takeDailySnapshot();
         if (taken) {
@@ -233,6 +241,19 @@ export function setUpBackups(options: BackupsOptions) {
         case 'cancel-export':
           exporting?.abort.abort();
           reply({ ok: true, status: status() });
+          break;
+        case 'recover':
+          try {
+            if (!options.recover) throw new Error('The database opened, so there is nothing to recover.');
+            options.recover();
+            reply({ ok: true, status: status() });
+          } catch (error) {
+            reply({
+              ok: false,
+              error: error instanceof Error ? error.message : String(error),
+              status: status(),
+            });
+          }
           break;
       }
       return true;

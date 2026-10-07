@@ -1,4 +1,4 @@
-import type { ItemStore } from '@commander/core/src/item-store';
+import type { ItemStore, ItemStoreOptions } from '@commander/core/src/item-store';
 import { attachmentMarkdown, CORE_DOWN, defaultDailyTemplate } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
@@ -69,6 +69,9 @@ function write(notebook: Notebook, day: string, ...texts: string[]): string[] {
 }
 
 const blockItems = () => store.query({ kinds: ['block'] });
+
+// The Item store's database connection, for the test that fills its "disk".
+type Connection = Parameters<NonNullable<ItemStoreOptions['onConnection']>>[0];
 
 describe('opening Notes', () => {
   it('makes today’s Daily Note, and shows it first with the earlier days that have something written', async () => {
@@ -320,6 +323,60 @@ describe('writing', () => {
         .sort(),
     ).toEqual(['Before the stop', 'Typed while stopped']);
     expect(store.get(below?.id as string)?.item.detail).toMatchObject({ parentId: first });
+  });
+
+  it('loses none of the User’s edits while the disk is full, and saves them once there is space (#203)', async () => {
+    // A real Item store whose "disk" fills up: its connection can't grow by another page.
+    let connection: Connection | undefined;
+    let space = true;
+    const full = openTestItemStore(undefined, {
+      hasSpace: () => space,
+      diskCheckMs: 10,
+      onConnection: (sqlite) => {
+        connection = sqlite;
+      },
+    });
+    try {
+      full.store.saveDailyTemplate({ blocks: [] });
+      const notebook = createNotebook(dailyNotesIn(full.client), {
+        today: '2026-10-03',
+        onError: (message) => errors.push(message),
+      });
+      notebooks.push(notebook);
+      await notebook.start();
+      const [first] = write(notebook, '2026-10-03', 'Before');
+      await notebook.flush();
+
+      const db = connection as Connection;
+      db.pragma(`max_page_count = ${db.pragma('page_count', { simple: true })}`);
+      space = false;
+      const long = 'Written while the disk was full. '.repeat(2000);
+      notebook.type('2026-10-03', first as string, long);
+      const below = notebook.enter('2026-10-03', first as string, long.length, long.length);
+      notebook.type('2026-10-03', below?.id as string, 'And a second Block');
+      await notebook.flush();
+      // Nothing saved, nothing lost on screen, and no error beyond the banner's.
+      expect(errors).toEqual([]);
+      expect(full.store.diskFull()).toBe(true);
+      expect(full.store.query({ kinds: ['block'] }).map((item) => item.title)).toEqual(['Before']);
+      expect(lines(notebook, '2026-10-03')).toEqual([long, 'And a second Block']);
+
+      db.pragma('max_page_count = 1073741823');
+      space = true;
+      await vi.waitFor(() => expect(full.store.diskFull()).toBe(false));
+      // Commander runs the window's savers once there is space.
+      await notebook.flush();
+      expect(errors).toEqual([]);
+      expect(
+        full.store
+          .query({ kinds: ['block'] })
+          .map((item) => item.title)
+          .sort(),
+      ).toEqual(['And a second Block', long]);
+    } finally {
+      for (const notebook of notebooks.splice(0)) await notebook.flush();
+      full.close();
+    }
   });
 
   it('records each structural change in the activity log as the User’s', async () => {

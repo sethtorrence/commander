@@ -99,6 +99,34 @@ describe('Restore', () => {
   });
 });
 
+describe('the recovery screen’s Restore (#203)', () => {
+  it('asks the Core to mark the snapshot it offers, with no typed confirmation, then relaunches', async () => {
+    vi.useFakeTimers();
+    const { backups, sent, relaunch } = channel();
+    expect(await backups.request({ op: 'recover' })).toEqual({ ok: true, status, relaunching: true });
+    expect(sent).toEqual([{ op: 'recover' }]);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(relaunch).toHaveBeenCalledOnce();
+    // Once is enough.
+    expect(await backups.request({ op: 'recover' })).toMatchObject({ ok: false });
+    expect(sent).toHaveLength(1);
+  });
+
+  it('never relaunches when there is nothing to restore', async () => {
+    vi.useFakeTimers();
+    const { backups, relaunch } = channel({
+      answer: () => ({ ok: false, error: 'There is no snapshot to restore.', status }),
+    });
+    expect(await backups.request({ op: 'recover' })).toEqual({
+      ok: false,
+      error: 'There is no snapshot to restore.',
+      status,
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(relaunch).not.toHaveBeenCalled();
+  });
+});
+
 describe('Export everything', () => {
   it('exports into the folder chosen in the system picker', async () => {
     const folder = join(root, 'Backups');

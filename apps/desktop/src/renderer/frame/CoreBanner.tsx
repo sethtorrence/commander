@@ -1,4 +1,4 @@
-import { CORE_DOWN, type CoreStatus } from '@commander/domain';
+import { CORE_DOWN, type CoreStatus, DISK_FULL } from '@commander/domain';
 import { Button, Led, toast } from '@commander/ui';
 import { useEffect, useRef, useState } from 'react';
 import { useOpenSettings } from '../sections/section';
@@ -34,6 +34,8 @@ export function useCoreStatus(bridge: Partial<CoreStatusBridge> | undefined): Co
  * The quiet banner while Commander's core is down (#200): "Starting it again…" while a new one is on
  * its way; once Commander has stopped trying (several stops in a short time), a plain error with Try
  * again and a link to Settings' Diagnostics page (settings/pages.ts). A toast says so when it is back.
+ * The same place says when the disk is full (#203): the window holds the User's edits meanwhile, and
+ * a toast says so when there is space again and they are being saved.
  */
 export function CoreBanner({
   bridge = window.commander,
@@ -44,6 +46,8 @@ export function CoreBanner({
   const openSettings = useOpenSettings();
   const [asking, setAsking] = useState(false);
   const wasDown = useRef(false);
+  const wasFull = useRef(false);
+  const diskFull = status?.state === 'running' && status.database?.state === 'disk-full';
   useEffect(() => {
     if (!status) return;
     if (status.state !== 'running') wasDown.current = true;
@@ -52,8 +56,25 @@ export function CoreBanner({
       toast('Commander’s core is running again.');
     }
     if (status.state !== 'stopped') setAsking(false);
-  }, [status]);
+    if (diskFull) wasFull.current = true;
+    else if (wasFull.current && status.state === 'running') {
+      wasFull.current = false;
+      toast('There’s space again. Commander is saving your changes.');
+    }
+  }, [status, diskFull]);
 
+  if (diskFull)
+    return (
+      <div
+        role="alert"
+        data-testid="core-banner"
+        data-state="disk-full"
+        className="fixed bottom-4 left-1/2 z-40 flex max-w-[calc(100vw-4rem)] -translate-x-1/2 items-center gap-3 border border-signal bg-sheet px-4 py-2.5 text-note text-ink"
+      >
+        <Led size="sm" state="on" />
+        <span>{DISK_FULL}</span>
+      </div>
+    );
   if (!status || status.state === 'running') return null;
   const stopped = status.state === 'stopped';
   return (

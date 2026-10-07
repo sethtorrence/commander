@@ -109,10 +109,9 @@ import {
   statusFromDetail,
   withoutUntouched,
 } from '@commander/domain';
-import Database from 'better-sqlite3';
+import type Database from 'better-sqlite3';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
-import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
@@ -146,6 +145,13 @@ import { type ComposeContext, type ComposeRecord, composeIn } from './compose';
 import { type ConversationStore, openConversationStore } from './conversations';
 import { dailyTemplateIn, inCopyOrder } from './daily-template';
 import { type DashboardStore, openDashboardStore } from './dashboard';
+import {
+  MigrationFailed,
+  migrateAtomically,
+  openCheckedDatabase,
+  type PreUpdateSnapshot,
+} from './database-health';
+import { guardWrites, hasSpaceIn, watchDiskFull } from './disk-full';
 import { type EmailImagesStore, emailImagesIn } from './email-images';
 import { type EmailSortingStore, emailSortingIn } from './email-sorting';
 import { emailsIn } from './emails';
@@ -226,6 +232,9 @@ export type { ComposeContext, ComposeRecord } from './compose';
 export type { AnswerChanges, ConversationStore, RemovedConversation } from './conversations';
 export { ConversationError } from './conversations';
 export type { DashboardStore, StoredClear } from './dashboard';
+export type { PreUpdateSnapshot } from './database-health';
+export { DatabaseDamaged, MigrationFailed } from './database-health';
+export { DiskFull, isDiskFull } from './disk-full';
 export type { FilingFeedbackStore } from './filing-feedback';
 export type { FocusSettingsStore } from './focus-settings';
 export type { GitHubOversightStore, OversightRequest, StaleWriterDetail } from './github-oversight';
@@ -254,11 +263,16 @@ export type ItemStoreOptions = {
   now?: () => number;
   // Stands in for the snapshots' integrity check (tests make a copy fail it).
   checkSnapshot?: (path: string) => string | null;
+  // A write failed because the disk is full (`full`), or there is space again and writing started
+  // again (#203, disk-full.ts).
+  onDiskFull?: (full: boolean, at: number) => void;
+  // Whether the database's disk has room to write again; at least 32 MB free in its folder unless
+  // given (tests stand in for it), checked every `diskCheckMs` while the disk is full.
+  hasSpace?: () => boolean;
+  diskCheckMs?: number;
+  // Runs on the connection once it is open and migrated (tests cap its size to fill the "disk").
+  onConnection?: (sqlite: Database.Database) => void;
 };
-
-// The snapshot taken before this open migrated the database (#202): taken, or failed (the migration
-// went ahead regardless, and the failure is for the Update and Diagnostics).
-export type PreUpdateSnapshot = { ok: true; path: string } | { ok: false; at: number; reason: string };
 
 export type ItemStore = {
   saveFromSource(batch: SourceBatch): SaveResult;
@@ -431,6 +445,8 @@ export type ItemStore = {
   takeDailySnapshot(): Snapshot | null;
   // The snapshot this open took before migrating the database, or null when nothing needed migrating.
   preUpdateSnapshot: PreUpdateSnapshot | null;
+  // Whether writes are held because the disk is full (#203, disk-full.ts).
+  diskFull(): boolean;
   // A consistent, checked copy of the database at `path` (Export everything). Throws SnapshotFailed.
   copyDatabaseTo(path: string): void;
   // Saves a pasted image into attachments/ and returns its file name (attachments.ts).
@@ -679,17 +695,35 @@ const MEMORY_KEY = 'memory:';
 // What marks a Conversation turn's key there (#195).
 const TURN_KEY = 'turn:';
 
+/**
+ * Opens the Item store. Throws DatabaseDamaged when the database fails its check, and
+ * MigrationFailed (with the database as it was) when this version couldn't update it (#203,
+ * database-health.ts); nothing is left open either way.
+ */
 export function openItemStore(options: ItemStoreOptions): ItemStore {
   const now = options.now ?? Date.now;
-  const sqlite = new Database(options.path);
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
+  const sqlite = openCheckedDatabase(options.path);
   const db = drizzle(sqlite, { schema });
   // A new version of Commander changing the database: a snapshot first, before any migration runs.
-  const preUpdateSnapshot = migrationsPending(sqlite, options.migrationsFolder)
-    ? snapshotBeforeUpdate(sqlite, options.snapshotDir, now(), options.checkSnapshot)
-    : null;
-  migrate(db, { migrationsFolder: options.migrationsFolder });
+  let preUpdateSnapshot: PreUpdateSnapshot | null = null;
+  try {
+    if (migrationsPending(sqlite, options.migrationsFolder))
+      preUpdateSnapshot = snapshotBeforeUpdate(sqlite, options.snapshotDir, now(), options.checkSnapshot);
+    migrateAtomically(sqlite, options.migrationsFolder);
+  } catch (error) {
+    sqlite.close();
+    if (error instanceof MigrationFailed) error.preUpdateSnapshot = preUpdateSnapshot;
+    throw error;
+  }
+  options.onConnection?.(sqlite);
+  // A full disk (#203): writes are held until there is space, and each failed write says so.
+  const disk = watchDiskFull({
+    sqlite,
+    hasSpace: options.hasSpace ?? (() => hasSpaceIn(dirname(options.path))),
+    onChange: options.onDiskFull,
+    checkMs: options.diskCheckMs,
+    now,
+  });
   const template = dailyTemplateIn(db, now);
   const outgoing = openOutgoingQueue(db);
   const syncState = openSyncStateStore(db);
@@ -2777,7 +2811,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     transaction: (fn) => sqlite.transaction(fn)(),
   });
 
-  return {
+  const store: ItemStore = {
     models,
     syncState,
     outgoing,
@@ -3212,6 +3246,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       return snapshot;
     },
     preUpdateSnapshot,
+    diskFull: () => disk.full(),
     copyDatabaseTo: (path) => copyDatabase(sqlite, path, options.checkSnapshot),
 
     saveAttachment: (bytes) => attachments.save(bytes),
@@ -3287,7 +3322,9 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     close() {
+      disk.stop();
       sqlite.close();
     },
   };
+  return guardWrites(store, (error) => disk.failed(error));
 }
