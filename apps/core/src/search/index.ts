@@ -1,4 +1,6 @@
 import {
+  type Conversation,
+  type ConversationHit,
   type Item,
   type Memory,
   type Person,
@@ -9,11 +11,18 @@ import {
   searchQuery,
 } from '@commander/domain';
 import type Database from 'better-sqlite3';
+import {
+  type ConversationIndex,
+  matchingLine,
+  openConversationIndex,
+  type SearchableTurn,
+} from './conversation-index';
 import { type MeaningIndex, openMeaningIndex, type QueryVector } from './meaning-index';
 import { fuse, type Retriever } from './retriever';
 import { type SearchableItem, searchTextOf } from './text';
 import { openWordIndex } from './words-index';
 
+export type { ConversationIndex } from './conversation-index';
 export type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector } from './meaning-index';
 
 /*
@@ -23,7 +32,9 @@ export type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector } from './
   FTS5 word index and the meaning index (#73, embeddings of the same text). Words answer at once;
   meaning answers only when the query brings its embedding (`meaning`), which the Core's meaning side
   makes off the main thread, so a plain search never waits on a model. Tantivy could replace the
-  word index without callers changing.
+  word index without callers changing. Conversations with Ares are found here too (#195), turn by
+  turn, by their own word and meaning index (conversation-index.ts), which the Conversation store
+  keeps current as the Item store does Items'.
 */
 
 export type Search = {
@@ -36,6 +47,9 @@ export type SearchIndex = Search & {
   put(item: SearchableItem): void;
   // What waits to be embedded, and saving embeddings (the Item store hands these to ../meaning).
   meaning: Pick<MeaningIndex, 'pending' | 'save' | 'progress'>;
+  // The Conversation store's hooks (put each turn written, drop a deleted Conversation's turns), and
+  // what of Conversations waits to be embedded.
+  conversations: Pick<ConversationIndex, 'put' | 'drop' | 'pending' | 'save' | 'progress'>;
 };
 
 export type SearchSources = {
@@ -51,6 +65,10 @@ export type SearchSources = {
   people?: () => Person[];
   // What Ares knows (#74) matching the words typed (and their meaning), best first: Memory finds its own.
   memories?: (text: string, meaning?: QueryVector) => Memory[];
+  // Every turn of every Conversation, page by page, for building their index from scratch (#195).
+  allTurns?: () => Iterable<SearchableTurn[]>;
+  // Conversations by id, for naming the ones found (#195).
+  conversations?: (ids: string[]) => Conversation[];
   // Something new waits to be embedded. Called inside the write's transaction: only schedule work.
   onMeaningPending?: () => void;
 };
@@ -71,6 +89,7 @@ function emailsNewestFirst(hits: SearchHit[]): SearchHit[] {
 
 const DEFAULT_LIMIT = 50;
 const PEOPLE_LIMIT = 8;
+const CONVERSATIONS_LIMIT = 6;
 const WORD = /[\p{L}\p{N}]+/gu;
 
 export function openSearch(sqlite: Database.Database, sources: SearchSources): SearchIndex {
@@ -84,6 +103,36 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
   });
   const meaning = openMeaningIndex(sqlite);
   const retrievers: Retriever[] = [words, meaning];
+  const conversations = openConversationIndex(sqlite, {
+    allTurns: sources.allTurns ?? (() => []),
+    onMeaningPending: sources.onMeaningPending,
+  });
+
+  // The Conversations whose turns match, each at its best turn and the line of it that matched.
+  function matchingConversations(text: string, vector: QueryVector | undefined): ConversationHit[] {
+    if (!sources.conversations) return [];
+    const found = conversations.find(text, vector, CONVERSATIONS_LIMIT);
+    if (!found.length) return [];
+    const byId = new Map(
+      sources.conversations(found.map((turn) => turn.conversationId)).map((each) => [each.id, each]),
+    );
+    return found.flatMap((turn) => {
+      const conversation = byId.get(turn.conversationId);
+      if (!conversation) return [];
+      return [
+        {
+          conversationId: conversation.id,
+          title: conversation.title,
+          day: conversation.day,
+          daily: conversation.daily,
+          turnId: turn.turnId,
+          by: turn.by,
+          line: matchingLine(turn.text, text),
+          foundBy: turn.foundBy,
+        },
+      ];
+    });
+  }
 
   // The calendar day each Block or Daily Note belongs to, for opening it in Notes.
   function daysOf(items: Item[]): Map<string, string> {
@@ -150,6 +199,14 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
 
     meaning: { pending: meaning.pending, save: meaning.save, progress: meaning.progress },
 
+    conversations: {
+      put: conversations.put,
+      drop: conversations.drop,
+      pending: conversations.pending,
+      save: conversations.save,
+      progress: conversations.progress,
+    },
+
     query(input, vector) {
       const { limit = DEFAULT_LIMIT, ...query } = searchQuery.parse(input);
       const fused = fuse(
@@ -177,6 +234,7 @@ export function openSearch(sqlite: Database.Database, sources: SearchSources): S
         projects: narrowed ? [] : matchingProjects(query.text),
         people: narrowed ? [] : matchingPeople(query.text),
         memories: narrowed ? [] : (sources.memories?.(query.text, vector) ?? []),
+        conversations: narrowed ? [] : matchingConversations(query.text, vector),
       };
     },
   };

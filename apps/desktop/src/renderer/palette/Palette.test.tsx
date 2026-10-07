@@ -126,12 +126,59 @@ describe('the palette', () => {
     press('ArrowDown');
     expect(selected().textContent).toContain('Search “switch” in Linear');
     press('ArrowDown');
+    expect(selected().textContent).toContain('Ask Ares: “switch”');
+    press('ArrowDown');
     expect(selected().textContent).toContain('Switch theme');
+    press('ArrowUp');
     press('ArrowUp');
     press('ArrowUp');
     expect(selected().textContent).toContain('Switch theme');
     press('Enter');
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: 'command' }));
+  });
+
+  it('asks Ares with Tab, whatever row is selected, with everything typed (#195)', async () => {
+    const { onAction, onOpenChange } = renderPalette();
+    type('what did Priya say about #LT');
+    const ares = await screen.findByRole('group', { name: 'Ares' });
+    expect(within(ares).getByRole('option').textContent).toContain(
+      'Ask Ares: “what did Priya say about #LT”',
+    );
+    // It is always the last row.
+    expect(screen.getAllByRole('option').at(-1)?.textContent).toContain('Ask Ares');
+    press('Tab');
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onAction).toHaveBeenCalledWith({ type: 'ask-ares', text: 'what did Priya say about #LT' });
+  });
+
+  it('lets Tab be when nothing is typed', () => {
+    const { onAction } = renderPalette();
+    const tab = fireEvent.keyDown(input(), { key: 'Tab' });
+    expect(tab).toBe(true);
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('finds Conversations with Ares by their words, and opens one at the turn that matched (#195)', async () => {
+    const { conversation } = backing.store.conversations.create('2026-10-03');
+    const asked = backing.store.conversations.addUserTurn(conversation.id, 'What is a fjord?');
+    const answer = backing.store.conversations.startAnswer(conversation.id, asked.id, 'streaming');
+    backing.store.conversations.saveAnswer(answer.id, {
+      status: 'done',
+      text: 'A long, narrow inlet\ncarved by glaciers.',
+      endedAt: 1,
+    });
+    const { onAction } = renderPalette();
+    type('glaciers');
+    const found = await screen.findByRole('group', { name: 'Conversations' });
+    const row = within(found).getByRole('option');
+    expect(row.textContent).toContain('What is a fjord? · carved by glaciers.');
+    expect(row.textContent).toContain('Ares');
+    fireEvent.click(row);
+    expect(onAction).toHaveBeenCalledWith({
+      type: 'conversation',
+      conversationId: conversation.id,
+      turnId: answer.id,
+    });
   });
 
   it('acts on the latest results when Enter comes before they arrive', async () => {

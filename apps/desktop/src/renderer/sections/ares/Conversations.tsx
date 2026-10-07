@@ -70,8 +70,15 @@ export function Conversations({
   const { open: openItem } = useUpdates();
   const group = useRef<HTMLDivElement>(null);
 
-  // The Ares button's pop-up moved a Conversation here (#193): it opens, in view.
-  useReveal(CONVERSATIONS_REVEAL, (conversationId) => {
+  // The turn search found (#195), shown and marked while its Conversation is open.
+  const [found, setFound] = useState<{ conversationId: string; turnId: number } | null>(null);
+  const foundTurn = found && found.conversationId === openId ? found.turnId : null;
+
+  // The Ares button's pop-up moved a Conversation here (#193), or Ctrl+K opens one (#195), at the
+  // turn search found when it says which: it opens, in view.
+  useReveal(CONVERSATIONS_REVEAL, (conversationId, focus) => {
+    const turnId = focus ? Number(focus) : Number.NaN;
+    setFound(Number.isInteger(turnId) ? { conversationId, turnId } : null);
     void state.reveal(conversationId).then(() =>
       // Once the Section is shown.
       requestAnimationFrame(() => group.current?.scrollIntoView?.({ block: 'start' })),
@@ -87,6 +94,15 @@ export function Conversations({
     if (element && lastText !== undefined) element.scrollTop = element.scrollHeight;
   }, [lastText]);
 
+  // Unless search opened it at a turn: then that turn is in view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the turn is looked for again as the view changes
+  useEffect(() => {
+    const element = thread.current;
+    const turn = foundTurn === null ? null : element?.querySelector(`[data-turn-id="${foundTurn}"]`);
+    if (!element || !turn) return;
+    element.scrollTop += turn.getBoundingClientRect().top - element.getBoundingClientRect().top - 16;
+  }, [foundTurn, view]);
+
   const lastTurn = view?.turns.at(-1);
 
   const setDraft = (text: string) => {
@@ -96,6 +112,7 @@ export function Conversations({
   const send = async () => {
     if (!openId || answering || !draft.trim() || tooLong) return;
     const sentTo = openId;
+    setFound(null);
     if (await state.send(draft)) setDrafts((current) => ({ ...current, [sentTo]: '' }));
     input.current?.focus();
   };
@@ -185,7 +202,13 @@ export function Conversations({
               </li>
             )}
             {view?.turns.map((turn) => (
-              <Turn key={turn.id} turn={turn} text={live.get(turn.id) ?? turn.text} sources={sources}>
+              <Turn
+                key={turn.id}
+                turn={turn}
+                text={live.get(turn.id) ?? turn.text}
+                sources={sources}
+                found={turn.id === foundTurn}
+              >
                 <AnswerActions
                   turn={turn}
                   client={autonomy}
@@ -302,27 +325,48 @@ export function Turn({
   text,
   sources,
   children,
+  found = false,
 }: {
   turn: ConversationTurn;
   text: string;
   sources: readonly string[];
   // What his action Skills did or prepared, under his words (#196).
   children?: ReactNode;
+  // The turn search opened the Conversation at (#195): marked.
+  found?: boolean;
 }) {
   const { open } = useUpdates();
   const refs = useMemo(() => refsOf(turn.links, open), [turn.links, open]);
   const doing = text ? null : doingOf(turn);
   if (turn.by === 'user') {
     return (
-      <li data-testid="conversation-turn" data-by="user" className="mb-4 flex justify-end">
-        <p className="m-0 max-w-[80%] border border-line2 bg-raise px-3 py-2 text-[14px] leading-[21px] whitespace-pre-wrap text-ink [overflow-wrap:anywhere]">
+      <li
+        data-testid="conversation-turn"
+        data-by="user"
+        data-turn-id={turn.id}
+        data-found={found || undefined}
+        className="mb-4 flex justify-end"
+      >
+        <p
+          className={cn(
+            'm-0 max-w-[80%] border border-line2 bg-raise px-3 py-2 text-[14px] leading-[21px] whitespace-pre-wrap text-ink [overflow-wrap:anywhere]',
+            found && 'border-signal',
+          )}
+        >
           {text}
         </p>
       </li>
     );
   }
   return (
-    <li data-testid="conversation-turn" data-by="ares" data-status={turn.status} className="mb-4 max-w-[88%]">
+    <li
+      data-testid="conversation-turn"
+      data-by="ares"
+      data-status={turn.status}
+      data-turn-id={turn.id}
+      data-found={found || undefined}
+      className={cn('mb-4 max-w-[88%]', found && '-ml-3 border-l-2 border-signal pl-2.5')}
+    >
       <div className={cn(metaClass, 'mb-1.5 flex items-center gap-1.5')}>
         {turn.status === 'streaming' && <Led size="sm" />}
         Ares

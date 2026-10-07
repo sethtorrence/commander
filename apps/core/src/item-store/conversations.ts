@@ -6,6 +6,8 @@
 // - The User can't write over him: a message is refused while he is still answering.
 // A Conversation started from an Item (#193) keeps that Item's id; naming the Item for the window is
 // the Conversations module's, which reads Items (`about` is null here).
+// Every turn written here is put in search's index of Conversations (#195) in the same transaction,
+// and a deleted Conversation's turns leave it with them (Undo puts them back).
 import { randomUUID } from 'node:crypto';
 import {
   type Conversation,
@@ -18,6 +20,7 @@ import {
 } from '@commander/domain';
 import { and, asc, desc, eq, inArray, lt, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
+import type { ConversationIndex } from '../search';
 import * as schema from './schema';
 
 // What Delete took away, for Undo to put back as it was.
@@ -90,11 +93,18 @@ const UNFINISHED: TurnStatus[] = ['queued', 'streaming'];
 export function openConversationStore(
   db: BetterSQLite3Database<typeof schema>,
   now: () => number = Date.now,
+  // Search's index of Conversations (#195), kept current with every turn written or removed.
+  index: Pick<ConversationIndex, 'put' | 'drop'> = { put: () => {}, drop: () => {} },
 ): ConversationStore {
   const { conversations, conversationTurns } = schema;
 
   const toTurn = (row: typeof conversationTurns.$inferSelect): ConversationTurn =>
     conversationTurn.parse(row);
+  // A turn as written, put in search.
+  const indexed = (turn: ConversationTurn): ConversationTurn => {
+    index.put(turn);
+    return turn;
+  };
 
   // Whether Ares is answering (or waiting to) in each Conversation.
   const answeringIn = (ids: readonly string[]): Set<string> =>
@@ -254,7 +264,7 @@ export function openConversationStore(
           .set({ updatedAt: at, ...(found.conversation.title === null ? { title: titleFrom(text) } : {}) })
           .where(eq(conversations.id, conversationId))
           .run();
-        return toTurn(row);
+        return indexed(toTurn(row));
       });
     },
 
@@ -278,14 +288,16 @@ export function openConversationStore(
     },
 
     saveAnswer(turnId, changes) {
-      const row = db
-        .update(conversationTurns)
-        .set(changes)
-        .where(and(eq(conversationTurns.id, turnId), eq(conversationTurns.by, 'ares')))
-        .returning()
-        .get();
-      if (!row) throw new ConversationError(`No answer ${turnId}`);
-      return toTurn(row);
+      return db.transaction(() => {
+        const row = db
+          .update(conversationTurns)
+          .set(changes)
+          .where(and(eq(conversationTurns.id, turnId), eq(conversationTurns.by, 'ares')))
+          .returning()
+          .get();
+        if (!row) throw new ConversationError(`No answer ${turnId}`);
+        return indexed(toTurn(row));
+      });
     },
 
     turn(turnId) {
@@ -306,6 +318,7 @@ export function openConversationStore(
           throw new ConversationError('There is no message of yours waiting to be sent again');
         }
         db.delete(conversationTurns).where(eq(conversationTurns.id, last.id)).run();
+        index.drop([last.id]);
         const asked = db.select().from(conversationTurns).where(eq(conversationTurns.id, last.replyTo)).get();
         if (!asked) throw new ConversationError('There is no message of yours waiting to be sent again');
         return toTurn(asked);
@@ -324,6 +337,7 @@ export function openConversationStore(
           .all();
         db.delete(conversationTurns).where(eq(conversationTurns.conversationId, conversationId)).run();
         db.delete(conversations).where(eq(conversations.id, conversationId)).run();
+        index.drop(kept.map((turn) => turn.id));
         return { conversation: row, turns: kept };
       });
     },
@@ -342,9 +356,12 @@ export function openConversationStore(
         const at = now();
         for (const turn of kept) {
           const unfinished = UNFINISHED.includes(turn.status);
-          db.insert(conversationTurns)
+          const back = db
+            .insert(conversationTurns)
             .values(unfinished ? { ...turn, status: 'stopped', endedAt: turn.endedAt ?? at } : turn)
-            .run();
+            .returning()
+            .get();
+          index.put(toTurn(back));
         }
         return required(row.id);
       });
@@ -352,11 +369,16 @@ export function openConversationStore(
 
     settleUnfinished(problem) {
       const at = now();
-      return db
-        .update(conversationTurns)
-        .set({ status: 'failed', problem, endedAt: at })
-        .where(inArray(conversationTurns.status, UNFINISHED))
-        .run().changes;
+      return db.transaction(() => {
+        const settled = db
+          .update(conversationTurns)
+          .set({ status: 'failed', problem, endedAt: at })
+          .where(inArray(conversationTurns.status, UNFINISHED))
+          .returning()
+          .all();
+        for (const row of settled) index.put(toTurn(row));
+        return settled.length;
+      });
     },
   };
 }

@@ -13,7 +13,8 @@ import { type PaletteAction, type PaletteContext, type PaletteRow, paletteGroups
   Projects and today's Daily Note, and runs commands. A filter row under the input picks chips.
   `↑`/`↓` move, `Enter` acts, `Esc` closes. Once the User pauses, it asks again with search by
   meaning (#73), and merges in what that finds (marked "related"), keeping the selected row; word
-  results never wait for it.
+  results never wait for it. Whatever is typed can go to Ares (#195): `Tab` (or Enter on the last
+  row, Ask Ares) starts a new Conversation with it.
 */
 
 export interface PaletteProps {
@@ -122,6 +123,8 @@ export function Palette(props: PaletteProps) {
     () =>
       paletteGroups({
         query,
+        // Ctrl+K asks with everything typed, chips and all; `/` with the words, not the Section's chips.
+        ask: mode === 'jump' ? input : undefined,
         result: query.search ? (answer?.result ?? null) : null,
         sections: props.sections,
         settingsPages: props.settingsPages,
@@ -135,6 +138,8 @@ export function Palette(props: PaletteProps) {
       }),
     [
       query,
+      mode,
+      input,
       answer,
       props.sections,
       props.settingsPages,
@@ -192,6 +197,12 @@ export function Palette(props: PaletteProps) {
       event.preventDefault();
       if (fresh) act(rows[at]);
       else setEnterWaiting(true);
+    } else if (event.key === 'Tab' && !event.shiftKey) {
+      // Tab asks Ares, whatever is selected.
+      const ask = rows.find((row) => row.action.type === 'ask-ares');
+      if (!ask) return;
+      event.preventDefault();
+      act(ask);
     }
   };
 
@@ -227,7 +238,8 @@ export function Palette(props: PaletteProps) {
           {mode === 'find' ? 'Search' : 'Jump, search and commands'}
         </DialogTitle>
         <DialogDescription className="sr-only">
-          Type to find Todos, notes, Linear issues, Projects, Sections and commands.
+          Type to find Todos, notes, Linear issues, Projects, Sections, Conversations and commands, or press
+          Tab to ask Ares.
         </DialogDescription>
         <div className="flex h-14 flex-none items-center gap-3 border-b border-line pr-3.5">
           <span className="grid self-stretch place-items-center border-r border-line px-3.5 font-mono text-label leading-none font-semibold uppercase tracking-wide text-muted">
@@ -384,6 +396,9 @@ export function Palette(props: PaletteProps) {
           </span>
           <span className="flex items-center gap-[5px]">
             <Kbd>/</Kbd> This Section, when not typing
+          </span>
+          <span className="flex items-center gap-[5px]">
+            <Kbd>Tab</Kbd> Ask Ares
           </span>
         </div>
       </DialogContent>

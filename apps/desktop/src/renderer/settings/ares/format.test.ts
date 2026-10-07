@@ -40,11 +40,13 @@ describe('where search by meaning stands (#73)', () => {
     );
   });
 
-  it('says how many Items and memories are indexed, while indexing and once done', () => {
+  it('says how many Items, memories and Conversation turns are indexed, while indexing and once done', () => {
     expect(meaningStatusLine(status({ embedded: 412 }))).toBe(
       'Ready. Indexing in the background: 412 of 1,300',
     );
-    expect(meaningStatusLine(status({}))).toBe('Ready. All 1,300 Items and memories are indexed');
+    expect(meaningStatusLine(status({}))).toBe(
+      'Ready. All 1,300 Items, memories and Conversation turns are indexed',
+    );
   });
 
   it('says what it is doing otherwise', () => {
