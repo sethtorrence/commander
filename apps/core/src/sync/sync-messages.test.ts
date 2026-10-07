@@ -20,6 +20,7 @@ let dir: string;
 let store: ItemStore;
 let sent: (CoreSyncStatus | CoreAccountRefused | CoreChannelPostsRefused)[];
 let endpointsSeen: string[];
+let cursorsSeen: unknown[];
 let refuse: boolean;
 let tokenGone: boolean;
 let accountsHeard: number;
@@ -31,13 +32,14 @@ function adapterFor(apiUrl: () => string): SourceAdapter {
     cadence: { defaultMinutes: 15, choices: [15, 30, 60] },
     async sync(request) {
       endpointsSeen.push(apiUrl());
+      cursorsSeen.push(request.cursor);
       if (refuse) throw new SignInRefused('Linear refused this Account’s sign-in.');
       if (tokenGone) await request.accessToken();
       request.save({
         items: [{ externalId: 'issue-1', kind: 'linear-issue', title: 'Fix it' }],
         deleted: [],
       });
-      return { cursor: null, cost: { requests: 1, complexity: 10 } };
+      return { cursor: { after: cursorsSeen.length }, cost: { requests: 1, complexity: 10 } };
     },
   };
 }
@@ -55,6 +57,7 @@ beforeEach(() => {
   });
   sent = [];
   endpointsSeen = [];
+  cursorsSeen = [];
   refuse = false;
   tokenGone = false;
   accountsHeard = 0;
@@ -135,6 +138,16 @@ describe('sync messages', () => {
 
     expect(endpointsSeen).toHaveLength(2);
     expect(lastStatus()).toMatchObject({ cadenceMinutes: 60, nextSyncAt: T0 + 5 * 60_000 + 60 * 60_000 });
+  });
+
+  it('runs Re-sync from scratch (#205)', async () => {
+    sync.handle(accounts());
+    await vi.advanceTimersByTimeAsync(1);
+    sync.handle({ type: 'sync-command', command: { op: 'resync', account: ACME } });
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(cursorsSeen).toEqual([null, null]);
+    expect(store.syncState.get(ACME, 'linear')?.cursor).toEqual({ after: 2 });
   });
 
   it('syncs Teams at the Graph endpoint named, and switches its checks alongside other Sources', async () => {

@@ -1,6 +1,6 @@
 import type { AccountSyncStatus } from '@commander/domain/ipc';
 import { describe, expect, it } from 'vitest';
-import { describeHourUse, describeSync } from './account-sync';
+import { describeHourUse, describeResync, describeSync } from './account-sync';
 
 // How Settings → Accounts puts an Account's sync into plain words.
 
@@ -88,6 +88,40 @@ describe('describing an Account’s sync', () => {
       next: 'Next full sync 4 Oct 09:00',
       problem: null,
     });
+  });
+});
+
+describe('describing a re-sync (#205)', () => {
+  const resyncing: AccountSyncStatus = { ...idle, source: 'gmail', activity: 'syncing' };
+
+  it('says how far it has got, of how many when the Source says, in place of the next sync', () => {
+    expect(describeSync({ ...resyncing, resync: { done: 340, total: 1200 } }, now).next).toBe(
+      'Re-syncing: 340 of 1,200',
+    );
+    expect(describeResync({ ...resyncing, resync: { done: 340, total: null } })).toBe(
+      'Re-syncing: 340 so far',
+    );
+    expect(describeResync({ ...resyncing, resync: { done: 0, total: null } })).toBe('Re-syncing…');
+  });
+
+  it('names the Source for an Account carrying several', () => {
+    expect(describeResync({ ...resyncing, resync: { done: 2, total: 9 } }, 'Gmail')).toBe(
+      'Re-syncing Gmail: 2 of 9',
+    );
+  });
+
+  it('says what it waits for', () => {
+    const waiting = (activity: AccountSyncStatus['activity']) =>
+      describeResync({ ...resyncing, activity, resync: { done: 0, total: null } });
+    expect(waiting('idle')).toBe('Re-sync waiting its turn');
+    expect(waiting('backing-off')).toBe('Re-sync waiting to try again');
+    expect(waiting('offline')).toBe('Re-sync paused while offline');
+    expect(waiting('needs-reconnect')).toBe('Re-sync paused until reconnected');
+  });
+
+  it('says nothing when there is none', () => {
+    expect(describeResync(resyncing)).toBeNull();
+    expect(describeResync({ ...resyncing, resync: null })).toBeNull();
   });
 });
 

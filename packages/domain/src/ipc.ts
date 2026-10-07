@@ -242,6 +242,8 @@ export type AccountSyncStatus = {
   hourUse?: { requests: number; complexity: number; requestLimit: number; complexityLimit: number };
   // How far a long sync has got (Gmail's 30-day download), while it runs; null otherwise.
   progress?: { done: number; total: number } | null;
+  // A re-sync (#205), while it waits its turn or runs: Items read again so far, of how many when known.
+  resync?: { done: number; total: number | null } | null;
 };
 export type AccountsState = {
   accounts: AccountSummary[];
@@ -267,6 +269,9 @@ export type AccountsRequest =
   // Syncs the Account at once (Sync now; Sections call it when they open), or just one of the
   // Sources it carries (the Calendar Section refreshes only Google Calendar).
   | { op: 'sync-now'; accountId: string; source?: AccountSyncStatus['source'] }
+  // Re-sync (#205): forgets the Account's sync cursors and reads everything again, every Source it
+  // carries; nothing of the User's is lost, as Items match back to the same Source ids.
+  | { op: 'resync'; accountId: string }
   // Minutes between the Account's syncs, from its Source's choices.
   | { op: 'set-sync-cadence'; accountId: string; minutes: number }
   // Teams: whether to also check whenever another Source syncs.

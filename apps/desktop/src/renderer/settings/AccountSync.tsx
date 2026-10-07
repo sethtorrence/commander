@@ -1,12 +1,96 @@
-import type { AccountSummary, AccountsRequest } from '@commander/domain/ipc';
-import { Button, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Switch } from '@commander/ui';
+import type { AccountSummary, AccountSyncStatus, AccountsRequest } from '@commander/domain/ipc';
+import {
+  Button,
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogHeading,
+  DialogTitle,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+  Switch,
+} from '@commander/ui';
+import { useState } from 'react';
 import { useNow } from '../frame/use-now';
-import { describeHourUse, describeSync } from './account-sync';
+import { describeHourUse, describeResync, describeSync } from './account-sync';
 
 // One Account's sync in Settings → Accounts: last sync, how many Items, the next sync or why it's
-// waiting, any problem in plain words, Sync now, and how often it syncs. A Source with a light sync
-// (Teams) also has the switch for checking whenever another Source syncs, with Microsoft's caveat. A
-// Source with hourly limits (GitHub) shows the last hour's use of them.
+// waiting, any problem in plain words, Sync now, Re-sync (#205, after a short confirmation, with its
+// progress in place of the next sync), and how often it syncs. A Source with a light sync (Teams)
+// also has the switch for checking whenever another Source syncs, with Microsoft's caveat. A Source
+// with hourly limits (GitHub) shows the last hour's use of them.
+
+// The Sources an Account carrying several syncs, as the User knows them.
+const SOURCE_NAMES: Partial<Record<AccountSyncStatus['source'], string>> = {
+  gmail: 'Gmail',
+  'google-calendar': 'Google Calendar',
+  outlook: 'Outlook',
+  'outlook-calendar': 'Outlook Calendar',
+};
+
+// The Account's re-sync line, from whichever of its Sources is re-syncing (the running one first);
+// null when none is. An Account carrying several Sources names the one.
+function resyncLine(account: AccountSummary): string | null {
+  const carried = 'sources' in account ? account.sources.map((each) => each.sync ?? null) : [];
+  const statuses = [account.sync ?? null, ...carried].filter((each) => each?.resync) as AccountSyncStatus[];
+  const shown = statuses.find((each) => each.activity === 'syncing') ?? statuses[0];
+  if (!shown) return null;
+  return describeResync(shown, 'sources' in account ? SOURCE_NAMES[shown.source] : undefined);
+}
+
+// Re-sync, after saying what it does and that nothing of the User's is lost.
+function ResyncAccount({
+  account,
+  disabled,
+  onResync,
+}: {
+  account: AccountSummary;
+  disabled: boolean;
+  onResync: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Button disabled={disabled} onClick={() => setOpen(true)}>
+        Re-sync
+      </Button>
+      <DialogContent aria-describedby={undefined} data-testid="resync-account-dialog">
+        <DialogHeader>
+          <DialogTitle>Re-sync Account</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          <DialogHeading>Re-sync {account.name}?</DialogHeading>
+          <DialogDescription>
+            Commander forgets where it got to with this Account and reads everything in it again, at the
+            Source’s usual pace. Nothing of yours is lost: your notes, Todos, Links, Projects, Buckets and
+            snoozes stay on the same Items, and none appears twice.
+          </DialogDescription>
+        </DialogBody>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button>Cancel</Button>
+          </DialogClose>
+          <Button
+            variant="primary"
+            onClick={() => {
+              onResync();
+              setOpen(false);
+            }}
+          >
+            Re-sync {account.name}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 // "Every 15 min", or for a Source with one choice, a plain line ("Full sync once a day").
 const every = (minutes: number) => (minutes === 1440 ? 'once a day' : `every ${minutes} min`);
@@ -21,6 +105,7 @@ export function AccountSync({
   const { sync } = account;
   if (!sync) return null;
   const { synced, next, problem } = describeSync(sync, now);
+  const resync = resyncLine(account);
   const canSync = sync.activity === 'idle' || sync.activity === 'backing-off';
   const light = sync.alsoAfterOtherSources !== undefined;
   const hourUse = describeHourUse(sync);
@@ -32,7 +117,7 @@ export function AccountSync({
             {synced}
           </div>
           <div data-testid="account-next-sync" className="text-muted">
-            {next}
+            {resync ?? next}
           </div>
         </div>
         {sync.cadenceChoices.length > 1 ? (
@@ -61,6 +146,11 @@ export function AccountSync({
         <Button disabled={!canSync} onClick={() => request({ op: 'sync-now', accountId: account.id })}>
           Sync now
         </Button>
+        <ResyncAccount
+          account={account}
+          disabled={resync !== null || sync.activity === 'needs-reconnect'}
+          onResync={() => request({ op: 'resync', accountId: account.id })}
+        />
       </div>
       {hourUse && (
         <p data-testid="account-hour-use" className="m-0 mt-2 text-note leading-[19px] text-muted">

@@ -16,6 +16,8 @@ export type AccountsSync = {
   status(accountId: string, source?: Source): AccountSyncStatus | null;
   // Every Source the Account carries, or just `source`.
   refresh(accountId: string, source?: Source): void;
+  // Re-sync (#205): forgets the Account's cursors and reads every Source it carries again.
+  resync(accountId: string): void;
   setCadence(accountId: string, minutes: number): void;
   setAlsoAfterOtherSources(accountId: string, enabled: boolean): void;
 };
@@ -23,6 +25,7 @@ export type AccountsSync = {
 const noSync: AccountsSync = {
   status: () => null,
   refresh: () => {},
+  resync: () => {},
   setCadence: () => {},
   setAlsoAfterOtherSources: () => {},
 };
@@ -91,6 +94,9 @@ export async function answerAccountsRequest(
         break;
       case 'sync-now':
         sync.refresh(request.accountId, request.source);
+        break;
+      case 'resync':
+        sync.resync(request.accountId);
         break;
       case 'set-sync-cadence':
         sync.setCadence(request.accountId, request.minutes);
