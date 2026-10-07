@@ -676,6 +676,8 @@ function snapshotBeforeUpdate(
 const MEMORIES_SEARCHED = 6;
 // What marks a memory's key among the work waiting to be embedded (an Item's key is its id).
 const MEMORY_KEY = 'memory:';
+// What marks a Conversation turn's key there (#195).
+const TURN_KEY = 'turn:';
 
 export function openItemStore(options: ItemStoreOptions): ItemStore {
   const now = options.now ?? Date.now;
@@ -1019,8 +1021,34 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     people: () => people.list(),
     // What Ares knows, for the palette's Memory group.
     memories: (text, meaning) => memory.search(text, MEMORIES_SEARCHED, meaning),
+    // Conversations with Ares (#195), turn by turn: only what the index reads.
+    *allTurns() {
+      const { conversationTurns } = schema;
+      for (let after = 0; ; ) {
+        const rows = db
+          .select({
+            id: conversationTurns.id,
+            conversationId: conversationTurns.conversationId,
+            by: conversationTurns.by,
+            status: conversationTurns.status,
+            text: conversationTurns.text,
+            links: conversationTurns.links,
+          })
+          .from(conversationTurns)
+          .where(gt(conversationTurns.id, after))
+          .orderBy(asc(conversationTurns.id))
+          .limit(500)
+          .all();
+        if (!rows.length) return;
+        yield rows;
+        after = rows.at(-1)?.id ?? after;
+      }
+    },
+    conversations: (ids) => ids.flatMap((id) => conversationStore.conversation(id) ?? []),
     onMeaningPending: meaningPending,
   });
+  // Conversations with Ares (#191), each turn kept in search as it is written (#195).
+  const conversationStore = openConversationStore(db, now, search.conversations);
 
   function findBySourceIdentity(source: Source, account: string, externalId: string): Item | undefined {
     const { items } = schema;
@@ -2762,7 +2790,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         withDetails(db.select().from(schema.items).where(eq(schema.items.id, id)).all())[0] ?? null,
     }),
     updates: openUpdateStore(db),
-    conversations: openConversationStore(db, now),
+    conversations: conversationStore,
     emailSorting: sortingAnswers.store,
     suggestedReplies,
     filing: {
@@ -2823,23 +2851,36 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       recent: (limit) => refusals.recent(limit),
     },
     search: { query: (query, meaning) => search.query(query, meaning) },
-    // Memories first (few, and what Ares's jobs look up), then Items; a memory's key is marked as one.
+    // Memories first (few, and what Ares's jobs look up), then Conversation turns (#195), then Items;
+    // a memory's key and a turn's are marked as such.
     meaning: {
       pending(model, limit) {
         const memories = memory.meaning
           .pending(model, limit)
           .map((work) => ({ ...work, key: `${MEMORY_KEY}${work.key}` }));
-        return [...memories, ...search.meaning.pending(model, limit - memories.length)];
+        const turns = search.conversations
+          .pending(model, limit - memories.length)
+          .map((work) => ({ ...work, key: `${TURN_KEY}${work.key}` }));
+        return [
+          ...memories,
+          ...turns,
+          ...search.meaning.pending(model, limit - memories.length - turns.length),
+        ];
       },
       save(model, done) {
-        const isMemory = (work: EmbeddedWork) => work.key.startsWith(MEMORY_KEY);
+        const marked = (work: EmbeddedWork, key: string) =>
+          work.key.startsWith(key) ? [{ ...work, key: work.key.slice(key.length) }] : [];
         memory.meaning.save(
           model,
-          done.filter(isMemory).map((work) => ({ ...work, key: work.key.slice(MEMORY_KEY.length) })),
+          done.flatMap((work) => marked(work, MEMORY_KEY)),
+        );
+        search.conversations.save(
+          model,
+          done.flatMap((work) => marked(work, TURN_KEY)),
         );
         search.meaning.save(
           model,
-          done.filter((work) => !isMemory(work)),
+          done.filter((work) => !work.key.startsWith(MEMORY_KEY) && !work.key.startsWith(TURN_KEY)),
         );
       },
       progress(model) {

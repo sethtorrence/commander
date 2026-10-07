@@ -1,4 +1,12 @@
-import type { Item, Memory, Person, Project, SearchHit, SearchResult } from '@commander/domain';
+import type {
+  ConversationHit,
+  Item,
+  Memory,
+  Person,
+  Project,
+  SearchHit,
+  SearchResult,
+} from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { readQuery } from './query';
 import { type PaletteContext, paletteGroups } from './rows';
@@ -152,10 +160,12 @@ describe('as the User types', () => {
     expect(shape('li', { hits: [], projects: [] })).toEqual([
       ['Jump', ['Linear']],
       ['Search in Linear', ['Search “li” in Linear']],
+      ['Ares', ['Ask Ares: “li”']],
     ]);
     expect(shape('switch th', { hits: [], projects: [] })).toEqual([
       ['Commands', ['Switch theme']],
       ['Search in Linear', ['Search “switch th” in Linear']],
+      ['Ares', ['Ask Ares: “switch th”']],
     ]);
     expect(shape('today', { hits: [], projects: [] })[0]).toEqual(['Jump', ['Today’s Daily Note']]);
   });
@@ -171,6 +181,7 @@ describe('as the User types', () => {
       ['Linear', ['Fix the login loop']],
       ['Todos', ['Ask about the login loop', 'Login loop retro']],
       ['Notes', ['Login loop is back on staging']],
+      ['Ares', ['Ask Ares: “login loop”']],
     ]);
     expect(groups[0]?.rows[0]).toMatchObject({
       tag: 'ENG-418',
@@ -310,9 +321,90 @@ describe('as the User types', () => {
     ]);
   });
 
+  it('lists the Conversations with Ares that match, with the line that matched, opening at its turn (#195)', () => {
+    const conversation = (extra: Partial<ConversationHit>): ConversationHit => ({
+      conversationId: 'conversation-1',
+      title: 'What is a fjord?',
+      day: '2026-10-03',
+      daily: false,
+      turnId: 7,
+      by: 'ares',
+      line: 'A long, narrow inlet carved by glaciers.',
+      foundBy: ['words'],
+      ...extra,
+    });
+    const groups = paletteGroups(
+      context('glaciers', {
+        hits: [hit(todo)],
+        projects: [],
+        conversations: [
+          conversation({}),
+          conversation({
+            conversationId: 'conversation-2',
+            title: 'Plan the offsite',
+            day: '2026-09-30',
+            turnId: 2,
+            by: 'user',
+            line: 'Plan the offsite',
+            foundBy: ['meaning'],
+          }),
+        ],
+      }),
+    );
+    expect(groups.map((group) => group.title)).toEqual([
+      'Todos',
+      'Conversations',
+      'Search in Linear',
+      'Ares',
+    ]);
+    expect(groups[1]?.rows).toEqual([
+      {
+        key: 'conversation:conversation-1',
+        tag: 'Ares',
+        label: 'What is a fjord? · A long, narrow inlet carved by glaciers.',
+        hint: 'Today',
+        action: { type: 'conversation', conversationId: 'conversation-1', turnId: 7 },
+      },
+      {
+        key: 'conversation:conversation-2',
+        tag: 'You',
+        label: 'Plan the offsite',
+        hint: 'Wed 30 Sep',
+        related: true,
+        action: { type: 'conversation', conversationId: 'conversation-2', turnId: 2 },
+      },
+    ]);
+    // A chip narrowing the search to Items leaves them out.
+    expect(
+      paletteGroups(
+        context('in:todos glaciers', { hits: [], projects: [], conversations: [conversation({})] }),
+      ),
+    ).not.toContainEqual(expect.objectContaining({ title: 'Conversations' }));
+  });
+
+  it('offers Ask Ares last once something is typed, with all that was typed when given (#195)', () => {
+    expect(shape('')).not.toContainEqual(expect.arrayContaining(['Ares']));
+    const groups = paletteGroups({
+      ...context('what is due in #LT', { hits: [hit(todo)], projects: [] }),
+      ask: 'what is due in #LT',
+    });
+    expect(groups.at(-1)).toEqual({
+      title: 'Ares',
+      rows: [
+        {
+          key: 'ask-ares',
+          tag: 'Tab',
+          label: 'Ask Ares: “what is due in #LT”',
+          hint: 'New Conversation',
+          action: { type: 'ask-ares', text: 'what is due in #LT' },
+        },
+      ],
+    });
+  });
+
   it('offers Search in Linear when local results are thin, one row per workspace', () => {
     const thin = paletteGroups(context('okta', { hits: [hit(issue)], projects: [] }));
-    expect(thin.at(-1)).toMatchObject({
+    expect(thin.at(-2)).toMatchObject({
       title: 'Search in Linear',
       rows: [
         {
@@ -377,7 +469,7 @@ describe('as the User types', () => {
 
   it('offers no Search in Linear without a Linear Account', () => {
     const groups = paletteGroups({ ...context('okta', { hits: [], projects: [] }), linearAccounts: [] });
-    expect(groups).toEqual([]);
+    expect(groups.map((group) => group.title)).toEqual(['Ares']);
   });
 });
 
@@ -385,9 +477,11 @@ describe('a search narrowed by chips', () => {
   it('shows only results, and Search in Linear only when Linear is in scope', () => {
     expect(shape('in:todos login', { hits: [hit(todo)], projects: [] })).toEqual([
       ['Todos', ['Ask about the login loop']],
+      ['Ares', ['Ask Ares: “login”']],
     ]);
     expect(shape('in:linear okta', { hits: [], projects: [] })).toEqual([
       ['Search in Linear', ['Search “okta” in Linear']],
+      ['Ares', ['Ask Ares: “okta”']],
     ]);
   });
 

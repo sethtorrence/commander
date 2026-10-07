@@ -28,13 +28,14 @@ import {
 } from '@commander/models';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { requestReveal } from '../../frame/reveal';
 import { openTestItemStore } from '../../item-store/test-item-store';
 import { CommandProvider, createCommandRegistry } from '../../palette/commands';
 import { ShortcutProvider } from '../../shortcuts/react';
 import { UpdatesProvider } from '../../updates/context';
 import type { UpdatesClient } from '../../updates/updates';
 import { Conversations } from './Conversations';
-import type { ConversationsClient } from './conversations';
+import { askAres, CONVERSATIONS_REVEAL, type ConversationsClient } from './conversations';
 import { WhatAresCanDo } from './WhatAresCanDo';
 
 // Conversations (#191) in the Ares Section, with the Core's own Conversations behind the window's
@@ -236,6 +237,37 @@ describe('Conversations in the Ares Section', () => {
       within(within(list).getByRole('listitem', { name: 'Today' })).getByRole('button', { name: /^Today/ }),
     );
     await waitFor(() => expect(input()).toHaveProperty('value', 'half a thought'));
+  });
+});
+
+describe('from Ctrl+K (#195)', () => {
+  it('Ask Ares starts a new Conversation with what was typed as its first message, opened here', async () => {
+    show();
+    await waitFor(() => expect(within(thread()).getByRole('heading', { name: 'Today' })).toBeTruthy());
+    const { conversationId, problem } = await askAres(client, 'How do tides work?', '2026-10-06');
+    expect(problem).toBeNull();
+    act(() => requestReveal(CONVERSATIONS_REVEAL, conversationId));
+    await waitFor(() =>
+      expect(within(thread()).getByRole('heading', { name: 'How do tides work?' })).toBeTruthy(),
+    );
+    expect(within(thread()).getAllByTestId('conversation-turn')[0]?.textContent).toBe('How do tides work?');
+    await waitFor(() => expect(calls).toHaveLength(1));
+  });
+
+  it('opens a Conversation search found at the turn that matched, marked', async () => {
+    const { conversation } = store.conversations.create('2026-10-05');
+    const asked = store.conversations.addUserTurn(conversation.id, 'What is a fjord?');
+    const answer = store.conversations.startAnswer(conversation.id, asked.id, 'streaming');
+    store.conversations.saveAnswer(answer.id, { status: 'done', text: 'Carved by glaciers.', endedAt: 1 });
+    show();
+    await waitFor(() => expect(within(thread()).getByRole('heading', { name: 'Today' })).toBeTruthy());
+    act(() => requestReveal(CONVERSATIONS_REVEAL, conversation.id, String(answer.id)));
+    await waitFor(() =>
+      expect(within(thread()).getByRole('heading', { name: 'What is a fjord?' })).toBeTruthy(),
+    );
+    const [first, second] = within(thread()).getAllByTestId('conversation-turn');
+    expect(second?.dataset.found).toBe('true');
+    expect(first?.dataset.found).toBeUndefined();
   });
 });
 

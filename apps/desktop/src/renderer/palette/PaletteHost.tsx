@@ -10,6 +10,7 @@ import { PEOPLE_SETTINGS } from '../people/PeopleSettings';
 import { useProjects } from '../projects/context';
 import { inFilter } from '../projects/filter';
 import { SECTIONS } from '../sections';
+import { askAres, CONVERSATIONS_REVEAL } from '../sections/ares/conversations';
 import { type EmailAccountSummary, emailAccountsIn } from '../sections/email/email';
 import { linearAccountsIn } from '../sections/linear/linear-issues';
 import { dayKey } from '../sections/notes/days';
@@ -25,8 +26,9 @@ import type { PaletteAction } from './rows';
   The palette in the frame: `Ctrl+K` (everywhere, even while typing) opens it on everything, `/`
   (when not typing) opens it on the open Section and the Project filter. It registers the frame's
   own commands, and carries out what the User picks: opening a Section, a Project page, today's
-  Daily Note, a Settings page, an Item where it lives (frame/reveal.ts), a command, or Linear's own
-  search in the browser.
+  Daily Note, a Settings page, an Item where it lives (frame/reveal.ts), a Conversation with Ares at
+  the turn that matched, a command, or Linear's own search in the browser. Ask Ares (#195) starts a
+  new Conversation with what was typed and opens it in the Ares Section as he answers.
 */
 
 export interface PaletteHostProps {
@@ -166,6 +168,20 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
         // What Ares knows, in the Ares Section, at the memory.
         onOpenSection('ares');
         return requestReveal(WHAT_ARES_KNOWS, action.memoryId);
+      case 'conversation':
+        // The Conversation in the Ares Section, at the turn that matched.
+        onOpenSection('ares');
+        return requestReveal(CONVERSATIONS_REVEAL, action.conversationId, String(action.turnId));
+      case 'ask-ares':
+        void askAres(window.commander.conversations, action.text, today).then(
+          ({ conversationId, problem }) => {
+            if (problem) report(problem);
+            onOpenSection('ares');
+            requestReveal(CONVERSATIONS_REVEAL, conversationId);
+          },
+          report,
+        );
+        return;
       case 'command':
         return action.command.run();
       case 'browser':

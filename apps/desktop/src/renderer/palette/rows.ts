@@ -1,4 +1,6 @@
 import {
+  type ConversationHit,
+  conversationName,
   type Filing,
   gmailSearchUrl,
   type Memory,
@@ -23,12 +25,15 @@ import type { PaletteQuery } from './query';
     lists them all)
   - search results grouped by kind, the group holding the best hit first, those found by meaning
     alone (#73) marked "related"; then Memory (#74): what Ares knows that matches, each opening What
-    Ares knows at the memory
+    Ares knows at the memory; then Conversations (#195): each Conversation with Ares that matches,
+    with the line that matched, opening it at that turn
   - Commands
   - Search in Linear, last, when local results are thin and a Linear Account is connected
   - Search in Gmail (#135) and Search in Outlook (#136), one row per email Account, when emails are
     among the results: Commander keeps only the 30 days before an Account was connected and what
     came since
+  - Ask Ares (#195), always last once something is typed: a new Conversation in the Ares Section
+    with what was typed as its first message (`Tab`, or Enter on it)
 
   Before anything is typed it offers Jump, Projects and Commands. Once chips narrow the search to
   Items (`/` in a Section), only results show.
@@ -41,6 +46,8 @@ export type PaletteAction =
   | { type: 'project'; projectId: string }
   | { type: 'person'; personId: string }
   | { type: 'memory'; memoryId: string }
+  | { type: 'conversation'; conversationId: string; turnId: number }
+  | { type: 'ask-ares'; text: string }
   | { type: 'item'; hit: SearchHit }
   | { type: 'command'; command: Command }
   | { type: 'browser'; url: string };
@@ -64,6 +71,8 @@ export interface PaletteGroup {
 
 export interface PaletteContext {
   query: PaletteQuery;
+  /** What Ask Ares sends: what the User typed (the query's words when none is given). */
+  ask?: string;
   /** The Core's answer for `query.search`, or null when there is none (yet). */
   result: SearchResult | null;
   sections: readonly { id: string; label: string; code: string }[];
@@ -196,6 +205,20 @@ function memoryRow(memory: Memory): PaletteRow {
   };
 }
 
+function conversationRow(hit: ConversationHit, today: string): PaletteRow {
+  const name = conversationName(hit, hit.day === today ? 'Today' : shortDay(hit.day));
+  // The line names the Conversation already when it is the start of the turn it was named after.
+  const named = hit.line.startsWith(name.replace(/…$/, ''));
+  return {
+    key: `conversation:${hit.conversationId}`,
+    tag: hit.by === 'user' ? 'You' : 'Ares',
+    label: named ? hit.line : `${name} · ${hit.line}`,
+    hint: hit.day === today ? 'Today' : shortDay(hit.day),
+    ...(!hit.foundBy.includes('words') && { related: true }),
+    action: { type: 'conversation', conversationId: hit.conversationId, turnId: hit.turnId },
+  };
+}
+
 export function paletteGroups(context: PaletteContext): PaletteGroup[] {
   const { query, result } = context;
   const groups: PaletteGroup[] = [];
@@ -249,7 +272,13 @@ export function paletteGroups(context: PaletteContext): PaletteGroup[] {
       byGroup.set(title, [...(byGroup.get(title) ?? []), hitRow(hit, context.today)]);
     }
     for (const [title, rows] of byGroup) add(title, rows);
-    if (!scoped) add('Memory', (result.memories ?? []).map(memoryRow));
+    if (!scoped) {
+      add('Memory', (result.memories ?? []).map(memoryRow));
+      add(
+        'Conversations',
+        (result.conversations ?? []).map((each) => conversationRow(each, context.today)),
+      );
+    }
   }
 
   if (!scoped) {
@@ -307,6 +336,18 @@ export function paletteGroups(context: PaletteContext): PaletteGroup[] {
         action: { type: 'browser', url: outlookSearchUrl(account.address, words, account.personal) },
       })),
     );
+  }
+  const ask = (context.ask ?? query.text).trim();
+  if (ask) {
+    add('Ares', [
+      {
+        key: 'ask-ares',
+        tag: 'Tab',
+        label: `Ask Ares: “${ask}”`,
+        hint: 'New Conversation',
+        action: { type: 'ask-ares', text: ask },
+      },
+    ]);
   }
   return groups;
 }

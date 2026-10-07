@@ -167,3 +167,23 @@ export function lastWritten(at: number, today: string): string {
 export function openConversation(conversationId: string): void {
   requestReveal(CONVERSATIONS_REVEAL, conversationId);
 }
+
+/**
+ * Ask Ares from Ctrl+K (#195): a new Conversation with what the User typed sent as its first message.
+ * Its id, to open in the Ares Section, and why the message couldn't be sent, if it couldn't (the
+ * Conversation is there either way).
+ */
+export async function askAres(
+  client: ConversationsClient,
+  text: string,
+  day: string,
+): Promise<{ conversationId: string; problem: unknown }> {
+  const made = await client({ op: 'new', day });
+  const conversationId = made.conversation.id;
+  try {
+    await client({ op: 'send', conversationId, text });
+    return { conversationId, problem: null };
+  } catch (problem) {
+    return { conversationId, problem };
+  }
+}
