@@ -127,10 +127,22 @@ function toActor(row: ActivityRow): Actor {
   }
 }
 
+// An Item's own fields, in the order ItemState lists them: the only ones an activity entry reports as
+// changes. Some entries also record Commander's own fields (an email's `bucket`, a Chat's `waiting`, a
+// warning's `injectionWarning`) so they can be undone; those are no change to the Item itself, and the
+// window refuses a reply naming them.
+const STATE_FIELDS = [
+  'title',
+  'people',
+  'status',
+  'filing',
+  'detail',
+  'deletedAt',
+] as const satisfies readonly (keyof ItemState)[];
+
 // The fields that differ between two recorded states of an Item, in the order ItemState lists them.
 export function changesBetween(before: ItemState, after: ItemState): ItemChange[] {
-  const fields = Object.keys(after) as (keyof ItemState)[];
-  return fields
+  return STATE_FIELDS.filter((field) => field in after || field in before)
     .filter((field) => !isDeepStrictEqual(before[field], after[field]))
     .map((field) => ({ field, before: before[field], after: after[field] }) as ItemChange);
 }
