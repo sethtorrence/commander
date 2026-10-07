@@ -13,10 +13,11 @@ const minimised = (app: ElectronApplication) =>
 
 const summon = (app: ElectronApplication) => process.kill(app.process().pid as number, 'SIGUSR1');
 
+// The Core's heartbeats, as Settings → Diagnostics heard them (beside its health, in words).
 async function beats(window: Page): Promise<number> {
-  const heartbeat = window.getByTestId('core-heartbeat');
-  await expect(heartbeat).toHaveText(/\d+/, { timeout: 10_000 });
-  return Number(await heartbeat.textContent());
+  const health = window.getByTestId('core-health');
+  await expect(health).toHaveAttribute('data-beats', /\d+/, { timeout: 10_000 });
+  return Number(await health.getAttribute('data-beats'));
 }
 
 const controls = (window: Page) => window.getByRole('group', { name: 'Window' });

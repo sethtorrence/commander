@@ -10,6 +10,7 @@ When you connect an account, Commander reads what you allow on its consent scree
 
 - Everything Commander syncs is stored only on your computer, in a local database in your user profile.
 - Sign-in tokens and API keys are stored only in your operating system's keyring, never in plain text.
+- Commander keeps a short log of what it did (syncs, failures, restarts) on your computer, for a week at most. It never holds tokens, keys, email text or what your items say. Settings → Diagnostics can export it to a file you choose, for example to attach to a bug report; nothing is sent anywhere unless you send that file yourself.
 - Removing an account in Settings → Accounts deletes its token and the data Commander synced from it.
 
 ## Who else sees it

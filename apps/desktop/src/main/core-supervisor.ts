@@ -10,6 +10,8 @@
 // window, which shows the recovery screen. Meanwhile every request fails at once with
 // DATABASE_UNAVAILABLE, except the recovery screen's own (`inRecovery`).
 //
+// Every start, stop and restart goes in the log (#207), with why it stopped and what happens next.
+//
 // Nothing is lost in a restart: sync, held sends (the outgoing queue, which never sends twice: a send
 // whose outcome isn't known is checked at the Source first), Conversations and Ares's jobs live in the
 // database, and the new Core carries on from it. Main re-sends what the Core only hears from it (the
@@ -69,6 +71,7 @@ export function createCoreSupervisor({
   checkMs = CHECK_MS,
   now = Date.now,
   killHard = (pid) => process.kill(pid, 'SIGKILL'),
+  log = () => {},
 }: {
   fork: () => CoreProcess;
   // Every message from the running Core, heartbeats included.
@@ -86,6 +89,8 @@ export function createCoreSupervisor({
   now?: () => number;
   // Ends a Core that stopped answering (it can't run its own SIGTERM handler while stuck).
   killHard?: (pid: number) => void;
+  // Where starts, stops and restarts are told (the log, #207).
+  log?: (level: 'info' | 'warn' | 'error', message: string) => void;
 }) {
   let current: CoreProcess | null = null;
   let state: CoreStatus['state'] = 'restarting';
@@ -119,6 +124,7 @@ export function createCoreSupervisor({
     if (restarted) restarts += 1;
     const core = fork();
     current = core;
+    log('info', restarted ? `Started a new Core (restart ${restarts})` : 'Started the Core');
     // The new Core's word on the database is still to come.
     database = null;
     let resolveStopped = () => {};
@@ -152,13 +158,23 @@ export function createCoreSupervisor({
       watchdog = null;
       resolveStopped();
       for (const listener of exitListeners) listener();
-      if (quitting) return;
+      if (quitting) return log('info', `The Core stopped (code ${code}), as Commander is quitting`);
       const at = now();
       lastStop = { at, reason: unresponsive ? 'unresponsive' : 'exited', code: unresponsive ? null : code };
       const next = nextRestart(stops, at, { delaysMs, windowMs });
       stops = next.stops;
-      if (next.delayMs === null) return setState('stopped');
+      const why = unresponsive
+        ? 'The Core stopped answering and was ended'
+        : `The Core exited (code ${code})`;
+      if (next.delayMs === null) {
+        log(
+          'error',
+          `${why}; it stopped ${stops.length} times in ${Math.round(windowMs / 60_000)} minutes, so it won’t be started again until the User asks (Try again)`,
+        );
+        return setState('stopped');
+      }
       const delay = next.delayMs;
+      log('warn', `${why}; starting a new one in ${delay / 1000} s`);
       restartTimer = setTimeout(start, delay);
       setState('restarting', at + delay);
     });
@@ -173,6 +189,10 @@ export function createCoreSupervisor({
       const late = beat ? at - lastBeat > missingBeatMs : at - startedAt > firstBeatMs;
       if (!late || unresponsive) return;
       unresponsive = true;
+      log(
+        'warn',
+        `The Core’s heartbeat went missing (${beat ? 'it stopped beating' : 'it never beat'}); ending it`,
+      );
       if (core.pid) killHard(core.pid);
       else core.kill();
     }, checkMs);
@@ -224,6 +244,7 @@ export function createCoreSupervisor({
     // Try again: Commander stopped retrying, and the User asks for a new Core now.
     tryAgain() {
       if (current || quitting) return;
+      log('info', 'The User asked to start the Core again (Try again)');
       stops = [];
       start();
     },

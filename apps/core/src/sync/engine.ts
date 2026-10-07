@@ -56,7 +56,7 @@ import {
   WriteRejected,
 } from '@commander/sources';
 import { type AccessToken, AccessTokenUnavailable } from '../access-tokens';
-import type { ItemStore, OutgoingRow, SyncState } from '../item-store';
+import type { ItemStore, OutgoingRow, SyncRun, SyncState } from '../item-store';
 
 // Back-off after failures: 1, 2, 4… minutes, never more than an hour (a Retry-After can ask for more).
 export const BACKOFF_BASE_MS = 60_000;
@@ -130,6 +130,8 @@ export type SyncEngineOptions = {
   now?: () => number;
   random?: () => number;
   log?: (message: string) => void;
+  // Each sync run, once recorded (the log, #207).
+  onRun?: (run: Omit<SyncRun, 'id'>) => void;
 };
 
 export type SyncEngine = {
@@ -236,6 +238,7 @@ export function createSyncEngine({
   now = Date.now,
   random = Math.random,
   log = (message) => console.warn(message),
+  onRun,
 }: SyncEngineOptions): SyncEngine {
   const bySource = new Map(adapters.map((adapter) => [adapter.source, adapter]));
   const entries = new Map<string, Entry>();
@@ -615,7 +618,7 @@ export function createSyncEngine({
       if (lane.resyncing && lane.resync === null) lane.resync = 'resume';
     }
     store.syncState.save(next);
-    store.syncState.recordRun({
+    const run = {
       account,
       source,
       trigger,
@@ -626,7 +629,9 @@ export function createSyncEngine({
       requests: cost?.requests ?? 0,
       complexity: cost?.complexity ?? null,
       error: problem?.message ?? null,
-    });
+    };
+    store.syncState.recordRun(run);
+    onRun?.(run);
     const itemIds = [...changed];
     for (const listener of syncedListeners) listener({ account, source, outcome, itemIds });
   }

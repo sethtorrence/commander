@@ -129,12 +129,14 @@ test('stops in a row back off, then stop with Try again and a link to Diagnostic
   await expect(window.getByTestId('settings')).toBeVisible();
   await expect(window.getByTestId('diagnostics')).toBeInViewport();
   await expect(window.getByTestId('core-restarts')).toContainText(/^3 · last exited/);
+  await expect(window.getByTestId('core-health')).toHaveText('Stopped');
 
   await banner.getByRole('button', { name: 'Try again' }).click();
   await expect(banner).toBeHidden({ timeout: 20_000 });
   expect(await tryRequest(window)).toBeNull();
   await expect(window.getByTestId('core-restarts')).toContainText(/^4 · /);
-  await expect(window.getByTestId('core-heartbeat')).toHaveText(/^[1-9]\d*$/);
+  await expect(window.getByTestId('core-health')).toHaveText('Healthy');
+  await expect(window.getByTestId('core-health')).toHaveAttribute('data-beats', /^[1-9]\d*$/);
 
   await commander.close();
 });

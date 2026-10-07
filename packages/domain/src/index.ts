@@ -20,6 +20,7 @@ export * from './conversations';
 export * from './core-messages';
 export * from './daily-template';
 export * from './database-health';
+export * from './diagnostics-messages';
 export * from './email';
 export * from './email-actions';
 export * from './email-calendar';

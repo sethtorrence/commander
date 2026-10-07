@@ -47,6 +47,8 @@ export type BackupsOptions = {
   // The recovery screen's Restore, in the Core's limited state: marks its snapshot for the relaunch.
   // Throws (RestoreRefused) when it can't.
   recover?: () => void;
+  // Where snapshots, restores and exports are told (the log, #207).
+  log?: { info(message: string): void; warn(message: string): void };
   now?: () => number;
 };
 
@@ -56,6 +58,7 @@ const PROGRESS_MS = 100;
 export function setUpBackups(options: BackupsOptions) {
   const { store, send } = options;
   const now = options.now ?? Date.now;
+  const log = options.log ?? { info: () => {}, warn: (message: string) => console.warn(message) };
   const problems = new Map<SnapshotProblem['kind'], SnapshotProblem>();
   let exporting: { progress: ExportProgress; abort: AbortController; work?: string } | null = null;
   let lastExport: ExportProgress | null = null;
@@ -166,6 +169,7 @@ export function setUpBackups(options: BackupsOptions) {
         onProgress: (step, done, total) => setExport({ ...progress, step, done, total }),
       });
       lastExport = { ...(exporting?.progress ?? progress), state: 'done', folder };
+      log.info('Export everything finished');
     } catch (error) {
       const cancelled = error instanceof ExportCancelled;
       lastExport = {
@@ -173,6 +177,8 @@ export function setUpBackups(options: BackupsOptions) {
         state: cancelled ? 'cancelled' : 'failed',
         error: cancelled ? null : error instanceof Error ? error.message : String(error),
       };
+      if (cancelled) log.info('Export everything was cancelled');
+      else log.warn(`Export everything failed: ${lastExport.error}`);
     } finally {
       exporting = null;
       changed();
@@ -189,6 +195,9 @@ export function setUpBackups(options: BackupsOptions) {
       try {
         const taken = store.takeDailySnapshot();
         if (taken) {
+          log.info(
+            `Took today’s snapshot, ${basename(taken.path)}${taken.removed.length ? `; removed the oldest, ${taken.removed.map((path) => basename(path)).join(', ')}` : ''}`,
+          );
           problems.delete('daily');
           problems.delete('before-update');
           settle('daily-snapshot');
@@ -196,7 +205,7 @@ export function setUpBackups(options: BackupsOptions) {
       } catch (error) {
         const at = now();
         const reason = error instanceof Error ? error.message : String(error);
-        console.warn('The daily snapshot failed:', reason);
+        log.warn(`Today’s snapshot failed and was discarded: ${reason}`);
         problems.set('daily', { kind: 'daily', at, reason });
         report({ kind: 'backup-failed', what: 'daily-snapshot', at, reason });
       }
@@ -221,6 +230,7 @@ export function setUpBackups(options: BackupsOptions) {
         case 'restore':
           try {
             markForRestore(options.dataDir, request.name);
+            log.info(`Marked the snapshot ${request.name} to restore; Commander relaunches to make it`);
             reply({ ok: true, status: status() });
           } catch (error) {
             reply({

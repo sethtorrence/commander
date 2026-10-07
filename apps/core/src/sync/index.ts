@@ -39,7 +39,7 @@ import {
 import { z } from 'zod';
 import type { AccessTokens } from '../access-tokens';
 import type { ItemStore } from '../item-store';
-import { createSyncEngine, type SyncEngine } from './engine';
+import { createSyncEngine, type SyncEngine, type SyncEngineOptions } from './engine';
 
 export type { SyncEngine, SyncedEvent } from './engine';
 
@@ -77,6 +77,8 @@ export type SyncOptions = {
   outlookSource?: (options: OutlookSourceOptions) => SourceAdapter;
   random?: () => number;
   log?: (message: string) => void;
+  // Each sync run, once recorded (the log, #207).
+  onRun?: SyncEngineOptions['onRun'];
   // The Accounts changed, or whether one needs reconnecting did.
   onAccountsChanged?: () => void;
   // A message written in Commander (#138): an attachment's bytes, for its draft or its sending.
@@ -118,6 +120,7 @@ export function setUpSync(
     outlookSource = createOutlookSource,
     random,
     log = (message) => console.warn(message),
+    onRun,
     onAccountsChanged,
     attachment,
   }: SyncOptions,
@@ -156,6 +159,7 @@ export function setUpSync(
     ...(attachment ? { attachment } : {}),
     random,
     log,
+    onRun,
   });
   // The Accounts as the main process last listed them.
   let listed: CoreSyncAccounts['accounts'] = [];

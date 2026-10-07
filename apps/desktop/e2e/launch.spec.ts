@@ -2,17 +2,16 @@ import { expect, test } from '@playwright/test';
 import { openSettings } from './frame';
 import { launchCommander } from './launch-commander';
 
-test('Commander launches and Settings → Diagnostics shows the core heartbeat climbing', async () => {
+test('Commander launches and Settings → Diagnostics shows the Core healthy, its heartbeat climbing', async () => {
   const { app } = await launchCommander();
   const window = await app.firstWindow();
   await openSettings(window, 'Diagnostics');
 
-  const beats = window.getByTestId('core-heartbeat');
-  await expect(beats).toHaveText(/\d+/, { timeout: 10_000 });
-  const first = Number(await beats.textContent());
-  await expect
-    .poll(async () => Number(await beats.textContent()), { timeout: 10_000 })
-    .toBeGreaterThan(first);
+  const health = window.getByTestId('core-health');
+  await expect(health).toHaveText('Healthy', { timeout: 10_000 });
+  const beats = async () => Number(await health.getAttribute('data-beats'));
+  const first = await beats();
+  await expect.poll(beats, { timeout: 10_000 }).toBeGreaterThan(first);
 
   await app.close();
 });

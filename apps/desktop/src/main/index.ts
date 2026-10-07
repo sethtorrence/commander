@@ -1,6 +1,8 @@
 import { execFile } from 'node:child_process';
+import { arch, release } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { createLog, type Log, logsDir } from '@commander/core/src/logs/log-file';
 import {
   attachmentScheme,
   type CoreMessage,
@@ -29,6 +31,7 @@ import { createBackupsChannel } from './backups-channel';
 import { createComposeChannel } from './compose-channel';
 import { createConversationsChannel } from './conversations-channel';
 import { createCoreSupervisor } from './core-supervisor';
+import { createDiagnosticsChannel } from './diagnostics-channel';
 import { displayServerFromHyprland, inferDisplayServer } from './display-server';
 import { setUpEmailReader } from './email-reader';
 import { emailReaderSchemePrivileges } from './email-reader/protocol';
@@ -91,7 +94,11 @@ async function diagnostics(): Promise<Diagnostics> {
   return {
     ...(await readDisplayServer()),
     passwordStore: app.commandLine.getSwitchValue('password-store') || 'default',
+    version: app.getVersion(),
     electron: process.versions.electron,
+    chrome: process.versions.chrome,
+    node: process.versions.node,
+    os: `${process.platform} ${release()} (${arch()})`,
   };
 }
 
@@ -160,7 +167,7 @@ function tellWindow(status: CoreStatus) {
     } satisfies CoreMessage);
 }
 
-function startCore(secrets: Secrets) {
+function startCore(secrets: Secrets, log: Log) {
   // The Core runs under a supervisor that starts a new one when it stops (#200). Every message to it
   // goes through `send` (dropped while there is none), and every window request through `relay`,
   // which fails at once while the Core is down rather than waiting out its time.
@@ -173,6 +180,8 @@ function startCore(secrets: Secrets) {
       if (restarted) coreRestarted();
     },
     onStatus: tellWindow,
+    // Its starts, stops and restarts go in the log (#207).
+    log: (level, message) => log[level]('core', message),
     ...(testRestartDelays ? { delaysMs: testRestartDelays } : {}),
   });
   supervisor.start();
@@ -245,6 +254,28 @@ function startCore(secrets: Secrets) {
   ipcMain.handle(ipc.backups, (_event, request: unknown) =>
     supervisor.whileRunning(() => backups.request(request), { inRecovery: true }),
   );
+  // Settings → Diagnostics' report and Export diagnostics (#207). Not relayed: the export works while
+  // the Core is down, without what only the Core knows. The file comes from the system save picker
+  // (read at call time, so the end-to-end tests can stand in for it).
+  const diagnosticsChannel = createDiagnosticsChannel({
+    send,
+    whileCoreRuns: (run) => supervisor.whileRunning(run),
+    logsDir: logsDir(app.getPath('userData')),
+    about: diagnostics,
+    coreStatus: () => supervisor.status(),
+    async chooseFile(suggested) {
+      const options: Electron.SaveDialogOptions = {
+        title: 'Export diagnostics',
+        defaultPath: join(app.getPath('documents'), suggested),
+        buttonLabel: 'Export',
+        filters: [{ name: 'Markdown', extensions: ['md'] }],
+      };
+      const result = await (window ? dialog.showSaveDialog(window, options) : dialog.showSaveDialog(options));
+      return result.canceled ? null : result.filePath || null;
+    },
+    log: (message) => log.info('diagnostics', message),
+  });
+  ipcMain.handle(ipc.diagnosticsReport, (_event, request: unknown) => diagnosticsChannel.request(request));
   // Ares's Updates: the window asks (`U`, the header button, the palette), the Core answers.
   const updates = createUpdatesChannel(send);
   ipcMain.handle(ipc.updates, (_event, request: unknown) => relay(() => updates.request(request)));
@@ -313,7 +344,7 @@ function startCore(secrets: Secrets) {
     if (health.success) return supervisor.setDatabase(health.data.health);
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
     if (markdownCopy.settle(raw) || backups.settle(raw) || updates.settle(raw) || compose.settle(raw)) return;
-    if (conversations.settle(raw)) return;
+    if (conversations.settle(raw) || diagnosticsChannel.settle(raw)) return;
     if (emailReader?.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.
     if (models(raw)) return;
@@ -335,6 +366,15 @@ function startCore(secrets: Secrets) {
 
 app.whenReady().then(() => {
   if (!primary) return;
+  // The log (#207): main.log in the logs folder of the data folder, beside the Core's core.log. Every
+  // warning main already gives goes in it too.
+  const log = createLog({ dir: logsDir(app.getPath('userData')), process: 'main' });
+  log.captureConsole();
+  log.info(
+    'app',
+    `Commander ${app.getVersion()} started (Electron ${process.versions.electron}, ${process.platform} ${release()}, ${inferredDisplayServer()})`,
+  );
+  app.on('before-quit', () => log.info('app', 'Commander is quitting'));
   ipcMain.handle(ipc.diagnostics, () => diagnostics());
   const secrets = setUpSecretStorage();
   window = new BrowserWindow({
@@ -376,7 +416,7 @@ app.whenReady().then(() => {
   });
   if (process.env.ELECTRON_RENDERER_URL) window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else window.loadFile(join(__dirname, '../renderer/index.html'));
-  const started = startCore(secrets);
+  const started = startCore(secrets, log);
   // Quitting sends the messages held for Undo first (#138). While the disk is full (#203) the window
   // may hold edits it can't save yet, so the tray's Quit asks first.
   tray = runInBackground(window, started.core, {

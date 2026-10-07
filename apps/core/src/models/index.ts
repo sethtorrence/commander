@@ -107,6 +107,7 @@ function refusingSecrets(
   borrow: () => Promise<string | null>,
   make: (apiKey: () => Promise<string | null>) => ModelProviderAdapter,
   secrets: Pick<KnownSecrets, 'foundIn'> | undefined,
+  log: (line: string) => void,
 ): ModelProviderAdapter {
   let current: Promise<string | null> | null = null;
   const provider = make(() => current ?? borrow());
@@ -122,6 +123,10 @@ function refusingSecrets(
         );
       }
       return await call();
+    } catch (error) {
+      // The log (#207): which model, and why, never the prompt. A cancelled call is no failure.
+      if (!(error instanceof ModelError && error.kind === 'cancelled')) log(modelErrorLine(request, error));
+      throw error;
     } finally {
       if (current === key) current = null;
     }
@@ -132,6 +137,14 @@ function refusingSecrets(
   };
 }
 
+/** A failed model call, for the log: "Model call to glm-4.6 failed (rate-limit, HTTP 429): …". */
+export function modelErrorLine(request: Pick<ProviderRequest, 'setting'>, error: unknown): string {
+  const kind = error instanceof ModelError ? error.kind : 'error';
+  const status = error instanceof ModelError && error.details.status ? `, HTTP ${error.details.status}` : '';
+  const reason = error instanceof Error ? error.message : String(error);
+  return `Model call to ${request.setting.model} failed (${kind}${status}): ${reason}`;
+}
+
 export function setUpModels(
   store: ItemStore,
   {
@@ -139,6 +152,7 @@ export function setUpModels(
     accessTokens,
     secrets,
     meaning,
+    log = (line) => console.warn(line),
   }: {
     send: (message: CoreModelsReply) => void;
     accessTokens: Pick<AccessTokens, 'request'>;
@@ -146,12 +160,15 @@ export function setUpModels(
     secrets?: Pick<KnownSecrets, 'foundIn'>;
     // Search by meaning (../meaning), set up after the client it embeds through.
     meaning?: () => MeaningSide | undefined;
+    // Where failed model calls are told (the log, #207).
+    log?: (line: string) => void;
   },
 ) {
   const zai = refusingSecrets(
     apiKeyFrom(accessTokens, 'zai'),
     (apiKey) => createZaiProvider({ apiKey }),
     secrets,
+    log,
   );
   const client = createModelClient({
     settings: () => store.models.settings(),

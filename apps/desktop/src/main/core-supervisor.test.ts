@@ -311,6 +311,41 @@ describe('createCoreSupervisor', () => {
     });
   });
 
+  it('tells the log each start, stop and restart, and why', async () => {
+    const lines: string[] = [];
+    const { supervisor, latest } = supervise({
+      missingBeatMs: 5_000,
+      log: (level, message) => lines.push(`${level} ${message}`),
+    });
+    latest().beat();
+    latest().exit(3);
+    await vi.advanceTimersByTimeAsync(1_000);
+    latest().beat();
+    await vi.advanceTimersByTimeAsync(7_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    latest().beat();
+    latest().exit(1);
+    await vi.advanceTimersByTimeAsync(30_000);
+    latest().exit(1);
+    supervisor.tryAgain();
+    supervisor.kill();
+    latest().exit(0);
+    expect(lines).toEqual([
+      'info Started the Core',
+      'warn The Core exited (code 3); starting a new one in 1 s',
+      'info Started a new Core (restart 1)',
+      'warn The Core’s heartbeat went missing (it stopped beating); ending it',
+      'warn The Core stopped answering and was ended; starting a new one in 5 s',
+      'info Started a new Core (restart 2)',
+      'warn The Core exited (code 1); starting a new one in 30 s',
+      'info Started a new Core (restart 3)',
+      'error The Core exited (code 1); it stopped 4 times in 10 minutes, so it won’t be started again until the User asks (Try again)',
+      'info The User asked to start the Core again (Try again)',
+      'info Started a new Core (restart 4)',
+      'info The Core stopped (code 0), as Commander is quitting',
+    ]);
+  });
+
   it('gives the end-to-end tests the running Core’s process id', () => {
     const { supervisor, latest } = supervise();
     expect(supervisor.pid()).toBe(latest().pid);
