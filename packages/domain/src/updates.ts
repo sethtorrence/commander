@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { actionKind, autonomyLevel, autonomySection, autonomySections } from './autonomy';
+import { source } from './items';
 
 // Updates (#23, #70): Ares never interrupts. Anything he wants to tell the User goes in his queue,
 // and he delivers it only when the User is active and asks (`U`, the header button, the tray, the
@@ -196,6 +197,31 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     at: timestamp,
     reason: z.string().min(1),
   }),
+  // Changes made in Commander that couldn't sync (#206), one line per Account and Source: "2 changes
+  // didn't reach Linear: moving ENG-418 to In Review…", with Retry. Each change keeps its words from
+  // when it stopped (Commander's own, from the change's data: the domain's outgoing-words.ts). A change
+  // stays on the line while it is still queued (retried, it is on its way again), and the line clears
+  // once every change has gone through or been discarded.
+  z.object({
+    kind: z.literal('couldnt-sync'),
+    account: z.string().min(1),
+    source,
+    // The Account's name ("Acme"), when known.
+    name: z.string().nullable(),
+    changes: z
+      .array(
+        z.object({
+          id,
+          itemId,
+          what: z.string().min(1),
+          verb: z.string().min(1),
+          rest: z.string(),
+        }),
+      )
+      .min(1),
+    // Held after a restore (#202): they may have reached the Source before it, so check there first.
+    heldAfterRestore: z.boolean(),
+  }),
 ]);
 export type QueuedAbout = z.infer<typeof queuedAbout>;
 export type QueuedKind = QueuedAbout['kind'];
@@ -271,6 +297,7 @@ export type GivenUpdate = z.infer<typeof givenUpdate>;
 // What the User can do to one Item of a line, right there in the Update (#186). Open and Reply open
 // it where it lives (Reply at the message waiting on them); the rest the Core carries out.
 // A missed send-later (#139) offers Send now, Edit (the composer, opened in the window) and Discard.
+// An Item whose changes couldn't sync (#206) offers Retry.
 export const updateRowActions = [
   'open',
   'reply',
@@ -281,10 +308,19 @@ export const updateRowActions = [
   'send-now',
   'edit',
   'discard',
+  'retry',
 ] as const;
 export const updateRowAction = z.enum(updateRowActions);
 export type UpdateRowAction = z.infer<typeof updateRowAction>;
-export const rowActions = ['accept', 'dismiss', 'tick', 'not-an-instruction', 'send-now', 'discard'] as const;
+export const rowActions = [
+  'accept',
+  'dismiss',
+  'tick',
+  'not-an-instruction',
+  'send-now',
+  'discard',
+  'retry',
+] as const;
 export const rowAction = z.enum(rowActions);
 export type RowAction = z.infer<typeof rowAction>;
 
@@ -347,7 +383,8 @@ export const snoozeChoices = ['later-today', 'tomorrow'] as const;
 export const snoozeChoice = z.enum(snoozeChoices);
 export type SnoozeChoice = z.infer<typeof snoozeChoice>;
 
-export const queuedActions = ['done', 'dismiss', 'snooze', 'accept'] as const;
+// Retry: the line's changes that couldn't sync go again (#206).
+export const queuedActions = ['done', 'dismiss', 'snooze', 'accept', 'retry'] as const;
 export const queuedAction = z.enum(queuedActions);
 export type QueuedAction = z.infer<typeof queuedAction>;
 

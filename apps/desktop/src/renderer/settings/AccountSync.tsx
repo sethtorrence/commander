@@ -20,10 +20,12 @@ import {
 import { useState } from 'react';
 import { useNow } from '../frame/use-now';
 import { describeHourUse, describeResync, describeSync } from './account-sync';
+import { OutgoingChanges } from './OutgoingChanges';
 
 // One Account's sync in Settings → Accounts: last sync, how many Items, the next sync or why it's
 // waiting, any problem in plain words, Sync now, Re-sync (#205, after a short confirmation, with its
-// progress in place of the next sync), and how often it syncs. A Source with a light sync (Teams)
+// progress in place of the next sync), how often it syncs, and its changes waiting to reach the
+// Source or that couldn't sync (#206, OutgoingChanges.tsx). A Source with a light sync (Teams)
 // also has the switch for checking whenever another Source syncs, with Microsoft's caveat. A Source
 // with hourly limits (GitHub) shows the last hour's use of them.
 
@@ -152,6 +154,7 @@ export function AccountSync({
           onResync={() => request({ op: 'resync', accountId: account.id })}
         />
       </div>
+      <OutgoingChanges account={account} />
       {hourUse && (
         <p data-testid="account-hour-use" className="m-0 mt-2 text-note leading-[19px] text-muted">
           {hourUse}

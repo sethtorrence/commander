@@ -278,6 +278,52 @@ describe('the Update panel', () => {
     expect(screen.queryByRole('button', { name: 'Accept' })).toBeNull();
   });
 
+  it('changes that couldn’t sync are retried from the line, and from each Item (#206)', async () => {
+    const stopped = line(
+      1,
+      'A change you made didn’t reach Linear (Acme): moving ENG-418 to In Review.',
+      {
+        group: 'now',
+        mergeKey: 'couldnt-sync:linear:org-acme:linear',
+        about: {
+          kind: 'couldnt-sync',
+          account: 'linear:org-acme',
+          source: 'linear',
+          name: 'Acme',
+          changes: [
+            { id: 7, itemId: 'issue-418', what: 'Move to In Review', verb: 'moving', rest: 'to In Review' },
+          ],
+          heldAfterRestore: false,
+        },
+        itemIds: ['issue-418'],
+        section: 'linear',
+      },
+      {
+        rows: [
+          row('issue-418', {
+            label: 'ENG-418',
+            title: 'Fix the login loop',
+            state: 'Couldn’t sync: Move to In Review',
+            actions: ['open', 'retry'],
+          }),
+        ],
+      },
+    );
+    answer = (request) =>
+      request.op === 'run-skill' || request.op === 'past' ? update([stopped]) : stopped.queued;
+    renderUpdates();
+    fireEvent.keyDown(document.body, { key: 'u' });
+    const now = await screen.findByRole('region', { name: 'Needs you now' });
+    fireEvent.click(within(now).getByRole('button', { name: 'Retry' }));
+    fireEvent.click(within(now).getByRole('button', { name: 'Retry: ENG-418' }));
+    await waitFor(() =>
+      expect(requests.filter((request) => request.op === 'act' || request.op === 'act-row')).toEqual([
+        { op: 'act', queuedId: 1, action: 'retry' },
+        { op: 'act-row', queuedId: 1, itemId: 'issue-418', action: 'retry' },
+      ]),
+    );
+  });
+
   it('Done, Dismiss and Snooze (later today or tomorrow) act on the line', async () => {
     answer = (request) =>
       request.op === 'run-skill' || request.op === 'past'

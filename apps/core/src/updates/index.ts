@@ -23,8 +23,9 @@
 //   suggestions it is about), Snooze hides it until later, and Accept takes a suggestion in place,
 //   through the gate, or raises an action's Autonomy level one step (never past its hard limit).
 // - Acting on one of its Items (#186): Accept or Dismiss its suggestion, Tick its Linear Todo, Not
-//   an instruction (clears its warning mark), Send now or Discard a missed send-later (#139), or
-//   Dismiss it from the line; the line goes once none of its Items is left.
+//   an instruction (clears its warning mark), Send now or Discard a missed send-later (#139), Retry
+//   changes that couldn't sync (#206, as the whole line's Retry does), or Dismiss it from the line;
+//   the line goes once none of its Items is left.
 import {
   type AutonomyLevel,
   autonomyLevels,
@@ -40,6 +41,7 @@ import {
   HARD_LIMITS,
   isAllowed,
   NOT_AN_INSTRUCTION,
+  type OutgoingStatus,
   type PersonParagraphAnswer,
   type PersonParagraphRequest,
   type PresenceReport,
@@ -224,6 +226,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
   // What the kinds of line read about their Items (kinds/), as things stand now.
   function lineContext(): LineContext {
     let todos: Map<string, string> | null = null;
+    let queued: Map<number, OutgoingStatus> | null = null;
     return {
       item,
       proposal: (id) => itemStore.autonomy.proposal(id),
@@ -244,6 +247,10 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
         return todos.get(issueId) ?? null;
       },
       me: (account) => options.me?.(account) ?? null,
+      change(id) {
+        queued ??= new Map(itemStore.outgoing.rows().map((row) => [row.id, row.status]));
+        return queued.get(id) ?? null;
+      },
       now: now(),
     };
   }
@@ -422,6 +429,11 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
         return queue.act(queuedId, 'snooze', snooze ?? 'later-today');
       case 'done':
         return queue.act(queuedId, 'done');
+      // Changes that couldn't sync (#206) go again; the line stays until they go through.
+      case 'retry':
+        if (line.about.kind !== 'couldnt-sync') throw new Error('There is nothing to retry on that line');
+        itemStore.outgoing.retryChanges(line.about.changes.map((change) => change.id));
+        return line;
     }
   }
 
@@ -458,6 +470,15 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
         });
         options.onItemsChanged?.([itemId]);
         return withoutRow(queuedId, itemId, 'done');
+      // One Item's changes that couldn't sync (#206) go again; it stays on the line until they go through.
+      case 'retry': {
+        if (line.about.kind !== 'couldnt-sync') throw new Error('There is nothing to retry on that Item');
+        const ids = line.about.changes
+          .filter((change) => change.itemId === itemId)
+          .map((change) => change.id);
+        itemStore.outgoing.retryChanges(ids);
+        return line;
+      }
       // A missed send-later (#139): it goes now, or it goes for good.
       case 'send-now':
       case 'discard': {

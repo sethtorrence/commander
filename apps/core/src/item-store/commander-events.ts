@@ -261,7 +261,10 @@ export function queueCommanderEventChanges(
       !isDeepStrictEqual(was.start, now.start) ||
       !isDeepStrictEqual(was.end, now.end) ||
       was.allDay !== now.allDay;
-    if (moved) queue.queue({ ...base, field: MOVE_FIELD, value: move });
+    // The time it had kept with the change (the Source's, unless an earlier move is still queued, which
+    // keeps its own): moving it back drops the change, and Discard (#206) puts it back there.
+    const kept: CommanderEventMove = { start: was.start, end: was.end, allDay: was.allDay };
+    if (moved) queue.queue({ ...base, field: MOVE_FIELD, value: move, synced: kept });
   }
   if (entry.action === 'delete' && before.deletedAt === null && after.deletedAt !== null) {
     queue.queue({ ...base, field: DELETE_FIELD, value: true });

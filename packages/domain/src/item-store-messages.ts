@@ -77,7 +77,15 @@ import {
   type WhatAresKnows,
   whatAresKnows,
 } from './memory';
-import { type OutgoingChange, outgoingChange, outgoingQuery } from './outgoing';
+import {
+  type OutgoingChange,
+  type OutgoingEntry,
+  outgoingChange,
+  outgoingEntriesQuery,
+  outgoingEntry,
+  outgoingIds,
+  outgoingQuery,
+} from './outgoing';
 import { type PeopleChange, type Person, peopleAction, peopleChange, person } from './people';
 import {
   type Project,
@@ -171,6 +179,11 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   // Item's changes that couldn't sync.
   z.object({ op: z.literal('outgoing'), query: outgoingQuery.default({}) }),
   z.object({ op: z.literal('retry-outgoing'), itemId: z.string().min(1) }),
+  // Settings → Accounts (#206): each Account's queued changes in Commander's words, with Retry for
+  // those that couldn't sync and Discard, which puts the Item back as its Source has it.
+  z.object({ op: z.literal('outgoing-entries'), query: outgoingEntriesQuery.default({}) }),
+  z.object({ op: z.literal('retry-changes'), ids: outgoingIds }),
+  z.object({ op: z.literal('discard-changes'), ids: outgoingIds }),
   // What an Account's Source offers the detail pane's pickers (Linear: each team's states, members,
   // labels, cycles and Linear projects), as its last sync fetched it; null before the first.
   z.object({ op: z.literal('source-catalog'), account: z.string().min(1) }),
@@ -339,6 +352,9 @@ export type ItemStoreResults = {
   search: SearchResult;
   outgoing: OutgoingChange[];
   'retry-outgoing': OutgoingChange[];
+  'outgoing-entries': OutgoingEntry[];
+  'retry-changes': OutgoingChange[];
+  'discard-changes': ActivityEntry[];
   'source-catalog': LinearCatalog | null;
   'daily-note-projects': DailyNoteProjects[];
   'project-blocks': ProjectBlock[];
@@ -418,6 +434,9 @@ export const itemStoreResult = {
   search: searchResult,
   outgoing: z.array(outgoingChange),
   'retry-outgoing': z.array(outgoingChange),
+  'outgoing-entries': z.array(outgoingEntry),
+  'retry-changes': z.array(outgoingChange),
+  'discard-changes': z.array(activityEntry),
   'source-catalog': linearCatalog.nullable(),
   'daily-note-projects': z.array(dailyNoteProjects),
   'project-blocks': z.array(projectBlock),

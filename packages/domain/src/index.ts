@@ -62,6 +62,7 @@ export * from './memory';
 export * from './model-messages';
 export * from './models';
 export * from './outgoing';
+export * from './outgoing-words';
 export * from './people';
 export * from './projects';
 export * from './ranking';

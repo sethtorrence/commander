@@ -299,6 +299,46 @@ describe('answering invitations', () => {
     await waitFor(() => expect(store.outgoing.list()[0]?.status).toBe('pending'));
   });
 
+  it('shows Couldn’t sync with Retry on an event Commander made whose move stopped (#206)', async () => {
+    const made = store.createEvent(
+      {
+        kind: 'meeting',
+        account: ALEX,
+        title: 'Roadmap sync',
+        start: { at: Date.parse('2026-10-05T16:30:00Z'), timeZone: LONDON, date: null },
+        end: { at: Date.parse('2026-10-05T17:00:00Z'), timeZone: LONDON, date: null },
+      },
+      { by: { kind: 'user' } },
+    ).itemId;
+    store.outgoing.settle(store.outgoing.forItem(made).map((row) => row.id));
+    store.moveEvent(
+      made,
+      {
+        start: { at: Date.parse('2026-10-05T17:00:00Z'), timeZone: LONDON, date: null },
+        end: { at: Date.parse('2026-10-05T17:30:00Z'), timeZone: LONDON, date: null },
+        allDay: false,
+      },
+      { by: { kind: 'user' } },
+    );
+    const [move] = store.outgoing.forItem(made);
+    store.outgoing.fail([move?.id as number], {
+      error: 'Google Calendar doesn’t have this event.',
+      failed: true,
+      nextAttemptAt: null,
+    });
+    renderSheet();
+    await waitFor(() =>
+      expect(within(row('Roadmap sync')).getByTestId('row-sync').textContent).toBe('Couldn’t sync'),
+    );
+    await open('Roadmap sync');
+    const alert = await within(pane()).findByRole('alert');
+    expect(alert.textContent).toContain('Couldn’t sync · Google Calendar doesn’t have this event.');
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(store.outgoing.forItem(made)[0]?.status).toBe('pending'));
+    // On its way again, it says so instead.
+    await waitFor(() => expect(within(pane()).getByTestId('answer-sync').textContent).toContain('Saving to'));
+  });
+
   it('shows the note when an answer given in Google Calendar won', async () => {
     store.saveFromSource({
       source: 'google-calendar',

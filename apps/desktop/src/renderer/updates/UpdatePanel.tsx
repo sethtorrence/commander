@@ -22,7 +22,15 @@ import {
 } from '@commander/ui';
 import { useRef, useState } from 'react';
 import type { PanelState } from './context';
-import { acceptLabel, foldedSummary, lineRows, lineStatus, ROW_ACTION_LABELS, rowName } from './updates';
+import {
+  acceptLabel,
+  canRetry,
+  foldedSummary,
+  lineRows,
+  lineStatus,
+  ROW_ACTION_LABELS,
+  rowName,
+} from './updates';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const when = new Intl.DateTimeFormat(undefined, {
@@ -43,7 +51,7 @@ export interface UpdatePanelProps {
    * `edit`: a missed send-later's message in the composer).
    */
   onOpen(line: UpdateViewLine, row?: UpdateRow, how?: 'reply' | 'edit'): void;
-  /** One of a line's Items, acted on: accept, dismiss, tick, Not an instruction, Send now or Discard. */
+  /** One of a line's Items, acted on: accept, dismiss, tick, Not an instruction, Send now, Discard or Retry. */
   onActRow(line: UpdateViewLine, row: UpdateRow, action: RowAction): void;
   onShowHistory(): void;
   onReopen(id: number): void;
@@ -52,9 +60,9 @@ export interface UpdatePanelProps {
 /**
  * The Update (#70): what Ares has queued, in three groups (needs you now, waiting on your decision,
  * for your information), each line one or two plain sentences with Done, Dismiss, Snooze and Open,
- * and suggestions accepted in place. Under each line, its Items (#186): each named, stamped with its
- * Section, with where it stands and its own actions, opening where it lives; folded when there are
- * many. After real time away the smaller things fold below the lead. Esc closes it; anything
+ * suggestions accepted in place, and changes that couldn't sync retried (#206). Under each line, its
+ * Items (#186): each named, stamped with its Section, with where it stands and its own actions,
+ * opening where it lives; folded when there are many. After real time away the smaller things fold below the lead. Esc closes it; anything
  * untouched stays queued. Past Updates reopens earlier ones.
  */
 export function UpdatePanel({
@@ -229,6 +237,11 @@ function Line({ line, onAct, onOpen, onActRow }: { line: UpdateViewLine } & Line
           {accept && (
             <Button size="sm" variant="signal" onClick={() => onAct(line, 'accept')}>
               {accept}
+            </Button>
+          )}
+          {canRetry(line) && (
+            <Button size="sm" variant="signal" onClick={() => onAct(line, 'retry')}>
+              Retry
             </Button>
           )}
           <ButtonGroup>

@@ -23,6 +23,8 @@
 // - GitHub (github.ts): Ares's latest unseen GitHub summary, daily or the Monday roll-up (#121).
 // - Missed send-later (#139): a Gmail (or personal Outlook) message whose time passed while Commander
 //   was closed or the machine asleep, as a Needs you now line of its own, until the User decides.
+// - Couldn't sync (couldnt-sync.ts, #206): changes that didn't reach a Source, one Needs you now line
+//   per Account and Source, with Retry, until they go through or are discarded.
 //
 // Later producers (meeting prep) call the queue's `enqueue` themselves, as the "Spot stuck Linear
 // issues" job does.
@@ -39,6 +41,7 @@ import {
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import { createBucketRuleSuggestions } from './bucket-rule-suggestions';
+import { createCouldntSyncWatch } from './couldnt-sync';
 import { createGitHubSummaryWatch } from './github';
 import { createLinearWatch, type WatchedAccount } from './linear';
 import type { UpdateQueue } from './queue';
@@ -326,6 +329,7 @@ export function createProducers({
   // "Always put mail from stripe.com in Receipts?" (bucket-rule-suggestions.ts, #141).
   const bucketRuleSuggestions = createBucketRuleSuggestions({ itemStore, queue });
   const githubSummaries = createGitHubSummaryWatch({ itemStore, queue });
+  const couldntSync = createCouldntSyncWatch({ itemStore, queue, accounts });
 
   return {
     sweep() {
@@ -341,6 +345,7 @@ export function createProducers({
       bucketRuleSuggestions.sweep();
       githubSummaries.sweep();
       missedSends();
+      couldntSync.sweep();
     },
   };
 }

@@ -4,6 +4,7 @@
 // so a new producer adds its kind there and nothing else in the Update has to change.
 import type {
   Item,
+  OutgoingStatus,
   ProposalRecord,
   QueuedAbout,
   QueuedKind,
@@ -28,6 +29,8 @@ export type LineContext = {
   todoOf(issueId: string): string | null;
   // Who the User is in an Account (their Teams user id), when known.
   me(account: string): string | null;
+  // Where a queued outgoing change stands now (#206), or null once it has gone (through, or discarded).
+  change?(id: number): OutgoingStatus | null;
   now: number;
 };
 

@@ -112,6 +112,12 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.outgoing.list(request.query) };
       case 'retry-outgoing':
         return { ok: true, result: store.outgoing.retry(request.itemId) };
+      case 'outgoing-entries':
+        return { ok: true, result: store.outgoingEntries(request.query) };
+      case 'retry-changes':
+        return { ok: true, result: store.outgoing.retryChanges(request.ids) };
+      case 'discard-changes':
+        return { ok: true, result: store.discardChanges(request.ids, { by: { kind: 'user' } }) };
       case 'source-catalog':
         return { ok: true, result: store.syncState.catalog(request.account) };
       case 'daily-note-projects':
@@ -305,6 +311,7 @@ const CHANGES = new Set([
   'resort',
   'undo-resort',
   'change-bucket',
+  'discard-changes',
 ]);
 
 /**

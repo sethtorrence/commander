@@ -411,6 +411,17 @@ updates = setUpUpdates({
 });
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
 sync.engine.onSynced(() => updates?.sweep());
+// Changes that couldn't sync (#206): the Update's line follows the queue as changes stop, go again,
+// go through or are discarded.
+let outgoingCounts = '';
+sync.engine.onStatus((statuses) => {
+  const counts = statuses
+    .map(({ account, outgoing }) => `${account}:${outgoing.pending}:${outgoing.failed}`)
+    .join('|');
+  if (counts === outgoingCounts) return;
+  outgoingCounts = counts;
+  updates?.sweep();
+});
 // A snapshot (or restore) that failed before the queue was there.
 backups.queueReady();
 

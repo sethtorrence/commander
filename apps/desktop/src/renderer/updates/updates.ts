@@ -48,6 +48,10 @@ export function acceptLabel(line: UpdateViewLine): string | null {
   }
 }
 
+/** Whether a line offers Retry in place: changes that couldn't sync (#206), while it waits. */
+export const canRetry = (line: UpdateViewLine) =>
+  isQueued(line) && line.queued?.about.kind === 'couldnt-sync';
+
 export type OpenTarget =
   // `focus`: where in the Item to open it (Reply: the Chat's message waiting on the User).
   | { kind: 'item'; sectionId: string; itemId: string; focus?: string }
@@ -100,7 +104,9 @@ export function openTarget(
   if (about?.kind === 'rule-suggestion' || about?.kind === 'bucket-rule-suggestion')
     return { kind: 'settings', group: 'rules' };
   if (about?.kind === 'bucket-suggestion') return { kind: 'settings', group: 'buckets' };
-  if (about?.kind === 'reconnect') return { kind: 'settings', group: 'accounts' };
+  // An Account to reconnect, or changes that couldn't sync (#206, listed with Discard there).
+  if (about?.kind === 'reconnect' || about?.kind === 'couldnt-sync')
+    return { kind: 'settings', group: 'accounts' };
   // A snapshot or restore that failed (#202): Settings → Data lists the snapshots.
   if (about?.kind === 'backup-failed') return { kind: 'settings', group: 'snapshots' };
   const first = line.itemIds[0];
@@ -132,6 +138,7 @@ export const ROW_ACTION_LABELS: Record<UpdateRowAction, string> = {
   'send-now': 'Send now',
   edit: 'Edit',
   discard: 'Discard',
+  retry: 'Retry',
 };
 
 /** How a row names its Item: its Source's short name, or its title. */
