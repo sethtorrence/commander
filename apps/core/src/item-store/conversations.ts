@@ -30,8 +30,8 @@ export type RemovedConversation = {
 };
 
 // What may change on one of Ares's answers as he writes it: also what it rests on (#192), the Items
-// it links to, the Update it gave and the Skills he used, and what his action Skills handed the gate
-// (#196).
+// it links to, the Update it gave and the Skills he used, what his action Skills handed the gate
+// (#196), and what he remembered from the User's message (#194).
 export type AnswerChanges = Partial<
   Pick<
     ConversationTurn,
@@ -44,6 +44,7 @@ export type AnswerChanges = Partial<
     | 'updateId'
     | 'skills'
     | 'proposalIds'
+    | 'remembered'
   >
 >;
 

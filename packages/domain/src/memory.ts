@@ -12,7 +12,10 @@ import { itemRef } from './items';
   - fact: something about People and Projects ("Priya works mostly on TL"). A fact from the User's
     own words is confirmed; one from outside content (a Linear issue) or from where People appear is
     unconfirmed until the User confirms it, and until then only ever background to Ares.
-  - preference: how the User likes things, added by hand for now.
+  - preference: how the User likes things, added by hand or told to Ares in a Conversation (#194).
+
+  What the User tells Ares in a Conversation (#194) is theirs, so confirmed, with their turn as its
+  source; deleting the Conversation keeps it.
 
   A memory is not an Item: it lives beside the Items, written only through the Item store. Its
   sources are the Items it came from; a fact whose source is deleted (or tombstoned) is flagged for
@@ -38,6 +41,17 @@ export const MEMORY_KIND_NAMES: Record<MemoryKind, string> = {
 export const memorySource = z.object({ itemId: id, item: itemRef.nullable() });
 export type MemorySource = z.infer<typeof memorySource>;
 
+// A Conversation turn a memory came from (#194): the User told Ares in it. `conversation` names the
+// Conversation for What Ares knows, and is null once it was deleted: the memory stays (the User said
+// it), its source "a deleted Conversation".
+export const memoryTurn = z.object({
+  conversationId: id,
+  turnId: z.number().int().positive(),
+  at: timestamp,
+  conversation: z.object({ title: z.string().nullable(), day: z.iso.date(), daily: z.boolean() }).nullable(),
+});
+export type MemoryTurn = z.infer<typeof memoryTurn>;
+
 export const memory = z.object({
   id,
   kind: memoryKind,
@@ -54,6 +68,8 @@ export const memory = z.object({
   // A rule memory's Rule.
   ruleId: id.nullable(),
   sources: z.array(memorySource),
+  // The Conversation turns where the User told Ares (#194).
+  turns: z.array(memoryTurn),
   // When it was learned (a rule memory: when its Rule was made), and last changed.
   learnedAt: timestamp,
   updatedAt: timestamp,

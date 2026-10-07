@@ -6,6 +6,7 @@ import { type CoreAccountRefused, type CoreMessage, createSkillRegistry } from '
 import { createAccessTokens } from './access-tokens';
 import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
+import { recall } from './agent/memory-context';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { applyPendingRestore, setUpBackups } from './backups';
@@ -13,6 +14,7 @@ import { setUpBusyCopies } from './busy-copies';
 import { composeFiles, setUpCompose } from './compose';
 import { setUpConversations } from './conversations';
 import { createAboutReader } from './conversations/about';
+import { createRememberer } from './conversations/remember';
 import { setUpEmailInvitations } from './email-invitations';
 import { setUpEmailReader } from './email-reader';
 import { workerSanitiser } from './email-reader/sanitiser';
@@ -372,7 +374,8 @@ sync.onSystemState((state) => sendLater?.systemState(state));
 // Conversations with Ares (#191): the User's messages answered on the Deep tier, streamed to the window
 // as he writes, with his Skills (#192), and about the Item the Ares button was pressed on (#193). A steering flag's mark shows at once in open views. The
 // end-to-end tests may treat their fake model (on this machine) as a cloud one, so two Conversations
-// answer at once.
+// answer at once. What the User tells him becomes confirmed Memory (#194), and what they told him
+// before comes back with each message (found by meaning too, once that model is ready).
 const conversations = setUpConversations({
   store: itemStore.conversations,
   client: models.client,
@@ -387,6 +390,21 @@ const conversations = setUpConversations({
   injectionWarnings: itemStore.injectionWarnings,
   refusals: itemStore.refusals,
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
+  remember: createRememberer({
+    client: models.client,
+    memory: itemStore.memory,
+    projects: () => itemStore.projects(),
+    people: () => itemStore.people.list(),
+    item: (itemId) => itemStore.get(itemId)?.item ?? null,
+    secrets,
+  }),
+  recall: async (text) =>
+    recall(itemStore, {
+      text,
+      confirmedOnly: true,
+      limit: 6,
+      meaning: (await meaning?.queryVector(text, 'embed-lookup')) ?? null,
+    }),
 });
 
 // Today's meetings (#128): the meeting chips in today's Daily Note follow each calendar sync, and the

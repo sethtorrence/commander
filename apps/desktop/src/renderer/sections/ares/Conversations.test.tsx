@@ -6,6 +6,7 @@ import {
   setUpConversations,
   UNFINISHED_PROBLEM,
 } from '@commander/core/src/conversations';
+import { createRememberer } from '@commander/core/src/conversations/remember';
 import type { ItemStore } from '@commander/core/src/item-store';
 import { createFindSkill } from '@commander/core/src/skills/find';
 import {
@@ -49,6 +50,8 @@ let core: CoreConversations;
 let client: ConversationsClient;
 let calls: Call[];
 let refuse: ModelError | null;
+// What the call that keeps what the User tells him answers (#194); none: it fails.
+let learnReply: string | null;
 const listeners = new Set<(message: CoreMessage) => void>();
 const onCoreMessage = (listener: (message: CoreMessage) => void) => {
   listeners.add(listener);
@@ -58,7 +61,10 @@ const onCoreMessage = (listener: (message: CoreMessage) => void) => {
 };
 
 const provider: ModelProviderAdapter = {
-  send: () => Promise.reject(new Error('Conversations stream')),
+  send: () =>
+    learnReply === null
+      ? Promise.reject(new Error('Conversations stream'))
+      : Promise.resolve({ text: learnReply, usage: { inputTokens: 10, cachedTokens: 0, outputTokens: 5 } }),
   stream(request, onToken) {
     if (refuse) return Promise.reject(refuse);
     return new Promise<ProviderReply>((resolve, reject) => {
@@ -79,20 +85,33 @@ beforeEach(() => {
   ({ store, close } = openTestItemStore());
   calls = [];
   refuse = null;
+  learnReply = null;
   boot();
 });
 
-// The Core's Conversations behind the window's channel, with these Skills (#192) or none.
-function boot(skills?: SkillRegistry) {
+// The Core's Conversations behind the window's channel, with these Skills (#192) or none, and
+// remembering what the User tells Ares (#194) when asked.
+function boot(skills?: SkillRegistry, { remember = false }: { remember?: boolean } = {}) {
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
+  const model = createModelClient({
+    settings: () => store.models.settings(),
+    providers: { zai: provider },
+    ledger: store.models,
+  });
   core = setUpConversations({
     skills,
     item: (itemId) => store.get(itemId)?.item ?? null,
     store: store.conversations,
-    client: createModelClient({
-      settings: () => store.models.settings(),
-      providers: { zai: provider },
-      ledger: store.models,
+    client: model,
+    ...(remember && {
+      remember: createRememberer({
+        client: model,
+        memory: store.memory,
+        projects: () => store.projects(),
+        people: () => store.people.list(),
+        item: (itemId) => store.get(itemId)?.item ?? null,
+        log: () => {},
+      }),
     }),
     settings: () => store.models.settings(),
     oneAtATime: () => false,
@@ -268,6 +287,40 @@ describe('from Ctrl+K (#195)', () => {
     const [first, second] = within(thread()).getAllByTestId('conversation-turn');
     expect(second?.dataset.found).toBe('true');
     expect(first?.dataset.found).toBeUndefined();
+  });
+});
+
+describe('what Ares remembers from what the User tells him (#194)', () => {
+  it('says so under his answer, with an Undo that takes it back', async () => {
+    core.stop();
+    boot(undefined, { remember: true });
+    learnReply = JSON.stringify({
+      remember: [
+        {
+          kind: 'preference',
+          text: 'The User doesn’t take meetings before 10',
+          said: 'you don’t take meetings before 10',
+        },
+      ],
+      forget: [],
+    });
+    show();
+    await type('I don’t take meetings before 10');
+    await waitFor(() => expect(calls).toHaveLength(1));
+    act(() => {
+      calls[0]?.write('[chat]\nNoted.');
+      calls[0]?.finish();
+    });
+    const line = await screen.findByTestId('remembered');
+    expect(line.textContent).toMatch(/^I’ll remember that you don’t take meetings before 10\.Undo$/);
+    expect(store.memory.list().memories.map((memory) => memory.text)).toEqual([
+      'The User doesn’t take meetings before 10',
+    ]);
+
+    fireEvent.click(within(line).getByRole('button', { name: /^Undo/ }));
+    await waitFor(() => expect(screen.getByTestId('remembered').getAttribute('data-undone')).toBe('true'));
+    expect(within(screen.getByTestId('remembered')).getByText('Undone')).toBeTruthy();
+    expect(store.memory.list().memories).toEqual([]);
   });
 });
 

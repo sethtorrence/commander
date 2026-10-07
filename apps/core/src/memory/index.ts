@@ -8,11 +8,13 @@ import {
   type MemoryChange,
   type MemoryKind,
   type MemoryQuery,
+  type MemoryTurn,
   memoryAction,
   memoryQuery,
   normaliseHandle,
   type Person,
   type Project,
+  type RememberedKind,
   type Rule,
   type WhatAresKnows,
 } from '@commander/domain';
@@ -45,6 +47,10 @@ export type { MemoryFoundBy, MemoryRetriever } from './retriever';
     when the lookup brings the embedding of what it is about, its meaning.
   - A fact whose source was deleted is for review: listed apart, and never looked up, until the User
     keeps it.
+  - What the User tells Ares in a Conversation (#194) is theirs: `tell`, `correct` and `forget` keep
+    their turn as its source (memory_turns), with what the memory was before, so `undoTurn` (the
+    line's Undo) puts it back. A Conversation deleted leaves its memories, from "a deleted
+    Conversation", and never puts a fact up for review: the User said it.
 */
 
 export type LearnedMemory = {
@@ -82,6 +88,9 @@ export type MemoryLookup = {
 
 export type RecalledMemory = Memory & { foundBy: MemoryFoundBy[] };
 
+// The User's turn in a Conversation that told Ares something (#194).
+export type TurnSource = { conversationId: string; turnId: number };
+
 export type MemoryStore = {
   // Ares (or the User) learns something. Null when its key was deleted by the User. Call inside a
   // transaction.
@@ -102,6 +111,19 @@ export type MemoryStore = {
   byKey(key: string): Memory | null;
   // Which of these keys have been learned (deleted ones included).
   knows(keys: readonly string[]): Set<string>;
+  // The User told Ares this in a Conversation (#194): kept as theirs (confirmed, in their words), with
+  // their turn as its source. A memory under the same key gains the turn and takes their words, even
+  // one they deleted before: they said it again. The same turn telling it again changes nothing (null
+  // if it was deleted since). Call inside a transaction.
+  tell(memory: LearnedMemory, turn: TurnSource): Memory | null;
+  // The User corrected a memory in a Conversation: its words are theirs now. Call inside a transaction.
+  correct(memoryId: string, text: string, turn: TurnSource): Memory;
+  // The User asked Ares to forget a memory in a Conversation. Call inside a transaction.
+  forget(memoryId: string, turn: TurnSource): void;
+  // Undo on the line under his answer: the memory goes back to how it was before that turn changed it,
+  // and one the turn made goes altogether (unless something else taught it since). Returns it as it
+  // now stands, or null once gone. Call inside a transaction.
+  undoTurn(memoryId: string, turn: TurnSource): Memory | null;
   // How far a learner has got (null before it starts), and saving it (inside a transaction).
   progress(name: string): number | null;
   saveProgress(name: string, value: number): void;
@@ -153,7 +175,7 @@ export function openMemory({
   // A memory waits to be embedded (#73). Called inside the save's transaction: only schedule work.
   onMeaningPending?: () => void;
 }): MemoryStore {
-  const { memories, memorySources, memoryProgress } = schema;
+  const { memories, memorySources, memoryProgress, memoryTurns, conversations } = schema;
 
   const indexed = (row: Row) => ({
     id: row.id,
@@ -193,15 +215,20 @@ export function openMemory({
     const byMemory = new Map<string, string[]>();
     for (const link of links)
       byMemory.set(link.memoryId, [...(byMemory.get(link.memoryId) ?? []), link.itemId]);
+    const told = turnsOf(rows.map((each) => each.id));
     return rows.map((each) => {
       const found = (byMemory.get(each.id) ?? []).map((itemId) => ({
         itemId,
         item: refs.get(itemId) ?? null,
       }));
       const kept = each.keptAt;
-      const gone = found.some(({ item }) =>
-        item === null ? kept === null : item.deletedAt !== null && (kept === null || item.deletedAt > kept),
-      );
+      const turns = told.get(each.id) ?? [];
+      // What the User told Ares stands whatever became of its other sources.
+      const gone =
+        !turns.length &&
+        found.some(({ item }) =>
+          item === null ? kept === null : item.deletedAt !== null && (kept === null || item.deletedAt > kept),
+        );
       return {
         id: each.id,
         kind: each.kind,
@@ -212,11 +239,45 @@ export function openMemory({
         projectId: each.projectId,
         ruleId: null,
         sources: found,
+        turns,
         learnedAt: each.learnedAt,
         updatedAt: each.updatedAt,
         forReview: each.kind === 'fact' && gone,
       };
     });
+  }
+
+  // The Conversation turns each memory came from (#194), oldest first, each naming its Conversation
+  // while that is still here.
+  function turnsOf(memoryIds: readonly string[]): Map<string, MemoryTurn[]> {
+    const found = new Map<string, MemoryTurn[]>();
+    if (!memoryIds.length) return found;
+    const rows = db
+      .select({
+        memoryId: memoryTurns.memoryId,
+        conversationId: memoryTurns.conversationId,
+        turnId: memoryTurns.turnId,
+        at: memoryTurns.at,
+        title: conversations.title,
+        day: conversations.day,
+        dailyOf: conversations.dailyOf,
+      })
+      .from(memoryTurns)
+      .leftJoin(conversations, eq(conversations.id, memoryTurns.conversationId))
+      .where(inArray(memoryTurns.memoryId, [...memoryIds]))
+      .orderBy(memoryTurns.at, memoryTurns.turnId)
+      .all();
+    for (const row of rows) {
+      const turn: MemoryTurn = {
+        conversationId: row.conversationId,
+        turnId: row.turnId,
+        at: row.at,
+        conversation:
+          row.day === null ? null : { title: row.title, day: row.day, daily: row.dailyOf !== null },
+      };
+      found.set(row.memoryId, [...(found.get(row.memoryId) ?? []), turn]);
+    }
+    return found;
   }
 
   // The Rules (Project Rules and Bucket Rules), as memories: their order is the list's.
@@ -242,6 +303,7 @@ export function openMemory({
         projectId: target.kind === 'project' ? target.projectId : null,
         ruleId: rule.id,
         sources: [],
+        turns: [],
         learnedAt: rule.createdAt,
         updatedAt: rule.createdAt,
         forReview: false,
@@ -295,6 +357,51 @@ export function openMemory({
 
   const nobody = { personIds: [], handles: [], projectIds: [] };
 
+  // A memory as it stands, to put back with Undo (#194).
+  const snapshot = (found: Row): schema.MemoryBefore => ({
+    kind: found.kind,
+    text: found.text,
+    keywords: found.keywords,
+    confirmed: found.confirmed,
+    by: found.by,
+    personId: found.personId,
+    projectId: found.projectId,
+    handles: found.handles,
+    editedAt: found.editedAt,
+    keptAt: found.keptAt,
+    deletedAt: found.deletedAt,
+  });
+
+  const turnLink = (memoryId: string, turnId: number) =>
+    db
+      .select()
+      .from(memoryTurns)
+      .where(and(eq(memoryTurns.memoryId, memoryId), eq(memoryTurns.turnId, turnId)))
+      .get();
+
+  function linkTurn(
+    memoryId: string,
+    turn: TurnSource,
+    did: RememberedKind,
+    before: schema.MemoryBefore | null,
+  ) {
+    db.insert(memoryTurns)
+      .values({ memoryId, conversationId: turn.conversationId, turnId: turn.turnId, at: now(), did, before })
+      .run();
+  }
+
+  // Whether anything but this turn taught the memory: an Item, or another turn.
+  function taughtElsewhere(memoryId: string, turnId: number): boolean {
+    const item = db.select().from(memorySources).where(eq(memorySources.memoryId, memoryId)).get();
+    if (item) return true;
+    return db
+      .select()
+      .from(memoryTurns)
+      .where(and(eq(memoryTurns.memoryId, memoryId), sql`${memoryTurns.turnId} <> ${turnId}`))
+      .all()
+      .some((link) => link.did !== 'forgot');
+  }
+
   // The live stored memories matching the words typed, best first.
   function typed(text: string, limit: number): Memory[] {
     const ids = words.retrieve({ ...nobody, text, typed: true }, limit);
@@ -321,6 +428,83 @@ export function openMemory({
   };
 
   const store: MemoryStore = {
+    tell(input, turn) {
+      const text = clean(input.text, MAX_TEXT);
+      if (!text) throw sources.error('invalid', 'A memory can’t be empty');
+      const known = input.key
+        ? db.select().from(memories).where(eq(memories.key, input.key)).get()
+        : undefined;
+      if (!known) {
+        const made = store.learn({ ...input, text, confirmed: true, by: 'user' });
+        if (!made) return null;
+        // Their words: never written over by what Ares learns later.
+        db.update(memories).set({ editedAt: now() }).where(eq(memories.id, made.id)).run();
+        linkTurn(made.id, turn, 'learned', null);
+        return toMemories([row(made.id) as Row])[0] as Memory;
+      }
+      // This turn told it already (said again by Send again): nothing changes.
+      if (turnLink(known.id, turn.turnId)) return store.get(known.id);
+      const before = snapshot(known);
+      const handles = (input.handles ?? []).map(normaliseHandle);
+      update(known.id, {
+        text,
+        confirmed: true,
+        editedAt: now(),
+        deletedAt: null,
+        ...(!known.personId && input.personId ? { personId: input.personId } : {}),
+        ...(!known.projectId && input.projectId ? { projectId: input.projectId } : {}),
+        handles: [...new Set([...known.handles, ...handles])],
+      });
+      addSources(known.id, input.sources, now());
+      linkTurn(known.id, turn, 'learned', before);
+      return toMemories([row(known.id) as Row])[0] as Memory;
+    },
+
+    correct(memoryId, raw, turn) {
+      const found = requireStored(memoryId);
+      const text = clean(raw, MAX_TEXT);
+      if (!text) throw sources.error('invalid', 'A memory can’t be empty');
+      if (turnLink(memoryId, turn.turnId)) throw sources.error('invalid', 'That memory changed already');
+      const before = snapshot(found);
+      update(memoryId, { text, confirmed: true, editedAt: now() });
+      linkTurn(memoryId, turn, 'changed', before);
+      return toMemories([row(memoryId) as Row])[0] as Memory;
+    },
+
+    forget(memoryId, turn) {
+      const found = requireStored(memoryId);
+      if (turnLink(memoryId, turn.turnId)) throw sources.error('invalid', 'That memory changed already');
+      const before = snapshot(found);
+      store.change({ type: 'delete', memoryId });
+      linkTurn(memoryId, turn, 'forgot', before);
+    },
+
+    undoTurn(memoryId, turn) {
+      const link = turnLink(memoryId, turn.turnId);
+      const found = row(memoryId);
+      if (!link || !found) throw sources.error('not-found', 'That can’t be undone any more');
+      db.delete(memoryTurns)
+        .where(and(eq(memoryTurns.memoryId, memoryId), eq(memoryTurns.turnId, turn.turnId)))
+        .run();
+      const dropped = () => {
+        for (const retriever of retrievers) retriever.drop?.(memoryId);
+        return null;
+      };
+      // The turn made it: it goes altogether, unless something else taught it since.
+      if (!link.before) {
+        if (taughtElsewhere(memoryId, turn.turnId)) return store.get(memoryId);
+        db.delete(memorySources).where(eq(memorySources.memoryId, memoryId)).run();
+        db.delete(memoryTurns).where(eq(memoryTurns.memoryId, memoryId)).run();
+        db.delete(memories).where(eq(memories.id, memoryId)).run();
+        return dropped();
+      }
+      // Deleted since on What Ares knows: it stays deleted (only a forget's Undo brings one back).
+      if (found.deletedAt !== null && link.did !== 'forgot') return null;
+      const restored = update(memoryId, link.before);
+      if (link.before.deletedAt !== null) return dropped();
+      return restored;
+    },
+
     learn(input) {
       const at = now();
       const text = clean(input.text, MAX_TEXT);

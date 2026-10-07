@@ -20,6 +20,7 @@ import {
   nameOf,
   refsOf,
 } from './conversations';
+import { RememberedLines } from './Remembered';
 import { type CoreMessages, useConversations } from './use-conversations';
 
 /*
@@ -39,6 +40,8 @@ import { type CoreMessages, useConversations } from './use-conversations';
   What his action Skills did or prepared (#196) shows under his words as cards (ConversationActions):
   done, with Undo, or waiting for the User, whose Confirm takes the focus when the answer arrives and
   nothing is typed, so one key (Enter) confirms it.
+  What he remembered from the User's message (#194) shows under his words as lines with Undo
+  (Remembered); What Ares knows opens a Conversation at the turn a memory came from, as search does.
 */
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -209,6 +212,7 @@ export function Conversations({
                 sources={sources}
                 found={turn.id === foundTurn}
               >
+                <RememberedLines turn={turn} client={client} sources={sources} />
                 <AnswerActions
                   turn={turn}
                   client={autonomy}

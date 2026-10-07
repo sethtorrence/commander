@@ -68,6 +68,8 @@ export const AGENT_JOB_NAMES: Record<string, string> = {
   'suggest-buckets': 'Suggest new Buckets',
   // Conversations with Ares (#191).
   conversation: 'Conversations',
+  // What the User tells Ares in a Conversation (#194).
+  'remember-from-conversations': 'Remember what you tell Ares',
   // Ares's drafts (#143).
   'draft-email-replies': 'Draft replies',
   'learn-writing-style': 'Learn writing style',

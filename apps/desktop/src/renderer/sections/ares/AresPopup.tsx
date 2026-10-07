@@ -9,6 +9,7 @@ import type { AutonomyClient } from './activity';
 import { AnswerActions } from './ConversationActions';
 import { Turn } from './Conversations';
 import { answeringTurn, type ConversationsClient, canSendAgain } from './conversations';
+import { RememberedLines } from './Remembered';
 import { useConversation } from './use-conversation';
 import type { CoreMessages } from './use-conversations';
 
@@ -263,6 +264,7 @@ export function AresPopup({
         )}
         {view?.turns.map((turn) => (
           <Turn key={turn.id} turn={turn} text={live.get(turn.id) ?? turn.text} sources={sources}>
+            <RememberedLines turn={turn} client={client} sources={sources} />
             <AnswerActions
               turn={turn}
               client={autonomy}
