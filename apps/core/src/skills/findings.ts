@@ -2,9 +2,18 @@
 // read (its facts and words, read-item.ts) and goes to the model in a data block of its own, with a
 // ref his answer links it by; other material (what Ares knows, People, Past Updates) comes as
 // ready-made data blocks; and Commander's own note says what the Skill did, in its words. The
-// Update Skill also hands over the Update it gave, which the Conversation shows with its actions, and
-// an action Skill (#196) the proposals it handed the gate, which it shows as cards.
-import type { FindKind, FindWhen, Item, ItemKind, SummaryTargetRange, UpdateView } from '@commander/domain';
+// Update Skill also hands over the Update it gave, which the Conversation shows with its actions, an
+// action Skill (#196) the proposals it handed the gate, which it shows as cards, and Draft, Schedule
+// and Meeting prep (#198) what they made for the answer to show (a draft reply, a meeting's prep).
+import type {
+  ConversationMade,
+  FindKind,
+  FindWhen,
+  Item,
+  ItemKind,
+  SummaryTargetRange,
+  UpdateView,
+} from '@commander/domain';
 import type { PromptData } from '../agent/prompt';
 
 export type FoundItem = { item: Item; text: string };
@@ -18,6 +27,8 @@ export type Findings = {
   update?: UpdateView | null;
   // What an action Skill handed the gate (#196), by proposal: shown under the answer as cards.
   proposalIds?: number[];
+  // What a Skill made for the answer to show under it (#198): drafts, a meeting's prep.
+  made?: ConversationMade[];
 };
 
 // The kinds of Item each of Find's kinds means.

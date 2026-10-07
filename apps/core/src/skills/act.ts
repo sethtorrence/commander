@@ -2,8 +2,8 @@
 // a Conversation only ever proposes. Each change it wants goes to the gate as a proposal, under the
 // User's Autonomy settings for its Action kind and Section, with the Conversation as its cause; the
 // gate decides whether it is done now (reported in the answer, with Undo) or waits as a suggestion,
-// which the Conversation shows as a card the User confirms with one key. A new action Skill (Draft,
-// Schedule and settings changes next) builds its proposals and hands them to `acting`:
+// which the Conversation shows as a card the User confirms with one key. A new action Skill (Schedule,
+// #198, and settings changes next) builds its proposals and hands them to `acting`:
 //
 // - Items: the model names them only by the refs handed to him for this answer (I1, I2…); any other
 //   ref is refused before anything is proposed.
@@ -19,6 +19,7 @@
 //   done and why.
 import {
   type AutonomySection,
+  type ConversationMade,
   type Item,
   type Proposal,
   type RegisteredAction,
@@ -120,6 +121,19 @@ export function causeOf(
   return { causedBy: { itemId: cause }, chained: !(onItself && alone) };
 }
 
+/**
+ * The Item a ref names, among those handed out for this answer (any Skill run in a Conversation,
+ * #198): any other ref, or an Item gone since, is refused before anything runs.
+ */
+export function handedItem(context: SkillContext, itemStore: Pick<ItemStore, 'get'>, ref: string): Item {
+  const itemId = context.refs?.get(ref.trim());
+  const item = itemId ? itemStore.get(itemId)?.item : undefined;
+  if (!item || item.deletedAt !== null) {
+    throw new SkillInputError(`${ref} isn’t one of the Items you were given for this message`);
+  }
+  return item;
+}
+
 /** An action Skill's way to its Items and the gate, for one run in a Conversation. */
 export function acting(context: SkillContext, { itemStore, gate }: ActionSkillOptions): Acting {
   const reason = reasonFor(context.asked);
@@ -127,14 +141,7 @@ export function acting(context: SkillContext, { itemStore, gate }: ActionSkillOp
   const marked = (itemIds: Iterable<string>) =>
     [...itemIds].some((itemId) => itemStore.injectionWarnings.warning(itemId) !== null);
   return {
-    item(ref) {
-      const itemId = context.refs?.get(ref.trim());
-      const item = itemId ? itemStore.get(itemId)?.item : undefined;
-      if (!item || item.deletedAt !== null) {
-        throw new SkillInputError(`${ref} isn’t one of the Items you were given for this message`);
-      }
-      return item;
-    },
+    item: (ref) => handedItem(context, itemStore, ref),
 
     propose({ what, proposal }) {
       const cause = causeOf(proposal, context.read);
@@ -171,11 +178,14 @@ export function acting(context: SkillContext, { itemStore, gate }: ActionSkillOp
 /**
  * What an action Skill hands the Conversation: Commander's note on what came of each change (and what
  * it didn't try, `skipped`, with why), and the proposals, which show under the answer as cards.
+ * `also`: more of Commander's own lines for him (other free times, #198), and what the Skill made for
+ * the answer to show (a reply with the booking link).
  */
 export function actionFindings(
   title: string,
   acted: readonly Acted[],
   skipped: readonly string[] = [],
+  also: { lines?: readonly string[]; made?: ConversationMade[] } = {},
 ): Findings {
   const lines = acted.map((each): string => {
     if (each.outcome === 'done') return `Done: ${each.what}. It shows under your answer, with Undo.`;
@@ -187,11 +197,13 @@ export function actionFindings(
     return `Not done: ${each.what}. ${each.why.replace(/[.\s]+$/, '')}.`;
   });
   lines.push(...skipped.map((why) => `Not done: ${why}.`));
+  lines.push(...(also.lines ?? []));
   if (!lines.length) lines.push('Nothing to do: none of it needed changing.');
   return {
     note: `${title}: ${lines.join(' ')} Tell the User plainly, in a sentence or two, what was done and what waits for them, naming Items by their refs; don’t use ${title} again for the same thing.`,
     items: [],
     more: [],
     proposalIds: acted.flatMap((each) => ('proposalId' in each ? [each.proposalId] : [])),
+    ...(also.made?.length && { made: also.made }),
   };
 }

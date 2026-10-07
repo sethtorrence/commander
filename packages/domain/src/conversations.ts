@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { conversationMade } from './conversation-made';
 import { itemKind } from './items';
 import { skillInfo } from './skills';
 import { updateSection } from './updates';
@@ -26,6 +27,10 @@ import { updateSection } from './updates';
 // With action Skills (#196) an answer can also do things: each action goes to the gate under the
 // User's Autonomy settings, and the answer names the proposals, shown under it as cards (done, with
 // Undo, or waiting for the User to confirm with one key).
+//
+// Draft, Schedule and Meeting prep (#198) also make things for an answer to show (`made`): a draft
+// reply to open in the composer or a Chat's reply box, a reply holding the booking link, a meeting's
+// prep. Nothing is ever sent from a Conversation.
 
 const timestamp = z.number().int().nonnegative();
 const conversationId = z.string().min(1);
@@ -110,6 +115,8 @@ export const conversationTurn = z.object({
   // What he remembered from the User's message it answers (#194), each line with Undo. Empty on the
   // User's turns.
   remembered: z.array(remembered),
+  // What his Skills made for this answer to show under it (#198): drafts and a meeting's prep.
+  made: z.array(conversationMade),
 });
 export type ConversationTurn = z.infer<typeof conversationTurn>;
 
@@ -134,7 +141,7 @@ export function piecesOf(
 }
 
 // A Skill as the "What Ares can do" page lists it: from the Skill registry, and whether he can use
-// it in a Conversation yet (the rest are used where they live, Draft on a Teams Chat).
+// it in a Conversation yet (the rest are used where they live).
 export const conversationSkill = skillInfo.extend({ inConversations: z.boolean() });
 export type ConversationSkill = z.infer<typeof conversationSkill>;
 

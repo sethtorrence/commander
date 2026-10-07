@@ -2,6 +2,7 @@ import { type ItemKind, MAX_TURN_TEXT } from '@commander/domain';
 import { AresMark, Button, Kbd, Led, usePortalContainer } from '@commander/ui';
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { ItemStoreClient } from '../../item-store/client';
 import { type AresActions, AresProvider, type AresTarget } from '../../links/AresButton';
 import { KindTag } from '../todos/detail/parts';
 import { kindTag } from '../todos/links';
@@ -73,6 +74,7 @@ type Opened = { target: AresTarget; anchor: DOMRect | null; from: Element | null
 export function AresPopupHost({
   client,
   autonomy,
+  itemStore,
   onCoreMessage,
   onExpand,
   children,
@@ -80,6 +82,8 @@ export function AresPopupHost({
   client: ConversationsClient;
   /** The gate, for the cards of what Ares did or prepared (#196). */
   autonomy?: AutonomyClient;
+  /** The Item store, for a meeting's prep an answer made (#198). */
+  itemStore?: ItemStoreClient;
   onCoreMessage: CoreMessages;
   /** Opens a Conversation in the Ares Section. */
   onExpand: (conversationId: string) => void;
@@ -123,8 +127,11 @@ export function AresPopupHost({
           anchor={opened.anchor}
           client={client}
           autonomy={autonomy}
+          itemStore={itemStore}
           onCoreMessage={onCoreMessage}
           onClose={close}
+          // Open in composer on a draft (#198): the User is taken to it, so the pop-up goes.
+          onLeave={() => setOpened(null)}
           onExpand={(conversationId) => {
             setOpened(null);
             onExpand(conversationId);
@@ -140,16 +147,21 @@ export function AresPopup({
   anchor,
   client,
   autonomy,
+  itemStore,
   onCoreMessage,
   onClose,
+  onLeave,
   onExpand,
 }: {
   target: AresTarget;
   anchor: DOMRect | null;
   client: ConversationsClient;
   autonomy?: AutonomyClient;
+  itemStore?: ItemStoreClient;
   onCoreMessage: CoreMessages;
   onClose: () => void;
+  // The User went to what an answer made (a draft opened in the composer): closes without refocusing.
+  onLeave?: () => void;
   onExpand: (conversationId: string) => void;
 }) {
   const state = useConversation(client, onCoreMessage, target.id);
@@ -263,7 +275,14 @@ export function AresPopup({
           </li>
         )}
         {view?.turns.map((turn) => (
-          <Turn key={turn.id} turn={turn} text={live.get(turn.id) ?? turn.text} sources={sources}>
+          <Turn
+            key={turn.id}
+            turn={turn}
+            text={live.get(turn.id) ?? turn.text}
+            sources={sources}
+            itemStore={itemStore}
+            onLeave={onLeave}
+          >
             <RememberedLines turn={turn} client={client} sources={sources} />
             <AnswerActions
               turn={turn}

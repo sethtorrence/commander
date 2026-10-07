@@ -11,6 +11,7 @@ import type {
   ComposeBody,
   ComposeMode,
   ConversationLink,
+  ConversationMade,
   DashboardBand,
   EmailDetail,
   EventDetail,
@@ -1275,6 +1276,8 @@ export const conversationTurns = sqliteTable(
     proposalIds: text('proposal_ids', { mode: 'json' }).$type<number[]>().notNull().default([]),
     // What Ares remembered from the User's message it answers (#194), as the lines under it.
     remembered: text('remembered', { mode: 'json' }).$type<Remembered[]>().notNull().default([]),
+    // What his Skills made for it to show (#198): drafts, a meeting's prep.
+    made: text('made', { mode: 'json' }).$type<ConversationMade[]>().notNull().default([]),
   },
   (t) => [index('conversation_turns_conversation').on(t.conversationId, t.id)],
 );

@@ -109,6 +109,7 @@ function FrameProviders({
               <AresPopupHost
                 client={window.commander.conversations}
                 autonomy={window.commander.autonomy}
+                itemStore={window.commander.itemStore}
                 onCoreMessage={window.commander.onCoreMessage}
                 onExpand={onExpandConversation}
               >

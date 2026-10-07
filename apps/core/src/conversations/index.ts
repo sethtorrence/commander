@@ -27,6 +27,10 @@
 //   confirm with one key. Accepting one never starts anything further. Changing his own settings
 //   (#197) always waits for the User, and only ever from words of theirs Commander finds in what they
 //   wrote here (../skills/change-settings.ts).
+// - Making (#198): Draft writes a reply to an email or a Chat (with the User's own message as what it
+//   should say), Schedule may put the booking link in one, and Meeting prep prepares a meeting; what
+//   they made is kept on the answer (`made`) and shows under it, a draft with Open in composer.
+//   Nothing is sent from a Conversation.
 // - Links: every Item handed to him has a ref (I1, I2…) for this answer; his answer names the ones
 //   its claims rest on, which become its links (`links`), each opening its Item in its Section. A ref
 //   he wasn't handed is taken out of his text.
@@ -335,6 +339,7 @@ export function setUpConversations(options: ConversationsOptions): Conversations
       links: handedLinks(gathered),
       updateId: gathered.update?.id ?? null,
       proposalIds: [...gathered.proposalIds],
+      made: [...gathered.made],
     });
     // What the User asked, for an action's reason, and everything they wrote up to it: where a change to
     // Ares's own settings must find the words that asked for it (#197).

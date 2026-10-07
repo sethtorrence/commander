@@ -4,9 +4,13 @@ import {
   fileInput,
   linearActionsInput,
   manageTodosInput,
+  scheduleAt,
+  scheduleInput,
+  scheduleWindow,
   snoozeInput,
   snoozeUntilFrom,
 } from './action-skills';
+import { DEFAULT_WORKING_HOURS, zonedTime } from './focus-time';
 
 // The words Ares's action Skills take times in (#196), turned into days and times on the User's own
 // calendar. Every clock here is local, so they hold in any time zone, and just after midnight.
@@ -85,5 +89,88 @@ describe('what each action Skill needs', () => {
     expect(snoozeInput.safeParse({ items: ['I2'], until: '2026-10-12T09:15' }).success).toBe(true);
     expect(linearActionsInput.safeParse({ action: 'assign', issues: ['I1'], to: null }).success).toBe(true);
     expect(linearActionsInput.safeParse({ action: 'delete', issues: ['I1'] }).success).toBe(false);
+  });
+});
+
+// Schedule (#198): the span a "when" means and the instant an "at" means, in the User's own zone,
+// given explicitly, so they hold whatever the machine's zone is.
+describe('Schedule’s times', () => {
+  const zone = 'America/New_York';
+  const local = (day: string, time: string) => zonedTime(day, time, zone);
+  const hours = DEFAULT_WORKING_HOURS;
+  // Tuesday 6 October 2026, five past midnight in New York.
+  const now = local('2026-10-06', '00:05');
+
+  it('reads today, tomorrow, a weekday, this week and next week from just after midnight', () => {
+    expect(scheduleWindow('today', now, zone, hours)).toEqual({
+      from: now,
+      to: local('2026-10-07', '00:00'),
+      words: 'today',
+    });
+    expect(scheduleWindow('tomorrow', now, zone, hours)).toMatchObject({
+      from: local('2026-10-07', '00:00'),
+      to: local('2026-10-08', '00:00'),
+    });
+    // A weekday is the next one, today counting.
+    expect(scheduleWindow('tuesday', now, zone, hours)).toMatchObject({
+      from: now,
+      to: local('2026-10-07', '00:00'),
+      words: 'Tuesday 6 October',
+    });
+    expect(scheduleWindow('Monday', now, zone, hours)).toMatchObject({
+      from: local('2026-10-12', '00:00'),
+      words: 'Monday 12 October',
+    });
+    expect(scheduleWindow('this-week', now, zone, hours)).toEqual({
+      from: now,
+      to: local('2026-10-12', '00:00'),
+      words: 'this week',
+    });
+    expect(scheduleWindow('next-week', now, zone, hours)).toEqual({
+      from: local('2026-10-12', '00:00'),
+      to: local('2026-10-19', '00:00'),
+      words: 'next week',
+    });
+    // On a Sunday, next week is the one starting tomorrow.
+    expect(scheduleWindow('next-week', local('2026-10-11', '23:50'), zone, hours).from).toBe(
+      local('2026-10-12', '00:00'),
+    );
+    expect(scheduleWindow('2026-10-20', now, zone, hours)).toMatchObject({
+      from: local('2026-10-20', '00:00'),
+      to: local('2026-10-21', '00:00'),
+    });
+  });
+
+  it('looks in the next five working days when no time was said', () => {
+    expect(scheduleWindow(undefined, now, zone, hours)).toEqual({
+      from: now,
+      to: local('2026-10-13', '00:00'),
+      words: 'the next 5 working days',
+    });
+  });
+
+  it('reads an exact time on the User’s clock', () => {
+    expect(scheduleAt('2026-10-06T14:00', zone)).toBe(local('2026-10-06', '14:00'));
+    expect(scheduleAt('2026-10-06 09:30', 'Asia/Tokyo')).toBe(zonedTime('2026-10-06', '09:30', 'Asia/Tokyo'));
+  });
+
+  it('takes people, a length and a time only in the words Commander reads, and Items only by refs', () => {
+    expect(
+      scheduleInput.parse({ action: 'meeting', with: [' Leo '], minutes: 60, when: 'Next-Week' }),
+    ).toEqual({ action: 'meeting', with: ['Leo'], minutes: 60, when: 'next-week' });
+    expect(scheduleInput.safeParse({ action: 'meeting', with: [] }).success).toBe(false);
+    expect(scheduleInput.safeParse({ action: 'meeting', with: ['Leo'], minutes: 5 }).success).toBe(false);
+    expect(
+      scheduleInput.safeParse({ action: 'meeting', with: ['Leo'], at: '2026-02-30T10:00' }).success,
+    ).toBe(false);
+    expect(
+      scheduleInput.safeParse({ action: 'meeting', with: ['Leo'], at: '2026-10-06T14:00' }).success,
+    ).toBe(true);
+    expect(scheduleInput.safeParse({ action: 'focus', todo: 'the Acme Todo', minutes: 120 }).success).toBe(
+      false,
+    );
+    expect(scheduleInput.safeParse({ action: 'focus', todo: 'I2', minutes: 120 }).success).toBe(true);
+    expect(scheduleInput.safeParse({ action: 'booking-link', to: 'I1' }).success).toBe(true);
+    expect(scheduleInput.safeParse({ action: 'send', to: 'I1' }).success).toBe(false);
   });
 });

@@ -37,6 +37,8 @@ import { createFileSkill } from './skills/file';
 import { createFindSkill } from './skills/find';
 import { createLinearActionsSkill } from './skills/linear-actions';
 import { createManageTodosSkill } from './skills/manage-todos';
+import { createMeetingPrepSkill } from './skills/meeting-prep';
+import { createScheduleSkill } from './skills/schedule';
 import { createSnoozeSkill } from './skills/snooze';
 import { createSummariseTarget } from './skills/summarise';
 import { setUpSkipInbox } from './skip-inbox';
@@ -292,7 +294,8 @@ const agent = setUpAgent(itemStore, {
 });
 sync.engine.onSynced((event) => agent.synced(event));
 
-// Ares's Skills (#192), one registry: Find here, the Update, Summarise and Draft with the Updates below.
+// Ares's Skills (#192), one registry: Find, the action Skills, Schedule and Meeting prep here, the
+// Update, Summarise and Draft with the Updates below.
 // Conversations choose from it, and "What Ares can do" lists it.
 const skills = createSkillRegistry();
 skills.register(
@@ -319,6 +322,10 @@ skills.register(
         .map((account) => account.account),
   }),
 );
+// Schedule (#198): the scheduler's Find time (set up below) and focus time, events always asked first.
+skills.register(createScheduleSkill({ itemStore, gate, findTime: (request) => scheduler.findTime(request) }));
+// Meeting prep (#198): "Prepare for meetings" run for the event the User names, and waited for.
+skills.register(createMeetingPrepSkill({ itemStore, runner: agent.runner }));
 // Changing his own settings (#197): always asked first, whatever the Autonomy settings say.
 skills.register(
   createChangeSettingsSkill({

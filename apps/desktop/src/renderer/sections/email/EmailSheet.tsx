@@ -1,5 +1,6 @@
 import {
   type BucketSortedBy,
+  draftBody,
   type EmailLabel,
   type EmailThreadSummary,
   type Item,
@@ -20,6 +21,7 @@ import type { ItemChanges } from '../../item-store/changes';
 import type { ItemStoreClient } from '../../item-store/client';
 import { AskAres, useAresKey } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
+import { ARES_REPLY_FOCUS, SUGGESTED_REPLY_FOCUS, takeReply } from '../../links/reply-handoff';
 import { useCommands } from '../../palette/commands';
 import { BadgePicker, type PickerTarget } from '../../projects/BadgePicker';
 import { ItemBadge, SectionProjectFilter, useAccentBar, waitingSuggestion } from '../../projects/badges';
@@ -614,6 +616,30 @@ export function EmailSheet({
       setSpecial('scheduled');
       setOpen(false);
       if (itemId && focus === SEND_LATER_EDIT_FOCUS) void writing.editScheduled(itemId);
+      return;
+    }
+    // Open in composer under one of Ares's answers (#198): his draft, opened as the thread's own
+    // suggested reply is; or a reply he handed over (the booking link), as a reply to the email.
+    if (itemId && focus === SUGGESTED_REPLY_FOCUS) {
+      setSpecial(null);
+      void state.reveal(itemId).then(async () => {
+        setOpen(true);
+        await writing.openSuggested(itemId);
+        state.reload();
+      });
+      return;
+    }
+    const handed = itemId && focus === ARES_REPLY_FOCUS ? takeReply(itemId) : null;
+    if (handed) {
+      setSpecial(null);
+      void state.reveal(itemId).then(() => {
+        if (handed.link && handed.text.endsWith(handed.link)) {
+          replyWithBookingLink(itemId, handed.text, handed.link);
+        } else {
+          setOpen(true);
+          void writing.open('reply', itemId, draftBody(handed.text, []));
+        }
+      });
       return;
     }
     void state.reveal(itemId);
