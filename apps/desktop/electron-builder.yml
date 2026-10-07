@@ -1,0 +1,22 @@
+# Packages the Linux Commander the author installs under his home (#208): `pnpm install:local` (see the
+# README, "Installing Commander"). An unpacked folder, not an installer: scripts/install-local.ts copies
+# it into place.
+appId: dev.storrence.commander
+# No productName: Electron names the data folder after the package (~/.config/@commander/desktop), so the
+# installed app opens the same data, Accounts and secrets as `pnpm dev`.
+executableName: commander
+directories:
+  output: dist
+# Not packed into an archive: the Core loads sqlite-vec's extension, onnxruntime's libraries and jsdom's
+# data files from their own folders, which an asar archive would hide.
+asar: false
+# better-sqlite3 and onnxruntime-node ship Node-API binaries, which load in Electron as they are (see
+# pnpm-workspace.yaml), so nothing is rebuilt.
+npmRebuild: false
+files:
+  - package.json
+  - out/**
+  - '!out/**/*.map'
+linux:
+  target: dir
+  category: Office

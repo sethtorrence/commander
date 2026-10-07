@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "pnpm --filter @commander/desktop dev",
     "build": "pnpm --filter @commander/desktop build",
+    "package": "pnpm --filter @commander/desktop package",
+    "install:local": "pnpm --filter @commander/desktop install:local",
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "pnpm -r --parallel typecheck",

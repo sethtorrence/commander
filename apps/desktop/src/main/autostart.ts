@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { APP_ENTRY } from './summon';
+// With its extension, like every import here: the installer (scripts/install.ts) runs this module in
+// Node directly, which doesn't guess extensions.
+import { APP_ENTRY } from './summon.ts';
 
 // "Start at login" on Linux: an XDG autostart entry in ~/.config/autostart. The entry existing
 // *is* the setting, so it is off until the User turns it on. Commander starts hidden in the tray.
@@ -27,13 +29,16 @@ function quoteArgument(arg: string): string {
   return quoted.replaceAll('\\', '\\\\').replaceAll('%', '%%');
 }
 
+// A desktop entry's Exec value for the command (the installer's launcher uses it too).
+export const execValue = (command: string[]) => command.map(quoteArgument).join(' ');
+
 export function autostartEntry(command: string[]): string {
   return [
     '[Desktop Entry]',
     'Type=Application',
     'Name=Commander',
     'Comment=Start Commander in the tray at login',
-    `Exec=${command.map(quoteArgument).join(' ')}`,
+    `Exec=${execValue(command)}`,
     'Terminal=false',
     'X-GNOME-Autostart-enabled=true',
     '',

@@ -19,6 +19,8 @@ pnpm lint             # Biome lint + format check
 pnpm typecheck        # TypeScript across the workspace
 ```
 
+To run an installed Commander instead of `pnpm dev`, see [Installing Commander](#installing-commander).
+
 Layout: `apps/desktop` (Electron main, preload, React renderer), `apps/core` (the Core: syncs Sources, holds the Items and runs the Agent, as an Electron `utilityProcess`), and `packages/{domain,ui,sources,models}`. The window and the core talk only through validated messages (`packages/domain`).
 
 ### Data and the Item store
@@ -474,6 +476,35 @@ You talk to Ares in the Ares Section's **Conversations** (#191). Opening the Sec
 
 The end-to-end tests' fake model is on this machine; with `COMMANDER_TEST_HOOKS=1`, `COMMANDER_TEST_MODEL_IN_CLOUD=1` has the Core treat it as a cloud model, so two Conversations answer at once.
 
+## Installing Commander
+
+Commander can run installed under your home instead of from `pnpm dev`, and is updated by building and installing again: there is no update service. Linux only. From the checkout, with `config/local.json` in place (see [Build config](#build-config-app-client-ids)):
+
+```sh
+pnpm install:local
+```
+
+That one command:
+
+1. **Builds** the app (`electron-vite build`) and packages it with [electron-builder](https://www.electron.build/) (MIT) into `apps/desktop/dist/linux-unpacked` (`pnpm package` does just this step). The package holds the Drizzle migrations, the Core's native modules (better-sqlite3 and onnxruntime-node ship Node-API binaries, which load in Electron as they are, so nothing is rebuilt) and sqlite-vec's extension; packaging fails unless all three load in the packaged Electron. The client IDs from `config/local.json` are built in, as for `pnpm dev`; `dist/` and `out/` are git-ignored, so they are never committed. Without `config/local.json` it says so: that build can't sign Accounts in or keep them signed in. The embedding model isn't packaged: Commander downloads it into its data folder, as in development.
+2. **Asks a running Commander to quit**, the installed one or `pnpm dev`'s (found through its pid file, as `commander-show` finds it), with `SIGTERM`, which is the tray's **Quit**: the window saves what it holds, messages held for Undo are sent, and the Core closes the database. It waits up to 30 seconds. If Commander is still running then (it asks first while the disk is full), nothing is installed: answer it, or quit from the tray, and run the command again.
+3. **Installs:**
+   - the app in `~/.local/opt/commander/` (replaced as a whole; the new copy goes in beside the old one first);
+   - the launcher `~/.local/share/applications/commander.desktop`, matching the window class `commander` that Hyprland binds and focuses by;
+   - `commander-show` in `~/.local/bin/` (it replaces a symlink to the checkout's copy, if you made one, without touching the checkout);
+   - **Start at login:** if it is on, its entry (`~/.config/autostart/commander.desktop`) now starts the installed app; if it is off, it stays off, and turning it on in the installed app's Settings → General points it at the installed app.
+4. **Starts Commander again** if it was running. Otherwise start it from your launcher.
+
+The launch switches (`--ozone-platform-hint=auto` and `--password-store=gnome-libsecret` on Linux) are applied by the app itself (`apps/desktop/src/main/launch-switches.ts`), so the launcher runs just the app. Settings → Diagnostics shows the version (`apps/desktop/package.json`) and the keyring store.
+
+**Your data comes along.** The installed app uses the same data folder as `pnpm dev`, `~/.config/@commander/desktop` (named after the package, which is why the package keeps its name and has no product name), so your Items, Accounts, secrets and settings are all there. The two also share the single-instance lock: while one runs, starting the other just brings the running window forward. When a newer build has migrations to run, Commander takes a snapshot first and runs them all or none, with the recovery screen if one fails (Settings → Data has the snapshots).
+
+**Updating:** pull, `pnpm install`, then `pnpm install:local` again.
+
+**Going back to `pnpm dev`:** quit Commander from the tray, then run `pnpm dev` (from a checkout at least as new as the installed build, whose migrations the database may already have). If Start at login is on, its entry still starts the installed app: turn it off and on again in Settings → General to point it at the development app. To remove the installed app, `rm -r ~/.local/opt/commander ~/.local/share/applications/commander.desktop`; `~/.local/bin/commander-show` summons the development app too, so it can stay.
+
+To install somewhere else, set `COMMANDER_INSTALL_PREFIX` (default `~/.local`): the app goes in `<prefix>/opt/commander`, the launcher in `<prefix>/share/applications` and `commander-show` in `<prefix>/bin`. The end-to-end tests run against a packaged build with `COMMANDER_E2E_APP=dist/linux-unpacked/commander pnpm exec playwright test` (from `apps/desktop`, after `pnpm package`).
+
 ## Moving around
 
 Sections sit on numbered notebook tabs: `1`–`9` open Dashboard, Notes, Todos, Linear, Email, Calendar, GitHub, Teams and Ares, `,` opens Settings (theme, signal colour, start at login, accounts, security, diagnostics, Ares, usage, autonomy, what to watch on GitHub, Teams Channel posts and muted and excluded Chats, the meeting heads-up and second time zone, and whether opening a thread marks it read), and `?` shows every keyboard shortcut. Single-letter keys never fire while you are typing in a field or editor.
@@ -566,7 +597,7 @@ Commander is meant to stay running. Closing the window hides it to the tray and 
 
 Electron's global shortcuts don't reach Hyprland, so bind a key in Hyprland to the `commander-show` helper instead. It sends `SIGUSR1` to the running app (found through its pid file, `$XDG_RUNTIME_DIR/commander.pid`), then focuses the window with Hyprland's dispatcher. That brings Commander forward from any workspace, or back from the tray, in about 20–35 ms.
 
-Put the helper on your `PATH` once (or use its full path in the bind):
+`pnpm install:local` puts the helper in `~/.local/bin` (see [Installing Commander](#installing-commander)). Running only `pnpm dev`, put it on your `PATH` once (or use its full path in the bind):
 
 ```sh
 ln -s "$PWD/apps/desktop/bin/commander-show" ~/.local/bin/commander-show
@@ -588,4 +619,4 @@ The helper works out which kind of config you run (from `hyprctl -j status`) and
 
 ### Start at login
 
-Off by default. Turning it on writes an XDG autostart entry, `~/.config/autostart/commander.desktop`, which starts Commander hidden in the tray (`--hidden`); turning it off deletes the entry. Hyprland doesn't run XDG autostart entries by itself: they run if your session starts `xdg-desktop-autostart.target` (uwsm does) or runs something like `dex -a`. Otherwise start Commander from your config's start-up commands instead (`exec-once` in a text config).
+Off by default. Turning it on writes an XDG autostart entry, `~/.config/autostart/commander.desktop`, which starts Commander hidden in the tray (`--hidden`); turning it off deletes the entry. The entry starts whichever Commander turned it on: the installed app, or `pnpm dev`'s Electron with the checkout (installing points an entry that is on at the installed app). Hyprland doesn't run XDG autostart entries by itself: they run if your session starts `xdg-desktop-autostart.target` (uwsm does) or runs something like `dex -a`. Otherwise start Commander from your config's start-up commands instead (`exec-once` in a text config).

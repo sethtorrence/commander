@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
-import { inTurn, keepInTray, stopCoreOnQuit } from './lifecycle';
+import { inTurn, keepInTray, quitWhenAsked, stopCoreOnQuit } from './lifecycle';
 
 describe('inTurn', () => {
   it('runs each step after the one before, never waiting on one longer than its time', async () => {
@@ -195,5 +195,17 @@ describe('stopCoreOnQuit', () => {
     expect(kill).toHaveBeenCalledOnce();
     core.exit();
     expect(app.quitCount).toBe(1);
+  });
+});
+
+describe('quitWhenAsked', () => {
+  it('quits as the tray does when the installer sends SIGTERM', () => {
+    const signals = new EventEmitter();
+    const quit = vi.fn();
+    quitWhenAsked(signals, quit);
+    expect(quit).not.toHaveBeenCalled();
+
+    signals.emit('SIGTERM');
+    expect(quit).toHaveBeenCalledOnce();
   });
 });

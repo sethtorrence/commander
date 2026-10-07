@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { ipc } from '@commander/domain';
 import { app, type BrowserWindow, ipcMain } from 'electron';
 import { autostartPath, isAutostartEnabled, launchAtLoginCommand, setAutostart } from './autostart';
-import { inTurn, keepInTray, type StoppableCore, stopCoreOnQuit } from './lifecycle';
+import { inTurn, keepInTray, quitWhenAsked, type StoppableCore, stopCoreOnQuit } from './lifecycle';
 import { ownPidRecord, pidFilePath, removePidFile, writePidFile } from './pid-file';
 import { askWindowToSave } from './save-before-quit';
 import { DESKTOP_ENTRY, focusThroughHyprland, installSummon, summonWindow } from './summon';
@@ -62,6 +62,10 @@ export function runInBackground(
     summonWindow(window);
     focusThroughHyprland();
   };
+  const quit = () => {
+    if (mayQuit()) app.quit();
+  };
+  quitWhenAsked(process, quit);
   tray = createTray({
     onOpen: open,
     // The window opens and runs the Update Skill, as `U` would.
@@ -69,9 +73,7 @@ export function runInBackground(
       open();
       window.webContents.send(ipc.askForUpdate);
     },
-    onQuit: () => {
-      if (mayQuit()) app.quit();
-    },
+    onQuit: quit,
   });
   const shown = tray;
   app.on('will-quit', () => shown.tray.destroy());
