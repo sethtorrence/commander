@@ -6,7 +6,7 @@ import type {
   CoreMessage,
   DatabaseRecovery,
 } from '@commander/domain';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { RecoveryScreen } from './RecoveryScreen';
 
@@ -98,7 +98,28 @@ describe('the recovery screen', () => {
     render(<RecoveryScreen health={{ ...damaged, snapshot: null }} />);
     await act(async () => {});
     expect(screen.getByTestId('recovery-offer').textContent).toContain('nothing to restore');
-    expect(screen.getAllByRole('button').map((element) => element.textContent)).toEqual(['Quit']);
+    expect(screen.getAllByRole('button').map((element) => element.textContent)).toEqual([
+      'Wipe all Commander data…',
+      'Quit',
+    ]);
+  });
+
+  it('offers Wipe all Commander data too, with its typed confirmation and no Markdown copy to tick (#204)', async () => {
+    const wipe = vi.fn(async () => ({ ok: true, relaunching: true }));
+    Object.assign(window.commander, { wipe });
+    render(<RecoveryScreen health={damaged} />);
+    await act(async () => {});
+
+    act(() => button('Wipe all Commander data…')?.click());
+    const confirm = screen.getByTestId('wipe-confirm');
+    expect(screen.queryByTestId('wipe-markdown-copy')).toBeNull();
+    const go = button('Wipe and relaunch');
+    expect(go).toHaveProperty('disabled', true);
+    fireEvent.change(confirm.querySelector('input') as HTMLInputElement, { target: { value: 'wipe' } });
+    act(() => button('Wipe and relaunch')?.click());
+
+    expect(await screen.findByTestId('wipe-relaunching')).toBeTruthy();
+    expect(wipe).toHaveBeenCalledWith({ confirmation: 'wipe', markdownCopy: false });
   });
 
   it('says the update failed and nothing changed, with Restore, Export everything and Quit', async () => {
@@ -114,6 +135,7 @@ describe('the recovery screen', () => {
     expect(screen.getAllByRole('button').map((element) => element.textContent)).toEqual([
       'Restore the pre-update snapshot',
       'Export everything…',
+      'Wipe all Commander data…',
       'Quit',
     ]);
 

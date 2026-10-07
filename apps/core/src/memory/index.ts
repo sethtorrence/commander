@@ -111,6 +111,11 @@ export type MemoryStore = {
   byKey(key: string): Memory | null;
   // Which of these keys have been learned (deleted ones included).
   knows(keys: readonly string[]): Set<string>;
+  // An Account removed (#204): its Items stop being sources, and what Ares learned only from them
+  // goes altogether (a deleted memory's tombstone too: nothing is left to teach it again), with its
+  // words, People and embedding; what the User wrote or told him stays. Returns the memories gone.
+  // Call inside a transaction.
+  dropSources(itemIds: readonly string[]): string[];
   // The User told Ares this in a Conversation (#194): kept as theirs (confirmed, in their words), with
   // their turn as its source. A memory under the same key gains the turn and takes their words, even
   // one they deleted before: they said it again. The same turn telling it again changes nothing (null
@@ -676,6 +681,33 @@ export function openMemory({
       if (!found || found.deletedAt !== null) return null;
       const [memory] = toMemories([found]);
       return memory && !memory.forReview ? memory : null;
+    },
+
+    dropSources(itemIds) {
+      const touched = new Set<string>();
+      for (let i = 0; i < itemIds.length; i += 500) {
+        const chunk = itemIds.slice(i, i + 500);
+        for (const { memoryId } of db
+          .select({ memoryId: memorySources.memoryId })
+          .from(memorySources)
+          .where(inArray(memorySources.itemId, chunk))
+          .all())
+          touched.add(memoryId);
+        db.delete(memorySources).where(inArray(memorySources.itemId, chunk)).run();
+      }
+      const gone: string[] = [];
+      for (const memoryId of touched) {
+        const found = row(memoryId);
+        if (!found || found.by === 'user') continue;
+        const stillTaught =
+          db.select().from(memorySources).where(eq(memorySources.memoryId, memoryId)).get() ??
+          db.select().from(memoryTurns).where(eq(memoryTurns.memoryId, memoryId)).get();
+        if (stillTaught) continue;
+        db.delete(memories).where(eq(memories.id, memoryId)).run();
+        for (const retriever of retrievers) retriever.drop?.(memoryId);
+        gone.push(memoryId);
+      }
+      return gone;
     },
 
     knows(keys) {

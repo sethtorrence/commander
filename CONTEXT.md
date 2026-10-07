@@ -43,7 +43,7 @@ The one record of every change to an Item or Link: who made it (the User, Ares, 
 _Avoid_: Audit trail, changelog, event log
 
 **Tombstone**:
-What Commander keeps of an Item deleted at its Source: hidden from views but kept, so its Links and activity log survive (shown as "deleted in Gmail").
+What Commander keeps of an Item deleted at its Source: hidden from views but kept, so its Links and activity log survive (shown as "deleted in Gmail"). One whose Account the User removed is bare: none of its content is left, in it or anywhere else in the database ("Removed with its Account").
 _Avoid_: Soft delete, trash, archive
 
 **Two-way sync**:

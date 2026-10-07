@@ -24,7 +24,7 @@ import { AccountsPanel } from './AccountsPanel';
 import { AutonomyPanel } from './AutonomyPanel';
 import { AresSettings } from './ares/AresSettings';
 import { CalendarSettings } from './CalendarSettings';
-import { ExportSettings, MarkdownCopySettings, SnapshotSettings } from './DataSettings';
+import { ExportSettings, MarkdownCopySettings, SnapshotSettings, WipeSettings } from './DataSettings';
 import { Diagnostics } from './Diagnostics';
 import { GitHubWatchPanel } from './github/GitHubWatchPanel';
 import { SETTINGS, SETTINGS_PAGES, type SettingsPageId } from './pages';
@@ -271,6 +271,7 @@ export function SettingsScreen({
             <SnapshotSettings no="01" />
             <ExportSettings no="02" />
             <MarkdownCopySettings no="03" />
+            <WipeSettings no="04" />
           </SettingsPageView>
           <SettingsPageView id="security" page={page}>
             <SecurityPanel no="01" />

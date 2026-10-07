@@ -169,8 +169,15 @@ function RemoveAccount({ account, onRemove }: { account: AccountSummary; onRemov
           <DialogHeading>Remove {account.name}?</DialogHeading>
           <DialogDescription>
             Commander deletes this {source.name} Account’s sign-in from the keyring and removes its{' '}
-            {source.items}. Your notes and Todos stay; Links to removed {source.items} show them as gone.
+            {source.items} for good: their text and details, cached attachments and images, and what search,
+            Ares and the activity log kept of them. Your notes and Todos stay; Links to removed {source.items}{' '}
+            show them as gone.
           </DialogDescription>
+          <p data-testid="remove-account-snapshots" className="m-0 mt-3 text-note leading-[19px] text-muted">
+            Snapshots still hold them for a while: each of the last 7 daily snapshots until it ages out (up to
+            7 days), and one taken before an update or a restore until it is replaced. Wipe all Commander
+            data, in Settings → Data, removes everything at once.
+          </p>
         </DialogBody>
         <DialogFooter>
           <DialogClose asChild>

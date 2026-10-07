@@ -1,4 +1,4 @@
-import type { LinkEnd, LinkType } from '@commander/domain';
+import { type LinkEnd, type LinkType, REMOVED_ITEM_TITLE } from '@commander/domain';
 import { SOURCE_NAMES, type TodoLink } from './todos';
 
 // How the detail pane words a Todo's Links and the Items at their other ends.
@@ -47,8 +47,12 @@ export function sectionFor(kind: string): string | null {
   return KINDS[kind]?.section ?? null;
 }
 
-/** "deleted in Gmail" for a tombstone, "deleted" for an Item deleted in Commander, else null. */
+/**
+ * "deleted in Gmail" for a tombstone, "deleted" for an Item deleted in Commander, "was in Gmail" for
+ * one removed with its Account (#204, its title already says so), else null.
+ */
 export function goneNote(item: LinkEnd): string | null {
   if (item.kind === 'project' || item.deletedAt === null) return null;
+  if (item.title === REMOVED_ITEM_TITLE) return item.source ? `was in ${SOURCE_NAMES[item.source]}` : 'gone';
   return item.source ? `deleted in ${SOURCE_NAMES[item.source]}` : 'deleted';
 }

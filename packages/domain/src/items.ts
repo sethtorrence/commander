@@ -225,6 +225,15 @@ export type LinkType = z.infer<typeof linkType>;
 
 // A short view of the Item at one end of a Link, enough to show "deleted in Gmail".
 export const itemRef = item.pick({ id: true, kind: true, title: true, source: true, deletedAt: true });
+
+// What Commander keeps of an Item whose Account the User removed (#204): a bare tombstone, with no
+// content of the Account's left in it, titled in Commander's own words so Links to it read as gone.
+// Its external id becomes `removed:<id>`, which frees the Source identity for the Account connected
+// again and marks the tombstone as one nothing brings back (undo refuses it).
+export const REMOVED_ITEM_TITLE = 'Removed with its Account';
+export const REMOVED_EXTERNAL_ID = 'removed:';
+export const isRemovedWithAccount = (item: Pick<Item, 'externalId'>) =>
+  item.externalId?.startsWith(REMOVED_EXTERNAL_ID) ?? false;
 export type ItemRef = z.infer<typeof itemRef>;
 
 // What a Link points at: an Item, or (a refers-to Link only, such as a `[[Project]]` link from a Block)

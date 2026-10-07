@@ -9,6 +9,7 @@ import type {
   Project,
   SourceItem,
 } from '@commander/domain';
+import { REMOVED_ITEM_TITLE } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ItemStore, openItemStore } from '.';
 
@@ -284,11 +285,13 @@ describe('issues leaving the list', () => {
 
   it('keeps the Todos of an Account being removed, with nothing behind them', () => {
     sync([{ n: 1 }]);
-    store.removeAccountItems({ source: 'linear', account: ACME }, user);
+    const issueId = issueItem(1).id;
     const todo = todoOf(1);
-    expect(todo.deletedAt).toBeNull();
+    store.removeAccountItems({ source: 'linear', account: ACME }, user);
+    expect(store.get(todo.id)?.item.deletedAt).toBeNull();
     expect(store.get(todo.id)?.links[0]?.to).toMatchObject({
-      id: issueItem(1).id,
+      id: issueId,
+      title: REMOVED_ITEM_TITLE,
       deletedAt: expect.any(Number),
     });
   });
@@ -371,9 +374,11 @@ describe('ticking a Linear Todo', () => {
 
   it('writes nothing for a Todo whose Account was removed', () => {
     sync([{ n: 1 }]);
+    const { id } = todoOf(1);
     store.removeAccountItems({ source: 'linear', account: ACME }, user);
-    tick(true);
-    expect(todoOf(1).status).toBe('done');
+    clock += 1000;
+    store.record({ type: 'update', itemId: id, changes: { status: 'done' } }, user);
+    expect(store.get(id)?.item.status).toBe('done');
     expect(queued()).toEqual([]);
   });
 });

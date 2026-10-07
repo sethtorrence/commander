@@ -66,6 +66,7 @@ import {
   isDiscardedWhy,
   isGitHubItemDetail,
   isPendingEventExternalId,
+  isRemovedWithAccount,
   itemAction,
   itemQuery,
   type LinearCatalog,
@@ -126,6 +127,7 @@ import {
   openSearch,
   type Search,
 } from '../search';
+import { accountRemovalIn } from './account-removal';
 import { type AgentStore, openAgentStore } from './agent-jobs';
 import { attachmentFolder } from './attachments';
 import { type AutonomyStore, openAutonomyStore } from './autonomy';
@@ -280,8 +282,9 @@ export type ItemStoreOptions = {
 
 export type ItemStore = {
   saveFromSource(batch: SourceBatch): SaveResult;
-  // Deletes every Item that came from one Account, when the User removes it. They stay as
-  // tombstones, so Links from notes and Todos show them as gone. Returns their ids.
+  // Deletes every Item that came from one Account, when the User removes it, and takes their content
+  // out of the database for good (account-removal.ts, #204): each stays as a bare tombstone, so Links
+  // from notes and Todos show them as gone. Returns the ids of those that were live.
   removeAccountItems(account: { source: Source; account: string }, context: ActionContext): string[];
   query(query?: ItemQuery): Item[];
   // An Item with its Links and backlinks; tombstones included.
@@ -713,6 +716,9 @@ const TURN_KEY = 'turn:';
 export function openItemStore(options: ItemStoreOptions): ItemStore {
   const now = options.now ?? Date.now;
   const sqlite = openCheckedDatabase(options.path);
+  // What is deleted (or rewritten) leaves no bytes behind in the file (#204): removing an Account
+  // must leave nothing of it, nor must a tombstoned email's bodies.
+  sqlite.pragma('secure_delete = ON');
   const db = drizzle(sqlite, { schema });
   // A new version of Commander changing the database: a snapshot first, before any migration runs.
   let preUpdateSnapshot: PreUpdateSnapshot | null = null;
@@ -1924,6 +1930,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     }
 
     const item = requireItem(target.itemId);
+    // An Item removed with its Account (#204) keeps nothing to bring back.
+    if (isRemovedWithAccount(item)) {
+      throw new ItemStoreError('invalid', 'This was removed with its Account; it can’t be brought back');
+    }
     const current = stateOf(item);
     const before = target.before as ItemState | null;
     const after = target.after as ItemState;
@@ -2777,7 +2787,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       log({ ...context, action: 'delete', itemId: item.id, before, after }, at);
       return item.id;
     });
-    // Removed mail (an Account's, when it is removed) takes its bodies with it.
+    // Removed mail takes its bodies with it.
     emails.deleteBodies(found.filter((item) => item.kind === 'email').map((item) => item.id));
     return removed;
   }
@@ -2803,14 +2813,72 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     deleteItem: (itemId, context) => record({ type: 'delete', itemId }, context),
   });
 
-  const removeAccountItems = sqlite.transaction(
+  // Removing an Account (#204, account-removal.ts): its Items deleted as one change, then their
+  // content taken out of everything that held it, and out of the database file.
+  const removal = accountRemovalIn({
+    sqlite,
+    now,
+    rows: (itemIds) =>
+      itemIds.length
+        ? db
+            .select()
+            .from(schema.items)
+            .where(inArray(schema.items.id, [...itemIds]))
+            .all()
+        : [],
+    withDetails: (rows) => withDetails(rows),
+    reindexTurn: (turn) => search.conversations.put(turn),
+    memory,
+    people,
+  });
+  const removeAccountContent = sqlite.transaction(
     ({ source, account }: { source: Source; account: string }, rawContext: ActionContext): string[] => {
+      const context = actionContext.parse(rawContext);
       chatSettings.removeAccount(account);
       channelSettings.removeAccount(account);
       mirror.removeAccount(account);
-      return removeItems(liveSourceItems(source, account), actionContext.parse(rawContext));
+      const loggedThrough =
+        db.select({ id: schema.activity.id }).from(schema.activity).orderBy(desc(schema.activity.id)).get()
+          ?.id ?? 0;
+      const { items } = schema;
+      const own = db
+        .select({ id: items.id })
+        .from(items)
+        .where(and(eq(items.source, source), eq(items.account, account)))
+        .all()
+        .map((row) => row.id);
+      // Ares's preps for its events go with them.
+      const followers = removal.followers(own);
+      const live = (ids: string[]) => {
+        const found: ItemRow[] = [];
+        for (let i = 0; i < ids.length; i += 500)
+          found.push(
+            ...db
+              .select()
+              .from(items)
+              .where(and(inArray(items.id, ids.slice(i, i + 500)), isNull(items.deletedAt)))
+              .all(),
+          );
+        return found;
+      };
+      // Deleted as one change, each with its entry; the states before and after are left out, as the
+      // purge would empty them anyway.
+      const removed = [...live(own), ...live(followers)].map((row) => {
+        const at = now();
+        db.update(items).set({ deletedAt: at, updatedAt: at }).where(eq(items.id, row.id)).run();
+        search.put({ ...toItem(row, null), deletedAt: at, updatedAt: at });
+        log({ ...context, action: 'delete', itemId: row.id, before: null, after: null }, at);
+        return row;
+      });
+      removal.purge([...own, ...followers], loggedThrough, { source, account });
+      return removed.filter((row) => row.source === source).map((row) => row.id);
     },
   );
+  const removeAccountItems = (account: { source: Source; account: string }, context: ActionContext) => {
+    const removed = removeAccountContent(account, context);
+    removal.compact();
+    return removed;
+  };
 
   const autonomy = openAutonomyStore(db, now);
   const agent = openAgentStore(db, now);
@@ -2981,6 +3049,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       undoTurn: sqlite.transaction((...args: Parameters<MemoryStore['undoTurn']>) =>
         memory.undoTurn(...args),
       ),
+      dropSources: sqlite.transaction((itemIds: readonly string[]) => memory.dropSources(itemIds)),
     },
 
     saveFromSource,
@@ -3357,6 +3426,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       recogniseUser: sqlite.transaction((accounts: Parameters<PeopleStore['recogniseUser']>[0]) =>
         people.recogniseUser(accounts),
       ),
+      forget: sqlite.transaction((handles: readonly string[]) => people.forget(handles)),
     },
 
     close() {

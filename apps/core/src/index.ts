@@ -618,11 +618,17 @@ port.on('message', ({ data }) => {
       ? itemStore.focusSettings.read()
       : null;
   const reply =
-    answerRemoveAccountItems(itemStore, data, (account) => {
-      sync.forget(account);
-      // Its cached attachments and inline images, and its image rules, go too.
-      emailReader.forget(account);
-    }) ??
+    answerRemoveAccountItems(
+      itemStore,
+      data,
+      (account) => {
+        sync.forget(account);
+        // Its cached attachments and inline images, and its image rules, go too.
+        emailReader.forget(account);
+      },
+      // And the files of its messages waiting in the composer (#204).
+      () => compose.sweep(),
+    ) ??
     answerItemStoreRequest(itemStore, data, (itemIds) => {
       changed = { type: 'items-changed', itemIds };
       changedIds = itemIds;

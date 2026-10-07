@@ -1,4 +1,4 @@
-import type { ItemRef } from '@commander/domain';
+import { type ItemRef, REMOVED_ITEM_TITLE } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import { goneNote, kindTag, linkLabel, sectionFor } from './links';
 
@@ -53,5 +53,10 @@ describe('the Item at the other end', () => {
     expect(goneNote(ref({}))).toBeNull();
     expect(goneNote(ref({ deletedAt: 5 }))).toBe('deleted');
     expect(goneNote(ref({ kind: 'email', source: 'gmail', deletedAt: 5 }))).toBe('deleted in Gmail');
+  });
+
+  it('says where an Item removed with its Account was, as its title says it was removed', () => {
+    const removed = ref({ kind: 'email', source: 'gmail', title: REMOVED_ITEM_TITLE, deletedAt: 5 });
+    expect(goneNote(removed)).toBe('was in Gmail');
   });
 });

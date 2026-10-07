@@ -10,6 +10,7 @@ import {
   coreDatabaseHealth,
   type Diagnostics,
   ipc,
+  needsRecovery,
   parseCoreMessage,
 } from '@commander/domain';
 import {
@@ -20,6 +21,7 @@ import {
   Notification,
   powerMonitor,
   protocol,
+  session,
   shell,
   utilityProcess,
 } from 'electron';
@@ -55,6 +57,8 @@ import {
   installWindowControls,
   windowFrameOptions,
 } from './window-frame';
+import { createWipeChannel, wipeLogs } from './wipe';
+import { clearSafeStorageKey } from './wipe-keyring';
 
 for (const [name, value] of launchSwitches(process.platform)) app.commandLine.appendSwitch(name, value);
 // Pasted images reach the window through attachment://, and emails' HTML its sandboxed frames through
@@ -276,6 +280,33 @@ function startCore(secrets: Secrets, log: Log) {
     log: (message) => log.info('diagnostics', message),
   });
   ipcMain.handle(ipc.diagnosticsReport, (_event, request: unknown) => diagnosticsChannel.request(request));
+  // Settings → Data → Wipe all Commander data (#204): the Core stopped for good (never a crash),
+  // everything Commander keeps deleted, and a relaunch as new, the way Restore relaunches. The keyring
+  // entry is shared by every Commander on this machine, so only one on its own data folder deletes it
+  // (never one started with --user-data-dir, as the end-to-end tests are). Read at call time, so the
+  // end-to-end tests can stand in for the relaunch.
+  const ownDataFolder = !app.commandLine.hasSwitch('user-data-dir') && !testHooks;
+  const wipe = createWipeChannel({
+    userData: app.getPath('userData'),
+    // A Core that couldn't open the database (#203) can't say where the copy is: none is offered.
+    markdownCopyFolder: () =>
+      needsRecovery(supervisor.status().database) ? Promise.resolve(null) : markdownCopy.folder(),
+    stopCore: () => supervisor.stopForGood(),
+    async clearWindowStorage() {
+      await session.defaultSession.clearStorageData();
+      await session.defaultSession.clearCache();
+    },
+    clearKeyring: ownDataFolder ? () => clearSafeStorageKey(app.getName()) : null,
+    relaunch() {
+      // The logs go last, as Commander quits (#207): any line written before then would make them again.
+      app.once('quit', () => wipeLogs(app.getPath('userData')));
+      app.relaunch({ args: process.argv.slice(1).filter((arg) => arg !== '--hidden') });
+      app.quit();
+    },
+    // On stdout only: the log is deleted with everything else.
+    log: (message) => console.log(`commander: ${message}`),
+  });
+  ipcMain.handle(ipc.wipe, (_event, request: unknown) => wipe.request(request));
   // Ares's Updates: the window asks (`U`, the header button, the palette), the Core answers.
   const updates = createUpdatesChannel(send);
   ipcMain.handle(ipc.updates, (_event, request: unknown) => relay(() => updates.request(request)));
