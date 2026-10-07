@@ -55,7 +55,12 @@ export const SETTINGS_PAGES = [
     groups: ['snapshots', 'export', 'markdown-copy'],
   },
   { id: 'security', label: 'Security', summary: 'Sign-ins and API keys', groups: ['security'] },
-  { id: 'diagnostics', label: 'Diagnostics', summary: 'The Core and the window', groups: ['diagnostics'] },
+  {
+    id: 'diagnostics',
+    label: 'Diagnostics',
+    summary: 'How Commander is doing, its syncs, and the log to export',
+    groups: ['diagnostics'],
+  },
 ] as const satisfies readonly SettingsPage[];
 
 export type SettingsPageId = (typeof SETTINGS_PAGES)[number]['id'];

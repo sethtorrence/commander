@@ -11,6 +11,8 @@ import type {
   ConversationsResponse,
   ConversationsResults,
   CoreMessage,
+  DiagnosticsRequest,
+  DiagnosticsResponse,
   EmailReaderRequest,
   EmailReaderResponse,
   GitHubDiscussionRequest,
@@ -76,6 +78,10 @@ const commander = {
     };
   },
   diagnostics: (): Promise<Diagnostics> => ipcRenderer.invoke(ipc.diagnostics),
+  // Settings → Diagnostics' report (recent sync runs, the database's version) and Export diagnostics,
+  // which shows the system save picker (#207).
+  diagnosticsReport: (request: DiagnosticsRequest): Promise<DiagnosticsResponse> =>
+    ipcRenderer.invoke(ipc.diagnosticsReport, request),
   // Whether the Core is running (#200), and as it changes; Try again, once Commander stopped trying.
   coreStatus: (): Promise<CoreStatus> => ipcRenderer.invoke(ipc.coreStatus),
   onCoreStatus(listener: (status: CoreStatus) => void) {

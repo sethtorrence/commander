@@ -4,6 +4,8 @@ import type { DatabaseHealth } from './database-health';
 export const ipc = {
   coreMessage: 'core-message',
   diagnostics: 'diagnostics',
+  // Settings → Diagnostics' report and Export diagnostics (#207); see diagnostics-messages.ts.
+  diagnosticsReport: 'diagnostics-report',
   secretStorageStatus: 'secret-storage-status',
   // Item store requests from the window; see item-store-messages.ts for the validated contract.
   itemStore: 'item-store',
@@ -329,7 +331,12 @@ export type Diagnostics = {
   // 'compositor' when the compositor confirmed it, 'inferred' when guessed from launch switches.
   displaySource: 'compositor' | 'inferred';
   passwordStore: string;
+  // Versions (#207): Commander's, Electron's and what it carries, and the operating system's.
+  version: string;
   electron: string;
+  chrome: string;
+  node: string;
+  os: string;
 };
 
 // Where Account tokens and API keys are kept. The window only ever learns this status, never a secret.

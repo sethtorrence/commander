@@ -58,6 +58,8 @@ export type SyncStateStore = {
   recordRun(run: Omit<SyncRun, 'id'>): void;
   // Newest first.
   runs(account: string, limit?: number): SyncRun[];
+  // Every Account's, newest first (Settings → Diagnostics, #207).
+  recentRuns(limit?: number): SyncRun[];
   // How many of the Account's Items Commander holds, tombstones aside.
   countItems(source: Source, account: string): number;
   // What the Account's Source (Linear) offers the detail pane's pickers, as its last sync fetched it.
@@ -132,6 +134,10 @@ export function openSyncStateStore(db: BetterSQLite3Database<typeof schema>): Sy
         .orderBy(desc(syncRuns.id))
         .limit(limit)
         .all();
+    },
+
+    recentRuns(limit = 50) {
+      return db.select().from(syncRuns).orderBy(desc(syncRuns.id)).limit(limit).all();
     },
 
     countItems(source, account) {

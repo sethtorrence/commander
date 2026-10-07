@@ -1,7 +1,7 @@
 // The Core: syncs Sources, holds the Items and runs the Agent. It runs as an Electron
 // utilityProcess and talks to the main process only through validated messages.
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import {
   type CoreAccountRefused,
   type CoreDatabaseHealth,
@@ -22,6 +22,7 @@ import { composeFiles, setUpCompose } from './compose';
 import { setUpConversations } from './conversations';
 import { createAboutReader } from './conversations/about';
 import { createRememberer } from './conversations/remember';
+import { setUpDiagnostics } from './diagnostics';
 import { setUpEmailInvitations } from './email-invitations';
 import { setUpEmailReader } from './email-reader';
 import { workerSanitiser } from './email-reader/sanitiser';
@@ -29,6 +30,8 @@ import { setUpGitHubDiscussion } from './github-discussion';
 import { setUpGitHubOversight } from './github-oversight';
 import { setUpGitHubWatch } from './github-watch';
 import { answerItemStoreRequest } from './item-store-requests';
+import { migrationsText, recoveryLine, syncRunLine } from './logs/lines';
+import { createLog, logsDir } from './logs/log-file';
 import { setUpMarkdownCopy } from './markdown-copy';
 import type { Meaning } from './meaning';
 import { meaningInCore } from './meaning/in-core';
@@ -65,30 +68,54 @@ const dataDir = process.argv.find((arg) => arg.startsWith('--data-dir='))?.slice
 if (!dataDir) throw new Error('The Core needs --data-dir=<folder> to know where the database lives');
 mkdirSync(dataDir, { recursive: true });
 
+// The tokens and keys Sources and models borrow from the main process are remembered here by
+// fingerprint (accessTokens, below), so no prompt to a model can carry one (agent/prompt.ts), and no
+// line of the log either.
+const secrets = createKnownSecrets();
+// The log (#207): core.log in the logs folder, every line blanked. Every warning the Core already
+// gives goes in it too, and an error that stops the Core.
+const log = createLog({ dir: logsDir(dataDir), process: 'core', secrets });
+log.captureConsole();
+process.on('uncaughtExceptionMonitor', (error) =>
+  log.error(
+    'core',
+    `The Core stopped on an error: ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`,
+  ),
+);
+log.info('core', `The Core started (pid ${process.pid})`);
+
 // A restore the User asked for before the relaunch (#202) is made first, while nothing has the
 // database open.
 const restored = applyPendingRestore({ dataDir });
+if (restored?.ok) log.info('backups', `Restored the snapshot ${restored.name}`);
+else if (restored) log.warn('backups', `Couldn’t restore the snapshot ${restored.name}: ${restored.reason}`);
 // Opening it checks it first, then takes a snapshot when this version of Commander has migrations to
 // run (#202), then runs them, all or none (#203). A full disk later holds every write until there is
 // space again; main and the window hear of it, and of it passing.
 const sendHealth = (health: CoreDatabaseHealth['health']) =>
   port.postMessage({ type: 'database-health', health } satisfies CoreDatabaseHealth);
+// The migrations: copied next to the bundled Core at build time (see electron.vite.config.ts). The
+// end-to-end tests may give another (one with a migration that fails, #203).
+const migrationsFolder =
+  (process.argv.includes('--test-hooks') &&
+    process.argv
+      .find((arg) => arg.startsWith('--migrations-folder='))
+      ?.slice('--migrations-folder='.length)) ||
+  join(import.meta.dirname, 'migrations');
 const opened = openOrRecover(
   {
     path: join(dataDir, 'commander.db'),
     snapshotDir: join(dataDir, 'snapshots'),
-    // Copied next to the bundled Core at build time (see electron.vite.config.ts). The end-to-end
-    // tests may give another (one with a migration that fails, #203).
-    migrationsFolder:
-      (process.argv.includes('--test-hooks') &&
-        process.argv
-          .find((arg) => arg.startsWith('--migrations-folder='))
-          ?.slice('--migrations-folder='.length)) ||
-      join(import.meta.dirname, 'migrations'),
-    onDiskFull: (full, at) => sendHealth(full ? { state: 'disk-full', since: at } : { state: 'ok' }),
+    migrationsFolder,
+    onDiskFull: (full, at) => {
+      if (full) log.warn('database', 'The disk is full: writes are held until there is space again');
+      else log.info('database', 'There is space on the disk again: writing started again');
+      sendHealth(full ? { state: 'disk-full', since: at } : { state: 'ok' });
+    },
   },
   { restored },
 );
+if (!opened.ok) log.error('database', recoveryLine(opened.health));
 // A damaged database, or one this version couldn't update (#203): the Core stays in its limited
 // state (backups/recovery.ts), answering only the recovery screen, and nothing below ever runs.
 const itemStore = opened.ok
@@ -102,6 +129,22 @@ const itemStore = opened.ok
       restored,
     });
 sendHealth({ state: 'ok' });
+{
+  // What opening the database did (#203): it passed its check, and any migrations this version ran.
+  const { migrated, preUpdateSnapshot } = itemStore;
+  log.info('database', 'Opened the database: it passed its quick check (a new one has nothing to check)');
+  if (migrated.length)
+    log.info(
+      'database',
+      `Ran ${migrated.length === 1 ? 'a migration' : 'migrations'} (${migrationsText(migrated)}); ${
+        !preUpdateSnapshot
+          ? 'no snapshot was needed first'
+          : preUpdateSnapshot.ok
+            ? `the before-update snapshot is ${basename(preUpdateSnapshot.path)}`
+            : `the before-update snapshot failed: ${preUpdateSnapshot.reason}`
+      }`,
+    );
+}
 
 // Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
 let updates: Updates | undefined;
@@ -117,13 +160,13 @@ const backups = setUpBackups({
   send: (message) => port.postMessage(message),
   restored,
   queue: () => updates?.queue,
+  log: { info: (message) => log.info('backups', message), warn: (message) => log.warn('backups', message) },
 });
 backups.takeDaily();
 setInterval(() => backups.takeDaily(), 60 * 60 * 1000);
 
-// Sources borrow their Accounts' access tokens from the main process through this, in memory only.
-// Each one is remembered by fingerprint, so no prompt to a model can carry it (agent/prompt.ts).
-const secrets = createKnownSecrets();
+// Sources borrow their Accounts' access tokens from the main process through this, in memory only,
+// each one remembered by fingerprint (secrets, above).
 const accessTokens = createAccessTokens((message) => port.postMessage(message), { secrets });
 // Model calls for Ares; the API key is borrowed the same way, for each call. Embeddings (search by
 // meaning) come from the local model, once it is ready.
@@ -133,6 +176,7 @@ const models = setUpModels(itemStore, {
   accessTokens,
   secrets,
   meaning: () => meaning,
+  log: (line) => log.warn('models', line),
 });
 // Search by meaning (#73): the embedding model downloaded on first use into the data folder and run in
 // a worker thread beside the Core (built next to it); every Item and memory embedded in the
@@ -170,6 +214,18 @@ const sync = setUpSync(itemStore, {
   githubWatch: (account, apiUrl) => githubWatch.forSync(account, apiUrl),
   onAccountsChanged: () => updates?.sweep(),
   attachment: (id) => composeFilesInData.read(id),
+  // Each sync run goes in the log (#207); a failed one says why.
+  onRun: (run) => (run.outcome === 'synced' ? log.info : log.warn)('sync', syncRunLine(run)),
+});
+// Settings → Diagnostics and Export diagnostics (#207): recent sync runs, where each Account's syncing
+// stands, the database's version and the settings that aren't secret.
+const diagnostics = setUpDiagnostics({
+  store: itemStore,
+  migrationsFolder,
+  statuses: () => sync.engine.statuses(),
+  snapshots: () => backups.status(),
+  secrets,
+  send: (message) => port.postMessage(message),
 });
 // The oversight summary (#119): finishes Links after GitHub and Linear syncs, and the writer's detail
 // fetched for the pull requests in today's summary. What it links shows at once in open views.
@@ -545,6 +601,7 @@ port.on('message', ({ data }) => {
   if (sync.handle(data)) return;
   if (markdownCopy.handle(data)) return;
   if (backups.handle(data)) return;
+  if (diagnostics.handle(data)) return;
   if (updates?.handle(data)) return;
   if (conversations.handle(data)) return;
   if (githubWatch.handle(data)) return;

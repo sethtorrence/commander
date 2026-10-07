@@ -449,6 +449,8 @@ export type ItemStore = {
   takeDailySnapshot(): Snapshot | null;
   // The snapshot this open took before migrating the database, or null when nothing needed migrating.
   preUpdateSnapshot: PreUpdateSnapshot | null;
+  // The migrations this open ran, by name (none when the database was up to date), for the log.
+  migrated: readonly string[];
   // Whether writes are held because the disk is full (#203, disk-full.ts).
   diskFull(): boolean;
   // A consistent, checked copy of the database at `path` (Export everything). Throws SnapshotFailed.
@@ -714,10 +716,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   const db = drizzle(sqlite, { schema });
   // A new version of Commander changing the database: a snapshot first, before any migration runs.
   let preUpdateSnapshot: PreUpdateSnapshot | null = null;
+  let migrated: string[] = [];
   try {
     if (migrationsPending(sqlite, options.migrationsFolder))
       preUpdateSnapshot = snapshotBeforeUpdate(sqlite, options.snapshotDir, now(), options.checkSnapshot);
-    migrateAtomically(sqlite, options.migrationsFolder);
+    migrated = migrateAtomically(sqlite, options.migrationsFolder);
   } catch (error) {
     sqlite.close();
     if (error instanceof MigrationFailed) error.preUpdateSnapshot = preUpdateSnapshot;
@@ -3280,6 +3283,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       return snapshot;
     },
     preUpdateSnapshot,
+    migrated,
     diskFull: () => disk.full(),
     copyDatabaseTo: (path) => copyDatabase(sqlite, path, options.checkSnapshot),
 
