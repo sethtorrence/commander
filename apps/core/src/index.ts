@@ -8,6 +8,7 @@ import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
 import { openGate } from './autonomy/gate';
 import { answerAutonomyRequest } from './autonomy/requests';
+import { applyPendingRestore, setUpBackups } from './backups';
 import { setUpBusyCopies } from './busy-copies';
 import { composeFiles, setUpCompose } from './compose';
 import { setUpConversations } from './conversations';
@@ -48,6 +49,10 @@ const dataDir = process.argv.find((arg) => arg.startsWith('--data-dir='))?.slice
 if (!dataDir) throw new Error('The Core needs --data-dir=<folder> to know where the database lives');
 mkdirSync(dataDir, { recursive: true });
 
+// A restore the User asked for before the relaunch (#202) is made first, while nothing has the
+// database open.
+const restored = applyPendingRestore({ dataDir });
+// Opening it takes a snapshot first when this version of Commander has migrations to run (#202).
 const itemStore = openItemStore({
   path: join(dataDir, 'commander.db'),
   snapshotDir: join(dataDir, 'snapshots'),
@@ -55,9 +60,23 @@ const itemStore = openItemStore({
   migrationsFolder: join(import.meta.dirname, 'migrations'),
 });
 
-// The daily snapshot: taken at start-up, then checked hourly so a Commander left running still gets one.
-itemStore.takeDailySnapshot();
-setInterval(() => itemStore.takeDailySnapshot(), 60 * 60 * 1000);
+// Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
+let updates: Updates | undefined;
+
+// Settings → Data's snapshots, Restore and Export everything (#202). The daily snapshot: taken at
+// start-up, then checked hourly so a Commander left running still gets one. A failed one is for the
+// Update, once Ares's queue is set up below.
+const backups = setUpBackups({
+  store: itemStore,
+  dataDir,
+  snapshotDir: join(dataDir, 'snapshots'),
+  attachmentsDir: join(dataDir, 'attachments'),
+  send: (message) => port.postMessage(message),
+  restored,
+  queue: () => updates?.queue,
+});
+backups.takeDaily();
+setInterval(() => backups.takeDaily(), 60 * 60 * 1000);
 
 // Sources borrow their Accounts' access tokens from the main process through this, in memory only.
 // Each one is remembered by fingerprint, so no prompt to a model can carry it (agent/prompt.ts).
@@ -85,8 +104,6 @@ meaning = meaningInCore({
 });
 // A little after start-up, so the first syncs go first.
 setTimeout(() => meaning?.start(), fakeEmbeddings ? 0 : 20_000);
-// Ares's Updates (set up below, once the Agent is): their producers look again whenever the gate acts.
-let updates: Updates | undefined;
 // Settings → GitHub: what each GitHub Account can reach and watches, kept through the Item store.
 const githubWatch = setUpGitHubWatch(itemStore, {
   send: (message) => port.postMessage(message),
@@ -306,6 +323,8 @@ updates = setUpUpdates({
 });
 // Injection warnings, and Linear Todos taken off the User's list, arrive with a sync.
 sync.engine.onSynced(() => updates?.sweep());
+// A snapshot (or restore) that failed before the queue was there.
+backups.queueReady();
 
 // Send later (#139): Commander's scheduled mail goes at its time while Commander runs and the machine is
 // awake; a time that passed while it was closed (found now) or asleep (found on waking) is missed, and
@@ -391,6 +410,7 @@ port.on('message', ({ data }) => {
   if (models.handle(data)) return;
   if (sync.handle(data)) return;
   if (markdownCopy.handle(data)) return;
+  if (backups.handle(data)) return;
   if (updates?.handle(data)) return;
   if (conversations.handle(data)) return;
   if (githubWatch.handle(data)) return;
@@ -484,6 +504,7 @@ const closeStore = () => {
   updates?.stop();
   sync.stop();
   markdownCopy.stop();
+  backups.stop();
   emailSanitiser.stop();
   void meaning?.stop();
   itemStore.close();

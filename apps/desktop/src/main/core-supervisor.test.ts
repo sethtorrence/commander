@@ -217,6 +217,19 @@ describe('createCoreSupervisor', () => {
     expect(cores).toHaveLength(1);
   });
 
+  it('never counts a deliberate stop (quitting to relaunch for a restore, #202) as a crash', async () => {
+    const { supervisor, cores, latest, statuses } = supervise();
+    latest().beat();
+    const seen = statuses.length;
+    supervisor.quit();
+    supervisor.kill();
+    latest().exit(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(supervisor.status()).toMatchObject({ state: 'running', lastStop: null, restarts: 0 });
+    expect(statuses.slice(seen)).toEqual([]);
+    expect(cores).toHaveLength(1);
+  });
+
   it('drops a restart already waiting when Commander quits', async () => {
     const { supervisor, cores, latest } = supervise();
     latest().exit(1);

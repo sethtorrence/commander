@@ -3,6 +3,7 @@
 // adding a kind of line adds its entry here (the registry's type asks for every kind).
 import type { QueuedAbout, QueuedKind, QueuedLine, UpdateRow } from '@commander/domain';
 import { capLines, prepLines, summaryLines } from './ares';
+import { backupLines } from './backups';
 import { bucketRuleLines, bucketSuggestionLines, missedSendLines } from './email';
 import { leftLines, reconnectLines, stuckLines } from './linear';
 import { refusalLines } from './refusals';
@@ -32,6 +33,7 @@ export const LINE_KINDS: LineKinds = {
   'bucket-rule-suggestion': bucketRuleLines,
   'bucket-suggestion': bucketSuggestionLines,
   'missed-send': missedSendLines,
+  'backup-failed': backupLines,
 };
 
 type Line = Pick<QueuedLine, 'about' | 'itemIds'>;

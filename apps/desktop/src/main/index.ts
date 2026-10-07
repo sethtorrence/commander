@@ -24,6 +24,7 @@ import { setUpAccounts } from './accounts/set-up-accounts';
 import { attachmentSchemePrivileges, serveAttachment } from './attachments-protocol';
 import { createAutonomyChannels } from './autonomy-channel';
 import { claimSingleInstance, runInBackground, startsHidden } from './background';
+import { createBackupsChannel } from './backups-channel';
 import { createComposeChannel } from './compose-channel';
 import { createConversationsChannel } from './conversations-channel';
 import { createCoreSupervisor } from './core-supervisor';
@@ -208,6 +209,29 @@ function startCore(secrets: Secrets) {
     },
   });
   ipcMain.handle(ipc.markdownCopy, (_event, request: unknown) => relay(() => markdownCopy.request(request)));
+  // Settings → Data's snapshots, Restore and Export everything (#202). Restore relaunches Commander:
+  // a clean quit (Quit's steps, so nothing held is lost and the Core's stop is no crash), and the
+  // new Core restores before it opens the database. Both read at call time, so the end-to-end tests
+  // can stand in for the picker and the relaunch.
+  const backups = createBackupsChannel({
+    userData: app.getPath('userData'),
+    send,
+    async chooseFolder() {
+      const options: Electron.OpenDialogOptions = {
+        title: 'Export everything to…',
+        buttonLabel: 'Export here',
+        properties: ['openDirectory', 'createDirectory'],
+      };
+      const result = await (window ? dialog.showOpenDialog(window, options) : dialog.showOpenDialog(options));
+      return result.canceled ? null : (result.filePaths[0] ?? null);
+    },
+    relaunch() {
+      // Back in the window, even when this start was at login (hidden in the tray).
+      app.relaunch({ args: process.argv.slice(1).filter((arg) => arg !== '--hidden') });
+      app.quit();
+    },
+  });
+  ipcMain.handle(ipc.backups, (_event, request: unknown) => relay(() => backups.request(request)));
   // Ares's Updates: the window asks (`U`, the header button, the palette), the Core answers.
   const updates = createUpdatesChannel(send);
   ipcMain.handle(ipc.updates, (_event, request: unknown) => relay(() => updates.request(request)));
@@ -272,7 +296,7 @@ function startCore(secrets: Secrets) {
   }
   fromCore = (raw: unknown) => {
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
-    if (markdownCopy.settle(raw) || updates.settle(raw) || compose.settle(raw)) return;
+    if (markdownCopy.settle(raw) || backups.settle(raw) || updates.settle(raw) || compose.settle(raw)) return;
     if (conversations.settle(raw)) return;
     if (emailReader?.settle(raw)) return;
     // Before Accounts: it answers the Core's token requests for model API keys.

@@ -187,6 +187,15 @@ export const queuedAbout = z.discriminatedUnion('kind', [
     dueAt: timestamp,
     missedAt: timestamp,
   }),
+  // A backup that failed (#202): a snapshot that couldn't be written or whose copy failed its integrity
+  // check (discarded; the older snapshots all stay), or a restore that couldn't be made. One line per
+  // kind, the newer failure replacing the older; a snapshot's line goes once a later one succeeds.
+  z.object({
+    kind: z.literal('backup-failed'),
+    what: z.enum(['daily-snapshot', 'update-snapshot', 'restore']),
+    at: timestamp,
+    reason: z.string().min(1),
+  }),
 ]);
 export type QueuedAbout = z.infer<typeof queuedAbout>;
 export type QueuedKind = QueuedAbout['kind'];

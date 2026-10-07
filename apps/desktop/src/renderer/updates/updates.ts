@@ -101,6 +101,8 @@ export function openTarget(
     return { kind: 'settings', group: 'rules' };
   if (about?.kind === 'bucket-suggestion') return { kind: 'settings', group: 'buckets' };
   if (about?.kind === 'reconnect') return { kind: 'settings', group: 'accounts' };
+  // A snapshot or restore that failed (#202): Settings → Data lists the snapshots.
+  if (about?.kind === 'backup-failed') return { kind: 'settings', group: 'snapshots' };
   const first = line.itemIds[0];
   const single = line.itemIds.length === 1 || about?.kind === 'chained';
   if (first && single) return { kind: 'item', sectionId: sectionOf(line.section), itemId: first };

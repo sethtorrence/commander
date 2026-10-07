@@ -190,6 +190,10 @@ _Avoid_: Default note, skeleton, boilerplate
 The read-only `YYYY-MM-DD.md` file of each Daily Note that Commander writes to a folder the User chooses, for Obsidian, grep and backups; never read back, so the database stays the source of truth.
 _Avoid_: Export, sync, vault, mirror
 
+**Snapshot**:
+A checked copy of the database in the snapshots folder beside it, with the pasted images it uses: one each day Commander runs (the last 7 kept), one before an update changes the database, and one before each restore; Restore in Settings → Data swaps one in and relaunches Commander, and Export everything copies all the User's data (never a secret) to a folder they choose.
+_Avoid_: Backup (alone), dump, checkpoint; Export (that's Export everything)
+
 ## Processing
 
 **Core**:

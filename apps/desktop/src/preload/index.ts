@@ -2,6 +2,8 @@ import type {
   AutonomyRequest,
   AutonomyResponse,
   AutonomyResults,
+  BackupsRequest,
+  BackupsResponse,
   ComposeRequest,
   ComposeResponse,
   ComposeResults,
@@ -135,6 +137,10 @@ const commander = {
   // main process shows; resolves with the refusal's reason, if any.
   markdownCopy: (request: MarkdownCopyRequest): Promise<MarkdownCopyResponse> =>
     ipcRenderer.invoke(ipc.markdownCopy, request),
+  // Settings → Data → Snapshots and Export (#202): the snapshots, Restore (typed confirmation; Commander
+  // relaunches) and Export everything (the folder from the system picker only). Resolves with the
+  // response, failures included.
+  backups: (request: BackupsRequest): Promise<BackupsResponse> => ipcRenderer.invoke(ipc.backups, request),
   // Settings → GitHub: what each GitHub Account can reach and watches. Resolves with the response,
   // failures included (with the last listing, when there is one).
   githubWatch: (request: GitHubWatchRequest): Promise<GitHubWatchResponse> =>

@@ -113,6 +113,7 @@ import Database from 'better-sqlite3';
 import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
+import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { alias } from 'drizzle-orm/sqlite-core';
 import { z } from 'zod';
 import { type MemoryStore, openMemory } from '../memory';
@@ -192,7 +193,13 @@ import {
 import { type ListChange, rulesIn } from './rules';
 import { type SchedulingSettingsStore, schedulingSettingsIn } from './scheduling-settings';
 import * as schema from './schema';
-import { keptSnapshots, type Snapshot, takeDailySnapshot } from './snapshots';
+import {
+  copyDatabase,
+  keptSnapshots,
+  type Snapshot,
+  takeDailySnapshot,
+  takeExtraSnapshot,
+} from './snapshots';
 import { type SuggestedReplyStore, suggestedRepliesIn } from './suggested-replies';
 import { openSyncStateStore, type SyncStateStore } from './sync-state';
 import {
@@ -230,6 +237,7 @@ export type { OutgoingRow, OutgoingStore } from './outgoing';
 export type { PeopleStore } from './people';
 export type { RefusalStore } from './refusals';
 export type { Snapshot } from './snapshots';
+export { SnapshotFailed } from './snapshots';
 export type { SyncRun, SyncState, SyncStateStore } from './sync-state';
 export type { UpdateState, UpdateStore } from './updates';
 
@@ -244,7 +252,13 @@ export type ItemStoreOptions = {
   migrationsFolder: string;
   // The clock, in epoch milliseconds. Injectable for tests.
   now?: () => number;
+  // Stands in for the snapshots' integrity check (tests make a copy fail it).
+  checkSnapshot?: (path: string) => string | null;
 };
+
+// The snapshot taken before this open migrated the database (#202): taken, or failed (the migration
+// went ahead regardless, and the failure is for the Update and Diagnostics).
+export type PreUpdateSnapshot = { ok: true; path: string } | { ok: false; at: number; reason: string };
 
 export type ItemStore = {
   saveFromSource(batch: SourceBatch): SaveResult;
@@ -412,8 +426,13 @@ export type ItemStore = {
   // When the next snooze is due, or null.
   nextSnoozeAt(): number | null;
   // Copies the database into the snapshot folder unless today's copy exists, keeping the last 7,
-  // with the pasted images they use (attachments.ts).
+  // with the pasted images they use (attachments.ts). The copy is integrity-checked first: a bad one
+  // is discarded and throws SnapshotFailed, the older snapshots all kept (snapshots.ts).
   takeDailySnapshot(): Snapshot | null;
+  // The snapshot this open took before migrating the database, or null when nothing needed migrating.
+  preUpdateSnapshot: PreUpdateSnapshot | null;
+  // A consistent, checked copy of the database at `path` (Export everything). Throws SnapshotFailed.
+  copyDatabaseTo(path: string): void;
   // Saves a pasted image into attachments/ and returns its file name (attachments.ts).
   saveAttachment(bytes: Uint8Array): { name: string };
   // The usage ledger and Settings → Ares, in the same database.
@@ -617,6 +636,42 @@ function dayTitle(day: string): string {
 }
 
 const calendarDay = z.iso.date();
+
+/**
+ * Whether opening this database will migrate it: it already holds Commander's tables (a new one has
+ * nothing to keep), and the migrations folder has one newer than the last it ran.
+ */
+function migrationsPending(sqlite: Database.Database, migrationsFolder: string): boolean {
+  const tables = sqlite
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+    .pluck()
+    .all() as string[];
+  if (!tables.some((name) => name !== '__drizzle_migrations')) return false;
+  const migrations = readMigrationFiles({ migrationsFolder });
+  if (!tables.includes('__drizzle_migrations')) return migrations.length > 0;
+  // As drizzle's migrator decides: any migration made after the last one this database ran.
+  const last = sqlite.prepare('SELECT MAX(created_at) FROM __drizzle_migrations').pluck().get() as
+    | number
+    | string
+    | null;
+  if (last === null) return migrations.length > 0;
+  return migrations.some((migration) => Number(last) < migration.folderMillis);
+}
+
+function snapshotBeforeUpdate(
+  sqlite: Database.Database,
+  snapshotDir: string,
+  at: number,
+  check: ((path: string) => string | null) | undefined,
+): PreUpdateSnapshot {
+  try {
+    return { ok: true, path: takeExtraSnapshot(sqlite, snapshotDir, 'before-update', at, { check }).path };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    console.warn('Could not snapshot the database before migrating it:', reason);
+    return { ok: false, at, reason };
+  }
+}
 // At most this many memories in the palette's Memory group.
 const MEMORIES_SEARCHED = 6;
 // What marks a memory's key among the work waiting to be embedded (an Item's key is its id).
@@ -628,6 +683,10 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   const db = drizzle(sqlite, { schema });
+  // A new version of Commander changing the database: a snapshot first, before any migration runs.
+  const preUpdateSnapshot = migrationsPending(sqlite, options.migrationsFolder)
+    ? snapshotBeforeUpdate(sqlite, options.snapshotDir, now(), options.checkSnapshot)
+    : null;
   migrate(db, { migrationsFolder: options.migrationsFolder });
   const template = dailyTemplateIn(db, now);
   const outgoing = openOutgoingQueue(db);
@@ -771,6 +830,16 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     now,
     invalid: (message) => new ItemStoreError('invalid', message),
   });
+  // After a snapshot: the images kept snapshots use are copied beside them. Looking after the images
+  // must never cost the snapshot (or the Core) itself.
+  const tidyAttachments = () => {
+    try {
+      attachments.afterSnapshot(sqlite, keptSnapshots(options.snapshotDir), options.snapshotDir);
+    } catch (error) {
+      console.warn('Could not snapshot or tidy the attachments:', error);
+    }
+  };
+  if (preUpdateSnapshot?.ok) tidyAttachments();
   // Emails (emails.ts): their detail, threading as they arrive, and their bodies beside them.
   const emails = emailsIn(db, {
     withDetails: (rows) => withDetails(rows),
@@ -3081,16 +3150,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
 
     takeDailySnapshot() {
-      const snapshot = takeDailySnapshot(sqlite, options.snapshotDir, now());
-      // Looking after the images must never cost the snapshot (or the Core) itself.
-      try {
-        if (snapshot)
-          attachments.afterSnapshot(sqlite, keptSnapshots(options.snapshotDir), options.snapshotDir);
-      } catch (error) {
-        console.warn('Could not snapshot or tidy the attachments:', error);
-      }
+      const snapshot = takeDailySnapshot(sqlite, options.snapshotDir, now(), {
+        check: options.checkSnapshot,
+      });
+      if (snapshot) tidyAttachments();
       return snapshot;
     },
+    preUpdateSnapshot,
+    copyDatabaseTo: (path) => copyDatabase(sqlite, path, options.checkSnapshot),
 
     saveAttachment: (bytes) => attachments.save(bytes),
 

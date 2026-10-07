@@ -304,6 +304,28 @@ describe('the cost-cap warning', () => {
   });
 });
 
+describe('a backup that failed (#202)', () => {
+  const at = new Date(2026, 9, 6, 9, 5).getTime();
+  it('what failed and when, that nothing was lost, why, and where to look', () => {
+    expect(
+      template({
+        kind: 'backup-failed',
+        what: 'daily-snapshot',
+        at,
+        reason: 'The copy failed its integrity check: Page 7 is never used',
+      }),
+    ).toBe(
+      'Today’s snapshot of the database failed at 09:05 today and was discarded; the older snapshots are all kept. The copy failed its integrity check: Page 7 is never used. Commander tries again every hour. See Settings → Data.',
+    );
+    expect(
+      template({ kind: 'backup-failed', what: 'restore', at, reason: 'That snapshot is no longer there.' }),
+    ).toBe(
+      'The restore you asked for couldn’t be made at 09:05 today, so your database is as it was. That snapshot is no longer there. See Settings → Data.',
+    );
+    expect(rows({ kind: 'backup-failed', what: 'update-snapshot', at, reason: 'Disk full' })).toEqual([]);
+  });
+});
+
 describe('“want me to just do them?”', () => {
   it('what the User did, what would change, and how to say no', () => {
     expect(

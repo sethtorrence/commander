@@ -21,8 +21,15 @@ const realPath = (path: string) => {
   }
 };
 
-/** Whether the copy may go in this folder: an existing one, not the whole disk, not Commander's own. */
-export function checkCopyFolder(path: string, userData: string): FolderCheck {
+// Why the data folder itself can't be chosen, for the Markdown copy (and, by default, anything else).
+const OWN_FOLDER =
+  'That is Commander’s own data folder. Choose a folder outside it, such as one in Documents or an Obsidian vault.';
+
+/**
+ * Whether the copy may go in this folder: an existing one, not the whole disk, not Commander's own.
+ * Export everything (#202) checks its folder the same way, with its own word for the data folder.
+ */
+export function checkCopyFolder(path: string, userData: string, ownFolder = OWN_FOLDER): FolderCheck {
   if (!isAbsolute(path)) return { ok: false, error: 'Choose a folder by its full path.' };
   const folder = realPath(path);
   if (!folder) return { ok: false, error: 'That folder can’t be found.' };
@@ -31,11 +38,7 @@ export function checkCopyFolder(path: string, userData: string): FolderCheck {
   const data = realPath(userData) ?? userData;
   const inData = relative(data, folder);
   if (inData === '' || (!inData.startsWith('..') && !isAbsolute(inData))) {
-    return {
-      ok: false,
-      error:
-        'That is Commander’s own data folder. Choose a folder outside it, such as one in Documents or an Obsidian vault.',
-    };
+    return { ok: false, error: ownFolder };
   }
   return { ok: true, folder };
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { aresStatus } from './agent';
+import { backupsStatus } from './backups-messages';
 import { conversationTokens, conversationTurnChanged } from './conversations';
 import { markdownCopyStatus } from './markdown-copy-messages';
 import { updatesState } from './updates';
@@ -53,6 +54,9 @@ const meetingHeadsUp = z.object({
 // How the Markdown copy of the Daily Notes stands changed (markdown-copy-messages.ts): Settings shows it.
 const markdownCopyChanged = z.object({ type: z.literal('markdown-copy-status'), status: markdownCopyStatus });
 
+// The snapshots or an export changed (backups-messages.ts): Settings → Data and Diagnostics show it.
+const backupsChanged = z.object({ type: z.literal('backups-status'), status: backupsStatus });
+
 // A new Core is running after one stopped (#200). Sent by the main process, not the Core: views
 // holding what the Core pushes as it changes (Ares working, the quiet count, an answer being written)
 // ask again, since the old Core's word may never have come.
@@ -63,6 +67,7 @@ export const coreMessage = z.discriminatedUnion('type', [
   heartbeat,
   aresActivity,
   aresStatusChanged,
+  backupsChanged,
   conversationTokens,
   conversationTurnChanged,
   coreRestarted,

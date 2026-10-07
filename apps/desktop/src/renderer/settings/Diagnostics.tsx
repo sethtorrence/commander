@@ -2,6 +2,7 @@ import type { CoreStatus, Diagnostics as DiagnosticsInfo } from '@commander/doma
 import { Led } from '@commander/ui';
 import { useEffect, useState } from 'react';
 import { useCoreStatus } from '../frame/CoreBanner';
+import { dayLabel, problemText, useBackups } from './DataSettings';
 import { Readout, ReadoutRow, SettingRow, SettingsGroup } from './parts';
 
 const hhmm = (at: number) =>
@@ -19,11 +20,15 @@ function restartsText(status: CoreStatus | null): string {
   return `${restarts} · last ${why} at ${hhmm(lastStop.at)}`;
 }
 
-// Settings → Diagnostics: the Core's heartbeat and restarts, and how the window reaches the screen.
+// Settings → Diagnostics: the Core's heartbeat and restarts, the latest snapshot (and any that failed,
+// #202), and how the window reaches the screen.
 export function Diagnostics({ no }: { no: string }) {
   const [beats, setBeats] = useState<number | null>(null);
   const [info, setInfo] = useState<DiagnosticsInfo | null>(null);
   const core = useCoreStatus(window.commander);
+  const backups = useBackups().status;
+  const latestDaily = backups?.snapshots.find((snapshot) => snapshot.kind === 'daily') ?? null;
+  const snapshotProblem = backups?.problems[0] ?? null;
 
   useEffect(() => {
     window.commander.diagnostics().then(setInfo);
@@ -53,7 +58,28 @@ export function Diagnostics({ no }: { no: string }) {
           <ReadoutRow label="Restarts">
             <span data-testid="core-restarts">{restartsText(core)}</span>
           </ReadoutRow>
+          <ReadoutRow label="Snapshot" live={!!snapshotProblem}>
+            {snapshotProblem && <Led size="sm" />}
+            <span data-testid="diagnostics-snapshot" className="normal-case tracking-normal">
+              {!backups
+                ? '…'
+                : snapshotProblem
+                  ? 'Failed'
+                  : latestDaily
+                    ? dayLabel(latestDaily.day)
+                    : 'None yet'}
+            </span>
+          </ReadoutRow>
         </Readout>
+        {snapshotProblem && (
+          <p
+            data-testid="diagnostics-snapshot-problem"
+            role="alert"
+            className="m-0 mt-3 max-w-[560px] border-l-2 border-signal py-0.5 pl-3.5 text-note leading-[19px] text-ink"
+          >
+            {problemText(snapshotProblem)}
+          </p>
+        )}
       </SettingRow>
       <SettingRow label="Window" description="How the window reaches the screen, and where secrets are kept.">
         <Readout>
