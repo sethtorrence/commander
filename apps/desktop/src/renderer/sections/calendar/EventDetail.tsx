@@ -1,6 +1,7 @@
 import type { ActivityEntry, EventPerson } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ComponentType, type ReactNode, useRef } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { ItemProject } from '../../projects/badges';
 import { useProjects } from '../../projects/context';
@@ -177,6 +178,7 @@ export function EventDetail({
               </p>
             )}
             <ItemWarning item={event} variant="pane" className="mt-3" />
+            <AskAres item={event} variant="pane" className="mt-3" />
             {clashes.map((other) => (
               <p
                 key={other.id}

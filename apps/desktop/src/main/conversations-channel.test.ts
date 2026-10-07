@@ -20,6 +20,8 @@ const view = {
     createdAt: 1,
     updatedAt: 1,
     answering: false,
+    aboutItemId: null,
+    about: null,
   },
   turns: [],
 };

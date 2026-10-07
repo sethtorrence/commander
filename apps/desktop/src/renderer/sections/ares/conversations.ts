@@ -12,11 +12,15 @@ import type { AresTextRef } from '@commander/ui';
 import { type OpenTarget, sectionOf } from '../../updates/updates';
 import { dayLabel, longDate, weekday } from '../notes/days';
 
+// Where the Ares button's pop-up (#193) asks the Ares Section to open a Conversation it expands
+// (frame/reveal.ts, with the Conversation's id).
+export const CONVERSATIONS_REVEAL = 'ares-conversations';
+
 // The longest an Item's title shows in a link.
 const LINK_TITLE = 48;
 
-/** Where an answer's link to an Item opens it: in its Section. */
-export const linkTarget = (link: ConversationLink): OpenTarget => ({
+/** Where an answer's link to an Item (or the Item a Conversation is about) opens it: in its Section. */
+export const linkTarget = (link: Pick<ConversationLink, 'section' | 'itemId'>): OpenTarget => ({
   kind: 'item',
   sectionId: sectionOf(link.section),
   itemId: link.itemId,

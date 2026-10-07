@@ -12,6 +12,12 @@ import { updateSection } from './updates';
 // (I1, I2…) for that answer, and the answer names the ones its claims rest on as [I1]; those are its
 // links, each opening its Item in its Section. Commander keeps only refs it handed out in that answer.
 // An answer that gave the Update names it, shown in the Conversation with its lines and actions.
+//
+// A Conversation can be about one Item (#193): the Ares button on an Item (or `a` on the focused one)
+// starts a new Conversation from it in a small pop-up beside the Item. That Item is handed to Ares
+// with every message as I1, in a data block of its own by where it came from (a Source's Item as
+// outside material, the User's own Todos and Blocks as theirs), and the pop-up can be expanded into
+// the Ares Section, where the Conversation carries on like any other.
 
 const timestamp = z.number().int().nonnegative();
 const conversationId = z.string().min(1);
@@ -102,6 +108,13 @@ export function piecesOf(
 export const conversationSkill = skillInfo.extend({ inConversations: z.boolean() });
 export type ConversationSkill = z.infer<typeof conversationSkill>;
 
+// The Item a Conversation is about, as its pop-up and the Ares Section name it, opening in its Section.
+export const conversationAbout = conversationLink.omit({ ref: true });
+export type ConversationAbout = z.infer<typeof conversationAbout>;
+
+// The ref the Item a Conversation is about always has in his answers.
+export const ABOUT_REF = 'I1';
+
 export const conversation = z.object({
   id: conversationId,
   // From the first words the User wrote; null until they write.
@@ -116,6 +129,11 @@ export const conversation = z.object({
   updatedAt: timestamp,
   // Ares is answering in it now (or waiting his turn to).
   answering: z.boolean(),
+  // The Item it was started from with the Ares button (#193), kept by its id, or null.
+  aboutItemId: z.string().nullable(),
+  // That Item as it is now, named for the window (the Conversations module reads it); null when the
+  // Conversation is about none, or the Item is no longer in Commander.
+  about: conversationAbout.nullable(),
 });
 export type Conversation = z.infer<typeof conversation>;
 
@@ -154,8 +172,9 @@ export const conversationsRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('list') }),
   // Today's Conversation, made on the first open of the day (`day`: the window's local date).
   z.object({ op: z.literal('today'), day: z.iso.date() }),
-  // New Conversation: another one, at any time.
-  z.object({ op: z.literal('new'), day: z.iso.date() }),
+  // New Conversation: another one, at any time. `about`: the Item the Ares button was pressed on
+  // (#193), which Ares is handed with every message.
+  z.object({ op: z.literal('new'), day: z.iso.date(), about: z.string().min(1).optional() }),
   z.object({ op: z.literal('open'), conversationId }),
   // The User's message: saved as their turn, and Ares starts answering (or waits his turn). Refused
   // while he is still answering in that Conversation.

@@ -24,6 +24,7 @@ import { isoWeek } from '../../frame/calendar';
 import { requestReveal, useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import { itemChangesFromCore } from '../../item-store/changes';
+import { type AresTarget, useAresKey } from '../../links/AresButton';
 import { useMeetingPreps, usePrepActions } from '../../links/meeting-prep';
 import { useEmails } from '../../links/use-emails';
 import { useEvents } from '../../links/use-events';
@@ -600,9 +601,22 @@ function NotesSection() {
     [notebook, applyFocus, keep, outlineProjects, links, sendToLinear],
   );
 
+  // The Ares key (#193): in the editor `a` is typing, so it asks about the Block the caret was last
+  // in, once the User has left the text (Esc).
+  const aresKey = useAresKey((): AresTarget | null => {
+    const id = lastBlock.current;
+    const block = id
+      ? notebook
+          .snapshot()
+          .days.find((d) => d.outline.has(id))
+          ?.outline.get(id)
+      : undefined;
+    return block?.text.trim() ? { id: block.id, kind: 'block', title: block.text } : null;
+  });
   useShortcuts([
     { keys: 'Ctrl+z', label: 'Undo in the Daily Note', run: () => controls.focus(notebook.undo()) },
     { keys: 'Ctrl+Shift+z', label: 'Redo in the Daily Note', run: () => controls.focus(notebook.redo()) },
+    aresKey,
   ]);
 
   // The week strip follows the day being read; its arrows browse other weeks.

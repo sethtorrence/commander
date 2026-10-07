@@ -1,15 +1,20 @@
 import { type Conversation, type ConversationTurn, MAX_TURN_TEXT } from '@commander/domain';
 import { AresText, Button, cn, Kbd, Led } from '@commander/ui';
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { useReveal } from '../../frame/reveal';
 import { SettingsGroup } from '../../settings/parts';
 import { useUpdates } from '../../updates/context';
+import { KindTag } from '../todos/detail/parts';
+import { kindTag } from '../todos/links';
 import { ConversationUpdate } from './ConversationUpdate';
 import {
   answeringTurn,
+  CONVERSATIONS_REVEAL,
   type ConversationsClient,
   canSendAgain,
   doingOf,
   lastWritten,
+  linkTarget,
   nameOf,
   refsOf,
 } from './conversations';
@@ -27,6 +32,8 @@ import { type CoreMessages, useConversations } from './use-conversations';
   ends it early and keeps what he wrote; a failed answer says why in his voice, and Send again asks
   him once more. Several run at once; with a model on this machine an answer may wait its turn, and
   says so. Delete removes one, with Undo in the toast. Each Conversation keeps its own unsent words.
+  One started from an Item with the Ares button (#193) names that Item under its title, opening it
+  where it lives; Open in Ares on the pop-up opens it here.
 */
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -52,6 +59,16 @@ export function Conversations({
   const draft = openId ? (drafts[openId] ?? '') : '';
   const answering = answeringTurn(view);
   const tooLong = draft.length > MAX_TURN_TEXT;
+  const { open: openItem } = useUpdates();
+  const group = useRef<HTMLDivElement>(null);
+
+  // The Ares button's pop-up moved a Conversation here (#193): it opens, in view.
+  useReveal(CONVERSATIONS_REVEAL, (conversationId) => {
+    void state.reveal(conversationId).then(() =>
+      // Once the Section is shown.
+      requestAnimationFrame(() => group.current?.scrollIntoView?.({ block: 'start' })),
+    );
+  });
 
   // The thread follows what is newest: a new turn, or Ares writing.
   const lastText = view?.turns.at(-1)
@@ -89,7 +106,10 @@ export function Conversations({
       note={`${pad(list.length)} Conversations`}
       data-testid="conversations"
     >
-      <div className="grid grid-cols-[260px_minmax(0,1fr)] border-b border-line2">
+      <div
+        ref={group}
+        className="grid scroll-mt-(--body) grid-cols-[260px_minmax(0,1fr)] border-b border-line2"
+      >
         <div className="border-r border-line2">
           <div className="flex items-center border-b border-line2 py-2 pr-3 pl-13">
             <Button size="sm" onClick={() => void state.startNew()}>
@@ -118,6 +138,24 @@ export function Conversations({
             <h3 className="m-0 min-w-0 flex-1 truncate text-note font-semibold text-ink">
               {view ? nameOf(view.conversation, today) : 'Conversations'}
             </h3>
+            {view?.conversation.about && (
+              <button
+                type="button"
+                data-testid="conversation-about"
+                onClick={() => {
+                  const about = view.conversation.about;
+                  if (about) openItem(linkTarget(about));
+                }}
+                className="flex max-w-[45%] min-w-0 cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 font-mono text-label uppercase tracking-label text-muted hover:text-ink"
+                aria-label={`Open ${view.conversation.about.title}`}
+              >
+                About
+                <KindTag>{kindTag(view.conversation.about.kind)}</KindTag>
+                <span className="truncate font-sans text-note normal-case tracking-[0]">
+                  {view.conversation.about.label ?? view.conversation.about.title}
+                </span>
+              </button>
+            )}
             {view && (
               <Button
                 size="sm"
@@ -239,7 +277,16 @@ function ConversationRow({
   );
 }
 
-function Turn({ turn, text, sources }: { turn: ConversationTurn; text: string; sources: readonly string[] }) {
+/** One turn of a Conversation, the User's or Ares's (also drawn in the Ares button's pop-up, #193). */
+export function Turn({
+  turn,
+  text,
+  sources,
+}: {
+  turn: ConversationTurn;
+  text: string;
+  sources: readonly string[];
+}) {
   const { open } = useUpdates();
   const refs = useMemo(() => refsOf(turn.links, open), [turn.links, open]);
   const doing = text ? null : doingOf(turn);

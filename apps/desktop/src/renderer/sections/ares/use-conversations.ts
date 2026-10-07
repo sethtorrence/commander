@@ -21,6 +21,8 @@ export type ConversationsState = {
   // Ares's answers as he writes them, by turn: what has arrived so far.
   live: ReadonlyMap<number, string>;
   open(conversationId: string): Promise<void>;
+  // Opens a Conversation the Ares button's pop-up moved here (#193), whatever day it is.
+  reveal(conversationId: string): Promise<void>;
   startNew(): Promise<void>;
   send(text: string): Promise<boolean>;
   stop(): Promise<void>;
@@ -131,6 +133,17 @@ export function useConversations(
     [client, ask, show],
   );
 
+  const reveal = useCallback(
+    async (conversationId: string) => {
+      // Shown now instead of today's, which opening the Section would otherwise land on.
+      landedOn.current = dayKey(new Date());
+      openId.current = conversationId;
+      await open(conversationId);
+      await reload();
+    },
+    [open, reload],
+  );
+
   const startNew = useCallback(async () => {
     const made = await ask(client({ op: 'new', day: dayKey(new Date()) }));
     if (made) show(made);
@@ -195,5 +208,5 @@ export function useConversations(
     [client, ask, open, show, reload],
   );
 
-  return { today, list, view, live, open, startNew, send, stop, sendAgain, remove };
+  return { today, list, view, live, open, reveal, startNew, send, stop, sendAgain, remove };
 }

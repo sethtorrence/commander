@@ -1,5 +1,6 @@
 import { cn } from '@commander/ui';
 import { useEffect, useRef } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePeople } from '../../people/context';
 import { shownAs } from '../../people/people';
@@ -154,6 +155,7 @@ export function WorkRow({
       </span>
       <span className="mt-[5px] ml-3 flex flex-none items-center gap-1.5">
         <ItemWarning item={work} />
+        <AskAres item={work} />
         {reviewAsked && (
           <Tag className="border-ink font-semibold text-ink" title="Your review is asked for">
             Your review

@@ -12,6 +12,7 @@ import {
 import { cn, Kbd, toast } from '@commander/ui';
 import { type ReactNode, useEffect, useState } from 'react';
 import { useNow } from '../../frame/use-now';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { EmailFrame } from './EmailFrame';
 import { sentTime, threadTime } from './email';
@@ -278,6 +279,8 @@ export function ThreadReader({
     if (thread) setExpanded(expandedAtFirst(thread.messages));
   }, [threadKey]);
   const shown = (id: string) => expanded.has(id) || thread?.messages.at(-1)?.item.id === id;
+  // The Ares button asks about the thread by its latest message (#193).
+  const latest = summary?.latest ?? thread?.messages.at(-1)?.item;
   return (
     <section aria-label="Thread" className="min-w-0 border-l border-line">
       <div className="sticky top-0 z-[2] flex h-11 items-stretch border-b border-line bg-sheet">
@@ -300,6 +303,7 @@ export function ThreadReader({
         <h2 className="m-0 font-sans text-[26px] leading-[1.15] font-bold tracking-[-.015em] text-ink font-stretch-(--stretch-wide)">
           {subject || '(no subject)'}
         </h2>
+        {latest && <AskAres item={latest} variant="pane" className="mt-2.5" />}
         {notice}
         {!thread ? (
           <p className="mt-4 text-note text-faint">Reading the thread…</p>

@@ -3,6 +3,7 @@ import { Kbd, SheetStripCell, toast } from '@commander/ui';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { clockTime } from '../../frame/calendar';
 import { requestReveal } from '../../frame/reveal';
+import { aresButtonFor, useAres } from '../../links/AresButton';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
@@ -64,6 +65,7 @@ export function DashboardSheet({
     return entry ? () => void dashboard.undo(entry.id) : null;
   });
   const now = dashboard.rankedAt;
+  const ares = useAres();
 
   useTabCount(loaded ? tabCount(shown) : null);
 
@@ -114,10 +116,16 @@ export function DashboardSheet({
     },
     { keys: 'x', label: 'Tick or untick the Todo', run: () => selected && void dashboard.tick(selected) },
     { keys: 'e', label: 'Clear it from the Dashboard', run: () => selected && dashboard.clear(selected) },
+    // The Ares key (#193): the pop-up on the selected row's Item; on Ares's suggested Todo, which is
+    // no Item yet, it adds it.
     {
       keys: 'a',
-      label: 'Add Ares’s suggested Todo',
-      run: () => selected?.suggestion && settle(selected, 'accept'),
+      label: 'Ask Ares about it (adds a suggested Todo)',
+      run: () => {
+        if (!selected) return;
+        if (selected.suggestion) settle(selected, 'accept');
+        else ares?.open(selected.item, aresButtonFor(selected.item.id));
+      },
     },
     {
       keys: 'b',
@@ -329,7 +337,12 @@ const KEYS: [ReactNode, string][] = [
   ],
   [<Kbd key="x">X</Kbd>, 'Tick'],
   [<Kbd key="e">E</Kbd>, 'Clear'],
-  [<Kbd key="a">A</Kbd>, 'Add'],
+  [
+    <Kbd key="a" tone="signal">
+      A
+    </Kbd>,
+    'Ares · Add',
+  ],
   [
     <>
       <Kbd>P</Kbd>

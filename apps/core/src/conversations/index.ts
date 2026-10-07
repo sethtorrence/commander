@@ -28,8 +28,14 @@
 //   steering flag in any reply marks an Item only with a quote found in it (ADR 0004). He never
 //   starts a Conversation or writes into one unprompted: every turn of his answers one of the User's,
 //   which the Item store enforces.
+// - About an Item (#193, about.ts): a Conversation started with the Ares button on an Item is named
+//   after it, and that Item is handed to him with every message as I1, in a data block of its own by
+//   where it came from, before anything his Skills find. Whatever it leads to is still only an answer
+//   (and, once he can act, a proposal through the gate like any other).
 import {
+  ABOUT_REF,
   CONVERSATIONS_MESSAGES,
+  type Conversation,
   type ConversationsOp,
   type ConversationsResults,
   type ConversationTurn,
@@ -43,6 +49,7 @@ import {
   type SkillRegistry,
   SUMMARISE_SKILL,
   skillTitle,
+  titleFrom,
 } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
@@ -56,6 +63,7 @@ import type {
 import type { KnownSecrets } from '../safety/known-secrets';
 import { heedRefusal } from '../safety/refusal';
 import { heedSteering, type SteeringFlag } from '../safety/steering-flag';
+import { type AboutReading, aboutOf } from './about';
 import { type AnswerReader, pieceBetween, readAnswer } from './answer';
 import { createFairQueue, type QueueTicket } from './fair-queue';
 import { HISTORY_BUDGET_CHARS, historyOf, historyWithin } from './history';
@@ -108,8 +116,15 @@ export function servedOnThisMachine(baseUrl: string): boolean {
 export const UNFINISHED_PROBLEM =
   'Commander’s core stopped while I was answering, so I didn’t finish. Send this again.';
 
-/** Why an answer failed, in Ares's voice. Never the provider's own words. */
-export function problemFor(error: unknown): string {
+/**
+ * Why an answer failed, in Ares's voice. Never the provider's own words. `aboutItemId`: the Item the
+ * Conversation was started from (#193), if any.
+ */
+export function problemFor(error: unknown, aboutItemId: string | null = null): string {
+  // The Item the Conversation is about held it (#201): it is noted as skipped, where it is.
+  if (error instanceof PromptRefused && aboutItemId && error.itemIds.includes(aboutItemId)) {
+    return 'What you started this from holds what looks like one of your keys or sign-in tokens, so I didn’t send it anywhere. Open it yourself instead.';
+  }
   // Something a Skill found held it (#201): that Item is noted as skipped, where it is.
   if (error instanceof PromptRefused && error.itemIds.length) {
     return 'Something my Skills found holds what looks like one of your keys or sign-in tokens, so I didn’t send it anywhere. Ask without it, or open it yourself.';
@@ -153,8 +168,10 @@ export type ConversationsOptions = {
   // Ares's Skills (#192): those a Conversation can use are offered to him; all are listed on "What
   // Ares can do". None: he has no Skills, and answers from his own knowledge.
   skills?: SkillRegistry;
-  // Items by id, for what an Update's lines are about.
+  // Items by id, for what an Update's lines are about, and the Item a Conversation is started from.
   item?: (itemId: string) => Item | null;
+  // Reads the Item a Conversation is about for each message (#193, about.ts). None: it isn't handed.
+  readAbout?: (itemId: string) => AboutReading;
   // Where a steering flag marks an Item, and who hears that it did.
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
   // Where an Item a Skill found, left unsent for holding a key or token, is noted as skipped (#201).
@@ -221,6 +238,13 @@ export function setUpConversations(options: ConversationsOptions): Conversations
     changed(store.saveAnswer(turnId, { status: 'streaming' }));
     const view = store.view(conversationId);
     const gathered: Gathered = nothingGathered();
+    // The Item it was started from (#193): handed first, as I1, read as it is now.
+    const aboutItemId = view?.conversation.aboutItemId ?? null;
+    const about = aboutItemId ? (options.readAbout?.(aboutItemId) ?? null) : null;
+    if (about) {
+      gathered.notes.push(about.note);
+      if (about.found) gathered.items.set(ABOUT_REF, about.found);
+    }
     let sent = '';
     let reader: AnswerReader | null = null;
     // Commander's own words before his: what he couldn't finish.
@@ -360,7 +384,7 @@ export function setUpConversations(options: ConversationsOptions): Conversations
             ...rests,
             status: 'failed',
             text,
-            problem: problemFor(error),
+            problem: problemFor(error, aboutItemId),
             endedAt: now(),
           }),
         );
@@ -412,10 +436,29 @@ export function setUpConversations(options: ConversationsOptions): Conversations
     await entry.finished;
   }
 
+  // A Conversation for the window, naming the Item it was started from as that Item is now.
+  function described(conversation: Conversation): Conversation {
+    if (!conversation.aboutItemId) return conversation;
+    const item = options.item?.(conversation.aboutItemId);
+    return { ...conversation, about: item && item.deletedAt === null ? aboutOf(item) : null };
+  }
+  const shown = (view: ConversationView): ConversationView => ({
+    ...view,
+    conversation: described(view.conversation),
+  });
+
   function required(conversationId: string): ConversationView {
     const view = store.view(conversationId);
     if (!view) throw new Error('That Conversation is no longer in Commander');
-    return view;
+    return shown(view);
+  }
+
+  // New Conversation, or one started from an Item (#193): named after the Item, which must be here.
+  function create(day: string, aboutItemId: string | undefined): ConversationView {
+    if (!aboutItemId) return shown(store.create(day));
+    const item = options.item?.(aboutItemId);
+    if (!item || item.deletedAt !== null) throw new Error('That Item is no longer in Commander');
+    return shown(store.create(day, { itemId: item.id, title: titleFrom(item.title) }));
   }
 
   async function run(
@@ -423,11 +466,11 @@ export function setUpConversations(options: ConversationsOptions): Conversations
   ): Promise<ConversationsResults[ConversationsOp]> {
     switch (request.op) {
       case 'list':
-        return store.list();
+        return store.list().map(described);
       case 'today':
-        return store.today(request.day);
+        return shown(store.today(request.day));
       case 'new':
-        return store.create(request.day);
+        return create(request.day, request.about);
       case 'open':
         return required(request.conversationId);
       case 'send': {
@@ -457,7 +500,7 @@ export function setUpConversations(options: ConversationsOptions): Conversations
         if (!kept) throw new Error('That Conversation can’t be put back any more');
         clearTimeout(kept.timer);
         removed.delete(request.conversationId);
-        return store.restore(kept.conversation);
+        return shown(store.restore(kept.conversation));
       }
       case 'skills': {
         // Every Skill he has, and whether a Conversation can use it yet.

@@ -1,5 +1,6 @@
 import { channelPostAttention, threadOf } from '@commander/domain';
 import { cn } from '@commander/ui';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { ItemBadge, useAccentBar } from '../../projects/badges';
 import { whenShort } from '../todos/when';
@@ -85,6 +86,7 @@ function PostRow({
           )}
           {unseen > 0 && <Mark title={`${unseen} you haven’t seen`}>New</Mark>}
           <ItemWarning item={post} />
+          <AskAres item={post} />
         </span>
         <span className="ml-auto flex-none font-mono text-label-lg leading-5 tracking-mono text-muted tabular-nums">
           {whenShort(post.detail.lastActivityAt)}

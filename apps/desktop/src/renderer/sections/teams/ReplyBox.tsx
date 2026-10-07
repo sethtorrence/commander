@@ -1,11 +1,12 @@
 import { MAX_REPLY_LENGTH } from '@commander/domain';
-import { Kbd, Led } from '@commander/ui';
+import { AresButton, Kbd } from '@commander/ui';
 
 /*
   The reply box at the bottom of the Chat view (#106): plain text with line breaks, sent with
   Ctrl+Enter (the Section's shortcut, listed in `?`) or Send. What is typed is the User's own text,
   sent to Teams exactly as written (escaped, never markup). The draft lives with the Section, one
-  per Chat, so moving between Chats keeps each one's.
+  per Chat, so moving between Chats keeps each one's. Draft, Ares's entry here, is the shared Ares
+  button (#193).
 */
 
 /** Whether keys pressed here are typed into a reply box. */
@@ -51,15 +52,15 @@ export function ReplyBox({
           </span>
         )}
         {onAskAres && (
-          <button
-            type="button"
+          <AresButton
+            variant="pane"
+            label={drafting ? 'Drafting…' : 'Draft'}
+            busy={drafting}
             disabled={drafting}
+            title="Ares drafts a reply into the box"
             onClick={onAskAres}
-            className="flex cursor-pointer items-center gap-1.5 border border-line bg-sheet px-3 py-1 font-mono text-label-lg font-semibold uppercase tracking-label text-ink hover:border-ink disabled:cursor-progress disabled:text-faint"
-          >
-            {drafting && <Led size="sm" />}
-            {drafting ? 'Drafting…' : 'Draft'}
-          </button>
+            className="h-auto px-3 py-1 text-label-lg"
+          />
         )}
         <button
           type="button"

@@ -16,6 +16,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
+import { useAresKey } from '../../links/AresButton';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
@@ -267,6 +268,7 @@ export function TeamsSheet({
     setOpen(true);
   };
 
+  const aresKey = useAresKey(post ?? selected);
   useShortcuts([
     { keys: 'j', label: 'Next chat', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous chat', run: () => state.moveSelection(-1) },
@@ -300,6 +302,7 @@ export function TeamsSheet({
       run: () => void toggleRead(),
     },
     { keys: 'Ctrl+z', label: 'Undo', run: () => state.undo() },
+    aresKey,
   ]);
   // From the palette: open a Chat it found, whatever the filters were hiding; from the Dashboard, at
   // the message that put it there.

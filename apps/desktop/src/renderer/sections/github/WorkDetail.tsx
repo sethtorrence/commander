@@ -1,6 +1,7 @@
 import type { ActivityEntry, GitHubCheck, GitHubDiscussionEntry, GitHubIssueRef } from '@commander/domain';
 import { cn, Kbd } from '@commander/ui';
 import { type ReactNode, useRef } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { usePeople } from '../../people/context';
 import { shownAs } from '../../people/people';
@@ -433,6 +434,7 @@ export function WorkDetail({
               {whenShort(work.detail.updatedAt)}
             </p>
             <ItemWarning item={work} variant="pane" className="mt-3" />
+            <AskAres item={work} variant="pane" className="mt-3" />
             <dl className="mt-3.5 mb-0 border-t border-line">
               <Fact field="repo" label="Repo">
                 <span className="normal-case tracking-normal">

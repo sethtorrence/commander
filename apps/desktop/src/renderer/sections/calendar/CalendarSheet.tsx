@@ -3,6 +3,7 @@ import { Button, ButtonGroup, cn, Kbd, Led, Switch } from '@commander/ui';
 import { type ComponentType, type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
+import { useAresKey } from '../../links/AresButton';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
@@ -245,6 +246,7 @@ export function CalendarSheet({
     else if (other.kind === 'event') void state.reveal(other.id);
   };
 
+  const aresKey = useAresKey(selected);
   useShortcuts([
     { keys: 'j', label: 'Next event', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous event', run: () => state.moveSelection(-1) },
@@ -259,6 +261,7 @@ export function CalendarSheet({
     { keys: 't', label: 'Today', run: () => state.goToday() },
     { keys: '[', label: 'Back', run: () => state.step(-1) },
     { keys: ']', label: 'Forward', run: () => state.step(1) },
+    aresKey,
     ...INVITATION_ANSWERS.map((answer) => ({
       keys: ANSWER_KEYS[answer],
       label: `${ANSWER_NAMES[answer]} the invitation`,

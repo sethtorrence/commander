@@ -1,5 +1,5 @@
 import { SUMMARY_RANGE_NAMES, summaryRanges } from '@commander/domain';
-import { AresText, cn, Led } from '@commander/ui';
+import { AresMark, AresText, cn, Led } from '@commander/ui';
 import { Eyebrow } from '../todos/detail/parts';
 import type { ChatSummaryState } from './chat-summary';
 import { type Chat, isWaiting } from './chats';
@@ -28,7 +28,7 @@ export function SummariseButton({ state, disabled }: { state: ChatSummaryState; 
       onClick={() => state.summarise()}
       disabled={disabled || state.busy}
     >
-      {state.busy && <Led size="sm" />}
+      {state.busy ? <Led size="sm" /> : <AresMark className="text-signal-ink" />}
       Summarise
     </button>
   );

@@ -18,6 +18,7 @@ import {
   useMemo,
   useRef,
 } from 'react';
+import { AskAres } from '../../links/AresButton';
 import { BlockImage } from './BlockImage';
 import { BlockIssueChips, BlockMenu } from './BlockLinear';
 import { type OutlineLinks, useBlockLinks } from './BlockLinks';
@@ -445,6 +446,9 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
         <TodoTag block={block} />
         <BlockIssueChips blockId={block.id} />
         {sendToLinear && <BlockMenu label={block.text} onSendToLinear={() => sendToLinear(day, block)} />}
+        {block.text.trim() && (
+          <AskAres item={{ id: block.id, kind: 'block', title: block.text }} className="n-ares" />
+        )}
       </div>
       {/* A meeting chip's Prep (#130): under its row, not a Block. */}
       {meeting && <MeetingPrep eventId={meeting} />}

@@ -4,6 +4,8 @@
 // - Ares never writes unprompted: his turn can only be started as the answer to the User's last turn,
 //   one answer at a time, and only while that turn has none.
 // - The User can't write over him: a message is refused while he is still answering.
+// A Conversation started from an Item (#193) keeps that Item's id; naming the Item for the window is
+// the Conversations module's, which reads Items (`about` is null here).
 import { randomUUID } from 'node:crypto';
 import {
   type Conversation,
@@ -41,8 +43,8 @@ export type ConversationStore = {
   // The day's own Conversation, made the first time it is asked for. Empty Conversations from earlier
   // days go then: nothing was said in them.
   today(day: string): ConversationView;
-  // New Conversation.
-  create(day: string): ConversationView;
+  // New Conversation; `about`, when it is started from an Item (#193), named after it.
+  create(day: string, about?: { itemId: string; title: string | null }): ConversationView;
   // The User's message. Names the Conversation from its first words. Refused while Ares is answering.
   addUserTurn(conversationId: string, text: string): ConversationTurn;
   // Ares starts answering the User's last turn (or waits his turn to). Refused for any other turn,
@@ -109,6 +111,7 @@ export function openConversationStore(
       ...row,
       daily: dailyOf !== null,
       answering: answering.has(row.id),
+      about: null,
     }));
   };
 
@@ -138,11 +141,23 @@ export function openConversationStore(
     return found;
   }
 
-  function insert(day: string, daily: boolean): ConversationView {
+  function insert(
+    day: string,
+    daily: boolean,
+    about?: { itemId: string; title: string | null },
+  ): ConversationView {
     const at = now();
     const id = randomUUID();
     db.insert(conversations)
-      .values({ id, title: null, day, dailyOf: daily ? day : null, createdAt: at, updatedAt: at })
+      .values({
+        id,
+        title: about?.title ?? null,
+        day,
+        dailyOf: daily ? day : null,
+        createdAt: at,
+        updatedAt: at,
+        aboutItemId: about?.itemId ?? null,
+      })
       .run();
     return required(id);
   }
@@ -207,8 +222,8 @@ export function openConversationStore(
       });
     },
 
-    create(day) {
-      return insert(day, false);
+    create(day, about) {
+      return insert(day, false, about);
     },
 
     addUserTurn(conversationId, raw) {

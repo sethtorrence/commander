@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useEffect, useRef } from 'react';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
+import { useAresKey } from '../../links/AresButton';
 import { useCommands } from '../../palette/commands';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
@@ -127,6 +128,7 @@ export function LinearSheet({
     setDetailOpen(true);
   };
 
+  const aresKey = useAresKey(selected);
   useShortcuts([
     { keys: 'j', label: 'Next issue', run: () => state.moveSelection(1) },
     { keys: 'k', label: 'Previous issue', run: () => state.moveSelection(-1) },
@@ -134,6 +136,7 @@ export function LinearSheet({
     { keys: 'Escape', label: 'Close the issue', when: () => detailOpen, run: () => setDetailOpen(false) },
     { keys: 'b', label: 'File under a Project', run: () => file() },
     { keys: 'Ctrl+z', label: 'Undo', run: () => state.undo() },
+    aresKey,
   ]);
   // From the palette: open an issue it found, whatever the view and filters were hiding.
   useReveal('linear', (itemId) => state.reveal(itemId));
