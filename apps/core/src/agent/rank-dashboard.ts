@@ -7,9 +7,11 @@
 //   involving the User (their Linear Todos, and issues they created or have that changed in the last
 //   two days), the User's open work on GitHub (reviews asked of them while their Todos are open, and
 //   their own open pull requests; #116), the Teams Chats that may need them (flagged as waiting on the User, a mention, an
-//   unanswered one-to-one Chat, or unread messages from the last two days; never a muted Chat), and
-//   the pending "Suggest Todos" suggestions; at most 200 Items, the most pressing by the rules
-//   first. Cleared rows are left out until their Item changes; how he last ranked them stands.
+//   unanswered one-to-one Chat, or unread messages from the last two days; never a muted Chat), the
+//   inbox's email threads in Needs reply and Waiting on others (#144: by their latest message, with
+//   their Bucket, sender, age, Project and whether a Todo already covers them; never mail Ares may not
+//   read), and the pending "Suggest Todos" suggestions; at most 200 Items, the most pressing by the
+//   rules first. Cleared rows are left out until their Item changes; how he last ranked them stands.
 //   Nothing changed since his last ranking today: no call.
 // - Every Item goes in a data block of its own through the prompt builder (ADR 0004), labelled with
 //   a short reference (I1, I2…) that the reply names it by; Linear issues, Chats and suggestions are
@@ -27,12 +29,16 @@
 import {
   type AresBand,
   type AresRankingEntry,
+  addressName,
   aresBands,
+  bareSubject,
   type ChatDetail,
   changesRequestedBy,
   chatAttention,
   chatFlags,
   dashboardCandidates,
+  type EmailDetail,
+  type EmailThreadSummary,
   type EventDetail,
   githubIdentifier,
   type Item,
@@ -44,8 +50,10 @@ import {
   isTheirs,
   type LinearIssueDetail,
   localDay,
+  mayReadMail,
   meetingTimes,
   mutedChatIds,
+  NEEDS_REPLY,
   type PullRequestDetail,
   type PullRequestItem,
   prepLines,
@@ -55,14 +63,17 @@ import {
   rankingFingerprint,
   reviewAskedBy,
   suggestionItemId,
+  WAITING_ON_OTHERS,
   waitedFor,
   waitingOn,
   waitingSince,
 } from '@commander/domain';
 import { z } from 'zod';
 import type { ItemStore } from '../item-store';
+import { emailOf } from './email-material';
 import type { PromptData } from './prompt';
 import type { AgentJob, JobInput } from './runner';
+import { ownLines } from './sort-into-buckets';
 import { SUGGEST_TODOS } from './suggest-todos';
 
 export const BATCH_SIZE = 40;
@@ -86,6 +97,12 @@ const MAX_PEOPLE = 8;
 // The meetings read as context (#130): those in the next few hours, at most a handful.
 const MEETINGS_AHEAD_MS = 3 * HOUR;
 const MAX_MEETINGS = 5;
+// An email thread goes with its latest message's own lines, cut short.
+const MAX_EMAIL_TEXT = 300;
+const BUCKET_NAMES: Record<string, string> = {
+  [NEEDS_REPLY]: 'Needs reply (someone is waiting on the User’s answer)',
+  [WAITING_ON_OTHERS]: 'Waiting on others (the User is waiting on someone’s answer)',
+};
 
 // Each entry is checked on its own (so one bad entry costs only that Item), hence the loose shape.
 const entry = z
@@ -164,8 +181,9 @@ Reply with only this JSON object: {"ranking":[{"ref":"I1","band":"now","rank":1,
 - band: one of now, today, waiting, fyi, none.
 - rank: the Item's place in its band, from 1 at the top, the most pressing first. Number each band on its own.
 - reason: why it is there, in a few plain words of your own (fewer than 12), as you would say it to the User: "Dana's waiting on this before Friday's review", "Overdue since Tuesday", "Priya has it now". No full stop. For band none it may be empty.
-- A Suggested Todo is one you suggested from the User's Daily Note that they haven't added yet: rank it like any other Todo.
+- A Suggested Todo is one you suggested (from the User's Daily Note, an email or a Teams chat) that they haven't added yet: rank it like any other Todo.
 - A Teams chat is a conversation in Microsoft Teams, with its last few messages. Place it when someone is waiting on the User (a question or mention aimed at them, a one-to-one message they haven't answered); chatter that asks nothing of them is none. When it says you judged that someone is waiting on the User, place it (usually today), and let your reason say who is waiting and on what.
+- An email thread is one of the User's email conversations, by its latest message, in the Bucket the User keeps it in: Needs reply (someone waits on the User's answer: usually today, now when it is urgent or they asked more than once) or Waiting on others (the User waits on someone: waiting once it has gone unanswered for days, otherwise none). When a Todo already covers it, the Todo carries the work: place the thread lower, or none. Let your reason say who is waiting and on what: "Dana has asked twice about the contract".
 - A GitHub review request is a review asked of the User (directly, or of one of their teams, which matters less); a GitHub pull request is the User's own, with its checks and reviews. Failing checks or changes requested need the User; a pull request waiting on reviewers is waiting.
 - Blocks labelled "Meeting at …" or "Prep for the meeting at …" are not Items to rank: they are the User's meetings in the next few hours and your preparation for them. A Todo a meeting needs done first (something to read, send or decide before it) should rise before the meeting.`;
 
@@ -373,6 +391,68 @@ export function rankDashboardJob(
     ].join('\n');
   }
 
+  // The Todo already covering a thread: an open one made from any of its messages.
+  function coveringTodo(itemIds: readonly string[], open: ReadonlyMap<string, Item>): Item | null {
+    for (const id of [...itemIds].reverse()) {
+      for (const link of itemStore.get(id)?.backlinks ?? []) {
+        const todo = link.type === 'made-from' ? open.get(link.from.id) : undefined;
+        if (todo) return todo;
+      }
+    }
+    return null;
+  }
+
+  // An email thread as Ares reads it (#144), by its latest message: its Bucket and who sorted it there,
+  // who wrote last and how long ago, how many messages each person wrote, its Project, whether a Todo
+  // already covers it, and its latest message's own lines, cut short. The latest message's words are
+  // someone else's: the builder marks the block outside (one Item, one block; the rest are facts
+  // Commander counted).
+  function threadText(thread: EmailThreadSummary, open: ReadonlyMap<string, Item>, at: number): string {
+    const latest = thread.latest;
+    const detail = emailOf(latest);
+    if (!detail) return `Title: ${latest.title}`;
+    const messages = itemStore.query({ ids: thread.itemIds.slice(-200), limit: 200 }).flatMap((item) => {
+      const email = emailOf(item);
+      return email ? [email] : [];
+    });
+    const who = (email: EmailDetail) => (email.sentByMe ? 'the User' : addressName(email.from) || 'someone');
+    const counts = new Map<string, number>();
+    for (const email of messages) counts.set(who(email), (counts.get(who(email)) ?? 0) + 1);
+    const bucketId = detail.bucket?.bucketId ?? '';
+    const sortedBy = { rule: 'a Rule', ares: 'Ares', user: 'the User' }[detail.bucket?.sortedBy ?? 'user'];
+    const todo = coveringTodo(thread.itemIds, open);
+    const due =
+      todo?.detail?.kind === 'todo' && todo.detail.dueOn ? `, due ${withWeekday(todo.detail.dueOn)}` : '';
+    const latestBy = detail.sentByMe
+      ? `the User (their own message, to ${addressName(detail.to[0] ?? null) || 'someone'})`
+      : who(detail);
+    const text = cut(
+      ownLines(itemStore.emailBody(latest.id)?.text ?? detail.snippet).join(' '),
+      MAX_EMAIL_TEXT,
+    );
+    const each = [...counts].map(([name, n]) => `${n} from ${name}`).join(', ');
+    return [
+      `Title: ${bareSubject(thread.subject) || latest.title}`,
+      `Bucket: ${BUCKET_NAMES[bucketId] ?? bucketId} (put there by ${sortedBy})`,
+      `Latest message: from ${latestBy}, ${stamp(detail.sentAt)} (${waitedFor(detail.sentAt, at)} ago)`,
+      `Messages: ${thread.messageCount}${each ? `; ${each}` : ''}`,
+      `Unread messages: ${thread.unreadCount}`,
+      `Project: ${projectName(latest)}`,
+      todo ? `A Todo already covers it: “${todo.title}”${due}` : 'No Todo covers it yet',
+      ...(text ? [`Latest message’s text: ${text}`] : []),
+    ].join('\n');
+  }
+
+  // Where a suggested Todo came from: a line of a Daily Note, an email (#144) or a Teams Chat (#110).
+  function suggestedFrom(source: Item): string {
+    const email = emailOf(source);
+    if (email)
+      return `Suggested by Ares from an email from ${addressName(email.from) || 'someone'}: “${cut(email.subject || source.title, 200)}”`;
+    if (source.kind === 'chat') return `Suggested by Ares from a Teams chat: “${cut(source.title, 200)}”`;
+    const line = source.detail?.kind === 'block' ? source.detail.text : source.title;
+    return `Suggested by Ares from this line in the User's Daily Note: “${cut(line, 300)}”`;
+  }
+
   // The pending suggestions of Suggest Todos, as the Todos they would add.
   function suggestions(): { item: Item; block: Item | undefined }[] {
     return itemStore.autonomy
@@ -466,6 +546,15 @@ export function rankDashboardJob(
         statuses: ['open'],
         limit: 1000,
       });
+      // Email threads in Needs reply and Waiting on others (#144), each by its latest message, as the
+      // window gives the Dashboard; never mail of an Account Ares may not read (the rules place those).
+      const threads = [NEEDS_REPLY, WAITING_ON_OTHERS]
+        .flatMap((bucket) => itemStore.emailThreads({ view: 'inbox', bucket, limit: 1000 }).threads)
+        .filter((thread) =>
+          mayReadMail(itemStore.models.settings(), thread.latest.source, thread.latest.account),
+        );
+      const threadOf = new Map(threads.map((thread) => [thread.latest.id, thread]));
+      const openTodos = new Map(todos.map((todo) => [todo.id, todo]));
       // Muted Chats are never sent; excluded ones are deleted, so not among them.
       const muted = mutedChatIds(chats, itemStore.chatSettings.list());
       const byId = new Map([...todos, ...issues, ...work].map((item) => [item.id, item]));
@@ -503,9 +592,9 @@ export function rankDashboardJob(
 
       // The Items any ranker may place, the most pressing by the rules first, so each batch is a
       // fair slice and the merge interleaves like with like.
-      const all = [...todos, ...issues, ...chats, ...work];
+      const all = [...todos, ...issues, ...chats, ...work, ...threads.map((thread) => thread.latest)];
       const open = dashboardCandidates(all, muted).filter((item) =>
-        item.kind === 'todo'
+        item.kind === 'todo' || item.kind === 'email'
           ? true
           : item.kind === 'chat'
             ? mayNeedUser(item)
@@ -576,6 +665,16 @@ export function rankDashboardJob(
           );
           continue;
         }
+        const thread = threadOf.get(item.id);
+        if (item.kind === 'email' && thread) {
+          add(
+            item.id,
+            { itemId: item.id, fingerprint },
+            { what: 'Email thread', from: item, text: threadText(thread, openTodos, at) },
+            fingerprint,
+          );
+          continue;
+        }
         if (isReviewRequestItem(item) || isPullRequestItem(item)) {
           const pull = isReviewRequestItem(item) ? byId.get(item.detail.pullRequestId ?? '') : item;
           const identifier = githubIdentifier(item.detail.repo, item.detail.number);
@@ -613,7 +712,6 @@ export function rankDashboardJob(
       for (const { item, block } of suggestions()) {
         const fingerprint = rankingFingerprint(item);
         if (leftOut(item.id, fingerprint) || !block) continue;
-        const line = block.detail?.kind === 'block' ? block.detail.text : block.title;
         add(
           item.id,
           // Remembered by its Block (a suggestion isn't an Item), one fingerprint per suggestion.
@@ -621,11 +719,7 @@ export function rankDashboardJob(
           {
             what: 'Suggested Todo',
             from: item,
-            text: [
-              `Title: ${item.title}`,
-              `Suggested by Ares from this line in the User's Daily Note: “${cut(line, 300)}”`,
-              `Project: ${projectName(item)}`,
-            ].join('\n'),
+            text: [`Title: ${item.title}`, suggestedFrom(block), `Project: ${projectName(item)}`].join('\n'),
           },
           fingerprint,
         );

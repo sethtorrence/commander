@@ -209,6 +209,7 @@ describe('the first sync', () => {
       seriesId: null,
       webUrl: 'https://www.google.com/calendar/event?eid=ZGVzaWducmV2aWV3MSBhbGV4QGdtYWlsLnRlc3Q',
       createdByCommander: null,
+      icalUid: 'designreview1@google.com',
     } satisfies EventDetail);
   });
 

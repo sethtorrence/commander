@@ -24,11 +24,13 @@ function EmailSection() {
       onSaveBeforeQuit={window.commander.onSaveBeforeQuit}
       autonomy={window.commander.autonomy}
       onAresActivity={onAresActivity}
+      itemStore={window.commander.itemStore}
     />
   );
 }
 
-// Ares did or suggested something: his Skip the inbox suggestions are read again (#142).
+// Ares did or suggested something: his Skip the inbox suggestions (#142), and the Todos and events he
+// suggests from a thread (#144), are read again.
 const onAresActivity = (listener: () => void) =>
   window.commander.onCoreMessage((message) => {
     if (message.type === 'ares-activity') listener();

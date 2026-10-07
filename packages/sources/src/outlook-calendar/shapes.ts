@@ -63,6 +63,8 @@ export const graphEvent = z.object({
   showAs: text,
   sensitivity: text,
   seriesMasterId: text,
+  // The event's iCalendar UID (each occurrence its own): what invitation emails name it by (#144).
+  iCalUId: text,
   webLink: text,
   location: z.object({ displayName: text }).nullish(),
   organizer: z.object({ emailAddress }).nullish(),
@@ -315,6 +317,7 @@ export function toEventItem(
     webUrl: isWebLink(event.webLink) ? event.webLink.trim() : null,
     // Commander's own events (focus blocks and busy copies), known by their transactionId.
     createdByCommander: commander?.kind ?? null,
+    ...(event.iCalUId?.trim() ? { icalUid: event.iCalUId.trim() } : {}),
   };
   const people = new Set<string>();
   if (isAddress(organiserAddress)) people.add(organiserAddress.toLowerCase());

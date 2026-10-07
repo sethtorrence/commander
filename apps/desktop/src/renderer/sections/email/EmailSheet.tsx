@@ -2,6 +2,7 @@ import {
   type BucketSortedBy,
   type EmailLabel,
   type EmailThreadSummary,
+  type Item,
   NEEDS_REPLY,
   SCHEDULED_FOCUS,
   SEND_LATER_EDIT_FOCUS,
@@ -16,6 +17,7 @@ import { SuggestedBucket } from '../../buckets/SuggestedBucket';
 import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
+import type { ItemStoreClient } from '../../item-store/client';
 import { AskAres, useAresKey } from '../../links/AresButton';
 import { ItemWarning } from '../../links/ItemWarning';
 import { useCommands } from '../../palette/commands';
@@ -26,6 +28,7 @@ import { SettingsLink } from '../../settings/SettingsLink';
 import { type ShortcutSpec, useShortcuts } from '../../shortcuts/react';
 import type { AutonomyClient } from '../ares/activity';
 import { EmptySheet, SectionSheet, useOpenSection, useSection, useTabCount } from '../section';
+import { AresOnThread } from './AresOnThread';
 import { CloudMailQuestions } from './CloudMail';
 import { Composer } from './compose/Composer';
 import { DraftList, OutboxList, OutboxNote } from './compose/ComposeViews';
@@ -53,6 +56,7 @@ import {
   threadTime,
 } from './email';
 import { emailTodoDraft } from './email-todo';
+import { InvitationCard, invitationIn } from './InvitationCard';
 import { useMakeTodo } from './MakeTodo';
 import { actionToast } from './organising';
 import { type EmailReaderClient, textOnlyReader } from './reader';
@@ -435,6 +439,7 @@ export function EmailSheet({
   onSaveBeforeQuit,
   autonomy,
   onAresActivity,
+  itemStore,
 }: {
   client: EmailClient;
   accounts: EmailAccountsClient;
@@ -449,6 +454,8 @@ export function EmailSheet({
   autonomy?: AutonomyClient;
   /** Hears whenever Ares did or suggested something. */
   onAresActivity?: (listener: () => void) => () => void;
+  /** The Item store (the window's bridge), for the meeting card of an event Ares proposes from mail (#144). */
+  itemStore?: ItemStoreClient;
 }) {
   const { include } = useProjectFilter();
   const { projectOf, projectById, settleFiling } = useProjects();
@@ -491,6 +498,18 @@ export function EmailSheet({
     setOpen(true);
     void writing.open(mode, selected.latest.id);
   };
+  // Reply with your booking link (#144): a reply to the email, opening with "Book a time here: <link>".
+  const replyWithBookingLink = (emailId: string, text: string, link: string) => {
+    setSpecial(null);
+    setOpen(true);
+    const prefix = text.slice(0, text.length - link.length);
+    void writing.open('reply', emailId, [
+      { type: 'paragraph', runs: [{ text: prefix }, { text: link, href: link }] },
+      { type: 'paragraph', runs: [] },
+    ]);
+  };
+  // The thread's Account, for the invitation card's Open in Gmail / Outlook.
+  const threadAccount = state.accounts.find((each) => each.id === state.thread?.account);
   // Ares's drafts (#143): the threads he is drafting a reply for now, asked for here.
   const [drafting, setDrafting] = useState<ReadonlySet<string>>(new Set());
   const draftFor = async (thread: EmailThreadSummary | null, instruction?: string) => {
@@ -1025,7 +1044,33 @@ export function EmailSheet({
                 )
               }
               notice={
-                selectedSkips.length > 0 && <SkipInboxSuggestion found={selectedSkips} suggestions={skips} />
+                <>
+                  {selectedSkips.length > 0 && (
+                    <SkipInboxSuggestion found={selectedSkips} suggestions={skips} />
+                  )}
+                  {/* Email meets Calendar and Todos (#144): the invitation's card, and Ares's suggestions. */}
+                  {state.thread && invitationIn(state.thread.messages) && (
+                    <InvitationCard
+                      key={invitationIn(state.thread.messages)?.id}
+                      email={invitationIn(state.thread.messages) as Item}
+                      client={client}
+                      changes={changes}
+                      address={threadAccount ? emailAddressOf(threadAccount) : null}
+                      personal={threadAccount?.source === 'outlook' && threadAccount.personal === true}
+                    />
+                  )}
+                  {state.thread && (
+                    <AresOnThread
+                      messages={state.thread.messages}
+                      autonomy={autonomy}
+                      itemStore={itemStore}
+                      changes={changes}
+                      onAresActivity={onAresActivity}
+                      accountAddresses={state.accounts.map(emailAddressOf)}
+                      onReplyWithBookingLink={replyWithBookingLink}
+                    />
+                  )}
+                </>
               }
               toolbar={
                 selected && (

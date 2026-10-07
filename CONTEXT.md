@@ -55,7 +55,7 @@ One part of a Source Item that Two-way sync writes back on its own (a Linear iss
 _Avoid_: Property, attribute, column
 
 **Invitation**:
-A calendar event someone else organised that the User is a guest of, answered with Accept, Maybe or Decline (a synced field); one still waiting for an answer sits in the Dashboard's Today band.
+A calendar event someone else organised that the User is a guest of, answered with Accept, Maybe or Decline (a synced field), from Calendar or from the card above the email that carries it; one still waiting for an answer sits in the Dashboard's Today band.
 _Avoid_: Invite (as a noun), RSVP (as a noun), meeting request
 
 ## Projects
@@ -179,7 +179,7 @@ The private event titled "Busy" that Block time across Accounts puts on another 
 _Avoid_: Mirror, shadow event, blocker
 
 **Booking link**:
-The User's own Google appointment-schedule page, saved in Settings → Calendar, that Ares offers instead of a time when scheduling with someone outside the User's organisations; Commander only copies it and never hosts booking pages.
+The User's own Google appointment-schedule page, saved in Settings → Calendar, that Ares offers instead of a time when scheduling with someone outside the User's organisations (copied, or in a reply to their email for the User to send); Commander only copies it and never hosts booking pages.
 _Avoid_: Scheduling link, booking page (that's Google's), Calendly
 
 **Daily template**:

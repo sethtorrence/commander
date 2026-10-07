@@ -132,7 +132,7 @@ describe('the first sync', () => {
     const { cursor, cost, pages } = await sync(recorded.fetch);
 
     expect(recorded.remaining()).toBe(0);
-    expect(cost.requests).toBe(18);
+    expect(cost.requests).toBe(19);
     expect(OUTLOOK_CADENCE).toEqual({ defaultMinutes: 15, choices: [5, 10, 15, 30, 60] });
     expect(sent.every((each) => each.authorization === 'Bearer eyJ0eXAiOi.recorded')).toBe(true);
     // Every request asks for immutable ids, so a moved message keeps its id.
@@ -245,6 +245,16 @@ describe('the first sync', () => {
       hasInvitation: true,
       folder: { id: F.projects, name: 'Projects', wellKnown: null },
       labels: [{ id: F.projects, name: 'Projects' }],
+    });
+    // An event message is read again with its event (#144): what finds it in the calendar.
+    expect(detailOf(msg('design-review')).invitation).toEqual({
+      method: 'request',
+      uid: '040000008200E00074C5B7101A82E00800000000D3B2C4DC9A1F0D01000000000000000010000000A1B2C3D4E5F60718293A4B5C6D7E8F90',
+      eventId: 'AAMkAGI2-evt-design-review=',
+      title: 'Design review: onboarding',
+      start: Date.parse('2026-10-07T13:00:00Z'),
+      end: Date.parse('2026-10-07T14:00:00Z'),
+      allDay: false,
     });
     expect(detailOf(msg('digest'))).toMatchObject({
       categories: ['Newsletters'],

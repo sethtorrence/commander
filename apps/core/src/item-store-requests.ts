@@ -214,6 +214,9 @@ function answer(store: ItemStore, raw: unknown): CoreItemStoreReply['response'] 
         return { ok: true, result: store.people.change(request.action) };
       case 'invitations':
         return { ok: true, result: store.invitations() };
+      case 'email-invitation':
+        // Answered by the invitation cards (./email-invitations), which may refresh a calendar first.
+        return { ok: false, error: 'Invitation cards aren’t running' };
       case 'focus-settings':
         return { ok: true, result: store.focusSettings.read() };
       case 'save-focus-settings':

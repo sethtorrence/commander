@@ -322,6 +322,13 @@ export function openGate({
     const causeItem = causeItemId ? itemStore.get(causeItemId)?.item : undefined;
     const outside = (causeItem && trustOf(causeItem) === 'untrusted') || entry?.by.kind === 'source';
     if (!outside) return false;
+    // An event made from an email (#144) is another Item, in the User's calendar: never the email's
+    // own, so always chained. (A Busy copy of an event is that event's own, #131.)
+    if (
+      causeItem?.kind === 'email' &&
+      parsed.itemActions.some((step) => step.type === 'create-event' && !step.event.copyOf)
+    )
+      return true;
     const touched = new Set([parsed.itemId]);
     const touch = (target: StepTarget) => typeof target === 'string' && touched.add(target);
     for (const step of parsed.itemActions) {

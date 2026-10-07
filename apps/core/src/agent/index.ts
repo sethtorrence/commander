@@ -15,8 +15,10 @@ import {
   DRAFT_EMAIL_REPLIES,
   type Enqueue,
   FILE_INTO_PROJECTS,
+  PROPOSE_EVENTS_FROM_EMAIL,
   SORT_INTO_BUCKETS,
   SUGGEST_TEAMS_REPLIES,
+  SUGGEST_TODOS_FROM_EMAIL,
 } from '@commander/domain';
 import type { ModelClient } from '@commander/models';
 import type { Gate } from '../autonomy/gate';
@@ -34,6 +36,7 @@ import { learnFactsJob } from './learn-facts';
 import { learnWritingStyleJob } from './learn-writing-style';
 import type { MeaningLookup } from './memory-context';
 import { prepareMeetingsJob } from './prepare-meetings';
+import { proposeEmailEventsJob } from './propose-email-events';
 import { proposeEventsJob } from './propose-events';
 import { rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
@@ -43,6 +46,7 @@ import { spotStuckLinearJob } from './spot-stuck-linear';
 import { clearAnswered, spotWaitingJob } from './spot-waiting';
 import { suggestBucketsJob } from './suggest-buckets';
 import { suggestChatTodosJob } from './suggest-chat-todos';
+import { suggestEmailTodosJob } from './suggest-email-todos';
 import { dismissAnsweredInvitations, suggestInvitationRepliesJob } from './suggest-invitation-replies';
 import { dismissSettledReplies, suggestTeamsRepliesJob } from './suggest-teams-replies';
 import { suggestTodosJob } from './suggest-todos';
@@ -162,6 +166,10 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       // User's sent mail.
       draftEmailRepliesJob(itemStore, { now, meaning: options.meaning, onDrafted: options.onItemsChanged }),
       learnWritingStyleJob(itemStore, { now }),
+      // Email meets Calendar and Todos (#144): Todos from what people ask in Needs reply and FYI, and
+      // events from what they suggest ("Thursday at 3"), each email a call of its own.
+      suggestEmailTodosJob(itemStore, { now }),
+      proposeEmailEventsJob(itemStore, { now }),
     ],
     client: options.client,
     gate: options.gate,
@@ -223,6 +231,13 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
     }
   };
   learn({ appearances: true });
+
+  // Mail sorted into a Bucket (by the User, a Rule or Ares): the jobs that read mail by its Bucket, or
+  // that read only what they may since the User allowed it, look again.
+  const emailSorted = () => {
+    for (const job of [DRAFT_EMAIL_REPLIES, SUGGEST_TODOS_FROM_EMAIL, PROPOSE_EVENTS_FROM_EMAIL])
+      runner.trigger({ kind: 'due', job });
+  };
 
   let lastChange = now();
   let caughtUp = false;
@@ -296,16 +311,16 @@ export function setUpAgent(itemStore: ItemStore, options: AgentOptions): Agent {
       if (blocks.length) runner.trigger({ kind: 'typing', itemIds: blocks });
       const ranked = itemIds.filter((id) => RANKED_KINDS.has(itemStore.get(id)?.item.kind ?? ''));
       if (ranked.length) runner.trigger({ kind: 'todos-changed', itemIds: ranked });
-      // The User may have moved a thread into Needs reply: it may want a draft (#143).
-      if (itemIds.some((id) => itemStore.get(id)?.item.kind === 'email'))
-        runner.trigger({ kind: 'due', job: DRAFT_EMAIL_REPLIES });
+      // The User may have moved a thread into Needs reply: it may want a draft (#143), and a Todo or an
+      // event from what it asks (#144).
+      if (itemIds.some((id) => itemStore.get(id)?.item.kind === 'email')) emailSorted();
     },
 
     aresChanged() {
       learn();
       runner.trigger({ kind: 'todos-changed', itemIds: [] });
-      // Ares may have sorted a thread into Needs reply: it may want a draft (#143).
-      runner.trigger({ kind: 'due', job: DRAFT_EMAIL_REPLIES });
+      // Ares may have sorted a thread into Needs reply: it may want a draft (#143), a Todo or an event (#144).
+      emailSorted();
     },
 
     synced({ source, account, itemIds }) {

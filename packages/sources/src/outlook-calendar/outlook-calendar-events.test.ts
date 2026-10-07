@@ -230,6 +230,7 @@ describe('making a focus block', () => {
         seriesId: null,
         webUrl: `https://outlook.office365.com/owa/?itemid=${encodeURIComponent(FOCUS_EVENT)}&exvsurl=1&path=/calendar/item`,
         createdByCommander: 'focus-block',
+        icalUid: '040000008200E00074C5B7101A82E008-focus1',
       } satisfies EventDetail,
     });
   });

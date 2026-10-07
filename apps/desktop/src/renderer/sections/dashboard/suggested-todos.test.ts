@@ -67,6 +67,43 @@ describe('suggestedTodoOf', () => {
     });
   });
 
+  it('makes one from an email (#144) open the email’s thread, with its due day', () => {
+    const fromEmail = pending({
+      section: 'email',
+      itemId: 'email-1',
+      itemActions: [
+        {
+          type: 'create',
+          item: {
+            kind: 'todo',
+            title: 'Send Dana the Q3 numbers',
+            people: [],
+            status: 'open',
+            filing: null,
+            detail: { kind: 'todo', origin: 'ares', dueOn: '2026-10-09', backedBy: null },
+          },
+        },
+        { type: 'link', from: { step: 0 }, linkType: 'made-from', to: 'email-1' },
+      ],
+      reason: 'Dana Reyes asked in “Q3 numbers”',
+      item: { id: 'email-1', kind: 'email', title: 'Q3 numbers', source: 'gmail', deletedAt: null },
+    });
+    expect(suggestedTodoOf(fromEmail)).toEqual({
+      item: expect.objectContaining({
+        id: 'suggestion:12',
+        title: 'Send Dana the Q3 numbers',
+        detail: { kind: 'todo', origin: 'ares', dueOn: '2026-10-09', backedBy: null },
+      }),
+      suggestion: {
+        proposalId: 12,
+        blockId: 'email-1',
+        reason: 'Dana Reyes asked in “Q3 numbers”',
+        source: 'Q3 numbers',
+        fromEmail: true,
+      },
+    });
+  });
+
   it('makes one from a Teams Chat (#110) open the Chat at its message', () => {
     const fromChat = pending({
       section: 'teams',

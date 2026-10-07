@@ -91,8 +91,9 @@ function hash(text: string): string {
 /**
  * What Ares ranks an Item by, as a short fingerprint: its title, status, Project and due date, a
  * Todo's origin and backing Item, a Linear issue's state, priority, assignee, cycle and last
- * change, and a Chat's latest message, when it was read, its flags and whether Ares flagged it as
- * waiting on the User. When it changes, his ranking of the Item no longer holds.
+ * change, a Chat's latest message, when it was read, its flags and whether Ares flagged it as
+ * waiting on the User, and an email's Bucket, time, snooze and Trash. When it changes, his ranking
+ * of the Item no longer holds.
  */
 export function rankingFingerprint(item: Item): string {
   const facts: unknown[] = [
@@ -125,6 +126,18 @@ export function rankingFingerprint(item: Item): string {
       detail.messages.at(-1)?.id ?? null,
       item.waiting?.messageId ?? null,
       item.waiting?.reason ?? null,
+    );
+  }
+  // An email thread, by its latest message (#144): what the band rules go by (its Bucket, when it came,
+  // a snooze or Trash), so a reply, a new Bucket or a snooze means he ranks it again.
+  if (detail?.kind === 'email') {
+    facts.push(
+      detail.bucket?.bucketId ?? null,
+      detail.sentAt,
+      detail.sentByMe,
+      detail.inTrash ?? false,
+      detail.snooze?.until ?? null,
+      detail.snooze?.returned ?? null,
     );
   }
   facts.push(...openWorkFacts(item));

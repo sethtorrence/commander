@@ -46,6 +46,11 @@ export const PROPOSE_EVENTS = 'propose-events';
 // Its two actions: an event others see, and time for the User alone.
 export const CREATE_EVENTS_WITH_GUESTS = 'create-events-with-guests';
 export const HOLD_TIME = 'hold-time-for-yourself';
+// Their hints in the Settings grid: the same actions cover events proposed from email (#144).
+export const CREATE_EVENTS_HINT =
+  'Events with guests from what you write in your Daily Notes and what people suggest in email: always a suggestion, as others see them';
+export const HOLD_TIME_HINT =
+  'Time for you alone from what you write in your Daily Notes, in your own calendar (from email, always a suggestion)';
 
 // At most this many Blocks per call; the rest wait for the next run.
 const MAX_BLOCKS = 30;
@@ -197,16 +202,6 @@ export function proposeEventsJob(
     return { offered, notes };
   }
 
-  // The User's events between two instants, as free time reads them.
-  const eventsBetween = (from: number, to: number) =>
-    itemStore
-      .events({ from, to })
-      .flatMap((event): (FreeTimeEvent & { title: string })[] =>
-        event.detail?.kind === 'event'
-          ? [{ id: event.id, account: event.account, title: event.title, detail: event.detail }]
-          : [],
-      );
-
   return {
     job: PROPOSE_EVENTS,
     name: 'Propose events',
@@ -217,7 +212,7 @@ export function proposeEventsJob(
       actionKind: 'act-for-you',
       section: 'calendar',
       name: 'Create events with guests',
-      hint: 'Events with guests from what you write in your Daily Notes: always a suggestion, as others see them',
+      hint: CREATE_EVENTS_HINT,
     },
     alsoActions: [
       {
@@ -225,7 +220,7 @@ export function proposeEventsJob(
         actionKind: 'tidy-sources',
         section: 'calendar',
         name: 'Hold time for yourself',
-        hint: 'Time for you alone from what you write in your Daily Notes, in your own calendar',
+        hint: HOLD_TIME_HINT,
       },
     ],
     triggers: { typing: { pauseMs: TYPING_PAUSE_MS } },
@@ -284,17 +279,11 @@ export function proposeEventsJob(
     output: OUTPUT,
 
     proposals(output, input) {
-      const zone = input.timeZone;
-      const at = now();
       const byRef = new Map(input.offered.map((offered) => [offered.ref, offered]));
       const target = newEventsTarget(itemStore);
       const dropped: string[] = [];
       if (!target) return { proposals: [], dropped: ['there is no calendar to put events in'] };
-      const directory = attendeeDirectory(itemStore);
-      const known = new Set<string>(
-        [...directory.seen, ...directory.people].map((each: KnownAddress) => each.email),
-      );
-      const settings = itemStore.focusSettings.read();
+      const plan = eventPlanner(itemStore, { now: now(), timeZone: input.timeZone });
       const used = new Set<string>();
 
       const proposals = output.events.flatMap((proposed): JobProposal[] => {
@@ -313,103 +302,18 @@ export function proposeEventsJob(
           dropped.push(`${proposed.blockId} changed while Ares was looking at it`);
           return [];
         }
-
-        // Who: addresses in code. An address must be written in the Block or already known to the User.
-        const written = offered.text.toLowerCase();
-        const guests: ResolvedAttendee[] = proposed.attendees.map((name) => {
-          const resolved = resolveAttendee(name, directory);
-          if (
-            resolved.how === 'address' &&
-            !written.includes(resolved.email ?? '') &&
-            !known.has(resolved.email ?? '')
-          )
-            return { name: resolved.name, email: null, how: null };
-          return resolved;
-        });
-        const attendees = [
-          ...new Map(
-            guests.flatMap((guest) =>
-              guest.email
-                ? [
-                    [
-                      guest.email,
-                      { email: guest.email, name: guest.name === guest.email ? null : guest.name },
-                    ] as const,
-                  ]
-                : [],
-            ),
-          ).values(),
-        ];
-        const guestsToFill = [
-          ...new Set(guests.flatMap((guest) => (!guest.email && guest.name ? [guest.name] : []))),
-        ];
-
-        // When: an exact time as said; a window's first free slot inside working hours.
-        const length = proposed.durationMinutes * 60_000;
-        let start: number;
-        let note: string;
-        if ('at' in proposed.when) {
-          const [day, time] = proposed.when.at.split('T') as [string, string];
-          start = zonedTime(day, time, zone);
-          if (start <= at) {
-            dropped.push(`${proposed.blockId} named a time already past`);
-            return [];
-          }
-          const clashes = clashesAt({ start, end: start + length }, eventsBetween(start, start + length));
-          note = clashes.length
-            ? `It clashes with ${clashes.map((each) => `“${each.title}”`).join(' and ')}.`
-            : 'You’re free then.';
-        } else {
-          const { from, to } = proposed.when.window;
-          const windowFrom = Math.max(at, zonedTime(from, '00:00', zone));
-          const windowTo = zonedTime(addDays(to < from ? from : to), '00:00', zone);
-          const free = freeSlots({
-            events: eventsBetween(windowFrom, windowTo),
-            from: windowFrom,
-            to: windowTo,
-            workingHours: settings.workingHours,
-            timeZone: zone,
-            minMinutes: proposed.durationMinutes,
-          });
-          const [first] = bestSlots({
-            free,
-            durationMinutes: proposed.durationMinutes,
-            count: 1,
-            timeZone: zone,
-          });
-          if (!first) {
-            dropped.push(`${proposed.blockId} has no free time in ${from}–${to}`);
-            return [];
-          }
-          start = first.start;
-          note = 'It’s the first time you’re free then.';
+        const planned = plan(proposed, offered.text);
+        if ('why' in planned) {
+          dropped.push(`${proposed.blockId} ${planned.why}`);
+          return [];
         }
-
-        const withGuests = attendees.length > 0 || guestsToFill.length > 0;
-        const time = (instant: number) => ({ at: instant, timeZone: zone, date: null });
         return [
           {
             itemId: block.id,
-            itemActions: [
-              {
-                type: 'create-event' as const,
-                event: {
-                  kind: 'meeting' as const,
-                  account: target.account,
-                  calendarId: target.calendarId,
-                  title: cleanTitle(proposed.title),
-                  start: time(start),
-                  end: time(start + length),
-                  attendees,
-                  guestsToFill,
-                  filing: inheritedFiling(block.filing),
-                },
-              },
-              { type: 'link' as const, from: { step: 0 }, linkType: 'made-from' as const, to: block.id },
-            ],
+            itemActions: meetingSteps(planned, target, block, input.timeZone),
             confidence: proposed.confidence,
-            reason: `You wrote “${offered.text}” in your Daily Note. ${note}`,
-            ...(!withGuests && {
+            reason: `You wrote “${offered.text}” in your Daily Note. ${planned.note}`,
+            ...(!planned.withGuests && {
               as: { action: HOLD_TIME, actionKind: 'tidy-sources' as const, section: 'calendar' as const },
             }),
           },
@@ -418,6 +322,145 @@ export function proposeEventsJob(
       return { proposals, dropped };
     },
   };
+}
+
+/** What Ares says of one event: who, how long, and when (an exact time, or a window of days). */
+export type ProposedEvent = Omit<Output['events'][number], 'blockId'>;
+
+/** An event worked out in code from what Ares said: its guests, its time, and whether the User is free. */
+export type PlannedEvent = {
+  title: string;
+  attendees: { email: string; name: string | null }[];
+  guestsToFill: string[];
+  start: number;
+  length: number;
+  // "You're free then.", "It clashes with “Board prep”.", or "It's the first time you're free then."
+  note: string;
+  withGuests: boolean;
+};
+
+/**
+ * Works out the events Ares proposes, in code (#132, and #144 from email): attendee names become
+ * addresses (an address must be in `written`, the words he read, or already known to the User; a name
+ * nobody can place is left for the User to fill in), an exact time is checked against every calendar,
+ * and a window gets its first free slot inside working hours. `{ why }` when it can't be proposed.
+ */
+export function eventPlanner(
+  itemStore: ItemStore,
+  { now, timeZone }: { now: number; timeZone: string },
+): (proposed: ProposedEvent, written: string) => PlannedEvent | { why: string } {
+  const directory = attendeeDirectory(itemStore);
+  const known = new Set<string>(
+    [...directory.seen, ...directory.people].map((each: KnownAddress) => each.email),
+  );
+  const settings = itemStore.focusSettings.read();
+  // The User's events between two instants, as free time reads them.
+  const eventsBetween = (from: number, to: number) =>
+    itemStore
+      .events({ from, to })
+      .flatMap((event): (FreeTimeEvent & { title: string })[] =>
+        event.detail?.kind === 'event'
+          ? [{ id: event.id, account: event.account, title: event.title, detail: event.detail }]
+          : [],
+      );
+
+  return (proposed, written) => {
+    // Who: addresses in code. An address must be written where Ares read it or already known to the User.
+    const lower = written.toLowerCase();
+    const guests: ResolvedAttendee[] = proposed.attendees.map((name) => {
+      const resolved = resolveAttendee(name, directory);
+      if (
+        resolved.how === 'address' &&
+        !lower.includes(resolved.email ?? '') &&
+        !known.has(resolved.email ?? '')
+      )
+        return { name: resolved.name, email: null, how: null };
+      return resolved;
+    });
+    const attendees = [
+      ...new Map(
+        guests.flatMap((guest) =>
+          guest.email
+            ? [
+                [
+                  guest.email,
+                  { email: guest.email, name: guest.name === guest.email ? null : guest.name },
+                ] as const,
+              ]
+            : [],
+        ),
+      ).values(),
+    ];
+    const guestsToFill = [
+      ...new Set(guests.flatMap((guest) => (!guest.email && guest.name ? [guest.name] : []))),
+    ];
+
+    // When: an exact time as said; a window's first free slot inside working hours.
+    const length = proposed.durationMinutes * 60_000;
+    let start: number;
+    let note: string;
+    if ('at' in proposed.when) {
+      const [day, time] = proposed.when.at.split('T') as [string, string];
+      start = zonedTime(day, time, timeZone);
+      if (start <= now) return { why: 'named a time already past' };
+      const clashes = clashesAt({ start, end: start + length }, eventsBetween(start, start + length));
+      note = clashes.length
+        ? `It clashes with ${clashes.map((each) => `“${each.title}”`).join(' and ')}.`
+        : 'You’re free then.';
+    } else {
+      const { from, to } = proposed.when.window;
+      const windowFrom = Math.max(now, zonedTime(from, '00:00', timeZone));
+      const windowTo = zonedTime(addDays(to < from ? from : to), '00:00', timeZone);
+      const free = freeSlots({
+        events: eventsBetween(windowFrom, windowTo),
+        from: windowFrom,
+        to: windowTo,
+        workingHours: settings.workingHours,
+        timeZone,
+        minMinutes: proposed.durationMinutes,
+      });
+      const [first] = bestSlots({ free, durationMinutes: proposed.durationMinutes, count: 1, timeZone });
+      if (!first) return { why: `has no free time in ${from}–${to}` };
+      start = first.start;
+      note = 'It’s the first time you’re free then.';
+    }
+    return {
+      title: cleanTitle(proposed.title),
+      attendees,
+      guestsToFill,
+      start,
+      length,
+      note,
+      withGuests: attendees.length > 0 || guestsToFill.length > 0,
+    };
+  };
+}
+
+/** A planned event's steps: made on the calendar new events go in, with a made-from Link to its source. */
+export function meetingSteps(
+  planned: PlannedEvent,
+  target: { account: string; calendarId: string },
+  source: Item,
+  timeZone: string,
+): JobProposal['itemActions'] {
+  const time = (instant: number) => ({ at: instant, timeZone, date: null });
+  return [
+    {
+      type: 'create-event' as const,
+      event: {
+        kind: 'meeting' as const,
+        account: target.account,
+        calendarId: target.calendarId,
+        title: planned.title,
+        start: time(planned.start),
+        end: time(planned.start + planned.length),
+        attendees: planned.attendees,
+        guestsToFill: planned.guestsToFill,
+        filing: inheritedFiling(source.filing),
+      },
+    },
+    { type: 'link' as const, from: { step: 0 }, linkType: 'made-from' as const, to: source.id },
+  ];
 }
 
 // The machine's time zone, which working hours are in.

@@ -13,6 +13,7 @@ import {
   threadMessages,
 } from '@commander/domain';
 import { teamsText as htmlText } from '../teams/html';
+import { parseInvitation } from './ics';
 import type { GmailMessage, GmailPart } from './shapes';
 
 // A Gmail message (`messages.get?format=full`) as an email Item: its headers, labels and attachment
@@ -259,6 +260,19 @@ function attachmentOf(part: GmailPart): EmailAttachment {
 
 const INVITATION_TYPES = new Set(['text/calendar', 'application/ics']);
 
+/**
+ * The invitation a message's calendar part describes (#144): the first text/calendar (or .ics) part
+ * Gmail sent the data of (an invitation's inline part; an attached .ics alone is left unread, null).
+ */
+export function invitationOf(leaves: readonly GmailPart[]): EmailDetail['invitation'] {
+  for (const part of leaves) {
+    if (!INVITATION_TYPES.has(mimeOf(part)) || !part.body?.data) continue;
+    const found = parseInvitation(textOf(part));
+    if (found) return found;
+  }
+  return null;
+}
+
 /** A message's bodies as Commander keeps them (see the domain's emailBody). */
 export function bodyOf(payload: GmailPart | undefined): EmailBody {
   if (!payload) return { text: '', html: null, textFromHtml: false, truncated: false };
@@ -298,6 +312,9 @@ function sentAtOf(message: GmailMessage): number {
   const date = Date.parse(headerOf(message.payload, 'Date') ?? '');
   return Number.isNaN(date) ? 0 : Math.max(0, date);
 }
+
+// The invitation field, only for a message carrying one Commander could read.
+const withInvitation = (invitation: EmailDetail['invitation']) => (invitation ? { invitation } : {});
 
 /**
  * The email Item for a Gmail message, with its bodies. `labels`: the Account's label names by id.
@@ -339,6 +356,7 @@ export function readGmailMessage(message: GmailMessage, labels: ReadonlyMap<stri
     labels: labelIds.map((id) => ({ id, name: labelName(id, labels) })),
     attachments: allLeaves.filter(isAttachment).map(attachmentOf),
     hasInvitation: allLeaves.some((part) => INVITATION_TYPES.has(mimeOf(part))),
+    ...withInvitation(invitationOf(allLeaves)),
     listUnsubscribe: header('List-Unsubscribe'),
     listId: header('List-Id') ? decodeHeader(header('List-Id') as string) : null,
     ...(labelIds.includes('TRASH') ? { inTrash: true } : {}),

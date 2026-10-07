@@ -71,6 +71,9 @@ export const AGENT_JOB_NAMES: Record<string, string> = {
   // Ares's drafts (#143).
   'draft-email-replies': 'Draft replies',
   'learn-writing-style': 'Learn writing style',
+  // Email meets Calendar and Todos (#144).
+  'suggest-email-todos': 'Suggest Todos from email',
+  'propose-email-events': 'Propose events from email',
   // Search by meaning (#73): the local embedding model's calls.
   'embed-index': 'Embed Items for search',
   'embed-query': 'Embed searches',

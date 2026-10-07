@@ -56,6 +56,8 @@ export const googleEvent = z.object({
   start: time,
   end: time,
   recurringEventId: text,
+  // The event's iCalendar UID, shared by a series' instances: what invitation emails name it by (#144).
+  iCalUID: text,
   transparency: text,
   visibility: text,
   attendees: z
@@ -229,6 +231,7 @@ export function toEventItem(
     seriesId: event.recurringEventId?.trim() || null,
     webUrl: isWebLink(event.htmlLink) ? event.htmlLink.trim() : null,
     createdByCommander: commanderKind(event),
+    ...(event.iCalUID?.trim() ? { icalUid: event.iCalUID.trim() } : {}),
   };
   const people = new Set<string>();
   if (organizer) people.add(organizer.email.toLowerCase());

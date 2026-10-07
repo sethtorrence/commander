@@ -35,6 +35,9 @@ export type FakeGmailMessageInput = {
   messageId?: string;
   inReplyTo?: string;
   references?: string;
+  // A calendar invitation (#144): this iCalendar text as an inline text/calendar part (method from its
+  // METHOD line) beside the text, as Google Calendar's invitations carry it.
+  calendar?: string;
   // Attachments, and inline images (with a Content-ID), served by `messages.attachments.get`.
   attachments?: {
     name: string;
@@ -188,26 +191,46 @@ function messageJson(id: string, threadId: string, labelIds: string[], input: Fa
   });
   // The message's text (and HTML) as a part numbered `partId`, its children `<partId>.0`, `.1`.
   const child = (partId: string, index: number) => (partId ? `${partId}.${index}` : String(index));
+  // An invitation's calendar part, with its data, as the last alternative.
+  const calendarPart = (partId: string, calendar: string) => {
+    const method = /^METHOD:(\S+)/m.exec(calendar)?.[1] ?? 'REQUEST';
+    return {
+      partId,
+      mimeType: 'text/calendar',
+      filename: '',
+      headers: [{ name: 'Content-Type', value: `text/calendar; charset="UTF-8"; method=${method}` }],
+      body: { size: Buffer.byteLength(calendar), data: b64(calendar) },
+    };
+  };
   const bodyPart = (partId: string) =>
-    input.html
+    input.calendar
       ? {
           partId,
           mimeType: 'multipart/alternative',
           filename: '',
           headers: [{ name: 'Content-Type', value: 'multipart/alternative; boundary="alt"' }],
           body: { size: 0 },
-          parts: [
-            textPart(child(partId, 0)),
-            {
-              partId: child(partId, 1),
-              mimeType: 'text/html',
-              filename: '',
-              headers: [{ name: 'Content-Type', value: 'text/html; charset="UTF-8"' }],
-              body: { size: Buffer.byteLength(input.html), data: b64(input.html) },
-            },
-          ],
+          parts: [textPart(child(partId, 0)), calendarPart(child(partId, 1), input.calendar)],
         }
-      : textPart(partId);
+      : input.html
+        ? {
+            partId,
+            mimeType: 'multipart/alternative',
+            filename: '',
+            headers: [{ name: 'Content-Type', value: 'multipart/alternative; boundary="alt"' }],
+            body: { size: 0 },
+            parts: [
+              textPart(child(partId, 0)),
+              {
+                partId: child(partId, 1),
+                mimeType: 'text/html',
+                filename: '',
+                headers: [{ name: 'Content-Type', value: 'text/html; charset="UTF-8"' }],
+                body: { size: Buffer.byteLength(input.html), data: b64(input.html) },
+              },
+            ],
+          }
+        : textPart(partId);
   const attachments = (input.attachments ?? []).map((attachment, index) => ({
     partId: String(index + 1),
     mimeType: attachment.type,
