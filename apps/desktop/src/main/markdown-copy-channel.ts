@@ -101,6 +101,12 @@ export function createMarkdownCopyChannel(options: {
       }
     },
 
+    // Where the copy is written, as the Core keeps it (for Wipe all Commander data, #204); null when
+    // the copy is off or the Core didn't answer.
+    async folder(): Promise<string | null> {
+      return (await ask({ op: 'status' }))?.status.folder ?? null;
+    },
+
     // A message from the Core. Returns true when it was a Markdown copy reply, handled here.
     settle(raw: unknown): boolean {
       const parsed = coreMarkdownCopyReply.safeParse(raw);

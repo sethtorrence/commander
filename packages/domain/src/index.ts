@@ -81,3 +81,4 @@ export * from './teams-rules';
 export * from './teams-work';
 export * from './updates';
 export * from './updates-messages';
+export * from './wipe-messages';

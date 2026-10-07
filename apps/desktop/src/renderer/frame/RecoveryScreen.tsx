@@ -1,7 +1,7 @@
 import type { DatabaseRecovery, SnapshotInfo } from '@commander/domain';
 import { Button, DrawingGrid, Led } from '@commander/ui';
-import type { ReactNode } from 'react';
-import { dayLabel, KIND_LABELS, progressText, useBackups } from '../settings/DataSettings';
+import { type ReactNode, useState } from 'react';
+import { dayLabel, KIND_LABELS, progressText, useBackups, WipeConfirm } from '../settings/DataSettings';
 
 /*
   The recovery screen (#203), shown instead of Commander while the Core is in its limited state
@@ -14,7 +14,10 @@ import { dayLabel, KIND_LABELS, progressText, useBackups } from '../settings/Dat
 
   Restore needs no typed confirmation here (the database as it is goes aside as a snapshot first, as
   with every restore) and relaunches Commander, through Settings → Data's backups channel
-  (backups-channel.ts, `recover`). Export everything shows its progress as it does there.
+  (backups-channel.ts, `recover`). Export everything shows its progress as it does there. Wipe all
+  Commander data (#204) is here too, with its typed confirmation: starting again as new is a fair
+  answer to a damaged database. (Where the Markdown copy is written is in that database, so it isn't
+  offered for deleting.)
 */
 
 export type RecoveryBridge = { quit(): Promise<void> };
@@ -61,6 +64,7 @@ export function RecoveryScreen({
   bridge?: RecoveryBridge;
 }) {
   const { status, refused, relaunching, busy, ask } = useBackups();
+  const [wiping, setWiping] = useState(false);
   const damaged = health.state === 'damaged';
   const snapshot = health.snapshot;
   const progress = status?.export ?? null;
@@ -170,12 +174,21 @@ export function RecoveryScreen({
           )}
           <Button
             size="lg"
+            disabled={busy || relaunching || exporting || wiping}
+            onClick={() => setWiping(true)}
+          >
+            Wipe all Commander data…
+          </Button>
+          <Button
+            size="lg"
             variant={snapshot || !damaged ? 'default' : 'primary'}
             onClick={() => void bridge.quit()}
           >
             Quit
           </Button>
         </div>
+
+        {wiping && <WipeConfirm markdownCopyFolder={null} onCancel={() => setWiping(false)} />}
 
         {relaunching && (
           <Para testId="recovery-relaunching">Restoring… Commander is relaunching with the snapshot.</Para>

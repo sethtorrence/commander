@@ -106,7 +106,7 @@ describe('Settings in pages', () => {
     expect(window.scrollTo).toHaveBeenCalledWith({ top: 0 });
 
     fireEvent.click(pageLink('Data'));
-    expect(groupsOn('data')).toEqual(['snapshots', 'export', 'markdown-copy']);
+    expect(groupsOn('data')).toEqual(['snapshots', 'export', 'markdown-copy', 'wipe']);
     expect(within(pageElement('data')).getByText('Markdown copy folder')).toBeTruthy();
   });
 

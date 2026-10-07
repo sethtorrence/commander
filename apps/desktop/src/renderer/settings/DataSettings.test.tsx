@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
-import type { BackupsRequest, BackupsResponse, BackupsStatus, CoreMessage } from '@commander/domain';
+import type {
+  BackupsRequest,
+  BackupsResponse,
+  BackupsStatus,
+  CoreMessage,
+  WipeRequest,
+  WipeResponse,
+} from '@commander/domain';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { dayLabel, ExportSettings, SnapshotSettings, sizeLabel } from './DataSettings';
+import { dayLabel, ExportSettings, SnapshotSettings, sizeLabel, WipeSettings } from './DataSettings';
 
 // Settings → Data's snapshots and Export everything (#202), against a stand-in bridge: the list,
 // Restore's typed confirmation, and an export's progress and Cancel.
@@ -162,5 +169,63 @@ describe('words', () => {
     expect(sizeLabel(900)).toBe('1 KB');
     expect(sizeLabel(12_400_000)).toBe('12 MB');
     expect(sizeLabel(3 * 1024 ** 3)).toBe('3.0 GB');
+  });
+});
+
+describe('Wipe all Commander data (#204)', () => {
+  function bridge(folder: string | null, response: WipeResponse = { ok: true, relaunching: true }) {
+    const wipes: WipeRequest[] = [];
+    vi.stubGlobal('commander', {
+      markdownCopy: async () => ({
+        ok: true,
+        status: { folder, state: folder ? 'idle' : 'off', problem: null, lastWrittenAt: null },
+      }),
+      wipe: async (request: WipeRequest) => {
+        wipes.push(request);
+        return response;
+      },
+    });
+    return wipes;
+  }
+
+  it('wipes only once “wipe” is typed, offering the Markdown copy unticked, then says Commander is relaunching', async () => {
+    const wipes = bridge('/home/me/Vault');
+    render(<WipeSettings no="04" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Wipe all Commander data…' }));
+    const confirm = screen.getByTestId('wipe-confirm');
+    const tick = (await within(confirm).findByTestId('wipe-markdown-copy')) as HTMLInputElement;
+    expect(confirm.textContent).toContain('/home/me/Vault');
+    expect(tick.checked).toBe(false);
+    const go = within(confirm).getByRole('button', { name: 'Wipe and relaunch' });
+    fireEvent.change(within(confirm).getByLabelText(/to confirm/), { target: { value: 'wiped' } });
+    expect(go).toHaveProperty('disabled', true);
+    fireEvent.change(within(confirm).getByLabelText(/to confirm/), { target: { value: 'WIPE' } });
+    fireEvent.click(go);
+
+    expect(await screen.findByTestId('wipe-relaunching')).toBeTruthy();
+    expect(wipes).toEqual([{ confirmation: 'WIPE', markdownCopy: false }]);
+  });
+
+  it('deletes the Markdown copy too only when ticked, and shows a refusal', async () => {
+    const wipes = bridge('/home/me/Vault', { ok: false, error: 'Commander is already wiping its data.' });
+    render(<WipeSettings no="04" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Wipe all Commander data…' }));
+    const confirm = screen.getByTestId('wipe-confirm');
+    fireEvent.click(await within(confirm).findByTestId('wipe-markdown-copy'));
+    fireEvent.change(within(confirm).getByLabelText(/to confirm/), { target: { value: 'wipe' } });
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Wipe and relaunch' }));
+
+    await waitFor(() => expect(wipes).toEqual([{ confirmation: 'wipe', markdownCopy: true }]));
+    expect((await screen.findByTestId('wipe-refused')).textContent).toBe(
+      'Commander is already wiping its data.',
+    );
+  });
+
+  it('offers no Markdown copy when there is none', async () => {
+    bridge(null);
+    render(<WipeSettings no="04" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Wipe all Commander data…' }));
+    await act(async () => {});
+    expect(screen.queryByTestId('wipe-markdown-copy')).toBeNull();
   });
 });

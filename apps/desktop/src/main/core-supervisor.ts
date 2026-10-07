@@ -261,6 +261,28 @@ export function createCoreSupervisor({
       restartTimer = null;
       return current?.kill() ?? false;
     },
+    // Wipe all Commander data (#204): stops the Core for good, as quitting does (never a crash, and no
+    // new one after it), and resolves once it has exited, ending it hard if it hasn't by `timeoutMs`.
+    stopForGood(timeoutMs = 5_000): Promise<void> {
+      log('info', 'Stopping the Core for good: Commander is wiping its data');
+      quitting = true;
+      if (restartTimer) clearTimeout(restartTimer);
+      restartTimer = null;
+      const core = current;
+      if (!core) return Promise.resolve();
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          if (core.pid) killHard(core.pid);
+          resolve();
+        }, timeoutMs);
+        exitListeners.add(function exited() {
+          exitListeners.delete(exited);
+          clearTimeout(timer);
+          resolve();
+        });
+        core.kill();
+      });
+    },
     // Commander is quitting (before-quit): whatever stops now is never started again.
     quit() {
       quitting = true;

@@ -22,7 +22,7 @@ import {
   peopleAction,
   type SeenIdentity,
 } from '@commander/domain';
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { z } from 'zod';
 import * as schema from './schema';
@@ -47,6 +47,11 @@ export type PeopleStore = {
   recogniseUser(accounts: readonly { handles: readonly string[]; name: string | null }[]): void;
   // Whether there are no People at all (a database from before People existed).
   empty(): boolean;
+  // An Account removed (#204): forgets these handles, which no Item names any more, with the names
+  // their Source gave them. A handle the User placed (pinned by a merge or split) stays where they
+  // put it. A Person left with no handles, no name of the User's and no entry in the People log
+  // goes too; one that keeps handles goes by the name they now give. Call inside a transaction.
+  forget(handles: readonly string[]): void;
 };
 
 // Where each kind of handle comes in a Person's list: Source handles first, then addresses.
@@ -468,5 +473,37 @@ export function peopleIn(
     seen,
     recogniseUser,
     empty: () => !db.select({ id: people.id }).from(people).limit(1).get(),
+
+    forget(handles) {
+      const at = now();
+      const touched = new Set<string>();
+      for (const handle of new Set(handles.map(normaliseHandle))) {
+        const row = handleRow(handle);
+        if (!row || row.pinned) continue;
+        db.delete(personHandles).where(eq(personHandles.handle, handle)).run();
+        touched.add(row.personId);
+      }
+      for (const personId of touched) {
+        const row = personRow(personId);
+        if (!row) continue;
+        if (handlesOf(personId).length) {
+          refreshName(personId, at);
+          continue;
+        }
+        const logged = db
+          .select({ id: peopleChanges.id })
+          .from(peopleChanges)
+          .where(or(eq(peopleChanges.personId, personId), eq(peopleChanges.otherId, personId)))
+          .get();
+        const mergedHere = db
+          .select({ id: people.id })
+          .from(people)
+          .where(eq(people.mergedInto, personId))
+          .get();
+        if (row.userName === null && row.mergedInto === null && !logged && !mergedHere)
+          db.delete(people).where(eq(people.id, personId)).run();
+        else refreshName(personId, at);
+      }
+    },
   };
 }

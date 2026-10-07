@@ -466,6 +466,32 @@ describe('the User’s Re-sync', () => {
     expect(seen).toContainEqual({ done: 0, total: null });
   });
 
+  it('stops a Re-sync running or waiting its turn when the Account is removed (#204)', async () => {
+    const engine = start();
+    engine.setAccounts([account]);
+    await vi.advanceTimersByTimeAsync(10);
+    const calls = calendar.cursors.length;
+    const slow = held(async (request) => {
+      request.save({ items: [email('late', 'Dana', 'Arrived after the removal')], deleted: [] });
+      return finished(request);
+    });
+    gmail.next(slow.behaviour);
+
+    const done = engine.resync(GOOGLE);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(statusOf(engine)?.activity).toBe('syncing');
+    engine.forget(GOOGLE);
+    slow.finish();
+    await done;
+    await vi.advanceTimersByTimeAsync(60 * MIN);
+
+    // Gmail's run saved nothing once stopped, and Google Calendar's never started.
+    expect(store.query({ account: GOOGLE }).map((item) => item.externalId)).not.toContain('late');
+    expect(calendar.cursors).toHaveLength(calls);
+    expect(store.syncState.get(GOOGLE, 'gmail')).toBeNull();
+    expect(engine.statuses()).toEqual([]);
+  });
+
   it('follows a sync already under way, rather than joining it', async () => {
     const engine = start();
     engine.setAccounts([gmailOnly]);

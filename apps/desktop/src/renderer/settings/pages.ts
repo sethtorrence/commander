@@ -51,8 +51,8 @@ export const SETTINGS_PAGES = [
   {
     id: 'data',
     label: 'Data',
-    summary: 'Snapshots, Export everything and the Markdown copy',
-    groups: ['snapshots', 'export', 'markdown-copy'],
+    summary: 'Snapshots, Export everything, the Markdown copy and Wipe',
+    groups: ['snapshots', 'export', 'markdown-copy', 'wipe'],
   },
   { id: 'security', label: 'Security', summary: 'Sign-ins and API keys', groups: ['security'] },
   {

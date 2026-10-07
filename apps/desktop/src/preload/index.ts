@@ -30,6 +30,8 @@ import type {
   UpdatesRequest,
   UpdatesResponse,
   UpdatesResults,
+  WipeRequest,
+  WipeResponse,
 } from '@commander/domain';
 // The ipc subpath keeps zod (and the schemas) out of the sandboxed preload bundle.
 import {
@@ -156,6 +158,9 @@ const commander = {
   // relaunches) and Export everything (the folder from the system picker only). Resolves with the
   // response, failures included.
   backups: (request: BackupsRequest): Promise<BackupsResponse> => ipcRenderer.invoke(ipc.backups, request),
+  // Settings → Data → Wipe all Commander data (#204), once the User typed the confirmation word: the
+  // main process stops the Core, deletes everything Commander keeps and relaunches it as new.
+  wipe: (request: WipeRequest): Promise<WipeResponse> => ipcRenderer.invoke(ipc.wipe, request),
   // Settings → GitHub: what each GitHub Account can reach and watches. Resolves with the response,
   // failures included (with the last listing, when there is one).
   githubWatch: (request: GitHubWatchRequest): Promise<GitHubWatchResponse> =>

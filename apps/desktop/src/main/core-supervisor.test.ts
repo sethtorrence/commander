@@ -346,6 +346,35 @@ describe('createCoreSupervisor', () => {
     ]);
   });
 
+  it('stops the Core for good for a wipe: never taken for a crash, no new one, resolved once it exits', async () => {
+    const { supervisor, cores, latest, statuses, killedHard } = supervise();
+    latest().beat();
+    let stopped = false;
+    const stopping = supervisor.stopForGood().then(() => {
+      stopped = true;
+    });
+    expect(latest().killed).toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(stopped).toBe(false);
+    latest().exit(0);
+    await stopping;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(cores).toHaveLength(1);
+    expect(statuses.at(-1)?.state).toBe('running');
+    expect(supervisor.status().lastStop).toBeNull();
+    expect(killedHard).toEqual([]);
+    supervisor.tryAgain();
+    expect(cores).toHaveLength(1);
+  });
+
+  it('ends a Core that doesn’t stop for a wipe hard, after the time given', async () => {
+    const { supervisor, latest, killedHard } = supervise();
+    const stopping = supervisor.stopForGood(2_000);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await stopping;
+    expect(killedHard).toEqual([latest().pid]);
+  });
+
   it('gives the end-to-end tests the running Core’s process id', () => {
     const { supervisor, latest } = supervise();
     expect(supervisor.pid()).toBe(latest().pid);

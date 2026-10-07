@@ -38,6 +38,8 @@ export const ipc = {
   markdownCopy: 'markdown-copy',
   // Settings → Data → Snapshots and Export (#202); see backups-messages.ts for the validated contract.
   backups: 'backups',
+  // Settings → Data → Wipe all Commander data (#204); see wipe-messages.ts for the validated contract.
+  wipe: 'wipe',
   // Ares's Updates; see updates-messages.ts for the validated contract. Main tells the window when
   // the tray's "Ask for an update" was chosen (askForUpdate), and the window runs the Update Skill.
   updates: 'updates',

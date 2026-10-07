@@ -2,11 +2,13 @@ import {
   type BackupsRequest,
   type BackupsStatus,
   confirmsRestore,
+  confirmsWipe,
   type ExportProgress,
   RESTORE_WORD,
   type SnapshotInfo,
   type SnapshotKind,
   type SnapshotProblem,
+  WIPE_WORD,
 } from '@commander/domain';
 import { Button, Input } from '@commander/ui';
 import { type ReactNode, useCallback, useEffect, useId, useState } from 'react';
@@ -17,7 +19,8 @@ import { SettingRow, SettingsGroup } from './parts';
   Settings → Data (#199, #202): what Commander keeps of the User's data besides the database itself.
   The snapshots the Core makes (item-store/snapshots.ts), each restorable after typed confirmation
   (Commander relaunches to make the restore); Export everything into a folder from the system picker,
-  with its progress and Cancel; and the Markdown copy of the Daily Notes.
+  with its progress and Cancel; the Markdown copy of the Daily Notes; and Wipe all Commander data
+  (#204), after typed confirmation, which the main process makes (main/wipe.ts) before relaunching.
 */
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -354,6 +357,140 @@ export function MarkdownCopySettings({ no }: { no: string }) {
   return (
     <SettingsGroup no={no} title="Markdown copy" note="Daily Notes · read-only">
       <MarkdownCopySetting />
+    </SettingsGroup>
+  );
+}
+
+/** What Wipe all Commander data deletes, in words, for its confirmation. */
+export const WIPE_WORDS =
+  'the database, every snapshot, your saved sign-ins, tokens and keys (and their keyring entry), cached attachments and images, the downloaded search model and Commander’s own settings';
+
+/**
+ * Wipe's typed confirmation. `markdownCopyFolder`: where the Markdown copy is written, offered for
+ * deleting too (unticked); null when there is none to offer.
+ */
+export function WipeConfirm({
+  markdownCopyFolder,
+  onCancel,
+}: {
+  markdownCopyFolder: string | null;
+  onCancel: () => void;
+}) {
+  const [typed, setTyped] = useState('');
+  const [markdownCopy, setMarkdownCopy] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const [relaunching, setRelaunching] = useState(false);
+  const id = useId();
+  const ready = confirmsWipe(typed);
+
+  async function wipe() {
+    setBusy(true);
+    try {
+      const response = await window.commander.wipe({
+        confirmation: typed,
+        markdownCopy: markdownCopy && markdownCopyFolder !== null,
+      });
+      if (response.ok) setRelaunching(true);
+      else setRefused(response.error);
+    } catch (error) {
+      setRefused(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (relaunching)
+    return (
+      <Note testId="wipe-relaunching">Wiping… Commander is deleting everything and relaunching as new.</Note>
+    );
+  return (
+    <form
+      data-testid="wipe-confirm"
+      className="mt-3 max-w-[560px] border border-line2 bg-raise px-3 py-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (ready && !busy) void wipe();
+      }}
+    >
+      <p className="m-0 text-note leading-[19px] text-ink">
+        Commander stops, deletes {WIPE_WORDS}, and starts again as new. This can’t be undone: export
+        everything first to keep a copy. Nothing changes at your Accounts’ Sources.
+      </p>
+      {markdownCopyFolder && (
+        <label className="mt-3 flex items-start gap-2 text-note leading-[19px] text-ink">
+          <input
+            type="checkbox"
+            data-testid="wipe-markdown-copy"
+            checked={markdownCopy}
+            onChange={(event) => setMarkdownCopy(event.target.checked)}
+            className="mt-[3px]"
+          />
+          <span>
+            Also delete the Markdown copy of the Daily Notes in{' '}
+            <code className="font-mono break-all">{markdownCopyFolder}</code> (only the files Commander wrote
+            there; the folder is yours)
+          </span>
+        </label>
+      )}
+      <label htmlFor={id} className="mt-3 block text-note text-muted">
+        Type <code className="font-mono text-ink">{WIPE_WORD}</code> to confirm
+      </label>
+      <div className="mt-1.5 flex gap-2">
+        <Input
+          id={id}
+          autoFocus
+          autoComplete="off"
+          spellCheck={false}
+          value={typed}
+          onChange={(event) => setTyped(event.target.value)}
+          className="max-w-[200px]"
+        />
+        <Button type="submit" variant="primary" disabled={!ready || busy}>
+          Wipe and relaunch
+        </Button>
+        <Button onClick={onCancel} disabled={busy}>
+          Cancel
+        </Button>
+      </div>
+      {refused && <Notice testId="wipe-refused">{refused}</Notice>}
+    </form>
+  );
+}
+
+/** Wipe all Commander data: everything Commander keeps on this machine, deleted at once. */
+export function WipeSettings({ no }: { no: string }) {
+  const [open, setOpen] = useState(false);
+  const [folder, setFolder] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let current = true;
+    window.commander
+      .markdownCopy({ op: 'status' })
+      .then((response) => {
+        if (current) setFolder(response.status?.folder ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [open]);
+
+  return (
+    <SettingsGroup no={no} title="Wipe" note="Everything · can’t be undone">
+      <SettingRow
+        label="Wipe all Commander data"
+        description={`Deletes ${WIPE_WORDS}, then relaunches Commander as if new. Removing one Account removes only its data; this removes everything at once, snapshots included.`}
+      >
+        <div data-testid="wipe-setting" className="max-w-[560px]">
+          {open ? (
+            <WipeConfirm markdownCopyFolder={folder} onCancel={() => setOpen(false)} />
+          ) : (
+            <Button onClick={() => setOpen(true)}>Wipe all Commander data…</Button>
+          )}
+        </div>
+      </SettingRow>
     </SettingsGroup>
   );
 }

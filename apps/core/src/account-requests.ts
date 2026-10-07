@@ -16,11 +16,13 @@ const sourceNames: Record<Source, string> = {
 };
 
 // Returns the reply to send back, or null when the message is not a remove-account-items request.
-// `beforeRemove` runs first, so the Account's syncing stops before its Items go.
+// `beforeRemove` runs first, so the Account's syncing stops before its Items go; `afterRemove` once
+// they have (the files only they needed can go then).
 export function answerRemoveAccountItems(
   store: ItemStore,
   message: unknown,
   beforeRemove: (account: string) => void = () => {},
+  afterRemove: (account: string) => void = () => {},
 ): CoreRemoveAccountItemsReply | null {
   const header = envelope.safeParse(message);
   if (!header.success) return null;
@@ -40,6 +42,7 @@ export function answerRemoveAccountItems(
     );
     // What a GitHub Account watched goes with it.
     if (source === 'github') store.githubWatch.forget(account);
+    afterRemove(account);
     return reply({ ok: true, removed: removed.length });
   } catch (error) {
     return reply({ ok: false, error: error instanceof Error ? error.message : String(error) });

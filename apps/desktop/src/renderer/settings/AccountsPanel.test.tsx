@@ -151,6 +151,22 @@ describe('Settings → Accounts', () => {
     expect(account.getByRole('button', { name: 'Remove' })).toBeTruthy();
   });
 
+  it('says before removing an Account that snapshots hold its data until they age out, and that Wipe removes it at once', async () => {
+    state = { accounts: [acme], sources: bothConfigured };
+    render(<AccountsPanel no="02" />);
+    const account = within(await waitFor(() => source('linear').getByTestId('account')));
+
+    fireEvent.click(account.getByRole('button', { name: 'Remove' }));
+
+    const dialog = within(await screen.findByTestId('remove-account-dialog'));
+    expect(dialog.getByText(/removes its Linear issues for good/)).toBeTruthy();
+    const snapshots = dialog.getByTestId('remove-account-snapshots').textContent;
+    expect(snapshots).toContain('last 7 daily snapshots until it ages out (up to 7 days)');
+    expect(snapshots).toContain('Wipe all Commander data, in Settings → Data, removes everything at once.');
+    fireEvent.click(dialog.getByRole('button', { name: 'Remove Acme' }));
+    await waitFor(() => expect(requests).toContainEqual({ op: 'remove', accountId: acme.id }));
+  });
+
   it('explains a tenant that needs admin consent under Teams, with the permissions and the link to copy', async () => {
     const url = 'https://login.example/tenant-1/adminconsent?client_id=app';
     answer = (request) =>
