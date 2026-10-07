@@ -86,6 +86,10 @@ export const backupsRequest = z.discriminatedUnion('op', [
   // Shows the system folder picker; the export goes into the folder chosen (if any).
   z.object({ op: z.literal('export') }),
   z.object({ op: z.literal('cancel-export') }),
+  // The recovery screen's Restore (#203): the snapshot the Core offers there (database-health.ts),
+  // with no typed confirmation (the database as it is goes aside first, as with every restore).
+  // Commander relaunches.
+  z.object({ op: z.literal('recover') }),
 ]);
 export type BackupsRequest = z.input<typeof backupsRequest>;
 
@@ -103,6 +107,7 @@ export const coreBackupsRequest = z.object({
     z.object({ op: z.literal('restore'), name: snapshotFileName }),
     z.object({ op: z.literal('export'), folder: z.string().min(1) }),
     z.object({ op: z.literal('cancel-export') }),
+    z.object({ op: z.literal('recover') }),
   ]),
 });
 export type CoreBackupsRequest = z.input<typeof coreBackupsRequest>;

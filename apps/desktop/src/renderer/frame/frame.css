@@ -398,6 +398,11 @@
     -webkit-app-region: no-drag;
   }
 
+  /* The recovery screen (#203) has no header: a strip along its top moves the window. */
+  .f-recovery-bar {
+    -webkit-app-region: drag;
+  }
+
   /* Minimise, maximise / restore and close, at the header's right edge, over the end of Ares's
      columns (the header keeps the drawing's eight columns). */
   .f-hdr {

@@ -9,6 +9,10 @@
     attached to messages not yet sent;
   - README.txt: what each part is.
 
+  In the Core's limited state (#203: the database couldn't be updated) there is no Item store: the
+  database is copied from its file as it is, and Daily Notes/ is left out (the notes are all in the
+  database copy), as the README then says.
+
   It is laid out like Commander's own data folder, so the database finds its images. It never reads
   anything else in the data folder: secrets.json, the keyring and Electron's own files are never part
   of it, so no secret, token or key can be. Written under a hidden name and renamed once complete; a
@@ -18,11 +22,14 @@ import type { Dirent } from 'node:fs';
 import { copyFile, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { type ExportStep, isAttachmentName } from '@commander/domain';
+import Database from 'better-sqlite3';
 import type { ItemStore } from '../item-store';
+import { copyDatabase } from '../item-store/snapshots';
 import { dailyNoteFiles } from '../markdown-copy';
 
 export type ExportOptions = {
-  store: ItemStore;
+  // Null in the Core's limited state (#203).
+  store: ItemStore | null;
   dataDir: string;
   attachmentsDir: string;
   // The folder the User chose (checked by the main process): the export goes in a new folder in it.
@@ -64,6 +71,22 @@ email-parts/
 compose-files/
   Files attached to messages that had not been sent yet.
 `;
+
+// Added to the README of an export made while Commander couldn't update its database.
+export const EXPORT_README_LIMITED = `
+This export was made while Commander couldn't update its database, so there is no Daily Notes/
+folder: the notes are all in commander.db, as the previous version of Commander left them.
+`;
+
+// A consistent, checked copy of the database file as it is, without the Item store (#203).
+function copyDatabaseFile(dataDir: string, path: string) {
+  const sqlite = new Database(join(dataDir, 'commander.db'), { readonly: true, fileMustExist: true });
+  try {
+    copyDatabase(sqlite, path);
+  } finally {
+    sqlite.close();
+  }
+}
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const folderName = (at: number) => {
@@ -132,22 +155,25 @@ export async function exportEverything({
     // The database, as one step: a consistent copy, checked.
     onProgress('database', 0, 1);
     stopIfCancelled();
-    store.copyDatabaseTo(join(work, 'commander.db'));
+    if (store) store.copyDatabaseTo(join(work, 'commander.db'));
+    else copyDatabaseFile(dataDir, join(work, 'commander.db'));
     onProgress('database', 1, 1);
 
     // Each Daily Note as Markdown, with its images.
     stopIfCancelled();
-    const notes = join(work, 'Daily Notes');
-    await mkdir(notes);
-    const files = dailyNoteFiles(store, attachmentsDir);
-    const days = files.allDays();
-    const projects = files.projectsLookup();
-    onProgress('daily-notes', 0, days.length);
-    for (const [index, { day, id }] of days.entries()) {
-      stopIfCancelled();
-      await files.writeDay(notes, day, id, projects);
-      onProgress('daily-notes', index + 1, days.length);
-    }
+    if (store) {
+      const notes = join(work, 'Daily Notes');
+      await mkdir(notes);
+      const files = dailyNoteFiles(store, attachmentsDir);
+      const days = files.allDays();
+      const projects = files.projectsLookup();
+      onProgress('daily-notes', 0, days.length);
+      for (const [index, { day, id }] of days.entries()) {
+        stopIfCancelled();
+        await files.writeDay(notes, day, id, projects);
+        onProgress('daily-notes', index + 1, days.length);
+      }
+    } else onProgress('daily-notes', 0, 0);
 
     // The pasted images (only files Commander named).
     const images = (await readdir(attachmentsDir).catch(() => [] as string[]))
@@ -180,7 +206,11 @@ export async function exportEverything({
 
     onProgress('readme', 0, 1);
     stopIfCancelled();
-    await writeFile(join(work, 'README.txt'), EXPORT_README, 'utf8');
+    await writeFile(
+      join(work, 'README.txt'),
+      store ? EXPORT_README : EXPORT_README + EXPORT_README_LIMITED,
+      'utf8',
+    );
     onProgress('readme', 1, 1);
 
     const done = join(into, name);

@@ -1,8 +1,8 @@
 // Settings → Data → Snapshots and Export (#202), in the main process. The window asks; the Core lists
 // the snapshots, marks one to restore and writes exports. Two things only the main process does:
 //
-// - Restore: once the User has typed the confirmation and the Core has checked and marked the
-//   snapshot, Commander relaunches (a clean quit, so the window saves and held messages go first, and
+// - Restore: once the User has typed the confirmation (or, on the recovery screen, #203, chosen
+//   Restore) and the Core has checked and marked the snapshot, Commander relaunches (a clean quit, so the window saves and held messages go first, and
 //   the supervisor never mistakes the Core stopping for a crash); the new Core makes the restore
 //   before it opens the database.
 // - Export everything: the folder comes from the system folder picker, checked here (an existing
@@ -61,6 +61,15 @@ export function createBackupsChannel(options: {
   const relay = async (request: CoreRequest): Promise<BackupsResponse> =>
     (await ask(request)) ?? { ok: false, error: 'The Core did not answer in time', status: null };
 
+  // A restore the Core accepted: Commander relaunches to make it.
+  function relaunchAfter(response: BackupsResponse): BackupsResponse {
+    if (!response.ok) return response;
+    relaunching = true;
+    // After the reply, so the window can say Commander is relaunching.
+    setTimeout(() => options.relaunch(), options.relaunchAfterMs ?? RELAUNCH_AFTER_MS);
+    return { ...response, relaunching: true };
+  }
+
   return {
     // A request from the window.
     async request(raw: unknown): Promise<BackupsResponse> {
@@ -82,13 +91,12 @@ export function createBackupsChannel(options: {
             };
           }
           if (relaunching) return { ok: false, error: 'Commander is already relaunching.', status: null };
-          const response = await relay({ op: 'restore', name: request.name });
-          if (!response.ok) return response;
-          relaunching = true;
-          // After the reply, so the window can say Commander is relaunching.
-          setTimeout(() => options.relaunch(), options.relaunchAfterMs ?? RELAUNCH_AFTER_MS);
-          return { ...response, relaunching: true };
+          return relaunchAfter(await relay({ op: 'restore', name: request.name }));
         }
+        // The recovery screen's Restore: the snapshot the Core in its limited state offers.
+        case 'recover':
+          if (relaunching) return { ok: false, error: 'Commander is already relaunching.', status: null };
+          return relaunchAfter(await relay({ op: 'recover' }));
         case 'export': {
           const chosen = await options.chooseFolder();
           if (!chosen) return relay({ op: 'status' });

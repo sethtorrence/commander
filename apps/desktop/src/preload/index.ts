@@ -58,6 +58,13 @@ ipcRenderer.on(ipc.saveBeforeQuit, async (_event, id: number) => {
 ipcRenderer.on(ipc.coreMessage, (_event, message: CoreMessage) => {
   if (message?.type === 'core-restarted') void saveAll();
 });
+// And once there is space again after the disk was full (#203).
+let diskFull = false;
+ipcRenderer.on(ipc.coreStatusChanged, (_event, status: CoreStatus) => {
+  const full = status?.database?.state === 'disk-full';
+  if (diskFull && !full) void saveAll();
+  diskFull = full;
+});
 
 // The only bridge between the renderer and the app.
 const commander = {
@@ -79,6 +86,8 @@ const commander = {
     };
   },
   restartCore: (): Promise<void> => ipcRenderer.invoke(ipc.restartCore),
+  // The recovery screen's Quit (#203).
+  quit: (): Promise<void> => ipcRenderer.invoke(ipc.quit),
   // Only the status of secret storage crosses to the window; secrets themselves never do.
   secretStorageStatus: (): Promise<SecretStorageStatus> => ipcRenderer.invoke(ipc.secretStorageStatus),
   // The window's only way to read or change Items. Rejects with the reason when the request fails.

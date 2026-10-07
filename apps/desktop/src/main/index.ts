@@ -5,6 +5,7 @@ import {
   attachmentScheme,
   type CoreMessage,
   type CoreStatus,
+  coreDatabaseHealth,
   type Diagnostics,
   ipc,
   parseCoreMessage,
@@ -134,18 +135,25 @@ function coreArgs(): string[] {
     ...(testHooks && process.env.COMMANDER_TEST_SEND_LATER_OFFSET_MS
       ? [`--send-later-clock-offset-ms=${process.env.COMMANDER_TEST_SEND_LATER_OFFSET_MS}`]
       : []),
+    // And the Core's migrations (#203): a copy with one that fails, to see the failed-update screen.
+    ...(testHooks && process.env.COMMANDER_TEST_MIGRATIONS_FOLDER
+      ? [`--migrations-folder=${process.env.COMMANDER_TEST_MIGRATIONS_FOLDER}`]
+      : []),
     // The end-to-end tests search by meaning with a stand-in model, so none of them ever downloads the
     // real one (#73). It can only make search by meaning worse, so it needs no test hooks.
     ...(process.env.COMMANDER_TEST_EMBEDDINGS === 'fake' ? ['--embeddings=fake'] : []),
   ];
 }
 
-// The window hears whether the Core is running (the banner), and, once a new one is, that it may ask
-// again for what the old one would have pushed.
+// The window hears whether the Core is running (the banner) and its word on the database (#203), and,
+// once a new one is running, that it may ask again for what the old one would have pushed.
+let lastCoreState: CoreStatus['state'] | null = null;
 function tellWindow(status: CoreStatus) {
+  const backUp = status.state === 'running' && lastCoreState !== 'running' && status.restarts > 0;
+  lastCoreState = status.state;
   if (!window || window.isDestroyed()) return;
   window.webContents.send(ipc.coreStatusChanged, status);
-  if (status.state === 'running' && status.restarts > 0)
+  if (backUp)
     window.webContents.send(ipc.coreMessage, {
       type: 'core-restarted',
       at: Date.now(),
@@ -173,6 +181,8 @@ function startCore(secrets: Secrets) {
   ipcMain.handle(ipc.coreStatus, () => supervisor.status());
   // The banner's Try again, once Commander has stopped starting the Core.
   ipcMain.handle(ipc.restartCore, () => supervisor.tryAgain());
+  // The recovery screen's Quit (#203).
+  ipcMain.handle(ipc.quit, () => app.quit());
   // Whatever stops once Commander is quitting stays stopped.
   app.on('before-quit', () => supervisor.quit());
 
@@ -231,7 +241,10 @@ function startCore(secrets: Secrets) {
       app.quit();
     },
   });
-  ipcMain.handle(ipc.backups, (_event, request: unknown) => relay(() => backups.request(request)));
+  // The recovery screen (#203) asks through it too, while the Core is in its limited state.
+  ipcMain.handle(ipc.backups, (_event, request: unknown) =>
+    supervisor.whileRunning(() => backups.request(request), { inRecovery: true }),
+  );
   // Ares's Updates: the window asks (`U`, the header button, the palette), the Core answers.
   const updates = createUpdatesChannel(send);
   ipcMain.handle(ipc.updates, (_event, request: unknown) => relay(() => updates.request(request)));
@@ -295,6 +308,9 @@ function startCore(secrets: Secrets) {
     });
   }
   fromCore = (raw: unknown) => {
+    // The database's health (#203): kept in the Core's status, which the window hears.
+    const health = coreDatabaseHealth.safeParse(raw);
+    if (health.success) return supervisor.setDatabase(health.data.health);
     if (itemStore.settle(raw) || autonomy.window.settle(raw) || autonomy.test.settle(raw)) return;
     if (markdownCopy.settle(raw) || backups.settle(raw) || updates.settle(raw) || compose.settle(raw)) return;
     if (conversations.settle(raw)) return;
@@ -361,8 +377,22 @@ app.whenReady().then(() => {
   if (process.env.ELECTRON_RENDERER_URL) window.loadURL(process.env.ELECTRON_RENDERER_URL);
   else window.loadFile(join(__dirname, '../renderer/index.html'));
   const started = startCore(secrets);
-  // Quitting sends the messages held for Undo first (#138).
-  tray = runInBackground(window, started.core, { sendHeld: started.sendHeld });
+  // Quitting sends the messages held for Undo first (#138). While the disk is full (#203) the window
+  // may hold edits it can't save yet, so the tray's Quit asks first.
+  tray = runInBackground(window, started.core, {
+    sendHeld: started.sendHeld,
+    mayQuit: () =>
+      started.core.status().database?.state !== 'disk-full' ||
+      dialog.showMessageBoxSync(created, {
+        type: 'warning',
+        message: 'Your disk is full',
+        detail:
+          'Commander can’t save changes until there’s space, so edits made since then aren’t saved yet. Free some space and Commander saves them by itself; quit now and they’re lost.',
+        buttons: ['Keep Commander open', 'Quit anyway'],
+        defaultId: 0,
+        cancelId: 0,
+      }) === 1,
+  });
   tray.setQueued(queued);
   if (testHooks) {
     // The tray's menu, for the end-to-end tests: its labels, and choosing one.

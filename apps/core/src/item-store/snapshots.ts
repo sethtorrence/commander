@@ -4,7 +4,8 @@
   - Daily: `commander-YYYY-MM-DD.db`, one per calendar day (local time), the last 7 kept.
   - Before an update: `commander-before-update-YYYY-MM-DD-HHMMSS.db`, taken before a new version of
     Commander migrates the database, and kept beside the daily ones until a daily snapshot of a later
-    day succeeds (so a pre-update copy always lives at least until the next day).
+    day succeeds (so a pre-update copy always lives at least until the next day); the last 3 kept,
+    as an update that fails (#203) takes one at each start until the User acts.
   - Before a restore: `commander-before-restore-YYYY-MM-DD-HHMMSS.db`, the database as it was when
     the User restored another snapshot over it (restore.ts); the last 3 kept.
 
@@ -20,6 +21,7 @@ import Database from 'better-sqlite3';
 
 export const snapshotsKept = 7;
 export const beforeRestoreKept = 3;
+export const beforeUpdateKept = 3;
 
 const dailyName = /^commander-(\d{4}-\d{2}-\d{2})\.db$/;
 const extraName = /^commander-(before-update|before-restore)-(\d{4}-\d{2}-\d{2})-(\d{2})(\d{2})(\d{2})\.db$/;
@@ -142,8 +144,8 @@ export function takeDailySnapshot(
 }
 
 /**
- * A snapshot before an update or a restore, named by its kind and time. Before-restore copies past
- * the last 3 go. Throws SnapshotFailed for a bad copy.
+ * A snapshot before an update or a restore, named by its kind and time. Copies of its kind past the
+ * last 3 go. Throws SnapshotFailed for a bad copy.
  */
 export function takeExtraSnapshot(
   sqlite: Database.Database,
@@ -155,7 +157,7 @@ export function takeExtraSnapshot(
   mkdirSync(dir, { recursive: true });
   const path = join(dir, snapshotName(kind, at));
   copyDatabase(sqlite, path, check);
-  return { path, removed: kind === 'before-restore' ? rotateBeforeRestore(dir) : [] };
+  return { path, removed: kind === 'before-restore' ? rotateBeforeRestore(dir) : rotateBeforeUpdate(dir) };
 }
 
 /** Removes before-restore copies past the last 3 (with the WAL of one copied as it was, restore.ts). */
@@ -170,6 +172,18 @@ export function rotateBeforeRestore(dir: string): string[] {
     rmSync(old, { force: true });
     rmSync(`${old}-wal`, { force: true });
   }
+  return removed;
+}
+
+/** Removes before-update copies past the last 3. */
+function rotateBeforeUpdate(dir: string): string[] {
+  const removed = readdirSync(dir)
+    .filter((name) => parseSnapshotName(name)?.kind === 'before-update')
+    .sort()
+    .reverse()
+    .slice(beforeUpdateKept)
+    .map((name) => join(dir, name));
+  for (const old of removed) rmSync(old, { force: true });
   return removed;
 }
 

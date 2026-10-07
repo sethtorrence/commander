@@ -1,3 +1,5 @@
+import type { DatabaseHealth } from './database-health';
+
 // The contract between the main process and the window, carried over the preload bridge.
 export const ipc = {
   coreMessage: 'core-message',
@@ -61,6 +63,8 @@ export const ipc = {
   coreStatus: 'core-status',
   coreStatusChanged: 'core-status-changed',
   restartCore: 'restart-core',
+  // The recovery screen's Quit (#203): Commander quits, as the tray's Quit does.
+  quit: 'quit',
 } as const;
 
 // Why the Core last stopped: it exited (crashed, or was killed) or stopped answering (its heartbeat
@@ -73,12 +77,17 @@ export type CoreStop = { at: number; reason: 'exited' | 'unresponsive'; code: nu
 //   yet); requests fail at once meanwhile, with CORE_DOWN's reason.
 // - stopped: it stopped too often in a short time, so Commander stopped starting it until the User
 //   asks (Try again).
+// `database`: the running Core's word on the database (#203, database-health.ts), null until it has
+// opened it. A damaged database or a failed update keeps the Core running in its limited state: it
+// beats (so it is never restarted), answers only the recovery screen, and every other request fails
+// at once with DATABASE_UNAVAILABLE.
 export type CoreStatus = {
   state: 'running' | 'restarting' | 'stopped';
   restartAt: number | null;
   // How many times a new Core was started since Commander started.
   restarts: number;
   lastStop: CoreStop | null;
+  database: DatabaseHealth | null;
 };
 
 // The plain reasons requests fail with while the Core is down: `restarting` and `stopped` for those
@@ -93,9 +102,26 @@ export const CORE_DOWN = {
 // Whether a request failed without ever reaching the Core, so it can safely be made again once the
 // Core is back (the window's held-back saves are).
 export function reachedNoCore(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const message = errorMessage(error);
   return message === CORE_DOWN.restarting || message === CORE_DOWN.stopped;
 }
+
+// What a write fails with while the disk is full (#203): the Item store changed nothing, and writes
+// nothing until there is space again. The window's banner says the same.
+export const DISK_FULL = 'Your disk is full. Commander can’t save changes until there’s space.';
+
+// What requests fail with while the Core is in its limited state (#203): the recovery screen shows.
+export const DATABASE_UNAVAILABLE = 'Commander couldn’t open its database.';
+
+// Whether a save failed having changed nothing, for a reason that passes: the Core was down, or the
+// disk is full. The window holds such saves, in order, and makes them again once the Core is back or
+// there is space (Commander runs the window's savers then).
+export function tryAgainLater(error: unknown): boolean {
+  return reachedNoCore(error) || errorMessage(error) === DISK_FULL;
+}
+
+const errorMessage = (error: unknown) =>
+  error instanceof Error ? error.message : typeof error === 'string' ? error : '';
 
 // An Item to show in its Section: the Calendar Section and the event, for a meeting's heads-up.
 export type OpenItem = { sectionId: string; itemId: string };

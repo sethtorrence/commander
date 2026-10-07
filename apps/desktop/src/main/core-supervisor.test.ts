@@ -1,5 +1,13 @@
 import { EventEmitter } from 'node:events';
-import { CORE_DOWN, type CoreStatus, reachedNoCore } from '@commander/domain';
+import {
+  CORE_DOWN,
+  type CoreStatus,
+  DATABASE_UNAVAILABLE,
+  type DatabaseRecovery,
+  DISK_FULL,
+  reachedNoCore,
+  tryAgainLater,
+} from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createCoreSupervisor, nextRestart } from './core-supervisor';
 
@@ -106,6 +114,7 @@ describe('createCoreSupervisor', () => {
       restartAt: Date.now() + 1_000,
       restarts: 0,
       lastStop: { at: Date.now(), reason: 'exited', code: 1 },
+      database: null,
     });
     expect(supervisor.send({ type: 'lost' })).toBe(false);
     await vi.advanceTimersByTimeAsync(999);
@@ -238,6 +247,68 @@ describe('createCoreSupervisor', () => {
     expect(cores).toHaveLength(1);
     supervisor.tryAgain();
     expect(cores).toHaveLength(1);
+  });
+
+  describe('a Core that can’t open the database (#203)', () => {
+    const damaged: DatabaseRecovery = {
+      state: 'damaged',
+      problem: 'Tree 12 page 40: btreeInitPage() returns error code 11',
+      snapshot: null,
+      restoreFailed: null,
+    };
+
+    it('stays up in its limited state, never restarted, with the window told why', async () => {
+      const { supervisor, cores, latest, statuses } = supervise({ missingBeatMs: 5_000 });
+      expect(supervisor.status().database).toBeNull();
+      latest().beat();
+      supervisor.setDatabase(damaged);
+      expect(supervisor.status()).toMatchObject({ state: 'running', database: damaged });
+      expect(statuses.at(-1)?.database).toEqual(damaged);
+      // It keeps beating, so it is never ended or started again.
+      for (let second = 0; second < 60; second++) {
+        await vi.advanceTimersByTimeAsync(1_000);
+        latest().beat();
+      }
+      expect(cores).toHaveLength(1);
+      expect(supervisor.status().state).toBe('running');
+    });
+
+    it('fails every request at once but the recovery screen’s, and those already waiting', async () => {
+      const { supervisor, latest } = supervise();
+      // Requests made as the window opens wait for the Core, which then says it can't open the database.
+      const waiting = supervisor.whileRunning(() => new Promise(() => {}));
+      latest().beat();
+      supervisor.setDatabase(damaged);
+      await expect(waiting).resolves.toEqual({ ok: false, error: DATABASE_UNAVAILABLE });
+
+      const run = vi.fn(async () => ({ ok: true }));
+      await expect(supervisor.whileRunning(run)).resolves.toEqual({ ok: false, error: DATABASE_UNAVAILABLE });
+      expect(run).not.toHaveBeenCalled();
+      await expect(supervisor.whileRunning(run, { inRecovery: true })).resolves.toEqual({ ok: true });
+      // Not one to hold and make again: the recovery screen is all there is.
+      expect(tryAgainLater(new Error(DATABASE_UNAVAILABLE))).toBe(false);
+    });
+
+    it('forgets the old Core’s word when a new one starts', async () => {
+      const { supervisor, latest } = supervise();
+      latest().beat();
+      supervisor.setDatabase({ state: 'disk-full', since: Date.now() });
+      expect(supervisor.status().database).toEqual({ state: 'disk-full', since: Date.now() });
+      latest().exit(1);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(supervisor.status().database).toBeNull();
+    });
+
+    it('keeps a full disk in the status without holding requests back', async () => {
+      const { supervisor, latest } = supervise();
+      latest().beat();
+      supervisor.setDatabase({ state: 'disk-full', since: Date.now() });
+      await expect(supervisor.whileRunning(async () => ({ ok: true }))).resolves.toEqual({ ok: true });
+      // Saves refused for a full disk are held and made again, as those while the Core is down are.
+      expect(tryAgainLater(new Error(DISK_FULL))).toBe(true);
+      expect(tryAgainLater(new Error(CORE_DOWN.restarting))).toBe(true);
+      expect(tryAgainLater(new Error('Invalid Block'))).toBe(false);
+    });
   });
 
   it('gives the end-to-end tests the running Core’s process id', () => {
