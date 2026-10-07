@@ -17,6 +17,8 @@ import type { CoreMessages } from './use-conversations';
     focus, so Enter confirms it (Escape dismisses it). Nothing more happens by itself.
   - Done by Ares (what the settings let run): what he did, with Undo.
   - Confirmed, dismissed or undone: says so.
+  - A change to his own settings (#197) always waits for the User: the card shows the setting, its
+    value now and the new one, and once confirmed, Undo puts the old value back.
 */
 
 /**
@@ -157,6 +159,7 @@ function ActionCard({
   }, [focus, waiting]);
 
   const lines = [...new Set(describeItemActions(row.itemActions, projectName))];
+  const setting = row.itemActions.find((action) => action.type === 'change-setting');
   // What Ares wrote may link only to what the Items it was about say (AresText).
   const sources = [row.item?.title ?? '', row.cause?.item?.title ?? ''];
   // The Item it is on, unless it only sits on today's Daily Note (a new Todo made from nothing).
@@ -202,22 +205,28 @@ function ActionCard({
         )}
       </div>
       <div className="min-w-0">
-        {lines.map((line) => (
-          <p key={line} className="m-0 text-row leading-6 font-semibold text-ink">
-            <AresText inline text={line} sources={sources} />
-          </p>
-        ))}
-        {on && (
+        {setting?.type === 'change-setting' ? (
+          <SettingChange name={setting.name} from={setting.fromWords} to={setting.toWords} />
+        ) : (
+          lines.map((line) => (
+            <p key={line} className="m-0 text-row leading-6 font-semibold text-ink">
+              <AresText inline text={line} sources={sources} />
+            </p>
+          ))
+        )}
+        {on && !setting && (
           <p className="m-0 text-note leading-5 text-muted">
             On <span className="text-text">{on.title}</span>
           </p>
         )}
       </div>
-      {waiting && (row.chained || row.actionKind === 'act-for-you') && (
+      {waiting && (row.chained || row.actionKind === 'act-for-you' || setting) && (
         <p className="m-0 min-w-0 text-note leading-5 text-muted" data-testid="conversation-action-why">
-          {row.chained
-            ? 'Asks first: it follows from what Ares found, not only from your words.'
-            : 'Asks first: other people will see it.'}
+          {setting
+            ? 'Asks first: Ares never changes his own settings without you.'
+            : row.chained
+              ? 'Asks first: it follows from what Ares found, not only from your words.'
+              : 'Asks first: other people will see it.'}
           {cause && (
             <span data-testid="conversation-action-cause" className="block">
               Suggested because of <cite className="font-semibold text-ink not-italic">{cause.title}</cite>
@@ -226,6 +235,28 @@ function ActionCard({
         </p>
       )}
     </li>
+  );
+}
+
+/** A change to one of Ares's settings (#197): the setting, its value now and the new one. */
+function SettingChange({ name, from, to }: { name: string; from: string; to: string }) {
+  return (
+    <>
+      <p data-testid="conversation-action-setting" className="m-0 text-row leading-6 font-semibold text-ink">
+        {name}
+      </p>
+      <p className="m-0 flex flex-wrap items-baseline gap-x-2 text-note leading-5 text-text">
+        <span className={metaClass}>Now</span>
+        <span data-testid="conversation-action-from">{from}</span>
+        <span aria-hidden className="text-muted">
+          →
+        </span>
+        <span className={metaClass}>New</span>
+        <span data-testid="conversation-action-to" className="font-semibold text-ink">
+          {to}
+        </span>
+      </p>
+    </>
   );
 }
 

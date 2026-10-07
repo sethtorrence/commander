@@ -22,6 +22,11 @@ export interface AresActivityFilters {
   section?: AutonomySection;
 }
 
+/** Whether a line is a change to Ares's own settings (#197): always asked, confirmed one at a time. */
+export function isSettingChange(row: Pick<AresActivity, 'itemActions'>): boolean {
+  return row.itemActions.some((action) => action.type === 'change-setting');
+}
+
 /** Organise and Tidy your Sources suggestions can be accepted all at once; the others one at a time. */
 export function bulkAcceptable(kind: ActionKind): boolean {
   return kind === 'organise' || kind === 'tidy-sources';
@@ -142,6 +147,9 @@ export function describeItemActions(
           );
         return [action.fields.seriesResponse ? reply[1] : reply[0]];
       }
+      case 'change-setting':
+        // One of Ares's own settings (#197), in Commander's words from when it was prepared.
+        return [`Change ${action.name} from ${action.fromWords} to ${action.toWords}`];
       default:
         return [];
     }
@@ -162,7 +170,8 @@ export function describeActivity(row: AresActivity): string {
     case 'accepted':
     case 'done': {
       const who = row.status === 'done' ? 'Done by Ares' : 'Accepted by you';
-      return row.undoable ? who : `${who} · undone`;
+      // A settings change no longer undoable because the setting changed again isn't undone (#197).
+      return row.undoable || (isSettingChange(row) && !row.undone) ? who : `${who} · undone`;
     }
   }
 }

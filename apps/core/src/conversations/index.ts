@@ -24,7 +24,9 @@
 //   tells each the refs handed out so far and what the call that chose it read from outside, so an
 //   action following from outside material is chained (../skills/act.ts). The proposals are kept on
 //   the answer (`proposalIds`) and show under it as cards: done, with Undo, or waiting for the User to
-//   confirm with one key. Accepting one never starts anything further.
+//   confirm with one key. Accepting one never starts anything further. Changing his own settings
+//   (#197) always waits for the User, and only ever from words of theirs Commander finds in what they
+//   wrote here (../skills/change-settings.ts).
 // - Links: every Item handed to him has a ref (I1, I2…) for this answer; his answer names the ones
 //   its claims rest on, which become its links (`links`), each opening its Item in its Section. A ref
 //   he wasn't handed is taken out of his text.
@@ -334,8 +336,12 @@ export function setUpConversations(options: ConversationsOptions): Conversations
       updateId: gathered.update?.id ?? null,
       proposalIds: [...gathered.proposalIds],
     });
-    // What the User asked, for an action's reason.
+    // What the User asked, for an action's reason, and everything they wrote up to it: where a change to
+    // Ares's own settings must find the words that asked for it (#197).
     const asked = view?.turns.find((turn) => turn.id === replyTo)?.text;
+    const said = (view?.turns ?? [])
+      .filter((turn) => turn.by === 'user' && turn.id <= replyTo)
+      .map((turn) => turn.text);
     entry.partial = () => soFar().text;
     if (view && !entry.remembered) learnFrom(view, replyTo, turnId, controller.signal);
     try {
@@ -405,6 +411,7 @@ export function setUpConversations(options: ConversationsOptions): Conversations
           output = await (options.skills as SkillRegistry).run(skill, input, {
             conversation: { conversationId, turnId },
             ...(asked !== undefined && { asked }),
+            said,
             refs: handedRefs(gathered),
             read: {
               outside: prompt.outside.map((block) => block.itemId),

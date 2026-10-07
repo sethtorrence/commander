@@ -45,6 +45,7 @@ import type {
   RuleWhen,
   SchedulingSettings,
   SendLaterHeldBy,
+  SettingChange,
   Source,
   SourceCatalog,
   SummaryCadence,
@@ -539,6 +540,23 @@ export const proposals = sqliteTable(
     entryIds: text('entry_ids', { mode: 'json' }).$type<number[]>().notNull(),
   },
   (t) => [index('proposals_item').on(t.itemId), index('proposals_status').on(t.status)],
+);
+
+// The settings log (#197): each change to Ares's own settings the User confirmed from a Conversation,
+// with the value it had before and the one it took. Kept apart from the activity log because a setting
+// is not an Item; it powers the change's Undo, which puts the value back while it still stands.
+export const settingChanges = sqliteTable(
+  'setting_changes',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    at: integer('at').notNull(),
+    proposalId: integer('proposal_id')
+      .notNull()
+      .references(() => proposals.id),
+    change: text('change', { mode: 'json' }).$type<SettingChange>().notNull(),
+    undoneAt: integer('undone_at'),
+  },
+  (t) => [uniqueIndex('setting_changes_proposal').on(t.proposalId)],
 );
 
 // Settings → Notes → Daily template: the Blocks a new day starts with, as one validated document in a

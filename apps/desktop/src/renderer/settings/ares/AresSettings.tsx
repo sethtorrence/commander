@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@commander/ui';
-import { type FormEvent, type ReactNode, useEffect, useReducer, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useReducer, useRef, useState } from 'react';
 import { requestReveal } from '../../frame/reveal';
 import { WHAT_ARES_KNOWS } from '../../memory/WhatAresKnows';
 import { useOpenSection } from '../../sections/section';
@@ -289,8 +289,10 @@ function JobOverrides({
   );
 }
 
-// The tiers, per-job overrides, the cap and when a Chat is busy, saved together.
-function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
+// The tiers, per-job overrides, the cap and when a Chat is busy, saved together. Read again each time
+// the page is shown, unless something is changed and not saved yet, so a change the User confirmed in
+// a Conversation (#197) shows here.
+function ModelSettingsForm({ onSaved, shown }: { onSaved: () => void; shown: boolean }) {
   const [draft, setDraft] = useState<ModelSettings | null>(null);
   const [capText, setCapText] = useState('');
   const [busyText, setBusyText] = useState(String(BUSY_CHAT_MESSAGES));
@@ -298,18 +300,26 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
     saved: false,
     problem: null,
   });
+  const unsaved = useRef(false);
 
   useEffect(() => {
+    if (!shown || unsaved.current) return;
+    let current = true;
     window.commander.models({ op: 'settings' }).then((response) => {
+      if (!current || unsaved.current) return;
       if (!response.ok) return setState({ saved: false, problem: response.error });
       setDraft(response.result);
       setCapText(response.result.monthlyCapUsd === null ? '' : String(response.result.monthlyCapUsd));
       setBusyText(String(busyChatThreshold(response.result)));
     });
-  }, []);
+    return () => {
+      current = false;
+    };
+  }, [shown]);
 
   if (!draft) return null;
   const change = (next: ModelSettings) => {
+    unsaved.current = true;
     setDraft(next);
     setState({ saved: false, problem: null });
   };
@@ -329,6 +339,7 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
     }
     const response = await window.commander.models({ op: 'save-settings', settings: parsed.data });
     if (!response.ok) return setState({ saved: false, problem: response.error });
+    unsaved.current = false;
     setDraft(response.result);
     setState({ saved: true, problem: null });
     onSaved();
@@ -375,6 +386,7 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
             className="max-w-40"
             value={capText}
             onChange={(event) => {
+              unsaved.current = true;
               setCapText(event.target.value);
               setState({ saved: false, problem: null });
             }}
@@ -417,6 +429,7 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
           className="max-w-24"
           value={busyText}
           onChange={(event) => {
+            unsaved.current = true;
             setBusyText(event.target.value);
             setState({ saved: false, problem: null });
           }}
@@ -443,8 +456,9 @@ function ModelSettingsForm({ onSaved }: { onSaved: () => void }) {
 const MEANING_BUSY_POLL_MS = 1000;
 const MEANING_IDLE_POLL_MS = 10_000;
 
-// Search by meaning (#73): the local embedding model, its download and indexing, and the switch.
-function SearchByMeaningRow() {
+// Search by meaning (#73): the local embedding model, its download and indexing, and the switch. Read
+// at once each time the page is shown.
+function SearchByMeaningRow({ shown }: { shown: boolean }) {
   const [status, setStatus] = useState<SearchByMeaningStatus | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -462,12 +476,12 @@ function SearchByMeaningRow() {
             (response.result.state === 'ready' && response.result.embedded < response.result.total));
         timer = setTimeout(read, busy ? MEANING_BUSY_POLL_MS : MEANING_IDLE_POLL_MS);
       });
-    void read();
+    if (shown) void read();
     return () => {
       current = false;
       clearTimeout(timer);
     };
-  }, []);
+  }, [shown]);
 
   async function turn(on: boolean) {
     const response = await window.commander.models({ op: 'set-meaning', on });
@@ -552,17 +566,25 @@ function WhatAresKnowsRow() {
 }
 
 /** Settings → Ares: his API key, Test, the Quick and Deep tiers and the cap, his jobs, search by
- * meaning; then Usage. */
-export function AresSettings({ no, usageNo }: { no: string; usageNo: string }) {
+ * meaning; then Usage. `shown`: the page is on screen (it is read again then). */
+export function AresSettings({
+  no,
+  usageNo,
+  shown = true,
+}: {
+  no: string;
+  usageNo: string;
+  shown?: boolean;
+}) {
   const [usageVersion, refreshUsage] = useReducer((version: number) => version + 1, 0);
   return (
     <>
       <SettingsGroup no={no} title="Ares" note="Model · GLM-5.3-Flash via Z.ai" data-testid="ares-settings">
         <ApiKeyRow onChange={refreshUsage} />
         <TestRow onCall={refreshUsage} />
-        <ModelSettingsForm onSaved={refreshUsage} />
+        <ModelSettingsForm onSaved={refreshUsage} shown={shown} />
         <AresJobs />
-        <SearchByMeaningRow />
+        <SearchByMeaningRow shown={shown} />
         <CloudMailRow />
         <WhatAresKnowsRow />
       </SettingsGroup>

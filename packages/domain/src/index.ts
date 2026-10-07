@@ -65,6 +65,7 @@ export * from './ranking';
 export * from './rules';
 export * from './scheduling';
 export * from './search';
+export * from './settings-changes';
 export * from './skills';
 export * from './source-catalog';
 export * from './sync-messages';

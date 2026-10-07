@@ -215,7 +215,7 @@ import { openUpdateStore, type UpdateStore } from './updates';
 export type { LearnedMemory, MemoryLookup, MemoryStore, RecalledMemory, TurnSource } from '../memory';
 export type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector, Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
-export type { NewProposal } from './autonomy';
+export type { NewProposal, SettingChangeRecord } from './autonomy';
 export type { BucketMirrorStore, MirrorPlan } from './bucket-mirror';
 export type { CalendarSettingsStore } from './calendar-settings';
 export type { CalendarStore, ListedCalendar } from './calendars';
@@ -2802,6 +2802,7 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
     injectionWarnings: {
       flag: sqlite.transaction((itemId: string, quote: string) => warnings.flag(itemId, quote)),
+      quotes: (itemId, quote) => warnings.quotes(itemId, quote),
       since: (after) => warnings.since(after),
       warning: (itemId) => warnings.warning(itemId),
       clear: sqlite.transaction((itemId: string, rawContext: ActionContext) => {

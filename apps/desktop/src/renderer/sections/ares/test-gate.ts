@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type Gate, openGate } from '@commander/core/src/autonomy/gate';
+import { createOwnSettings } from '@commander/core/src/autonomy/own-settings';
 import { answerAutonomyRequest } from '@commander/core/src/autonomy/requests';
 import { type ItemStore, openItemStore } from '@commander/core/src/item-store';
 import type { AutonomyClient } from './activity';
@@ -15,7 +16,12 @@ export function openTestGate(): { store: ItemStore; gate: Gate; client: Autonomy
     snapshotDir: join(dir, 'snapshots'),
     migrationsFolder: join(import.meta.dirname, '../../../../../core/drizzle'),
   });
-  const gate = openGate({ itemStore: store });
+  // Ares's own settings (#197), which a confirmed settings change writes.
+  const ownSettings = createOwnSettings({
+    itemStore: store,
+    setLevel: (target, level) => gate.setLevel(target, level),
+  });
+  const gate: Gate = openGate({ itemStore: store, ownSettings });
   let id = 0;
   const client: AutonomyClient = async (request) => {
     id += 1;

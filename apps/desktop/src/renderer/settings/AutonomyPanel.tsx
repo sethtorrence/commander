@@ -30,8 +30,10 @@ type AutonomyClient = Window['commander']['autonomy'];
 /**
  * Settings → Autonomy: the grid of what Ares may do on his own. The four Action kinds down the side,
  * Everywhere and each Section across; under each kind, the actions Ares's jobs have registered, each
- * with an optional level of its own. Levels above a kind's hard limit are greyed out. Reloaded each
- * time Settings opens, so newly registered actions show.
+ * with an optional level of its own. Levels above a kind's hard limit are greyed out. An action that
+ * always asks (changing Ares's own settings, #197) shows so, with no level to choose. Reloaded each
+ * time Settings opens, so newly registered actions show, and so does a change the User confirmed
+ * in a Conversation.
  */
 export function AutonomyPanel({
   no,
@@ -124,18 +126,27 @@ export function AutonomyPanel({
                         )}
                       </th>
                       <td className="px-1 py-1.5">
-                        <LevelSelect
-                          label={action.name}
-                          kind={kind}
-                          value={state.settings.actions[action.action] ?? null}
-                          onChange={(level) => set({ scope: 'action', action: action.action }, level)}
-                        />
+                        {action.alwaysAsks ? (
+                          <span
+                            data-testid="always-asks"
+                            className="inline-flex h-7.5 min-w-28 items-center border border-dashed border-line px-2.5 font-mono text-label-lg font-semibold uppercase leading-none tracking-label whitespace-nowrap text-muted"
+                          >
+                            Always asks
+                          </span>
+                        ) : (
+                          <LevelSelect
+                            label={action.name}
+                            kind={kind}
+                            value={state.settings.actions[action.action] ?? null}
+                            onChange={(level) => set({ scope: 'action', action: action.action }, level)}
+                          />
+                        )}
                       </td>
                       <td
                         colSpan={autonomySections.length}
                         className="px-1 py-1.5 align-middle text-note leading-[17px] text-faint"
                       >
-                        Overrides {name} everywhere
+                        {action.alwaysAsks ? 'Whatever these settings say' : `Overrides ${name} everywhere`}
                       </td>
                     </tr>
                   )),

@@ -61,10 +61,11 @@ const DOING: Record<string, string> = {
   file: 'Filing',
   snooze: 'Snoozing',
   linear: 'Preparing it for Linear',
+  settings: 'Preparing the change',
 };
 
 /** Where one of an answer's actions stands (#196), for its card. */
-export function actionStatus(row: Pick<AresActivity, 'status' | 'undoable' | 'entryIds'>): {
+export function actionStatus(row: Pick<AresActivity, 'status' | 'undoable' | 'entryIds' | 'undone'>): {
   key: 'waiting' | 'done' | 'confirmed' | 'dismissed' | 'undone';
   text: string;
 } {
@@ -74,7 +75,9 @@ export function actionStatus(row: Pick<AresActivity, 'status' | 'undoable' | 'en
     case 'dismissed':
       return { key: 'dismissed', text: 'Dismissed' };
     default: {
-      if (!row.undoable && row.entryIds.length) return { key: 'undone', text: 'Undone' };
+      // A settings change (#197) has no activity entries: it says itself when it was undone.
+      if (row.undone || (row.undone === undefined && !row.undoable && row.entryIds.length))
+        return { key: 'undone', text: 'Undone' };
       return row.status === 'done'
         ? { key: 'done', text: 'Done by Ares' }
         : { key: 'confirmed', text: 'Confirmed by you' };

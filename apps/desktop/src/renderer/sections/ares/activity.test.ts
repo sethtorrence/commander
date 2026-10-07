@@ -99,6 +99,20 @@ describe('describeItemActions', () => {
     expect(line).toMatch(/^Snooze the thread until .*08:00/);
   });
 
+  it('names a change to one of Ares’s own settings with its two values (#197)', () => {
+    expect(
+      describeItemActions([
+        {
+          type: 'change-setting',
+          change: { setting: 'monthly-cap', from: null, to: 25 },
+          name: 'Monthly cap',
+          fromWords: 'No cap',
+          toWords: '$25 a month',
+        },
+      ]),
+    ).toEqual(['Change Monthly cap from No cap to $25 a month']);
+  });
+
   it('says plainly when it deletes, and shows Links when they are all it does', () => {
     expect(describeItemActions([{ type: 'delete', itemId: 'm1' }])).toEqual(['Delete it']);
     expect(describeItemActions([{ type: 'link', from: 'a', linkType: 'about', to: 'b' }])).toEqual([

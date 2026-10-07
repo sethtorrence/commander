@@ -3,6 +3,7 @@ import { eventTime } from './calendar';
 import { commanderEventDraft, meetingGuest } from './commander-events';
 import { activityEntry, causedBy, itemChanges, itemRef, linkType, newItem } from './items';
 import { linearIssueDraft } from './linear-send';
+import { jobName, modelTier, reasoningEffort } from './models';
 
 // Autonomy settings: how far Ares may go on his own, per Action kind, with Section and per-action
 // overrides, under hard limits no setting can lift. Every Ares action goes through `decide`.
@@ -65,6 +66,9 @@ export const registeredAction = z.object({
   actionKind,
   name: z.string().min(1),
   hint: z.string().optional(),
+  // It always asks, whatever the settings say (changes to Ares's own settings, #197): no level of its
+  // own in the Settings grid, never done by Ares, and its suggestions accepted one at a time.
+  alwaysAsks: z.boolean().optional(),
 });
 export type RegisteredAction = z.infer<typeof registeredAction>;
 
@@ -135,6 +139,47 @@ const timestamp = z.number().int().nonnegative();
 export const stepTarget = z.union([id, z.object({ step: z.number().int().nonnegative() })]);
 export type StepTarget = z.infer<typeof stepTarget>;
 
+// Where a Settings grid change applies: Everywhere, one Section, or one registered action.
+export const autonomyTarget = z.discriminatedUnion('scope', [
+  z.object({ scope: z.literal('everywhere'), actionKind }),
+  z.object({ scope: z.literal('section'), section: autonomySection, actionKind }),
+  z.object({ scope: z.literal('action'), action: z.string().min(1) }),
+]);
+export type AutonomyTarget = z.infer<typeof autonomyTarget>;
+
+// A change to one of Ares's own settings (#197, decision #24), told to him in a Conversation: which
+// setting, its value when the change was prepared (`from`) and the value it would take (`to`). Each is
+// a setting the User can change in Settings: one cell of the Autonomy grid (null: the same as the level
+// it overrides), a tier's thinking level or a job's own (null: the tier's), the monthly cap in US
+// dollars (null: no cap), the meeting heads-up and search by meaning.
+const capUsd = z.number().positive().max(100_000);
+export const settingChange = z.discriminatedUnion('setting', [
+  z.object({
+    setting: z.literal('autonomy'),
+    target: autonomyTarget,
+    from: autonomyLevel.nullable(),
+    to: autonomyLevel.nullable(),
+  }),
+  z.object({
+    setting: z.literal('tier-thinking'),
+    tier: modelTier,
+    from: reasoningEffort,
+    to: reasoningEffort,
+  }),
+  z.object({
+    setting: z.literal('job-thinking'),
+    job: jobName,
+    from: reasoningEffort.nullable(),
+    to: reasoningEffort.nullable(),
+  }),
+  z.object({ setting: z.literal('monthly-cap'), from: capUsd.nullable(), to: capUsd.nullable() }),
+  z.object({ setting: z.literal('meeting-heads-up'), from: z.boolean(), to: z.boolean() }),
+  z.object({ setting: z.literal('search-by-meaning'), from: z.boolean(), to: z.boolean() }),
+]);
+export type SettingChange = z.infer<typeof settingChange>;
+// A setting's value, whichever it is.
+export type SettingValue = SettingChange['to'];
+
 // The Item actions a proposal would take, carried out in order through the Item store.
 export const proposedItemAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('create'), item: newItem }),
@@ -154,6 +199,16 @@ export const proposedItemAction = z.discriminatedUnion('type', [
   z.object({ type: z.literal('create-event'), event: commanderEventDraft }),
   // A new Linear issue, as Send to Linear makes one (#196): seen by other people, so Act for you.
   z.object({ type: z.literal('send-to-linear'), draft: linearIssueDraft }),
+  // A change to one of Ares's own settings (#197): no Item changes, so it is kept in the settings log
+  // rather than the activity log. Only an action that always asks may carry it. `name`, `fromWords`
+  // and `toWords`: the setting and its two values in Commander's own words, as the card shows them.
+  z.object({
+    type: z.literal('change-setting'),
+    change: settingChange,
+    name: z.string().trim().min(1).max(200),
+    fromWords: z.string().trim().min(1).max(200),
+    toWords: z.string().trim().min(1).max(200),
+  }),
 ]);
 export type ProposedItemAction = z.input<typeof proposedItemAction>;
 
@@ -239,6 +294,9 @@ export const aresActivity = proposalRecord.extend({
   // The Conversation it was asked for in, with its name (null once it is deleted).
   conversation: conversationCause.extend({ title: z.string().nullable() }).nullable(),
   undoable: z.boolean(),
+  // What it did was undone. A change to Ares's settings (#197) records no activity entries, so this is
+  // how it says so; set for the others too.
+  undone: z.boolean().optional(),
 });
 export type AresActivity = z.infer<typeof aresActivity>;
 
@@ -247,14 +305,6 @@ export type ProposalOutcome =
   | { decision: 'off' }
   | { decision: 'ask'; suggestion: ProposalRecord }
   | { decision: 'auto'; done: ProposalRecord };
-
-// Where a Settings grid change applies: Everywhere, one Section, or one registered action.
-export const autonomyTarget = z.discriminatedUnion('scope', [
-  z.object({ scope: z.literal('everywhere'), actionKind }),
-  z.object({ scope: z.literal('section'), section: autonomySection, actionKind }),
-  z.object({ scope: z.literal('action'), action: z.string().min(1) }),
-]);
-export type AutonomyTarget = z.infer<typeof autonomyTarget>;
 
 // What the User changed on a suggestion's card before accepting it (#132): a proposed meeting's Account
 // and calendar, title, time and guests. Accepted with them, the event is made as changed, by the User.

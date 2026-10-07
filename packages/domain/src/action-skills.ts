@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { LINK_REF } from './conversations';
+import { SETTINGS_SKILL } from './settings-changes';
 import type { SkillInfo } from './skills';
 
 /*
@@ -257,10 +258,11 @@ export const LINEAR_SKILL: SkillInfo = {
   acts: true,
 };
 
-// The action Skills in the order Ares is told of them.
+// The action Skills in the order Ares is told of them; changing his own settings (#197) last.
 export const ACTION_SKILLS: readonly SkillInfo[] = [
   MANAGE_TODOS_SKILL,
   FILE_SKILL,
   SNOOZE_SKILL,
   LINEAR_SKILL,
+  SETTINGS_SKILL,
 ];

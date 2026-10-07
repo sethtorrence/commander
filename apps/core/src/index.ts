@@ -8,6 +8,7 @@ import { answerRemoveAccountItems } from './account-requests';
 import { setUpAgent } from './agent';
 import { recall } from './agent/memory-context';
 import { openGate } from './autonomy/gate';
+import { createOwnSettings } from './autonomy/own-settings';
 import { answerAutonomyRequest } from './autonomy/requests';
 import { applyPendingRestore, setUpBackups } from './backups';
 import { setUpBusyCopies } from './busy-copies';
@@ -31,6 +32,7 @@ import { setUpModels } from './models';
 import { createKnownSecrets } from './safety/known-secrets';
 import { setUpScheduler } from './scheduling';
 import { type SendLater, setUpSendLater } from './send-later';
+import { createChangeSettingsSkill } from './skills/change-settings';
 import { createFileSkill } from './skills/file';
 import { createFindSkill } from './skills/find';
 import { createLinearActionsSkill } from './skills/linear-actions';
@@ -212,8 +214,17 @@ sync.engine.onSynced(({ itemIds }) => {
 const testHooks = process.argv.includes('--test-hooks');
 // Snooze's timer, once it is set up below.
 let snoozeChanged: (() => void) | undefined;
+// Ares's own settings (#197), which a change the User confirms from a Conversation writes where Settings
+// does: the Autonomy grid through the gate (its hard limits), the models' settings, the heads-up, and
+// search by meaning, which starts or frees its model.
+const ownSettings = createOwnSettings({
+  itemStore,
+  setLevel: (target, level) => gate.setLevel(target, level),
+  meaning: () => meaning,
+});
 const gate = openGate({
   itemStore,
+  ownSettings,
   onChange: (itemIds, suggestionsOn) => {
     port.postMessage({ type: 'ares-activity', at: Date.now() } satisfies CoreMessage);
     // What Ares added (or the User accepted, or undid) shows in every open Section, and so does a
@@ -306,6 +317,16 @@ skills.register(
         .accounts()
         .filter((account) => account.sources.includes('linear'))
         .map((account) => account.account),
+  }),
+);
+// Changing his own settings (#197): always asked first, whatever the Autonomy settings say.
+skills.register(
+  createChangeSettingsSkill({
+    itemStore,
+    gate,
+    ownSettings,
+    jobs: () => agent.runner.jobs(),
+    onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
   }),
 );
 

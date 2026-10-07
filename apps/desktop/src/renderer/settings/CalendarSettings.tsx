@@ -11,20 +11,31 @@ import { SchedulingSettings } from './SchedulingSettings';
 /**
  * Settings → Calendar (#128): the heads-up, a system notification 2 minutes before each meeting with
  * its title and time. The one interruption Commander makes (decision #23), so it is off until the
- * User turns it on here.
+ * User turns it on here. Read again each time the page is shown (`shown`), so a change the User
+ * confirmed in a Conversation (#197) shows.
  */
 export function CalendarSettings({
   no,
   itemStore = window.commander.itemStore,
+  shown = true,
 }: {
   no: string;
   itemStore?: ItemStoreClient;
+  shown?: boolean;
 }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const calendar = useMemo(() => calendarSettingsIn(itemStore), [itemStore]);
   useEffect(() => {
-    itemStore({ op: 'calendar-settings' }).then(setSettings, () => {});
-  }, [itemStore]);
+    if (!shown) return;
+    let current = true;
+    itemStore({ op: 'calendar-settings' }).then(
+      (next) => current && setSettings(next),
+      () => {},
+    );
+    return () => {
+      current = false;
+    };
+  }, [itemStore, shown]);
   const change = (headsUp: boolean) =>
     itemStore({ op: 'save-calendar-settings', settings: { headsUp } }).then(setSettings, (error) =>
       toast(error instanceof Error ? error.message : String(error)),

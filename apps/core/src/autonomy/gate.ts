@@ -1,7 +1,8 @@
 // The gate every Ares action goes through. Ares's jobs hand it proposals; it decides, from the
 // User's Autonomy settings and the hard limits, whether each is dropped, kept as a suggestion on its
 // Item for the User to accept, or carried out as Ares through the Item store, logged and undoable.
-// Ares never writes to the database himself.
+// Ares never writes to the database himself. A change to his own settings (#197) always asks: only
+// the User's Confirm carries it out, it is kept in the settings log, and Undo puts the value back.
 import {
   ACTION_KIND_NAMES,
   type AcceptChanges,
@@ -28,10 +29,12 @@ import {
   type RegisteredAction,
   registeredAction,
   SEND_FIELD,
+  type SettingChange,
   type StepTarget,
 } from '@commander/domain';
-import type { ItemStore } from '../item-store';
+import type { ItemStore, SettingChangeRecord } from '../item-store';
 import { trustOf } from '../safety/trust';
+import type { OwnSettings } from './own-settings';
 
 export type Gate = {
   // Jobs register each action they propose, with its Action kind, so the Settings grid can list it.
@@ -77,15 +80,25 @@ const user: ActionContext['by'] = { kind: 'user' };
 // Suggestions of these kinds are only ever accepted one at a time.
 const ONE_AT_A_TIME = new Set(['act-for-you', 'delete']);
 
+/** The change to Ares's own settings a proposal makes (#197), if it makes one. */
+export function settingChangeOf(record: Pick<ProposalRecord, 'itemActions'>): SettingChange | null {
+  const step = record.itemActions.find((action) => action.type === 'change-setting');
+  return step?.type === 'change-setting' ? step.change : null;
+}
+
 // `onChange` hears of every change to Ares's activity, with the Items it changed (none for a
 // suggestion kept or dismissed) and the Items whose waiting suggestions changed (a dashed Badge
 // shows or goes), so open views can catch up.
+// `ownSettings`: where a confirmed change to Ares's own settings is read and written (#197); without
+// it, no such change is taken.
 export function openGate({
   itemStore,
   onChange,
+  ownSettings,
 }: {
   itemStore: ItemStore;
   onChange?: (itemIds: string[], suggestionsOn: string[]) => void;
+  ownSettings?: OwnSettings;
 }): Gate {
   const registered = new Map<string, RegisteredAction>();
 
@@ -130,6 +143,15 @@ export function openGate({
         `"${action.name}" ${what}, which is ${ACTION_KIND_NAMES[kind]}, not ${ACTION_KIND_NAMES[action.actionKind]}`,
       );
     };
+    // A change to Ares's own settings (#197) is only ever asked for: an action that always asks carries
+    // it, alone, and carries nothing else.
+    const changesSettings = parsed.itemActions.some((step) => step.type === 'change-setting');
+    if (changesSettings && !action.alwaysAsks) {
+      throw new GateError('invalid', `"${action.name}" would change Ares’s own settings, which always asks`);
+    }
+    if (action.alwaysAsks && (!changesSettings || parsed.itemActions.length !== 1)) {
+      throw new GateError('invalid', `"${action.name}" changes one of Ares’s own settings, and nothing else`);
+    }
     for (const step of parsed.itemActions) {
       if (step.type === 'delete' && action.actionKind !== 'delete') refuse('deletes', 'delete');
       // Synced fields exist only to write back to a Source. An email's Bucket (#141) and its Snooze
@@ -159,6 +181,26 @@ export function openGate({
       const syncedChanges = Object.keys(step.changes).filter((field) => field !== 'filing');
       if (fromSource && syncedChanges.length) refuse('changes an Item at its Source', 'tidy-sources');
     }
+  }
+
+  // A change to Ares's own settings must be one Settings itself would make (#197): an Autonomy level
+  // within its kind's hard limit, on an action that exists and doesn't always ask, and Everywhere
+  // always with a level. The other settings' values are held to Settings' own bounds by their schema.
+  function checkSettingChange(change: SettingChange) {
+    if (!ownSettings) throw new GateError('invalid', 'Ares’s own settings can’t be changed here');
+    if (change.setting !== 'autonomy') return;
+    const { target, to } = change;
+    const action = target.scope === 'action' ? requireAction(target.action) : null;
+    if (action?.alwaysAsks)
+      throw new GateError('invalid', `“${action.name}” always asks, whatever the settings say`);
+    const kind = action?.actionKind ?? (target.scope !== 'action' ? target.actionKind : 'organise');
+    if (to && !isAllowed(kind, to)) {
+      throw new GateError(
+        'invalid',
+        `${ACTION_KIND_NAMES[kind]} can’t go above ${AUTONOMY_LEVEL_NAMES[HARD_LIMITS[kind]]}`,
+      );
+    }
+    if (target.scope === 'everywhere' && !to) throw new GateError('invalid', 'Everywhere always has a level');
   }
 
   // Ares never writes or sends a message (#11, #138, #143): only the User does, pressing Send in the
@@ -217,9 +259,10 @@ export function openGate({
       typeof target === 'string' ? target : (createdIds[target.step] as string);
     const entryIds: number[] = [];
     const steps: ProposalRecord['itemActions'] = [...record.itemActions];
-    // A cause in another Item is linked from the Item acted on, so each shows the other.
+    // A cause in another Item is linked from the Item acted on, so each shows the other. A settings
+    // change acts on no Item (it only sits on today's Daily Note), so it links nothing.
     const causeItem = record.causedBy?.itemId;
-    if (causeItem && causeItem !== record.itemId) {
+    if (causeItem && causeItem !== record.itemId && !settingChangeOf(record)) {
       steps.push({ type: 'link', from: record.itemId, linkType: 'caused-by', to: causeItem });
     }
     for (const action of steps) {
@@ -255,6 +298,20 @@ export function openGate({
         case 'edit-fields':
           entry = itemStore.record({ ...action, itemId: resolve(action.itemId) }, context);
           break;
+        case 'change-setting': {
+          // Ares's own setting (#197): set as Settings would, and kept in the settings log with the
+          // value it had just before, for Undo. No Item changes, so no activity entry.
+          checkSettingChange(action.change);
+          const settings = ownSettings as OwnSettings;
+          const before = settings.value(action.change);
+          settings.write(action.change);
+          itemStore.autonomy.recordSettingChange(record.id, {
+            ...action.change,
+            from: before,
+          } as SettingChange);
+          createdIds.push('');
+          continue;
+        }
         default:
           entry = itemStore.record(
             { ...action, from: resolve(action.from), to: resolve(action.to) },
@@ -367,7 +424,18 @@ export function openGate({
     return result;
   }
 
-  function toActivity(record: ProposalRecord, undone: Set<number>): AresActivity {
+  // Whether a confirmed settings change can still be undone: not undone yet, and the setting still has
+  // the value it set (changed again since, in Settings or by another change, it is the newer one).
+  function settingUndoable(log: SettingChangeRecord | undefined): boolean {
+    if (!log || log.undoneAt !== null || !ownSettings) return false;
+    return ownSettings.value(log.change) === log.change.to;
+  }
+
+  function toActivity(
+    record: ProposalRecord,
+    undone: Set<number>,
+    settingsLog: Map<number, SettingChangeRecord> = new Map(),
+  ): AresActivity {
     const ref = (id: string | undefined) => {
       const item = id ? itemStore.get(id)?.item : undefined;
       return item
@@ -386,13 +454,28 @@ export function openGate({
     const conversation = asked
       ? { ...asked, title: itemStore.conversations.conversation(asked.conversationId)?.title ?? null }
       : null;
+    // A change to Ares's settings (#197) is undone through the settings log, not the activity log.
+    if (settingChangeOf(record)) {
+      const log = settingsLog.get(record.id);
+      return {
+        ...record,
+        name: registered.get(record.action)?.name ?? record.action,
+        item: ref(record.itemId),
+        cause,
+        conversation,
+        undoable: carriedOut && settingUndoable(log),
+        undone: carriedOut && !!log && log.undoneAt !== null,
+      };
+    }
+    const wasUndone = record.entryIds.some((id) => undone.has(id));
     return {
       ...record,
       name: registered.get(record.action)?.name ?? record.action,
       item: ref(record.itemId),
       cause,
       conversation,
-      undoable: carriedOut && record.entryIds.length > 0 && !record.entryIds.some((id) => undone.has(id)),
+      undoable: carriedOut && record.entryIds.length > 0 && !wasUndone,
+      undone: carriedOut && wasUndone,
     };
   }
 
@@ -410,7 +493,11 @@ export function openGate({
 
     setLevel(rawTarget, level) {
       const target = autonomyTarget.parse(rawTarget);
-      const kind = target.scope === 'action' ? requireAction(target.action).actionKind : target.actionKind;
+      const action = target.scope === 'action' ? requireAction(target.action) : null;
+      if (action?.alwaysAsks) {
+        throw new GateError('invalid', `“${action.name}” always asks, whatever the settings say`);
+      }
+      const kind = action?.actionKind ?? (target.scope !== 'action' ? target.actionKind : 'organise');
       if (level && !isAllowed(kind, level)) {
         throw new GateError(
           'invalid',
@@ -451,6 +538,8 @@ export function openGate({
       }
       checkSteps(parsed);
       checkStepsFitKind(parsed, action);
+      for (const step of parsed.itemActions)
+        if (step.type === 'change-setting') checkSettingChange(step.change);
       if (overridesFiling(parsed.itemActions)) {
         throw new GateError('invalid', 'Ares never re-files an Item you or a Rule filed');
       }
@@ -460,7 +549,8 @@ export function openGate({
       if (!itemStore.get(parsed.itemId)) throw new GateError('not-found', `No Item ${parsed.itemId}`);
       if (followsAChain(parsed.causedBy?.entryId) || reachesBeyondOutsideCause(parsed)) parsed.chained = true;
 
-      const decided = decide(parsed, settings());
+      // One that always asks (a change to Ares's own settings) asks whatever the settings say.
+      const decided = action.alwaysAsks ? 'ask' : decide(parsed, settings());
       const decision = askOnly && decided === 'auto' ? 'ask' : decided;
       if (decision === 'off') return { decision };
 
@@ -496,6 +586,9 @@ export function openGate({
 
     acceptAll(proposalIds) {
       const records = proposalIds.map(requirePending);
+      if (records.some((record) => registered.get(record.action)?.alwaysAsks)) {
+        throw new GateError('bulk-refused', 'Changes to Ares’s own settings are confirmed one at a time');
+      }
       const refused = records.find((record) => ONE_AT_A_TIME.has(record.actionKind));
       if (refused) {
         throw new GateError(
@@ -514,6 +607,29 @@ export function openGate({
     undo(proposalId) {
       const record = itemStore.autonomy.proposal(proposalId);
       if (!record) throw new GateError('not-found', `No proposal ${proposalId}`);
+      // A settings change (#197): the value it replaced goes back, while the setting still has the one it
+      // set; changed since, the newer value stands.
+      if (settingChangeOf(record)) {
+        const log = itemStore.autonomy.settingChanges([record.id]).get(record.id);
+        if (!log || log.undoneAt !== null) {
+          throw new GateError(
+            'not-undoable',
+            'That settings change isn’t in effect, so there’s nothing to undo',
+          );
+        }
+        if (!settingUndoable(log)) {
+          throw new GateError(
+            'not-undoable',
+            'That setting has changed again since, so the newer value stands. Change it in Settings.',
+          );
+        }
+        const back = { ...log.change, from: log.change.to, to: log.change.from } as SettingChange;
+        const undoneLog = itemStore.transaction(() => {
+          (ownSettings as OwnSettings).write(back);
+          return itemStore.autonomy.settingChangeUndone(record.id);
+        });
+        return changed(toActivity(record, new Set(), new Map([[record.id, undoneLog]])));
+      }
       const undone = new Set(itemStore.undone(record.entryIds));
       if (!toActivity(record, undone).undoable) {
         throw new GateError('not-undoable', `What Ares did in proposal ${proposalId} can’t be undone`);
@@ -529,7 +645,10 @@ export function openGate({
     activity(query = {}) {
       const records = itemStore.autonomy.proposals(query);
       const undone = new Set(itemStore.undone(records.flatMap((record) => record.entryIds)));
-      return records.map((record) => toActivity(record, undone));
+      const settingsLog = itemStore.autonomy.settingChanges(
+        records.filter((record) => settingChangeOf(record)).map((record) => record.id),
+      );
+      return records.map((record) => toActivity(record, undone, settingsLog));
     },
   };
 }

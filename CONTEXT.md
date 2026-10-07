@@ -209,7 +209,7 @@ The name and persona under which the Agent presents itself to the User.
 _Avoid_: Titanus (former name), assistant, bot, AI
 
 **Skill**:
-A named ability Ares can use, on request or when he judges it is wanted (e.g. Update, Find, Summarise, Draft, Schedule), each listed on What Ares can do; in a Conversation he chooses one from what the User says, and using one is a **Skill step**, at most a few for each message. An **action Skill** (Manage Todos, File, Snooze, Linear actions) changes nothing itself: each change it is asked for goes to the gate as a proposal, so it runs (reported in his answer, with Undo) or waits as a card in the Conversation, as the User's Autonomy settings say.
+A named ability Ares can use, on request or when he judges it is wanted (e.g. Update, Find, Summarise, Draft, Schedule), each listed on What Ares can do; in a Conversation he chooses one from what the User says, and using one is a **Skill step**, at most a few for each message. An **action Skill** (Manage Todos, File, Snooze, Linear actions, Change settings) changes nothing itself: each change it is asked for goes to the gate as a proposal, so it runs (reported in his answer, with Undo) or waits as a card in the Conversation, as the User's Autonomy settings say; a change to his own settings always waits for the User, whatever they say.
 _Avoid_: Tool, command, feature, plugin
 
 **Conversation**:

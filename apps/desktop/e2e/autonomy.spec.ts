@@ -137,6 +137,8 @@ test('the Autonomy grid greys out levels above the hard limits, lists registered
     /Manage Todos/,
     /File.*in a Conversation/,
     /Snooze/,
+    // Changing his own settings (#197): no level of its own, it always asks.
+    /Change Ares’s settings.*Always asksWhatever these settings say/,
     /Skip the inbox/,
     /Mirror Buckets.*Below Auto nothing is written/,
     /Block time for Todos/,

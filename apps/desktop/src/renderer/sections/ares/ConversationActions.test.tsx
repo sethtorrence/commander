@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { Gate } from '@commander/core/src/autonomy/gate';
 import type { ItemStore } from '@commander/core/src/item-store';
-import type { Proposal } from '@commander/domain';
+import { localDay, type Proposal } from '@commander/domain';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { AutonomyClient } from './activity';
@@ -133,5 +133,52 @@ describe('cards for what Ares did or prepared in a Conversation', () => {
       for (const listener of listeners) listener();
     });
     await waitFor(() => expect(card.getAttribute('data-status')).toBe('confirmed'));
+  });
+
+  it('show a change to Ares’s own settings with its value now and the new one, confirmed with one key and undone (#197)', async () => {
+    gate.registerAction({
+      action: 'conversation-settings',
+      actionKind: 'organise',
+      name: 'Change Ares’s settings',
+      alwaysAsks: true,
+    });
+    const daily = store.ensureDailyNote(localDay(Date.now()), { by: { kind: 'user' } });
+    const id = propose({
+      actionKind: 'organise',
+      action: 'conversation-settings',
+      section: null,
+      itemId: daily.id,
+      itemActions: [
+        {
+          type: 'change-setting',
+          change: { setting: 'meeting-heads-up', from: false, to: true },
+          name: 'Meeting heads-up',
+          fromWords: 'Off',
+          toWords: 'On',
+        },
+      ],
+      confidence: 1,
+      reason: 'You asked in a Conversation: “Turn on the meeting heads-up”',
+      conversation,
+    });
+    render(<ConversationActions proposalIds={[id]} client={client} focusWaiting />);
+    const card = await screen.findByTestId('conversation-action');
+    expect(card.getAttribute('data-status')).toBe('waiting');
+    expect(within(card).getByTestId('conversation-action-setting').textContent).toBe('Meeting heads-up');
+    expect(within(card).getByTestId('conversation-action-from').textContent).toBe('Off');
+    expect(within(card).getByTestId('conversation-action-to').textContent).toBe('On');
+    expect(within(card).getByTestId('conversation-action-why').textContent).toBe(
+      'Asks first: Ares never changes his own settings without you.',
+    );
+    // It sits on today's Daily Note, which the card doesn't name.
+    expect(card.textContent).not.toContain('On Tue');
+    const confirm = within(card).getByRole('button', { name: /Confirm/ });
+    await waitFor(() => expect(document.activeElement).toBe(confirm));
+    await act(async () => fireEvent.click(confirm));
+    await waitFor(() => expect(card.getAttribute('data-status')).toBe('confirmed'));
+    expect(store.calendarSettings.read().headsUp).toBe(true);
+    await act(async () => fireEvent.click(within(card).getByRole('button', { name: 'Undo' })));
+    await waitFor(() => expect(card.getAttribute('data-status')).toBe('undone'));
+    expect(store.calendarSettings.read().headsUp).toBe(false);
   });
 });
