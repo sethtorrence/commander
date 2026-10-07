@@ -38,7 +38,14 @@ import { CalendarSwatch, EventRow } from './EventRow';
 import { requestFindTime } from './FindTime';
 import { FocusSuggestionBlocks, FocusSuggestionRows, FocusTimePanel } from './FocusTime';
 import { useFocusTime, withSuggestionDays } from './focus-time';
-import { ANSWER_KEYS, InvitationPanel, RowAnswer, SuggestedReplyCard } from './InvitationAnswer';
+import {
+  ANSWER_KEYS,
+  EventSync,
+  InvitationPanel,
+  RowAnswer,
+  RowSync,
+  SuggestedReplyCard,
+} from './InvitationAnswer';
 import type { InvitationsClient } from './invitations';
 import { MonthGrid } from './MonthGrid';
 import { TimeGrid } from './TimeGrid';
@@ -486,11 +493,14 @@ export function CalendarSheet({
                               clashes={state.clashes.get(entry.event.id) ?? []}
                               answer={
                                 invites.enabled && (
-                                  <RowAnswer
-                                    event={entry.event}
-                                    sync={invites.syncOf(entry.event.id)}
-                                    onAnswer={(answer) => void invites.answer(entry.event, answer)}
-                                  />
+                                  <>
+                                    <RowAnswer
+                                      event={entry.event}
+                                      sync={invites.syncOf(entry.event.id)}
+                                      onAnswer={(answer) => void invites.answer(entry.event, answer)}
+                                    />
+                                    <RowSync event={entry.event} sync={invites.syncOf(entry.event.id)} />
+                                  </>
                                 )
                               }
                               suggestion={(() => {
@@ -544,16 +554,24 @@ export function CalendarSheet({
                   invitation={
                     selected &&
                     invites.enabled && (
-                      <InvitationPanel
-                        event={selected}
-                        reply={invites.suggestions.get(selected.id) ?? null}
-                        sync={invites.syncOf(selected.id)}
-                        note={supersededNote(state.history)}
-                        onAnswer={(answer, series) => void invites.answer(selected, answer, series)}
-                        onSend={(reply) => void invites.send(reply)}
-                        onDismiss={(reply) => void invites.dismiss(reply)}
-                        onRetry={() => void invites.retry(selected.id)}
-                      />
+                      <>
+                        <InvitationPanel
+                          event={selected}
+                          reply={invites.suggestions.get(selected.id) ?? null}
+                          sync={invites.syncOf(selected.id)}
+                          note={supersededNote(state.history)}
+                          onAnswer={(answer, series) => void invites.answer(selected, answer, series)}
+                          onSend={(reply) => void invites.send(reply)}
+                          onDismiss={(reply) => void invites.dismiss(reply)}
+                          onRetry={() => void invites.retry(selected.id)}
+                        />
+                        {/* An edit of an event Commander made (#206): Couldn't sync with Retry too. */}
+                        <EventSync
+                          event={selected}
+                          sync={invites.syncOf(selected.id)}
+                          onRetry={() => void invites.retry(selected.id)}
+                        />
+                      </>
                     )
                   }
                 />

@@ -257,16 +257,34 @@ describe('undo, moves and deletes', () => {
     const later = { start: time(START + 3 * HOUR), end: time(START + 4 * HOUR), allDay: false };
     const moved = store.moveEvent(entry.itemId, later, ares);
     expect(detailOf(entry.itemId)).toMatchObject({ start: later.start, end: later.end });
-    expect(store.outgoing.forItem(entry.itemId).map((row) => [row.field, row.value])).toEqual([
-      ['create', expect.anything()],
-      ['time', later],
+    const before = { start: time(START), end: time(START + 2 * HOUR), allDay: false };
+    // The time it had is kept with the change (#206): what Discard puts it back to.
+    expect(store.outgoing.forItem(entry.itemId).map((row) => [row.field, row.value, row.synced])).toEqual([
+      ['create', expect.anything(), null],
+      ['time', later, before],
     ]);
     store.record({ type: 'undo', entryId: moved.id }, user);
     expect(detailOf(entry.itemId)).toMatchObject({ start: time(START), end: time(START + 2 * HOUR) });
-    expect(store.outgoing.forItem(entry.itemId).at(-1)).toMatchObject({
-      field: 'time',
-      value: { start: time(START), end: time(START + 2 * HOUR), allDay: false },
-    });
+    // Moved back to the time it had before the change was sent: there is nothing to send.
+    expect(store.outgoing.forItem(entry.itemId).map((row) => row.field)).toEqual(['create']);
+  });
+
+  it('moved again after a move was sent, it queues the new time; moved back there, nothing', () => {
+    const entry = store.createEvent(focus(), ares);
+    const [create] = store.outgoing.forItem(entry.itemId);
+    store.outgoing.settle([create?.id as number]);
+    const later = { start: time(START + 3 * HOUR), end: time(START + 4 * HOUR), allDay: false };
+    store.moveEvent(entry.itemId, later, ares);
+    const [move] = store.outgoing.forItem(entry.itemId);
+    store.outgoing.markSending([move?.id as number], T);
+    const latest = { start: time(START + 5 * HOUR), end: time(START + 6 * HOUR), allDay: false };
+    store.moveEvent(entry.itemId, latest, ares);
+    expect(store.outgoing.forItem(entry.itemId).map((row) => [row.status, row.value, row.synced])).toEqual([
+      ['sending', later, expect.anything()],
+      ['pending', latest, later],
+    ]);
+    store.moveEvent(entry.itemId, later, ares);
+    expect(store.outgoing.forItem(entry.itemId).map((row) => row.status)).toEqual(['sending']);
   });
 
   it('deleting it queues its deletion at the Source', () => {

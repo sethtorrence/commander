@@ -57,6 +57,8 @@ export type OutgoingStore = {
   markSending(ids: number[], at: number): void;
   // The changes reached the Source (or lost to a newer change there): they leave the queue.
   settle(ids: number[]): void;
+  // The User discarded the changes (#206): they leave the queue, and its listeners hear of it.
+  discard(ids: number[]): void;
   // A failed attempt: back to pending until `nextAttemptAt`, or stopped as Couldn't sync.
   fail(ids: number[], outcome: { error: string; failed: boolean; nextAttemptAt: number | null }): void;
   // Back to pending without counting an attempt (offline, rate-limited, sign-in refused).
@@ -66,6 +68,11 @@ export type OutgoingStore = {
   follow(itemId: string, fields: string[], at: number): void;
   // Retry: the Item's changes that couldn't sync are pending again, with their attempts reset.
   retry(itemId: string): OutgoingChange[];
+  // Retry for these changes alone (#206: from Settings → Accounts, or the Update), those that couldn't
+  // sync; returns what is queued for their Items now.
+  retryChanges(ids: number[]): OutgoingChange[];
+  // Queued changes with their values, oldest first: an Account's, in some states, or by id.
+  rows(query?: { account?: string; statuses?: OutgoingStatus[]; ids?: number[] }): OutgoingRow[];
   // Changes to this field held until later (messages held for Undo) are due now: Commander is quitting
   // (#138). Returns the Accounts they belong to.
   releaseHeld(field: string, at: number): string[];
@@ -250,6 +257,13 @@ export function openOutgoingQueue(db: BetterSQLite3Database<typeof schema>): Out
       if (ids.length) db.delete(table).where(byId(ids)).run();
     },
 
+    discard(ids) {
+      if (!ids.length) return;
+      const accounts = db.selectDistinct({ account: table.account }).from(table).where(byId(ids)).all();
+      db.delete(table).where(byId(ids)).run();
+      for (const { account } of accounts) changed(account);
+    },
+
     fail(ids, { error, failed, nextAttemptAt }) {
       for (const id of ids) {
         const row = db.select().from(table).where(eq(table.id, id)).get();
@@ -302,6 +316,48 @@ export function openOutgoingQueue(db: BetterSQLite3Database<typeof schema>): Out
         .orderBy(asc(table.id))
         .all()
         .map(toChange);
+    },
+
+    retryChanges(ids) {
+      if (!ids.length) return [];
+      const rows = db
+        .select()
+        .from(table)
+        .where(and(byId(ids), eq(table.status, 'failed')))
+        .all();
+      if (rows.length) {
+        db.update(table)
+          .set({ status: 'pending', attempts: 0, nextAttemptAt: null, error: null })
+          .where(byId(rows.map((row) => row.id)))
+          .run();
+        for (const account of new Set(rows.map((row) => row.account))) changed(account);
+      }
+      const itemIds = [...new Set(rows.map((row) => row.itemId))];
+      if (!itemIds.length) return [];
+      return db
+        .select()
+        .from(table)
+        .where(inArray(table.itemId, itemIds))
+        .orderBy(asc(table.id))
+        .all()
+        .map(toChange);
+    },
+
+    rows({ account, statuses, ids } = {}) {
+      if (ids?.length === 0 || statuses?.length === 0) return [];
+      return db
+        .select()
+        .from(table)
+        .where(
+          and(
+            account ? eq(table.account, account) : undefined,
+            statuses ? inArray(table.status, statuses) : undefined,
+            ids ? byId(ids) : undefined,
+          ),
+        )
+        .orderBy(asc(table.id))
+        .all()
+        .map(toRow);
     },
 
     releaseHeld(field, at) {

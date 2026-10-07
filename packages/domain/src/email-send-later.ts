@@ -48,6 +48,10 @@ export const HELD_BY_MICROSOFT_NOTE =
 // and to open one in the composer (its Edit).
 export const SCHEDULED_FOCUS = 'scheduled';
 export const SEND_LATER_EDIT_FOCUS = 'edit-scheduled';
+// And to show the Outbox or Drafts (#206): where a message's change that couldn't sync is looked after,
+// opened from Settings → Accounts.
+export const OUTBOX_FOCUS = 'outbox';
+export const DRAFTS_FOCUS = 'drafts';
 
 export const HELD_BY_NAMES: Record<SendLaterHeldBy, string> = {
   microsoft: 'Held by Microsoft',

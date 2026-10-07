@@ -8,6 +8,7 @@ import { bucketRuleLines, bucketSuggestionLines, missedSendLines } from './email
 import { leftLines, reconnectLines, stuckLines } from './linear';
 import { refusalLines } from './refusals';
 import { autonomyLines, chainedLines, ruleLines, suggestionLines } from './suggestions';
+import { couldntSyncLines } from './sync';
 import { chatLines } from './teams';
 import type { LineContext, LineKind, LineKinds, RowFacts } from './types';
 import { warningLines } from './warnings';
@@ -34,6 +35,7 @@ export const LINE_KINDS: LineKinds = {
   'bucket-suggestion': bucketSuggestionLines,
   'missed-send': missedSendLines,
   'backup-failed': backupLines,
+  'couldnt-sync': couldntSyncLines,
 };
 
 type Line = Pick<QueuedLine, 'about' | 'itemIds'>;

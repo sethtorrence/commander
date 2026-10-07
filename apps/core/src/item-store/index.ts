@@ -63,6 +63,7 @@ import {
   type ItemRef,
   type ItemView,
   identitiesOf,
+  isDiscardedWhy,
   isGitHubItemDetail,
   isPendingEventExternalId,
   itemAction,
@@ -81,6 +82,8 @@ import {
   mayReadMail,
   mentionQuery,
   type OutboxEntry,
+  type OutgoingEntriesQuery,
+  type OutgoingEntry,
   type Project,
   type ProjectAction,
   type ProjectBlock,
@@ -174,6 +177,7 @@ import { type MarkdownCopyFolderStore, markdownCopyFolderIn } from './markdown-c
 import { type MeetingChips, meetingChipsIn } from './meeting-chips';
 import { type ModelStore, openModelStore } from './models';
 import { type OutgoingStore, openOutgoingQueue } from './outgoing';
+import { outgoingOverviewIn } from './outgoing-overview';
 import { type PeopleStore, peopleIn } from './people';
 import { projectsIn } from './projects';
 import { type RefusalStore, refusalsIn } from './refusals';
@@ -458,6 +462,10 @@ export type ItemStore = {
   // Two-way sync's outgoing queue: changes made in Commander to Source Items' synced fields, queued
   // by record (in the change's own transaction) and sent by the sync engine.
   outgoing: OutgoingStore;
+  // Settings → Accounts (#206): the queued changes in Commander's words, and Discard, which takes
+  // changes out of the queue and puts their Items back as the Source has them (outgoing-overview.ts).
+  outgoingEntries(query?: OutgoingEntriesQuery): OutgoingEntry[];
+  discardChanges(ids: number[], context: ActionContext): ActivityEntry[];
   // The Autonomy settings and the gate's proposals, in the same database.
   autonomy: AutonomyStore;
   // Where Ares's jobs stand and what they have looked at, in the same database.
@@ -1884,6 +1892,11 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
         throw error;
       }
     }
+    // A Discard (#206) put the Item back as its Source has it, and queued nothing: making the change
+    // again is the way back, so a creation the Source never had can't come back half made.
+    if (isDiscardedWhy(target.why)) {
+      throw new ItemStoreError('invalid', 'A discarded change can’t be undone: make it again instead');
+    }
     if (target.action === 'correction' || target.action === 'confirmation') {
       throw new ItemStoreError(
         'invalid',
@@ -2083,6 +2096,25 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     outgoing,
     emails,
     invalid: (message) => new ItemStoreError('invalid', message),
+  });
+
+  // Settings → Accounts' changes that didn't reach a Source, and Discard (outgoing-overview.ts, #206).
+  const outgoingOverview = outgoingOverviewIn({
+    outgoing,
+    readItem,
+    stateBefore: (entryId) =>
+      (db.select().from(schema.activity).where(eq(schema.activity.id, entryId)).get()?.before ??
+        null) as ItemState | null,
+    compose: (itemId) => compose.record(itemId),
+    writeState,
+    log,
+    afterChange,
+    invalid: (message) => new ItemStoreError('invalid', message),
+  });
+
+  const discardChanges = sqlite.transaction((ids: number[], rawContext: ActionContext) => {
+    const context = actionContext.parse(rawContext);
+    return outgoingOverview.discard(ids, { by: context.by }, now());
   });
 
   const composeApi: ComposeApi = {
@@ -3026,6 +3058,8 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
     },
     emailBody: (itemId) => emails.readBody(itemId),
     compose: composeApi,
+    outgoingEntries: (query) => outgoingOverview.entries(query),
+    discardChanges,
     emailViews: (query) => emails.viewCounts(query),
     emailSearch: (query) => emails.searchThreads(query),
     emailLabels: (account) => emails.labelsOf(account),

@@ -2,6 +2,7 @@ import type { QueuedLine, UpdateRow, UpdateViewLine } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import {
   acceptLabel,
+  canRetry,
   foldedSummary,
   lineRows,
   lineStatus,
@@ -245,6 +246,26 @@ describe('Ares watching Linear', () => {
     });
     expect(openTarget(reconnect)).toEqual({ kind: 'settings', group: 'accounts' });
     expect(acceptLabel(reconnect)).toBeNull();
+  });
+
+  it('Changes that couldn’t sync open Settings at Accounts, where Discard is, and offer Retry (#206)', () => {
+    const stopped = line({
+      group: 'now',
+      about: {
+        kind: 'couldnt-sync',
+        account: 'linear:org-acme',
+        source: 'linear',
+        name: 'Acme',
+        changes: [{ id: 7, itemId: 'issue-1', what: 'Move to Done', verb: 'moving', rest: 'to Done' }],
+        heldAfterRestore: false,
+      },
+      itemIds: ['issue-1'],
+      section: 'linear',
+    });
+    expect(openTarget(stopped)).toEqual({ kind: 'settings', group: 'accounts' });
+    expect(canRetry(stopped)).toBe(true);
+    expect(canRetry(line())).toBe(false);
+    expect(ROW_ACTION_LABELS.retry).toBe('Retry');
   });
 });
 

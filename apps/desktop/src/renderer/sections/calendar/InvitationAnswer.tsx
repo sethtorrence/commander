@@ -243,3 +243,37 @@ export function RowAnswer({
     </span>
   );
 }
+
+/**
+ * Where an edit of an event that isn't an invitation stands (#206: a focus block, busy copy or meeting
+ * Commander made, moved or deleted): on its way, or Couldn't sync with Retry, as an answer's does.
+ */
+export function EventSync({
+  event,
+  sync,
+  onRetry,
+}: {
+  event: CalendarEvent;
+  sync: IssueSync;
+  onRetry: () => void;
+}) {
+  if (canAnswer(event.detail) || sync.kind === 'synced') return null;
+  return (
+    <section aria-label="Sync" data-testid="event-sync">
+      <AnswerSync sync={sync} note={null} where={sourceName(event.source)} onRetry={onRetry} />
+    </section>
+  );
+}
+
+/** The Agenda row's Couldn't sync, for an event that isn't an invitation (an invitation's answer says it). */
+export function RowSync({ event, sync }: { event: CalendarEvent; sync: IssueSync }) {
+  if (canAnswer(event.detail) || sync.kind !== 'failed') return null;
+  return (
+    <span
+      data-testid="row-sync"
+      className="font-mono text-label font-semibold uppercase tracking-label text-ink"
+    >
+      Couldn’t sync
+    </span>
+  );
+}

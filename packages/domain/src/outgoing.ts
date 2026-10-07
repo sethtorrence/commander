@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { source } from './items';
+import { itemKind, source } from './items';
 
 // Two-way sync's outgoing queue, as the window sees it: each change made in Commander to a Source
 // Item's synced field, waiting to reach the Source. Changes queue per Account with the time they were
@@ -35,3 +35,31 @@ export const outgoingQuery = z.object({
   account: id.optional(),
 });
 export type OutgoingQuery = z.input<typeof outgoingQuery>;
+
+// Where a message written in Commander is looked after (#138, #139): its sending in the Outbox (or, held
+// by Microsoft for later, in Scheduled), its draft in Drafts. Those changes keep the Outbox's own
+// Retry and Undo; nothing elsewhere discards them, so a message is never dropped by surprise.
+export const messageViews = ['outbox', 'scheduled', 'drafts'] as const;
+export const messageView = z.enum(messageViews);
+export type MessageView = z.infer<typeof messageView>;
+
+// A queued change as Settings → Accounts lists it (#206): what it was in Commander's words ("Move to
+// In Review"), the Item it is on, and, for a message written in Commander, where the Outbox has it.
+export const outgoingEntry = outgoingChange.extend({
+  what: z.string().min(1),
+  item: z.object({
+    title: z.string(),
+    // The Source's short name for it (ENG-418), when it has one.
+    label: z.string().nullable(),
+    kind: itemKind,
+  }),
+  message: messageView.nullable(),
+});
+export type OutgoingEntry = z.infer<typeof outgoingEntry>;
+
+// What Settings asks for: one Account's queued changes, or (no Account) every Account's.
+export const outgoingEntriesQuery = z.object({ account: id.optional() });
+export type OutgoingEntriesQuery = z.input<typeof outgoingEntriesQuery>;
+
+// Retry and Discard name the changes by their ids.
+export const outgoingIds = z.array(z.number().int().positive()).min(1).max(1000);

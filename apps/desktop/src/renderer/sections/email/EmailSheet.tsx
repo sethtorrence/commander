@@ -1,10 +1,12 @@
 import {
   type BucketSortedBy,
+  DRAFTS_FOCUS,
   draftBody,
   type EmailLabel,
   type EmailThreadSummary,
   type Item,
   NEEDS_REPLY,
+  OUTBOX_FOCUS,
   SCHEDULED_FOCUS,
   SEND_LATER_EDIT_FOCUS,
   type ThreadAction,
@@ -612,6 +614,12 @@ export function EmailSheet({
       return;
     }
     // A missed send-later's Update line (#139): Scheduled, or (its Edit) the message in the composer.
+    // A message's change that couldn't sync, from Settings → Accounts (#206): the Outbox or Drafts.
+    if (!itemId && (focus === OUTBOX_FOCUS || focus === DRAFTS_FOCUS)) {
+      setSpecial(focus === OUTBOX_FOCUS ? 'outbox' : 'drafts');
+      setOpen(false);
+      return;
+    }
     if (focus === SCHEDULED_FOCUS || focus === SEND_LATER_EDIT_FOCUS) {
       setSpecial('scheduled');
       setOpen(false);
