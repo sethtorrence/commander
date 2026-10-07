@@ -21,6 +21,10 @@ const HOLIDAYS = 'en.uk#holiday@group.v.calendar.google.com';
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 
+// Minutes from a start to the end of its day: the longer Design review must not run past midnight, or
+// the Agenda shows its last part again the next day (a test run late in the evening).
+const toMidnight = (start: number) => (new Date(start).setHours(24, 0, 0, 0) - start) / 60_000;
+
 const iso = (time: number) => new Date(time).toISOString();
 const localDay = (time: number) => new Date(time).toDateString();
 const dateOnly = (time: number) => {
@@ -236,7 +240,11 @@ test('connect Google → events in the Agenda → open one → hand it to Google
   );
 
   // Back from Google Calendar (the window regains focus): the Account syncs, bringing what changed.
-  google.putEvent(ALEX.sub, PRIMARY, timed('designreview', 'Design review: onboarding v2', soon, 90));
+  google.putEvent(
+    ALEX.sub,
+    PRIMARY,
+    timed('designreview', 'Design review: onboarding v2', soon, Math.min(90, toMidnight(soon))),
+  );
   google.cancelEvent(ALEX.sub, PRIMARY, 'dentist');
   await window.evaluate(() => globalThis.dispatchEvent(new Event('focus')));
   await expect(rows(section)).toHaveText([/Design review: onboarding v2/, /TL standup/, /TL standup/]);

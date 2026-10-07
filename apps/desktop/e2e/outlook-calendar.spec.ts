@@ -25,6 +25,10 @@ const DANA = { name: 'Dana Ruiz', address: 'dana@titanlink.test' };
 const HOUR = 60 * 60_000;
 const DAY = 24 * HOUR;
 
+// Minutes from a start to the end of its day: the longer Design review must not run past midnight, or
+// the Agenda shows its last part again the next day (a test run late in the evening).
+const toMidnight = (start: number) => (new Date(start).setHours(24, 0, 0, 0) - start) / 60_000;
+
 // Graph's calendarView times: UTC, seven decimals, no offset.
 const graphTime = (time: number) => ({
   dateTime: `${new Date(time).toISOString().slice(0, 23)}0000`,
@@ -116,7 +120,13 @@ test.beforeEach(async () => {
     {
       calendar: { id: SHARED, name: 'Dana Ruiz', canEdit: false, owner: DANA },
       events: [
-        timed('AAMkAGI2-evt-offsite=', 'Offsite planning', soon + 3 * DAY, 120, { isOrganizer: false }),
+        timed(
+          'AAMkAGI2-evt-offsite=',
+          'Offsite planning',
+          soon + 3 * DAY,
+          Math.min(120, toMidnight(soon + 3 * DAY)),
+          { isOrganizer: false },
+        ),
       ],
     },
   ]);
@@ -237,9 +247,15 @@ test('connect Outlook → events in the Agenda → open one in Outlook on the we
   microsoft.putEvent(
     SAM.id,
     DEFAULT,
-    timed('AAMkAGI2-evt-designreview=', 'Design review: onboarding v2', soon, 90, {
-      organizer: { emailAddress: DANA },
-    }),
+    timed(
+      'AAMkAGI2-evt-designreview=',
+      'Design review: onboarding v2',
+      soon,
+      Math.min(90, toMidnight(soon)),
+      {
+        organizer: { emailAddress: DANA },
+      },
+    ),
   );
   microsoft.removeEvent(SAM.id, DEFAULT, 'AAMkAGI2-evt-dentist=');
   await window.evaluate(() => globalThis.dispatchEvent(new Event('focus')));
