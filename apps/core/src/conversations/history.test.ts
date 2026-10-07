@@ -24,6 +24,7 @@ function turn(overrides: Partial<ConversationTurn>): ConversationTurn {
     skills: [],
     proposalIds: [],
     remembered: [],
+    made: [],
     ...overrides,
   };
 }

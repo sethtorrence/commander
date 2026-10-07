@@ -5,14 +5,18 @@
 // ones whose result it can hand him), how each result becomes material, how his choice is read, and
 // what he says plainly when he couldn't finish. Action Skills (#196) are offered the same way: what
 // they hand back is Commander's note on what came of each change, and the proposals, kept on the
-// answer and shown under it as cards.
+// answer and shown under it as cards. Draft and Meeting prep (#198) hand back what they made (a draft
+// reply, a meeting's prep), kept on the answer the same way and shown under it.
 import {
   ACTION_SKILLS,
   type ConversationLink,
+  type ConversationMade,
+  DRAFT_SKILL,
   FIND_SKILL,
   type Item,
   LINK_MARKER,
   LINK_REF,
+  MEETING_PREP_SKILL,
   type SkillInfo,
   type SkillRegistry,
   SUMMARISE_SKILL,
@@ -32,13 +36,14 @@ export const SKILL_STEPS = 3;
 // The most Items one answer is handed, however many steps found them.
 export const MAX_HANDED = 30;
 
-// The Skills a Conversation can use, in the order he is told of them: those that look, then those
-// that act (#196). The rest (Draft) are used where they live until a Conversation can hand him what
-// they make.
+// The Skills a Conversation can use, in the order he is told of them: those that look, those that
+// make something to show (#198), then those that act (#196).
 export const CONVERSATION_SKILLS: readonly string[] = [
   UPDATE_SKILL.name,
   FIND_SKILL.name,
   SUMMARISE_SKILL.name,
+  DRAFT_SKILL.name,
+  MEETING_PREP_SKILL.name,
   ...ACTION_SKILLS.map((skill) => skill.name),
 ];
 
@@ -137,6 +142,8 @@ export type Gathered = {
   skills: string[];
   // What his action Skills handed the gate, by proposal, in order (#196).
   proposalIds: number[];
+  // What his Skills made for the answer to show, in order (#198).
+  made: ConversationMade[];
 };
 
 export const nothingGathered = (): Gathered => ({
@@ -146,6 +153,7 @@ export const nothingGathered = (): Gathered => ({
   update: undefined,
   skills: [],
   proposalIds: [],
+  made: [],
 });
 
 /** The Items handed out for this answer so far, by ref: what an action Skill may name. */
@@ -166,13 +174,15 @@ export function gather(into: Gathered, skill: string, findings: Findings): void 
   if (findings.update !== undefined) into.update = findings.update;
   for (const proposalId of findings.proposalIds ?? [])
     if (!into.proposalIds.includes(proposalId)) into.proposalIds.push(proposalId);
+  into.made.push(...(findings.made ?? []));
 }
 
 export const gatheredAnything = (gathered: Gathered) =>
   gathered.items.size > 0 ||
   gathered.more.length > 0 ||
   gathered.update !== undefined ||
-  gathered.proposalIds.length > 0;
+  gathered.proposalIds.length > 0 ||
+  gathered.made.length > 0;
 
 /**
  * The material for his next step or answer: Commander's notes on what each Skill did (Commander's

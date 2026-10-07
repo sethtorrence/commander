@@ -113,6 +113,44 @@ describe('describeItemActions', () => {
     ).toEqual(['Change Monthly cap from No cap to $25 a month']);
   });
 
+  it('says exactly when an event it would make happens, and who goes without an address (#198)', () => {
+    const start = new Date(2026, 9, 12, 9).getTime();
+    const time = (at: number) => ({ at, timeZone: 'UTC', date: null });
+    const [meeting] = describeItemActions([
+      {
+        type: 'create-event',
+        event: {
+          kind: 'meeting',
+          account: 'google:1',
+          calendarId: 'alex@gmail.test',
+          title: 'Call with Leo',
+          start: time(start),
+          end: time(start + 3_600_000),
+          attendees: [{ email: 'leo@acme.test', name: 'Leo' }],
+          guestsToFill: ['Zed'],
+        },
+      },
+    ]);
+    expect(meeting).toMatch(
+      /^Put “Call with Leo” in your calendar, .*12.*, 09:00–10:00, and invite leo@acme\.test, without Zed \(no address\)$/,
+    );
+    const [focus] = describeItemActions([
+      {
+        type: 'create-event',
+        event: {
+          kind: 'focus-block',
+          account: 'google:1',
+          title: 'Focus: Acme deck',
+          start: time(start),
+          end: time(start + 7_200_000),
+        },
+      },
+    ]);
+    expect(focus).toMatch(
+      /^Put “Focus: Acme deck” in your Commander calendar, .*09:00–11:00, busy and private$/,
+    );
+  });
+
   it('says plainly when it deletes, and shows Links when they are all it does', () => {
     expect(describeItemActions([{ type: 'delete', itemId: 'm1' }])).toEqual(['Delete it']);
     expect(describeItemActions([{ type: 'link', from: 'a', linkType: 'about', to: 'b' }])).toEqual([

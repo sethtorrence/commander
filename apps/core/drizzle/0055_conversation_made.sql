@@ -1,0 +1,1 @@
+ALTER TABLE `conversation_turns` ADD `made` text DEFAULT '[]' NOT NULL;

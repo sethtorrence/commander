@@ -17,6 +17,7 @@ import { useReveal } from '../../frame/reveal';
 import { useNow } from '../../frame/use-now';
 import type { ItemChanges } from '../../item-store/changes';
 import { useAresKey } from '../../links/AresButton';
+import { ARES_REPLY_FOCUS, takeReply } from '../../links/reply-handoff';
 import { PickBadgeProvider, useBadgePicker } from '../../projects/BadgePicker';
 import { SectionProjectFilter } from '../../projects/badges';
 import { useProjectFilter, useProjects } from '../../projects/context';
@@ -308,6 +309,21 @@ export function TeamsSheet({
   // the message that put it there.
   // A Channel post (#111) opens in the post view; anything else is a Chat.
   useReveal('teams', (itemId, messageId) => {
+    // Open in composer under one of Ares's answers (#198): his reply goes in the Chat's reply box, for
+    // the User to edit and send; what was in it comes back with Undo.
+    if (messageId === ARES_REPLY_FOCUS) {
+      const handed = takeReply(itemId);
+      posts.openPost(null);
+      state.reveal(itemId);
+      if (!handed) return;
+      const before = drafts[itemId] ?? '';
+      setDraft(itemId, handed.text);
+      if (before.trim() && before !== handed.text)
+        toast('Ares’s draft replaced what you had written', {
+          action: { label: 'Undo', onClick: () => setDraft(itemId, before) },
+        });
+      return;
+    }
     if (!channelPosts) return state.reveal(itemId, messageId);
     channelPosts.kindOf(itemId).then(
       (kind) => {

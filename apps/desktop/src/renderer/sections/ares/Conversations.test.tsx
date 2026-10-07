@@ -459,9 +459,10 @@ describe('Ares’s Skills in a Conversation (#192)', () => {
     registry.register(createFindSkill({ itemStore: store }));
     registry.register({ ...UPDATE_SKILL, run: async () => null });
     registry.register({ ...DRAFT_SKILL, run: async () => null });
+    registry.register({ name: 'someday', title: 'Someday', description: 'Not yet.', run: async () => null });
     showWithSkills(registry);
     const page = screen.getByTestId('what-ares-can-do');
-    await waitFor(() => expect(within(page).getAllByTestId('ares-skill')).toHaveLength(3));
+    await waitFor(() => expect(within(page).getAllByTestId('ares-skill')).toHaveLength(4));
     const find = within(page).getByRole('listitem', { name: 'Find' });
     expect(find.textContent).toContain(FIND_SKILL.summary);
     expect(within(find).getByTestId('ares-skill-example').textContent).toBe(
@@ -470,7 +471,11 @@ describe('Ares’s Skills in a Conversation (#192)', () => {
     expect(within(page).getByRole('listitem', { name: 'Update' }).textContent).toContain(
       'Ask: “Anything I should know?”',
     );
+    // Draft is in Conversations now (#198).
     expect(within(page).getByRole('listitem', { name: 'Draft' }).textContent).toContain(
+      'Ask: “Reply to this saying Thursday works”',
+    );
+    expect(within(page).getByRole('listitem', { name: 'Someday' }).textContent).toContain(
       'Not in Conversations yet',
     );
   });

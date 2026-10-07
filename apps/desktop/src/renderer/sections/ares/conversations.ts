@@ -62,6 +62,9 @@ const DOING: Record<string, string> = {
   snooze: 'Snoozing',
   linear: 'Preparing it for Linear',
   settings: 'Preparing the change',
+  draft: 'Drafting a reply',
+  prep: 'Preparing for the meeting',
+  schedule: 'Looking for time',
 };
 
 /** Where one of an answer's actions stands (#196), for its card. */

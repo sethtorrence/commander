@@ -44,6 +44,13 @@ const snoozeTime = new Intl.DateTimeFormat(undefined, {
   hourCycle: 'h23',
 });
 
+const clock = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
+/** When an event Ares would make happens (#198), so its card says exactly when: "Tue 13 Oct, 10:00–11:00". */
+function eventTimeWords(start: number, end: number): string {
+  return `${dueDay.format(new Date(start))}, ${clock.format(new Date(start))}–${clock.format(new Date(end))}`;
+}
+
 /** A due day (YYYY-MM-DD) as a line names it: "Fri 9 Oct". */
 function dueWords(day: string): string {
   const [year, month, date] = day.split('-').map(Number) as [number, number, number];
@@ -107,16 +114,19 @@ export function describeItemActions(
       case 'delete':
         return ['Delete it'];
       case 'create-event': {
-        const { kind, title, attendees = [] } = action.event;
+        const { kind, title, attendees = [], guestsToFill = [], start, end } = action.event;
+        const when = eventTimeWords(start.at, end.at);
         if (kind === 'meeting') {
+          // Names no address was found for go without them (#132): the line says so.
+          const unplaced = guestsToFill.length ? `, without ${guestsToFill.join(', ')} (no address)` : '';
           return attendees.length
             ? [
-                `Put “${title}” in your calendar and invite ${attendees.map((guest) => guest.email).join(', ')}`,
+                `Put “${title}” in your calendar, ${when}, and invite ${attendees.map((guest) => guest.email).join(', ')}${unplaced}`,
               ]
-            : [`Put “${title}” in your calendar`];
+            : [`Put “${title}” in your calendar, ${when}${unplaced}`];
         }
         return kind === 'focus-block'
-          ? [`Put “${title}” in your Commander calendar, busy and private`]
+          ? [`Put “${title}” in your Commander calendar, ${when}, busy and private`]
           : ['Put a private Busy copy on your other calendar'];
       }
       case 'update': {

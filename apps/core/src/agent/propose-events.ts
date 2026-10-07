@@ -20,6 +20,7 @@
 // - The runner remembers each Block it sent with its text, so a dismissed proposal is never offered
 //   again for the same text.
 import {
+  type AttendeeDirectory,
   addDays,
   bestSlots,
   clashesAt,
@@ -339,35 +340,24 @@ export type PlannedEvent = {
   withGuests: boolean;
 };
 
-/**
- * Works out the events Ares proposes, in code (#132, and #144 from email): attendee names become
- * addresses (an address must be in `written`, the words he read, or already known to the User; a name
- * nobody can place is left for the User to fill in), an exact time is checked against every calendar,
- * and a window gets its first free slot inside working hours. `{ why }` when it can't be proposed.
- */
-export function eventPlanner(
-  itemStore: ItemStore,
-  { now, timeZone }: { now: number; timeZone: string },
-): (proposed: ProposedEvent, written: string) => PlannedEvent | { why: string } {
-  const directory = attendeeDirectory(itemStore);
-  const known = new Set<string>(
-    [...directory.seen, ...directory.people].map((each: KnownAddress) => each.email),
-  );
-  const settings = itemStore.focusSettings.read();
-  // The User's events between two instants, as free time reads them.
-  const eventsBetween = (from: number, to: number) =>
-    itemStore
-      .events({ from, to })
-      .flatMap((event): (FreeTimeEvent & { title: string })[] =>
-        event.detail?.kind === 'event'
-          ? [{ id: event.id, account: event.account, title: event.title, detail: event.detail }]
-          : [],
-      );
+/** The guests Ares named, as addresses for an event, and the names nobody could place. */
+export type PlannedGuests = Pick<PlannedEvent, 'attendees' | 'guestsToFill'>;
 
-  return (proposed, written) => {
-    // Who: addresses in code. An address must be written where Ares read it or already known to the User.
+/**
+ * Turns the names Ares gave into guests, in code (#132, #144, and a Conversation's Schedule, #198): an
+ * address as written must be in `written` (the words he read) or already known to the User; a name
+ * becomes the one person of that name seen on the User's events and emails, else among People; a name
+ * nobody can place (or more than one person) is left for the User to fill in.
+ */
+export function guestResolver(
+  directory: AttendeeDirectory,
+  known: ReadonlySet<string> = new Set(
+    [...directory.seen, ...directory.people].map((each: KnownAddress) => each.email),
+  ),
+): (names: readonly string[], written: string) => PlannedGuests {
+  return (names, written) => {
     const lower = written.toLowerCase();
-    const guests: ResolvedAttendee[] = proposed.attendees.map((name) => {
+    const guests: ResolvedAttendee[] = names.map((name) => {
       const resolved = resolveAttendee(name, directory);
       if (
         resolved.how === 'address' &&
@@ -394,6 +384,40 @@ export function eventPlanner(
     const guestsToFill = [
       ...new Set(guests.flatMap((guest) => (!guest.email && guest.name ? [guest.name] : []))),
     ];
+    return { attendees, guestsToFill };
+  };
+}
+
+/**
+ * Works out the events Ares proposes, in code (#132, and #144 from email): attendee names become
+ * addresses (an address must be in `written`, the words he read, or already known to the User; a name
+ * nobody can place is left for the User to fill in), an exact time is checked against every calendar,
+ * and a window gets its first free slot inside working hours. `{ why }` when it can't be proposed.
+ */
+export function eventPlanner(
+  itemStore: ItemStore,
+  { now, timeZone }: { now: number; timeZone: string },
+): (proposed: ProposedEvent, written: string) => PlannedEvent | { why: string } {
+  const directory = attendeeDirectory(itemStore);
+  const known = new Set<string>(
+    [...directory.seen, ...directory.people].map((each: KnownAddress) => each.email),
+  );
+  const settings = itemStore.focusSettings.read();
+  // The User's events between two instants, as free time reads them.
+  const eventsBetween = (from: number, to: number) =>
+    itemStore
+      .events({ from, to })
+      .flatMap((event): (FreeTimeEvent & { title: string })[] =>
+        event.detail?.kind === 'event'
+          ? [{ id: event.id, account: event.account, title: event.title, detail: event.detail }]
+          : [],
+      );
+
+  const guestsOf = guestResolver(directory, known);
+
+  return (proposed, written) => {
+    // Who: addresses in code. An address must be written where Ares read it or already known to the User.
+    const { attendees, guestsToFill } = guestsOf(proposed.attendees, written);
 
     // When: an exact time as said; a window's first free slot inside working hours.
     const length = proposed.durationMinutes * 60_000;

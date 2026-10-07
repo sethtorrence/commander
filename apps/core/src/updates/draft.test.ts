@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DRAFT_EMAIL_REPLIES, DRAFT_REPLIES, DRAFT_SKILL } from '@commander/domain';
+import { DRAFT_EMAIL_REPLIES, DRAFT_NEEDS, DRAFT_REPLIES, DRAFT_SKILL } from '@commander/domain';
 import { createModelClient, type ModelProviderAdapter, type ProviderRequest } from '@commander/models';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { allowCloudMail, deliver } from '../agent/fixtures/emails';
@@ -91,8 +91,15 @@ describe('Draft on request', () => {
         result: { itemId: omar(), text: 'Hi Omar, yes: I’ll send you the TL budget by Friday.', at: NOW },
       },
     });
-    expect(updates.skills.list()).toContainEqual(DRAFT_SKILL);
-    await expect(updates.skills.run('draft', { itemId: omar() })).resolves.toMatchObject({ itemId: omar() });
+    expect(updates.skills.list()).toContainEqual({ ...DRAFT_SKILL, needs: DRAFT_NEEDS });
+    // From a Conversation (#198): the Chat by its ref, the draft shown under the answer.
+    await expect(
+      updates.skills.run('draft', { item: 'I1' }, { refs: new Map([['I1', omar()]]) }),
+    ).resolves.toMatchObject({
+      made: [
+        { kind: 'chat-draft', itemId: omar(), text: 'Hi Omar, yes: I’ll send you the TL budget by Friday.' },
+      ],
+    });
   });
 
   it('drafts nothing while Draft replies is Off', async () => {
@@ -124,11 +131,15 @@ describe('Draft a reply to an email thread', () => {
       },
     });
 
+    // From a Conversation (#198): the User's own message is what the reply should say.
     await expect(
-      updates.skills.run('draft', { itemId: message, instruction: 'Say yes, Thursday' }),
+      updates.skills.run(
+        'draft',
+        { item: 'I1' },
+        { refs: new Map([['I1', message]]), asked: 'Say yes, Thursday' },
+      ),
     ).resolves.toMatchObject({
-      state: 'ready',
-      answering: message,
+      made: [{ kind: 'email-draft', itemId: message, body: 'Hi Dana,\n\nYes, Thursday.\n\nAlex' }],
     });
     expect(calls.at(-1)?.messages.at(-1)?.content).toContain('Say yes, Thursday');
     expect(store.models.usageSummary().byJob.map((row) => row.job)).toEqual([DRAFT_EMAIL_REPLIES]);

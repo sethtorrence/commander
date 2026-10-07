@@ -33,7 +33,6 @@ import {
   chosenLevel,
   createSkillRegistry,
   DRAFT_REPLIES,
-  DRAFT_SKILL,
   type DraftEmailRequest,
   decide,
   type GitHubSummaryAnswer,
@@ -69,12 +68,13 @@ import {
 import type { ModelClient } from '@commander/models';
 import { z } from 'zod';
 import { draftEmailReply } from '../agent/draft-email-reply';
-import { draftReply } from '../agent/draft-reply';
+import { DraftFailed, draftReply } from '../agent/draft-reply';
 import type { MeaningLookup } from '../agent/memory-context';
 import { summariseChat } from '../agent/summarise-chat';
 import type { Gate } from '../autonomy/gate';
 import type { ItemStore } from '../item-store';
 import type { KnownSecrets } from '../safety/known-secrets';
+import { createDraftSkill } from '../skills/draft';
 import { compose } from './compose';
 import { type LineContext, lineRows, lineTemplate, lineWithout } from './kinds';
 import type { WatchedAccount } from './linear';
@@ -149,7 +149,7 @@ export type Updates = {
   // The Summarise Skill: Ares summarises a Chat over a range of its messages.
   summarise(itemId: string, range: SummaryRange): Promise<ChatSummary>;
   // The Draft Skill: Ares drafts a reply to a Chat, for the User to edit and send.
-  draft(itemId: string): Promise<ChatDraft>;
+  draft(itemId: string, instruction?: string): Promise<ChatDraft>;
   // Draft a reply (#143): Ares drafts the User's reply to an email thread, kept as its suggested reply.
   draftEmail(request: DraftEmailRequest): Promise<ReadyReply>;
   history(limit?: number): UpdateSummary[];
@@ -529,20 +529,22 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     });
   }
 
-  async function draft(itemId: string): Promise<ChatDraft> {
+  // `instruction`: what the User wants the reply to say, from a Conversation (#198).
+  async function draft(itemId: string, instruction?: string): Promise<ChatDraft> {
     const found = item(itemId);
-    if (!found || found.deletedAt !== null) throw new Error('That Chat is no longer in Commander');
+    if (!found || found.deletedAt !== null) throw new DraftFailed('That Chat is no longer in Commander');
     const off =
       decide(
         { action: DRAFT_REPLIES, actionKind: 'organise', section: 'teams', confidence: 1, chained: false },
         gate.settings(),
       ) === 'off';
-    if (off) throw new Error('Drafting replies is Off in Settings → Autonomy');
+    if (off) throw new DraftFailed('Drafting replies is Off in Settings → Autonomy');
     return draftReply(found, {
       client: options.client,
       now,
       me: options.me,
       secrets: options.secrets,
+      ...(instruction !== undefined && { instruction }),
       injectionWarnings: itemStore.injectionWarnings,
       refusals: itemStore.refusals,
       onItemsChanged: options.onItemsChanged,
@@ -573,13 +575,9 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       return options.summariseTarget(input);
     },
   });
-  // Draft takes an Item and, for an email, what the User wants said (#143): a Chat gets a draft for its
-  // reply box, an email thread its suggested reply. M7's Conversations call it this way.
-  skills.register<{ itemId: string; instruction?: string }, ChatDraft | ReadyReply>({
-    ...DRAFT_SKILL,
-    run: ({ itemId, instruction }) =>
-      item(itemId)?.kind === 'email' ? draftEmail({ itemId, instruction }) : draft(itemId),
-  });
+  // Draft (#143, #198): a Chat gets a draft for its reply box, an email thread its suggested reply, with
+  // the User's own message in a Conversation as what it should say.
+  skills.register(createDraftSkill({ itemStore, draftChat: draft, draftEmail }));
 
   async function answer(raw: unknown): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
     const parsed = updatesRequest.safeParse(raw);

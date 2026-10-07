@@ -52,6 +52,7 @@ function AresSection() {
       <Conversations
         client={window.commander.conversations}
         autonomy={window.commander.autonomy}
+        itemStore={window.commander.itemStore}
         shown={active}
         onCoreMessage={onCoreMessage}
       />

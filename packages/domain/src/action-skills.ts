@@ -1,15 +1,16 @@
 import { z } from 'zod';
 import { LINK_REF } from './conversations';
+import { addDays, dayInZone, nextWorkingDays, type WorkingHours, weekdayOf, zonedTime } from './focus-time';
 import { SETTINGS_SKILL } from './settings-changes';
 import type { SkillInfo } from './skills';
 
 /*
   Ares's action Skills (#196, decision #24): what the User can tell him to do from a Conversation.
-  Manage Todos, File, Snooze and Linear actions each hand the gate proposals, under the User's Autonomy
-  settings for the Action kind and Section, as every Ares action does (ADR 0004): what the settings let
-  run goes ahead, reported in his answer with Undo; what must ask is prepared in the Conversation as a
-  card the User confirms with one key. Each is a registered action of its own, so it has its own line
-  in Settings → Autonomy.
+  Manage Todos, File, Snooze, Linear actions and Schedule (#198) each hand the gate proposals, under the
+  User's Autonomy settings for the Action kind and Section, as every Ares action does (ADR 0004): what
+  the settings let run goes ahead, reported in his answer with Undo; what must ask is prepared in the
+  Conversation as a card the User confirms with one key. Each is a registered action of its own, so it
+  has its own line in Settings → Autonomy.
 
   What the model gives them names Items only by the refs handed to him for this answer (I1, I2…), and
   times only in words Commander turns into dates on the User's own calendar ("friday", "next-week"),
@@ -258,11 +259,162 @@ export const LINEAR_SKILL: SkillInfo = {
   acts: true,
 };
 
+// ---------------------------------------------------------------------------------------------
+// Schedule
+
+// The registered actions (#198): an event with guests is Act for you in the Calendar Section (other
+// people see it), so it only ever asks; focus time in the Commander calendar is Tidy your Sources, as
+// "Block time for Todos" is (#131).
+export const CONVERSATION_SCHEDULE = 'conversation-schedule';
+export const CONVERSATION_FOCUS_TIME = 'conversation-focus-time';
+
+// The words a time to look in may be given in, beside a date (YYYY-MM-DD).
+export const SCHEDULE_WHENS: readonly string[] = [
+  'today',
+  'tomorrow',
+  'this-week',
+  'next-week',
+  ...WEEKDAYS.slice(1),
+  'sunday',
+];
+
+// How many working days Schedule looks in when no time was given.
+export const SCHEDULE_DAYS = 5;
+
+const whenWord = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .refine((word) => SCHEDULE_WHENS.includes(word) || realDay(word), {
+    message: `one of ${SCHEDULE_WHENS.map((word) => `"${word}"`).join(', ')} or a date as YYYY-MM-DD`,
+  });
+const atTime = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .refine(
+    (text) => {
+      const time = ISO_TIME.exec(text);
+      return !!time && realDay(text.slice(0, 10)) && Number(time[4]) < 24 && Number(time[5]) < 60;
+    },
+    { message: 'a time as YYYY-MM-DDTHH:MM' },
+  );
+const minutes = z
+  .number()
+  .int()
+  .min(15)
+  .max(8 * 60);
+
+export const scheduleInput = z.discriminatedUnion('action', [
+  // A meeting with other people: at the time the User named, else the first time Commander finds
+  // everyone free in `when`. `from`: an Item it is about (an email, a Todo).
+  z.object({
+    action: z.literal('meeting'),
+    title: z.string().trim().min(1).max(200).optional(),
+    with: z.array(z.string().trim().min(1).max(200)).min(1).max(10),
+    minutes: minutes.optional(),
+    at: atTime.optional(),
+    when: whenWord.optional(),
+    from: ref.optional(),
+  }),
+  // Focus time for the User alone, in their Commander calendar: for a Todo, or for what they name.
+  z.object({
+    action: z.literal('focus'),
+    todo: ref.optional(),
+    title: z.string().trim().min(1).max(200).optional(),
+    minutes,
+    when: whenWord.optional(),
+  }),
+  // The User's booking link, in a reply to an email or a Chat, for them to open and send.
+  z.object({ action: z.literal('booking-link'), to: ref }),
+]);
+export type ScheduleInput = z.infer<typeof scheduleInput>;
+
+const whenNeeds = `${SCHEDULE_WHENS.map((word) => `"${word}"`).join(', ')} or a date as "YYYY-MM-DD"`;
+
+export const SCHEDULE_NEEDS = `one of {"action":"meeting","with":[the people, each as the User named them or an email address],"title": a short event title (optional),"minutes": how long (optional, 30 when not said),"at": a time the User named, as "YYYY-MM-DDTHH:MM" on their own clock (optional),"when": when to look for a time (optional),"from": the ref of an Item it is about (optional)}, {"action":"focus","minutes": how long,"todo": the ref of the Todo it is for (optional),"title": what it is for, when not a Todo (optional),"when": when to look (optional)} or {"action":"booking-link","to": the ref of the email or Teams Chat to reply to}, where "when" is ${whenNeeds}; with no "when", the next ${SCHEDULE_DAYS} working days`;
+
+export const SCHEDULE_SKILL: SkillInfo = {
+  name: 'schedule',
+  title: 'Schedule',
+  description:
+    'Set up time for the User with the scheduler: find a time with people and prepare the event ("find an hour with Priya next week", "set up a call with Leo Tuesday at 2"), block focus time in their Commander calendar ("block two hours for the Acme Todo"), or put their booking link in a reply ("send Leo my booking link"). Commander works out the free time across every calendar, and checks the guests’ calendars where it can. An event with guests always waits for the User to confirm. A reply with the booking link is only ever for the User to open and send. For a Todo, an email or a Chat, find it first and give its ref.',
+  summary:
+    'Finds a time with people and prepares the event for you to confirm, blocks focus time, or puts your booking link in a reply.',
+  example: 'Find an hour with Priya next week',
+  acts: true,
+};
+
+/** A span of time to look in, on the User's own calendar: from inclusive, to exclusive. */
+export type ScheduleWindow = { from: number; to: number; words: string };
+
+/**
+ * The span of time a Schedule "when" means, in the time zone given, never before `now`: "today",
+ * "tomorrow", a weekday (the next one, today counting), "this-week" (to the end of Sunday),
+ * "next-week" (Monday to Sunday), or a date. With none, the next SCHEDULE_DAYS working days.
+ */
+export function scheduleWindow(
+  word: string | undefined,
+  now: number,
+  timeZone: string,
+  workingHours: WorkingHours,
+): ScheduleWindow {
+  const text = word?.trim().toLowerCase();
+  const today = dayInZone(now, timeZone);
+  const start = (day: string) => zonedTime(day, '00:00', timeZone);
+  const span = (from: string, days: number, words: string): ScheduleWindow => ({
+    from: Math.max(now, start(from)),
+    to: start(addDays(from, days)),
+    words,
+  });
+  if (!text) {
+    const range = nextWorkingDays(now, SCHEDULE_DAYS, workingHours, timeZone);
+    return { from: range.from, to: range.to, words: `the next ${SCHEDULE_DAYS} working days` };
+  }
+  if (realDay(text)) return span(text, 1, longDay(text));
+  const weekday = WEEKDAYS.indexOf(text as (typeof WEEKDAYS)[number]);
+  const todayIs = weekdayOf(today);
+  if (weekday !== -1) {
+    const day = addDays(today, (weekday - todayIs + 7) % 7);
+    return span(day, 1, longDay(day));
+  }
+  // Monday of this week.
+  const monday = addDays(today, -((todayIs + 6) % 7));
+  switch (text) {
+    case 'today':
+      return span(today, 1, 'today');
+    case 'tomorrow':
+      return span(addDays(today), 1, 'tomorrow');
+    case 'this-week':
+      return { from: now, to: start(addDays(monday, 7)), words: 'this week' };
+    default:
+      return span(addDays(monday, 7), 7, 'next week');
+  }
+}
+
+/** The instant a Schedule "at" means on the User's own clock, in the time zone given. */
+export function scheduleAt(text: string, timeZone: string): number {
+  const [day, time] = text.trim().toLowerCase().split(/[t ]/) as [string, string];
+  return zonedTime(day, time, timeZone);
+}
+
+// A day as the User reads it: "Friday 9 October".
+function longDay(day: string): string {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number];
+  return new Date(Date.UTC(year, month - 1, date)).toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    timeZone: 'UTC',
+  });
+}
+
 // The action Skills in the order Ares is told of them; changing his own settings (#197) last.
 export const ACTION_SKILLS: readonly SkillInfo[] = [
   MANAGE_TODOS_SKILL,
   FILE_SKILL,
   SNOOZE_SKILL,
   LINEAR_SKILL,
+  SCHEDULE_SKILL,
   SETTINGS_SKILL,
 ];

@@ -14,6 +14,8 @@ export * from './calendar';
 export * from './channel-posts';
 export * from './clashes';
 export * from './commander-events';
+export * from './conversation-made';
+export * from './conversation-skills';
 export * from './conversations';
 export * from './core-messages';
 export * from './daily-template';

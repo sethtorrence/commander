@@ -412,7 +412,7 @@ describe('Ares choosing Skills in a Conversation', () => {
   it('lists every Skill he has for “What Ares can do”, saying which a Conversation can use', async () => {
     const registry = createSkillRegistry();
     registry.register(fakeSkill(FIND_SKILL, nothingFound).skill);
-    registry.register(fakeSkill({ name: 'draft', description: 'Drafts.' }, nothingFound).skill);
+    registry.register(fakeSkill({ name: 'someday', description: 'Not yet.' }, nothingFound).skill);
     setUp(registry);
     expect(await ask({ op: 'skills' })).toEqual([
       expect.objectContaining({
@@ -421,17 +421,21 @@ describe('Ares choosing Skills in a Conversation', () => {
         example: FIND_SKILL.example,
         inConversations: true,
       }),
-      { name: 'draft', description: 'Drafts.', inConversations: false },
+      { name: 'someday', description: 'Not yet.', inConversations: false },
     ]);
-    // Those that look, then those that act (#196), changing his own settings last (#197).
+    // Those that look, those that make something to show (#198), then those that act (#196),
+    // changing his own settings last (#197).
     expect(CONVERSATION_SKILLS).toEqual([
       'update',
       'find',
       'summarise',
+      'draft',
+      'prep',
       'todos',
       'file',
       'snooze',
       'linear',
+      'schedule',
       'settings',
     ]);
   });

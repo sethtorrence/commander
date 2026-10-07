@@ -2,12 +2,14 @@ import { type Conversation, type ConversationTurn, MAX_TURN_TEXT } from '@comman
 import { AresText, Button, cn, Kbd, Led } from '@commander/ui';
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReveal } from '../../frame/reveal';
+import type { ItemStoreClient } from '../../item-store/client';
 import { SettingsGroup } from '../../settings/parts';
 import { useUpdates } from '../../updates/context';
 import { KindTag } from '../todos/detail/parts';
 import { kindTag } from '../todos/links';
 import type { AutonomyClient } from './activity';
 import { AnswerActions } from './ConversationActions';
+import { AnswerMade } from './ConversationMade';
 import { ConversationUpdate } from './ConversationUpdate';
 import {
   answeringTurn,
@@ -42,6 +44,8 @@ import { type CoreMessages, useConversations } from './use-conversations';
   nothing is typed, so one key (Enter) confirms it.
   What he remembered from the User's message (#194) shows under his words as lines with Undo
   (Remembered); What Ares knows opens a Conversation at the turn a memory came from, as search does.
+  What Draft, Schedule and Meeting prep made (#198) shows there too (ConversationMade): a draft reply
+  with Open in composer, a meeting's prep.
 */
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -50,6 +54,7 @@ const metaClass = 'font-mono text-label leading-none font-medium uppercase track
 export function Conversations({
   client,
   autonomy,
+  itemStore,
   shown,
   onCoreMessage,
   no = 'A4',
@@ -57,6 +62,8 @@ export function Conversations({
   client: ConversationsClient;
   // The gate, for the cards of what Ares did or prepared (#196); without it they don't show.
   autonomy?: AutonomyClient;
+  // The Item store, for a meeting's prep an answer made (#198).
+  itemStore?: ItemStoreClient;
   shown: boolean;
   onCoreMessage: CoreMessages;
   no?: string;
@@ -211,6 +218,7 @@ export function Conversations({
                 text={live.get(turn.id) ?? turn.text}
                 sources={sources}
                 found={turn.id === foundTurn}
+                itemStore={itemStore}
               >
                 <RememberedLines turn={turn} client={client} sources={sources} />
                 <AnswerActions
@@ -328,12 +336,18 @@ export function Turn({
   turn,
   text,
   sources,
+  itemStore,
+  onLeave,
   children,
   found = false,
 }: {
   turn: ConversationTurn;
   text: string;
   sources: readonly string[];
+  // Where a meeting's prep the answer made is read (#198).
+  itemStore?: ItemStoreClient;
+  // Open in composer on a draft the answer made took the User elsewhere (#198).
+  onLeave?: () => void;
   // What his action Skills did or prepared, under his words (#196).
   children?: ReactNode;
   // The turn search opened the Conversation at (#195): marked.
@@ -396,6 +410,7 @@ export function Turn({
         </div>
       )}
       {turn.updateId !== null && <ConversationUpdate updateId={turn.updateId} />}
+      <AnswerMade turn={turn} itemStore={itemStore} onLeave={onLeave} />
       {children}
       {turn.status === 'stopped' && (
         <p className={cn(metaClass, 'mt-1.5')}>{text ? 'Stopped' : 'Stopped before he began'}</p>

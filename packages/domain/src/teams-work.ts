@@ -41,15 +41,15 @@ export const chatDraft = z.object({
 });
 export type ChatDraft = z.infer<typeof chatDraft>;
 
-/** Draft: one of Ares's Skills, on a Chat or an email thread (#143). */
+/** Draft: one of Ares's Skills, on a Chat or an email thread (#143), and in Conversations (#198). */
 export const DRAFT_SKILL: SkillInfo = {
   name: 'draft',
   description:
-    'Draft a reply to a Teams Chat or an email thread for the User, in their own style, from its recent messages (and what the User wants said), for the User to edit and send themselves.',
+    'Draft the User’s reply to an email thread or a Teams Chat, in their own style, from its recent messages and what the User asked it to say ("reply to this saying Thursday works", "draft a reply to Priya’s last Chat"). Find the email or Chat first and give its ref. The draft shows under your answer for the User to open in the composer, edit and send themselves: you never send anything.',
   title: 'Draft',
   summary:
-    'Drafts a reply to a Teams Chat or an email thread in your own style, for you to edit and send yourself.',
-  example: 'Draft a reply saying I’ll be there',
+    'Drafts a reply to an email or a Teams Chat in your own style, for you to open in the composer, edit and send yourself.',
+  example: 'Reply to this saying Thursday works',
 };
 
 /** Where a Todo Ares made from a Chat came from: the Chat, and the message it opens at. */
