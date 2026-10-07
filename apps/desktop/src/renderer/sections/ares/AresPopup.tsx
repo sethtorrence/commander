@@ -5,6 +5,8 @@ import { createPortal } from 'react-dom';
 import { type AresActions, AresProvider, type AresTarget } from '../../links/AresButton';
 import { KindTag } from '../todos/detail/parts';
 import { kindTag } from '../todos/links';
+import type { AutonomyClient } from './activity';
+import { AnswerActions } from './ConversationActions';
 import { Turn } from './Conversations';
 import { answeringTurn, type ConversationsClient, canSendAgain } from './conversations';
 import { useConversation } from './use-conversation';
@@ -69,11 +71,14 @@ type Opened = { target: AresTarget; anchor: DOMRect | null; from: Element | null
 
 export function AresPopupHost({
   client,
+  autonomy,
   onCoreMessage,
   onExpand,
   children,
 }: {
   client: ConversationsClient;
+  /** The gate, for the cards of what Ares did or prepared (#196). */
+  autonomy?: AutonomyClient;
   onCoreMessage: CoreMessages;
   /** Opens a Conversation in the Ares Section. */
   onExpand: (conversationId: string) => void;
@@ -116,6 +121,7 @@ export function AresPopupHost({
           target={opened.target}
           anchor={opened.anchor}
           client={client}
+          autonomy={autonomy}
           onCoreMessage={onCoreMessage}
           onClose={close}
           onExpand={(conversationId) => {
@@ -132,6 +138,7 @@ export function AresPopup({
   target,
   anchor,
   client,
+  autonomy,
   onCoreMessage,
   onClose,
   onExpand,
@@ -139,6 +146,7 @@ export function AresPopup({
   target: AresTarget;
   anchor: DOMRect | null;
   client: ConversationsClient;
+  autonomy?: AutonomyClient;
   onCoreMessage: CoreMessages;
   onClose: () => void;
   onExpand: (conversationId: string) => void;
@@ -254,7 +262,16 @@ export function AresPopup({
           </li>
         )}
         {view?.turns.map((turn) => (
-          <Turn key={turn.id} turn={turn} text={live.get(turn.id) ?? turn.text} sources={sources} />
+          <Turn key={turn.id} turn={turn} text={live.get(turn.id) ?? turn.text} sources={sources}>
+            <AnswerActions
+              turn={turn}
+              client={autonomy}
+              onCoreMessage={onCoreMessage}
+              last={turn === lastTurn}
+              writing={draft !== ''}
+              onSettled={() => input.current?.focus()}
+            />
+          </Turn>
         ))}
       </ol>
       {canSendAgain(view) && (

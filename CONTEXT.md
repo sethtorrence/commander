@@ -209,7 +209,7 @@ The name and persona under which the Agent presents itself to the User.
 _Avoid_: Titanus (former name), assistant, bot, AI
 
 **Skill**:
-A named ability Ares can use, on request or when he judges it is wanted (e.g. Update, Find, Summarise, Draft, Schedule), each listed on What Ares can do; in a Conversation he chooses one from what the User says, and using one is a **Skill step**, at most a few for each message.
+A named ability Ares can use, on request or when he judges it is wanted (e.g. Update, Find, Summarise, Draft, Schedule), each listed on What Ares can do; in a Conversation he chooses one from what the User says, and using one is a **Skill step**, at most a few for each message. An **action Skill** (Manage Todos, File, Snooze, Linear actions) changes nothing itself: each change it is asked for goes to the gate as a proposal, so it runs (reported in his answer, with Undo) or waits as a card in the Conversation, as the User's Autonomy settings say.
 _Avoid_: Tool, command, feature, plugin
 
 **Conversation**:
@@ -237,7 +237,7 @@ A GitHub issue the User's coding-agent skills keep open on purpose (a wayfinder 
 _Avoid_: Stale issue, epic, tracking issue; "skill" alone (a Skill is one of Ares's abilities)
 
 **Suggestion**:
-Something Ares has prepared and left on its Item for the User to accept or dismiss (what Ask means); nothing happens until it is accepted, and one suggested because of another Item says what caused it.
+Something Ares has prepared and left on its Item for the User to accept or dismiss (what Ask means), and, when asked for in a Conversation, as a card in his answer there, confirmed with one key; nothing happens until it is accepted, and one suggested because of another Item says what caused it.
 _Avoid_: Recommendation, proposal (that's what Ares's jobs hand the gate), prompt, nudge
 
 **Warning mark**:

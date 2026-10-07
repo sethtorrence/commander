@@ -28,6 +28,7 @@ import {
   describeActivity,
   describeItemActions,
 } from './activity';
+import { openConversation } from './conversations';
 import { useAresActivity } from './use-ares-activity';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -198,6 +199,7 @@ function ActivityRow({ row, state }: { row: AresActivity; state: ReturnType<type
         <span className="text-muted">Why: </span>
         <AresText inline text={row.reason} sources={sources} />
         <Cause row={row} />
+        <FromConversation row={row} />
       </p>
     </li>
   );
@@ -213,6 +215,30 @@ function Cause({ row }: { row: AresActivity }) {
       {row.chained ? 'Suggested because of ' : 'Because of '}
       <cite className="font-semibold text-ink not-italic">{cause.item.title}</cite>
       {at !== undefined && `, ${when.format(at)}`}
+    </span>
+  );
+}
+
+/** The Conversation it was asked for in (#196), which opens there. */
+function FromConversation({ row }: { row: AresActivity }) {
+  const asked = row.conversation;
+  if (!asked) return null;
+  return (
+    <span data-testid="activity-conversation" className="block text-muted">
+      {asked.title === null ? (
+        'Asked for in a Conversation since deleted'
+      ) : (
+        <>
+          Asked for in your Conversation{' '}
+          <button
+            type="button"
+            onClick={() => openConversation(asked.conversationId)}
+            className="cursor-pointer border-0 bg-transparent p-0 font-semibold text-ink underline decoration-line underline-offset-2 hover:decoration-ink"
+          >
+            {asked.title}
+          </button>
+        </>
+      )}
     </span>
   );
 }

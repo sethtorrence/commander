@@ -11,6 +11,22 @@ import { type ZodType, z } from 'zod';
 // words saying what to give it.
 export type SkillInput<Input> = { schema: ZodType<Input>; describe: string };
 
+// Where a Skill runs, when it runs in a Conversation (#196): what an action Skill needs beside its
+// input to hand the gate a proposal. Commander fills it in, never the model.
+export type SkillContext = {
+  // The Conversation and the answer of Ares's the Skill runs for: what every action it proposes was
+  // caused by, in Ares's activity log.
+  conversation?: { conversationId: string; turnId: number };
+  // The User's message being answered, for an action's reason.
+  asked?: string;
+  // The Items handed to Ares for this answer, by the ref he names them by (I1, I2…).
+  refs?: ReadonlyMap<string, string>;
+  // What the call that chose this Skill read that the User didn't write: its outside Items, and the
+  // Items behind its background blocks (null when it had none). An action caused by one of them that
+  // reaches beyond it is chained (ADR 0004).
+  read?: { outside: readonly string[]; background: readonly string[] | null };
+};
+
 export type Skill<Input = void, Output = unknown> = {
   name: string;
   description: string;
@@ -22,7 +38,10 @@ export type Skill<Input = void, Output = unknown> = {
   example?: string;
   // What it needs. A Skill without one takes no input (the Update) or checks its own.
   input?: SkillInput<Input>;
-  run(input: Input): Promise<Output>;
+  // It acts (#196): what it does goes to the gate as proposals, under the User's Autonomy settings,
+  // rather than only reading.
+  acts?: boolean;
+  run(input: Input, context?: SkillContext): Promise<Output>;
 };
 
 export const skillInfo = z.object({
@@ -33,6 +52,8 @@ export const skillInfo = z.object({
   example: z.string().optional(),
   // What it needs, in the words the model reads; absent when it needs nothing.
   needs: z.string().optional(),
+  // It acts through the gate (#196), under the User's Autonomy settings.
+  acts: z.boolean().optional(),
 });
 export type SkillInfo = z.infer<typeof skillInfo>;
 
@@ -49,8 +70,9 @@ export type SkillRegistry = {
   register<Input, Output>(skill: Skill<Input, Output>): void;
   list(): SkillInfo[];
   has(name: string): boolean;
-  // Runs a Skill by name. Its input is checked against what it needs first, when it says.
-  run(name: string, input: unknown): Promise<unknown>;
+  // Runs a Skill by name. Its input is checked against what it needs first, when it says. `context`:
+  // where it runs, from a Conversation.
+  run(name: string, input: unknown, context?: SkillContext): Promise<unknown>;
 };
 
 function infoOf({
@@ -60,6 +82,7 @@ function infoOf({
   summary,
   example,
   input,
+  acts,
 }: Omit<Skill<unknown, unknown>, 'run' | 'input'> & { input?: { describe: string } }): SkillInfo {
   return {
     name,
@@ -68,6 +91,7 @@ function infoOf({
     ...(summary !== undefined && { summary }),
     ...(example !== undefined && { example }),
     ...(input && { needs: input.describe }),
+    ...(acts && { acts }),
   };
 }
 
@@ -81,10 +105,10 @@ export function createSkillRegistry(): SkillRegistry {
     },
     list: () => [...skills.values()].map(infoOf),
     has: (name) => skills.has(name),
-    async run(name, input) {
+    async run(name, input, context = {}) {
       const skill = skills.get(name);
       if (!skill) throw new Error(`Ares has no Skill called “${name}”`);
-      if (!skill.input) return skill.run(input);
+      if (!skill.input) return skill.run(input, context);
       const checked = skill.input.schema.safeParse(input);
       if (!checked.success) {
         const issue = checked.error.issues[0];
@@ -93,7 +117,7 @@ export function createSkillRegistry(): SkillRegistry {
           `${skillTitle(skill)} needs ${skill.input.describe} (${where}${issue?.message ?? 'not that'})`,
         );
       }
-      return skill.run(checked.data);
+      return skill.run(checked.data, context);
     },
   };
 }

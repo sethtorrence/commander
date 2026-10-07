@@ -527,6 +527,10 @@ export const proposals = sqliteTable(
     causedByItemId: text('caused_by_item_id').references(() => items.id),
     causedByEntryId: integer('caused_by_entry_id').references(() => activity.id),
     chained: integer('chained', { mode: 'boolean' }).notNull(),
+    // The Conversation it was asked for in, and Ares's answer there (#196). No foreign key: deleting a
+    // Conversation keeps what was done from it in the activity log.
+    conversationId: text('conversation_id'),
+    conversationTurnId: integer('conversation_turn_id'),
     decision: text('decision').$type<'ask' | 'auto'>().notNull(),
     status: text('status').$type<ProposalStatus>().notNull(),
     settledAt: integer('settled_at'),
@@ -1211,6 +1215,8 @@ export const conversationTurns = sqliteTable(
     links: text('links', { mode: 'json' }).$type<ConversationLink[]>().notNull().default([]),
     updateId: integer('update_id'),
     skills: text('skills', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    // What his action Skills handed the gate for it (#196), by proposal.
+    proposalIds: text('proposal_ids', { mode: 'json' }).$type<number[]>().notNull().default([]),
   },
   (t) => [index('conversation_turns_conversation').on(t.conversationId, t.id)],
 );

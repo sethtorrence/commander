@@ -33,14 +33,16 @@ export type AutonomyStore = {
 type ProposalRow = typeof schema.proposals.$inferSelect;
 
 function toProposal(row: ProposalRow): ProposalRecord {
-  const { causedByItemId, causedByEntryId, ...rest } = row;
+  const { causedByItemId, causedByEntryId, conversationId, conversationTurnId, ...rest } = row;
   let causedBy: CausedBy | null = null;
   if (causedByItemId || causedByEntryId) {
     causedBy = {};
     if (causedByItemId) causedBy.itemId = causedByItemId;
     if (causedByEntryId) causedBy.entryId = causedByEntryId;
   }
-  return { ...rest, causedBy };
+  const conversation =
+    conversationId && conversationTurnId ? { conversationId, turnId: conversationTurnId } : null;
+  return { ...rest, causedBy, conversation };
 }
 
 export function openAutonomyStore(
@@ -67,13 +69,15 @@ export function openAutonomyStore(
       return settings;
     },
 
-    saveProposal({ causedBy, ...proposal }) {
+    saveProposal({ causedBy, conversation, ...proposal }) {
       const row = db
         .insert(proposals)
         .values({
           ...proposal,
           causedByItemId: causedBy?.itemId ?? null,
           causedByEntryId: causedBy?.entryId ?? null,
+          conversationId: conversation?.conversationId ?? null,
+          conversationTurnId: conversation?.turnId ?? null,
           at: now(),
           settledAt: null,
         })
@@ -105,6 +109,7 @@ export function openAutonomyStore(
         .from(proposals)
         .where(
           and(
+            query.ids ? inArray(proposals.id, query.ids) : undefined,
             query.itemId ? eq(proposals.itemId, query.itemId) : undefined,
             query.action ? eq(proposals.action, query.action) : undefined,
             query.actionKinds ? inArray(proposals.actionKind, query.actionKinds) : undefined,

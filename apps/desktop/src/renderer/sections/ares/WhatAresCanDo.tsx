@@ -6,7 +6,8 @@ import type { ConversationsClient } from './conversations';
 /*
   What Ares can do (#192, decision #24): every Skill he has, from the Skill registry in the Core, so a
   Skill added later shows here by itself. Each with a plain line saying what it does and how to ask
-  for it in a Conversation; one a Conversation can't use yet says where it is used instead.
+  for it in a Conversation; one a Conversation can't use yet says where it is used instead. One that
+  acts (#196) says it goes through the User's Autonomy settings.
 */
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -66,6 +67,11 @@ export function WhatAresCanDo({
                   )
                 ) : (
                   <span className={metaClass}>Not in Conversations yet: used where it lives</span>
+                )}
+                {skill.acts && (
+                  <span className={metaClass} data-testid="ares-skill-acts">
+                    Acts as your Autonomy settings say: done with Undo, or asked first
+                  </span>
                 )}
               </span>
             </li>

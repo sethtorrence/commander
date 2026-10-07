@@ -61,6 +61,7 @@ beforeAll(() => {
         reason: 'Maybe',
         causedBy: null,
         chained: false,
+        conversation: null,
         decision: 'ask',
         status: 'pending',
         entryIds: [],

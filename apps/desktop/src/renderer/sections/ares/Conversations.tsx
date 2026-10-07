@@ -1,11 +1,13 @@
 import { type Conversation, type ConversationTurn, MAX_TURN_TEXT } from '@commander/domain';
 import { AresText, Button, cn, Kbd, Led } from '@commander/ui';
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReveal } from '../../frame/reveal';
 import { SettingsGroup } from '../../settings/parts';
 import { useUpdates } from '../../updates/context';
 import { KindTag } from '../todos/detail/parts';
 import { kindTag } from '../todos/links';
+import type { AutonomyClient } from './activity';
+import { AnswerActions } from './ConversationActions';
 import { ConversationUpdate } from './ConversationUpdate';
 import {
   answeringTurn,
@@ -34,6 +36,9 @@ import { type CoreMessages, useConversations } from './use-conversations';
   says so. Delete removes one, with Undo in the toast. Each Conversation keeps its own unsent words.
   One started from an Item with the Ares button (#193) names that Item under its title, opening it
   where it lives; Open in Ares on the pop-up opens it here.
+  What his action Skills did or prepared (#196) shows under his words as cards (ConversationActions):
+  done, with Undo, or waiting for the User, whose Confirm takes the focus when the answer arrives and
+  nothing is typed, so one key (Enter) confirms it.
 */
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -41,11 +46,14 @@ const metaClass = 'font-mono text-label leading-none font-medium uppercase track
 
 export function Conversations({
   client,
+  autonomy,
   shown,
   onCoreMessage,
   no = 'A4',
 }: {
   client: ConversationsClient;
+  // The gate, for the cards of what Ares did or prepared (#196); without it they don't show.
+  autonomy?: AutonomyClient;
   shown: boolean;
   onCoreMessage: CoreMessages;
   no?: string;
@@ -78,6 +86,8 @@ export function Conversations({
     const element = thread.current;
     if (element && lastText !== undefined) element.scrollTop = element.scrollHeight;
   }, [lastText]);
+
+  const lastTurn = view?.turns.at(-1);
 
   const setDraft = (text: string) => {
     if (openId) setDrafts((current) => ({ ...current, [openId]: text }));
@@ -175,7 +185,16 @@ export function Conversations({
               </li>
             )}
             {view?.turns.map((turn) => (
-              <Turn key={turn.id} turn={turn} text={live.get(turn.id) ?? turn.text} sources={sources} />
+              <Turn key={turn.id} turn={turn} text={live.get(turn.id) ?? turn.text} sources={sources}>
+                <AnswerActions
+                  turn={turn}
+                  client={autonomy}
+                  onCoreMessage={onCoreMessage}
+                  last={turn === lastTurn}
+                  writing={draft !== ''}
+                  onSettled={() => input.current?.focus()}
+                />
+              </Turn>
             ))}
           </ol>
           {canSendAgain(view) && (
@@ -282,10 +301,13 @@ export function Turn({
   turn,
   text,
   sources,
+  children,
 }: {
   turn: ConversationTurn;
   text: string;
   sources: readonly string[];
+  // What his action Skills did or prepared, under his words (#196).
+  children?: ReactNode;
 }) {
   const { open } = useUpdates();
   const refs = useMemo(() => refsOf(turn.links, open), [turn.links, open]);
@@ -326,6 +348,7 @@ export function Turn({
         </div>
       )}
       {turn.updateId !== null && <ConversationUpdate updateId={turn.updateId} />}
+      {children}
       {turn.status === 'stopped' && (
         <p className={cn(metaClass, 'mt-1.5')}>{text ? 'Stopped' : 'Stopped before he began'}</p>
       )}

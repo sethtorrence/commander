@@ -19,7 +19,7 @@ import {
   decide,
   HARD_LIMITS,
   isAllowed,
-  onlyBucketFields,
+  onlyOwnEmailFields,
   type Proposal,
   type ProposalOutcome,
   type ProposalQuery,
@@ -132,10 +132,18 @@ export function openGate({
     };
     for (const step of parsed.itemActions) {
       if (step.type === 'delete' && action.actionKind !== 'delete') refuse('deletes', 'delete');
-      // Synced fields exist only to write back to a Source. An email's Bucket (#141) is Commander's
-      // own field, never written back, so sorting is Organise.
-      if (step.type === 'edit-fields' && action.actionKind === 'organise' && !onlyBucketFields(step.fields)) {
+      // Synced fields exist only to write back to a Source. An email's Bucket (#141) and its Snooze
+      // (#196) are Commander's own fields, never written back, so sorting and snoozing are Organise.
+      if (
+        step.type === 'edit-fields' &&
+        action.actionKind === 'organise' &&
+        !onlyOwnEmailFields(step.fields)
+      ) {
         refuse('changes an Item at its Source', 'tidy-sources');
+      }
+      // A new Linear issue is seen by the people in its team (#11).
+      if (step.type === 'send-to-linear' && action.actionKind !== 'act-for-you') {
+        refuse('makes a Linear issue', 'act-for-you');
       }
       // An event goes in one of the User's calendars, at its Source.
       if (step.type === 'create-event' && action.actionKind === 'organise') {
@@ -216,6 +224,8 @@ export function openGate({
     }
     for (const action of steps) {
       let entry: ReturnType<ItemStore['record']>;
+      // Entries a step recorded after its first (what sending to Linear did to the Todo).
+      let more: number[] = [];
       switch (action.type) {
         case 'create':
           entry = itemStore.record(action, context);
@@ -223,6 +233,15 @@ export function openGate({
         case 'create-event':
           entry = itemStore.createEvent(action.event, context);
           break;
+        case 'send-to-linear': {
+          // Send to Linear's own entries: the issue made first, then what it did to the Todo or Block.
+          const entries = itemStore.sendToLinear(action.draft, context);
+          const [made, ...rest] = entries;
+          if (!made) throw new GateError('invalid', 'Sending to Linear made no issue');
+          entry = made;
+          more = rest.map((each) => each.id);
+          break;
+        }
         case 'update': {
           const { filing } = action.changes;
           const changes =
@@ -243,7 +262,7 @@ export function openGate({
           );
       }
       createdIds.push(entry.itemId);
-      entryIds.push(entry.id);
+      entryIds.push(entry.id, ...more);
     }
     return entryIds;
   }
@@ -313,6 +332,7 @@ export function openGate({
       }
       if (step.type === 'create') for (const target of createdIn(step.item.detail)) touch(target);
       if (step.type === 'create-event' && step.event.copyOf) touch(step.event.copyOf);
+      if (step.type === 'send-to-linear' && step.draft.from) touch(step.draft.from);
     }
     return [...touched].some((itemId) => itemId !== causeItemId);
   }
@@ -354,11 +374,17 @@ export function openGate({
       cause = { item: ref(record.causedBy.itemId ?? entry?.itemId), entry };
     }
     const carriedOut = record.status === 'done' || record.status === 'accepted';
+    // The Conversation it was asked for in (#196), by its name while it is still kept.
+    const asked = record.conversation;
+    const conversation = asked
+      ? { ...asked, title: itemStore.conversations.conversation(asked.conversationId)?.title ?? null }
+      : null;
     return {
       ...record,
       name: registered.get(record.action)?.name ?? record.action,
       item: ref(record.itemId),
       cause,
+      conversation,
       undoable: carriedOut && record.entryIds.length > 0 && !record.entryIds.some((id) => undone.has(id)),
     };
   }
@@ -435,6 +461,7 @@ export function openGate({
         const saved = itemStore.autonomy.saveProposal({
           ...parsed,
           causedBy: parsed.causedBy ?? null,
+          conversation: parsed.conversation ?? null,
           decision,
           status: 'pending',
           entryIds: [],

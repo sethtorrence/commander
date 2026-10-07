@@ -262,7 +262,8 @@ function fitting<T>(schema: ZodType<T>, value: unknown): { data: T; dropped: num
 
 // The Items a proposal touches: the one it is about, and every existing Item its steps name,
 // including what an Item it creates would sit in or be backed by (a Block's Daily Note and parent).
-function touched(proposal: JobProposal): Set<string> {
+// A Conversation's action Skills judge chaining by it too (../skills/act.ts).
+export function touched(proposal: Pick<Proposal, 'itemId' | 'itemActions'>): Set<string> {
   const ids = new Set([proposal.itemId]);
   for (const step of proposal.itemActions) {
     for (const target of [
@@ -271,6 +272,7 @@ function touched(proposal: JobProposal): Set<string> {
       'to' in step ? step.to : undefined,
       ...(step.type === 'create' ? createdIn(step.item.detail) : []),
       ...(step.type === 'create-event' && step.event.copyOf ? [step.event.copyOf] : []),
+      ...(step.type === 'send-to-linear' && step.draft.from ? [step.draft.from] : []),
     ]) {
       if (typeof target === 'string') ids.add(target);
     }
