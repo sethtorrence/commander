@@ -51,7 +51,32 @@ export function describeSync(
   const progress = status.progress
     ? `${downloading}: ${COUNT.format(status.progress.done)} of ~${COUNT.format(status.progress.total)}`
     : null;
-  return { synced, next: progress ?? next, problem: status.problem?.message ?? null };
+  return {
+    synced,
+    next: describeResync(status) ?? progress ?? next,
+    problem: status.problem?.message ?? null,
+  };
+}
+
+// What a re-sync is waiting for (#205), by what the Source's syncing is doing now.
+const resyncWaits: Record<Exclude<AccountSyncStatus['activity'], 'syncing'>, string> = {
+  idle: 'Re-sync waiting its turn',
+  'backing-off': 'Re-sync waiting to try again',
+  offline: 'Re-sync paused while offline',
+  asleep: 'Re-sync paused while asleep',
+  'needs-reconnect': 'Re-sync paused until reconnected',
+};
+
+// A re-sync in plain words (#205): "Re-syncing: 340 of 1,200" while it runs (or "340 so far" when the
+// Source doesn't say how many), or what it waits for; null when there is none. `name`: the Source's,
+// for an Account carrying several ("Re-syncing Gmail: …").
+export function describeResync(status: AccountSyncStatus, name?: string): string | null {
+  const { resync } = status;
+  if (!resync) return null;
+  if (status.activity !== 'syncing') return resyncWaits[status.activity];
+  const what = name ? `Re-syncing ${name}` : 'Re-syncing';
+  if (resync.total !== null) return `${what}: ${COUNT.format(resync.done)} of ${COUNT.format(resync.total)}`;
+  return resync.done > 0 ? `${what}: ${COUNT.format(resync.done)} so far` : `${what}…`;
 }
 
 // What a Source's hourly limits are counted in (GitHub: REST requests and GraphQL points).

@@ -22,6 +22,14 @@
 // Source's Account finishes syncing: a moment later, so syncs finishing together cause one check,
 // never within 5 minutes of the Account's last sync, never while it is backing off, and not at all
 // when the User switches it off.
+//
+// A re-sync (#205) reads a Source again from scratch: automatically, once, when the Source rejects
+// the cursor (Gmail's history expired, a 410 from a calendar's delta), or when the User asks for one
+// (Re-sync in Settings → Accounts, for every Source the Account carries). Both forget the cursor and
+// go through the adapter's first-sync path, so they are paced as a first download is (Gmail's quota)
+// and honour a Retry-After; one that stops part-way carries on from its checkpoint, still a re-sync.
+// Nothing of the User's is lost: the Item store matches each Item back to the one holding its
+// external id, so Links, filing, Buckets, snoozes and Todos stay on the same Items, none twice.
 import {
   type AccountSyncStatus,
   isChannelExcluded,
@@ -132,6 +140,10 @@ export type SyncEngine = {
   // running. Resolves when that sync is over (at once when skipped: offline, asleep, needing
   // reconnecting, or waiting out a rate limit).
   refresh(account: string, source?: Source): Promise<void>;
+  // Re-sync (#205): forgets the cursor of every Source the Account carries and reads each again from
+  // scratch, after any sync already under way. Resolves when they are over (at once when they must
+  // wait: offline, asleep, needing reconnecting, or a rate limit, after which they run).
+  resync(account: string): Promise<void>;
   // Minutes between the Account's syncs (of `source`, or of each of its Sources offering that
   // choice), from its Source's choices. Kept across restarts.
   setCadence(account: string, minutes: number, source?: Source): void;
@@ -164,6 +176,11 @@ type Lane = {
   lastStartedAt: number | null;
   // How far the running sync has got, when it says (Gmail's first download).
   progress: SyncProgress | null;
+  // Re-sync (#205): what the next sync must do. 'start': forget the cursor and read everything again
+  // (the User asked); 'resume': carry on with a re-sync that stopped part-way, from its checkpoint.
+  resync: 'start' | 'resume' | null;
+  // While a re-sync runs (the User's, or the Source rejecting the cursor): the Items read again.
+  resyncing: { read: number } | null;
 };
 
 type Entry = {
@@ -288,7 +305,16 @@ export function createSyncEngine({
       ...(hasLightSync(lane) ? { alsoAfterOtherSources: checksAlongside(lane, state) } : {}),
       ...(lane.adapter.hourlyLimits ? { hourUse: hourUse(entry, lane, lane.adapter.hourlyLimits) } : {}),
       ...(lane.progress ? { progress: lane.progress } : {}),
+      ...(lane.resyncing || lane.resync ? { resync: resyncProgress(lane) } : {}),
     };
+  }
+
+  // How far a re-sync has got: the Source's own count when it gives one (Gmail: messages of the
+  // window's), else the Items read again so far. Nothing yet while it waits its turn.
+  function resyncProgress(lane: Lane): { done: number; total: number | null } {
+    if (!lane.resyncing) return { done: 0, total: null };
+    if (lane.progress) return { done: lane.progress.done, total: lane.progress.total };
+    return { done: lane.resyncing.read, total: null };
   }
 
   // What the Account's syncs of a Source with hourly limits cost in the last hour, against them.
@@ -349,7 +375,8 @@ export function createSyncEngine({
     const last = hasLightSync(lane) ? state.lastFullSyncAt : state.lastSyncedAt;
     let due: number;
     if (state.retryAt !== null) due = state.retryAt;
-    else if (last === null) due = now();
+    // A first sync, or a Re-sync waiting (asked for while offline, say), runs at once.
+    else if (last === null || lane.resync !== null) due = now();
     else due = last + cadenceMs(lane, state) + random() * SPREAD_MS;
     // Overdue (after a restart, sleep or going offline): catch up once, soon, spread a little.
     if (due < now()) due = now() + random() * SPREAD_MS;
@@ -373,8 +400,12 @@ export function createSyncEngine({
     if (lane.running) return lane.running;
     if (!isCurrent(entry, lane) || entry.account.needsReconnect || paused()) return Promise.resolve();
     const state = load(entry, lane);
-    // A refresh never cuts a Source's Retry-After short.
-    if (trigger === 'refresh' && state.problem?.kind === 'rate-limited' && (state.retryAt ?? 0) > now()) {
+    // A refresh (or a Re-sync, which waits for its scheduled run) never cuts a Retry-After short.
+    if (
+      (trigger === 'refresh' || trigger === 'resync') &&
+      state.problem?.kind === 'rate-limited' &&
+      (state.retryAt ?? 0) > now()
+    ) {
       return Promise.resolve();
     }
     // A check alongside another Source never runs while backing off.
@@ -387,13 +418,20 @@ export function createSyncEngine({
     lane.running = takeTurn(entry, async () => {
       // Switched off or removed while it waited its turn.
       if (abort.signal.aborted || !isCurrent(entry, lane)) return;
+      // A Re-sync asked for forgets the cursor now, whatever triggered this run, so one that stops
+      // (a restart too) carries on from scratch or from its checkpoint, never from the old cursor.
+      const resync = lane.resync;
+      lane.resync = null;
+      if (resync === 'start') store.syncState.save({ ...load(entry, lane), cursor: null });
+      if (resync) lane.resyncing = { read: 0 };
       lane.active = true;
       emit();
       try {
-        await execute(entry, lane, load(entry, lane).cursor, trigger, abort.signal);
+        await execute(entry, lane, load(entry, lane).cursor, resync ? 'resync' : trigger, abort.signal);
       } finally {
         lane.active = false;
         lane.progress = null;
+        lane.resyncing = null;
       }
     })
       .catch((error) => log(`Sync engine error for ${entry.account.id} (${lane.source}): ${String(error)}`))
@@ -424,13 +462,19 @@ export function createSyncEngine({
     let result: SyncResult | null = null;
     let failure: unknown = null;
     let mode: SyncMode = 'full';
+    // The Source rejected the cursor once already: a second rejection fails the sync.
+    let restarted = false;
     try {
       let cursor = startCursor;
       const watch = watchOf ? await watchOf(account, source) : undefined;
       if (signal.aborted || !isCurrent(entry, lane)) return;
       for (;;) {
-        // Light only for Sources that have one, with a cursor to check from, off their cadence.
-        mode = hasLightSync(lane) && cursor !== null && trigger !== 'scheduled' ? 'light' : 'full';
+        // Light only for Sources that have one, with a cursor to check from, off their cadence (and
+        // never for a re-sync carrying on from its checkpoint).
+        mode =
+          hasLightSync(lane) && cursor !== null && trigger !== 'scheduled' && trigger !== 'resync'
+            ? 'light'
+            : 'full';
         try {
           result = await lane.adapter.sync({
             account,
@@ -487,15 +531,25 @@ export function createSyncEngine({
               saved.updated += outcome.updated.length;
               saved.tombstoned += outcome.tombstoned.length;
               saved.unchanged += outcome.unchanged.length;
+              if (lane.resyncing) {
+                lane.resyncing.read += page.items.length;
+                emit();
+              }
             },
             signal,
           });
           break;
         } catch (error) {
-          // The Source no longer knows the cursor: sync again from scratch, once.
-          if (error instanceof CursorExpired && cursor !== null) {
+          // The Source no longer knows the cursor: sync again from scratch, once, forgetting the cursor
+          // so that a re-sync stopped part-way never asks with it again. It shows as a re-sync.
+          if (error instanceof CursorExpired && cursor !== null && !restarted) {
+            if (signal.aborted || !isCurrent(entry, lane)) throw error;
             log(`${source} no longer accepts ${account}'s sync cursor; syncing it again from scratch`);
+            restarted = true;
             cursor = null;
+            store.syncState.save({ ...load(entry, lane), cursor: null });
+            lane.resyncing ??= { read: 0 };
+            emit();
             continue;
           }
           throw error;
@@ -556,6 +610,9 @@ export function createSyncEngine({
         next = { ...latest, failures, retryAt: now() + backoff(failures), problem };
       }
       log(`${source} sync of ${account} did not finish (${outcome}): ${message}`);
+      // A re-sync that stopped part-way is still one: the next sync carries it on (unless the User
+      // has asked for a fresh one meanwhile).
+      if (lane.resyncing && lane.resync === null) lane.resync = 'resume';
     }
     store.syncState.save(next);
     store.syncState.recordRun({
@@ -624,6 +681,8 @@ export function createSyncEngine({
       checkTimer: null,
       lastStartedAt: null,
       progress: null,
+      resync: null,
+      resyncing: null,
     };
     entry.lanes.set(adapter.source, lane);
     return lane;
@@ -962,6 +1021,20 @@ export function createSyncEngine({
       const running = runAll(entry, 'refresh', source);
       emit();
       return running;
+    },
+
+    resync(account) {
+      const entry = entries.get(account);
+      if (!entry) return Promise.resolve();
+      const runs = [...entry.lanes.values()].map((lane) => {
+        lane.resync = 'start';
+        // A sync under way finishes first, and the re-sync follows it; one still waiting its turn
+        // becomes the re-sync as it starts.
+        const before = lane.active && lane.running ? lane.running : Promise.resolve();
+        return before.then(() => run(entry, lane, 'resync'));
+      });
+      emit();
+      return Promise.all(runs).then(() => {});
     },
 
     setCadence(account, minutes, source) {

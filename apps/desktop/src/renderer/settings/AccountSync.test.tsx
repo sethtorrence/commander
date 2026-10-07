@@ -2,6 +2,7 @@
 import type {
   AccountSyncStatus,
   AccountsRequest,
+  GoogleAccountSummary,
   LinearAccountSummary,
   TeamsAccountSummary,
 } from '@commander/domain/ipc';
@@ -67,7 +68,7 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function show(account: TeamsAccountSummary | LinearAccountSummary) {
+function show(account: TeamsAccountSummary | LinearAccountSummary | GoogleAccountSummary) {
   const requests: AccountsRequest[] = [];
   render(<AccountSync account={account} request={(request) => requests.push(request)} />);
   return requests;
@@ -136,5 +137,72 @@ describe('a GitHub Account’s sync', () => {
     expect(screen.getByTestId('account-hour-use').textContent).toBe(
       'Last hour: 3 of 5,000 REST requests · 41 of 5,000 GraphQL points',
     );
+  });
+});
+
+describe('Re-sync (#205)', () => {
+  it('asks first, saying nothing of the User’s is lost, and re-syncs once confirmed', () => {
+    const requests = show(linear);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Re-sync' }));
+    const dialog = screen.getByTestId('resync-account-dialog');
+    expect(dialog.textContent).toContain('Re-sync Acme?');
+    expect(dialog.textContent).toContain('Nothing of yours is lost');
+    expect(requests).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Re-sync Acme' }));
+
+    expect(requests).toEqual([{ op: 'resync', accountId: linear.id }]);
+    expect(screen.queryByTestId('resync-account-dialog')).toBeNull();
+  });
+
+  it('does nothing when cancelled', () => {
+    const requests = show(linear);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Re-sync' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    expect(requests).toEqual([]);
+  });
+
+  it('shows its progress in the Account’s status, and can’t be asked for again meanwhile', () => {
+    show({
+      ...linear,
+      sync: { ...linear.sync, activity: 'syncing', resync: { done: 340, total: 1200 } } as AccountSyncStatus,
+    });
+
+    expect(screen.getByTestId('account-next-sync').textContent).toBe('Re-syncing: 340 of 1,200');
+    expect(screen.getByRole('button', { name: 'Re-sync' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it('names which Source of a Google Account is re-syncing', () => {
+    const gmail = { ...linear.sync, account: 'google:1045', source: 'gmail' } as AccountSyncStatus;
+    const google: GoogleAccountSummary = {
+      id: 'google:1045',
+      source: 'google',
+      name: 'alex@gmail.test',
+      email: 'alex@gmail.test',
+      method: 'oauth',
+      status: 'connected',
+      user: null,
+      sync: gmail,
+      sources: [
+        { source: 'gmail', granted: true, enabled: true, sync: gmail },
+        {
+          source: 'google-calendar',
+          granted: true,
+          enabled: true,
+          sync: {
+            ...gmail,
+            source: 'google-calendar',
+            activity: 'syncing',
+            resync: { done: 12, total: null },
+          },
+        },
+      ],
+    } as GoogleAccountSummary;
+
+    show(google);
+
+    expect(screen.getByTestId('account-next-sync').textContent).toBe('Re-syncing Google Calendar: 12 so far');
   });
 });

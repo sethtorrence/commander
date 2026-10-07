@@ -281,6 +281,67 @@ describe('first sync', () => {
   });
 });
 
+describe('a Re-sync (#205)', () => {
+  it('reads the window again with no cursor, fetching only what it doesn’t hold, paced as a first download', async () => {
+    // 300 messages held; 300 more arrived (older ones, still in the window) that Commander doesn't hold.
+    const mailbox = Array.from({ length: 600 }, (_, n) => `m${String(n).padStart(4, '0')}`);
+    const message = (id: string, n: number) => ({
+      id,
+      threadId: id,
+      labelIds: ['INBOX'],
+      snippet: `Message ${n}`,
+      internalDate: String(NOW - n * 60_000),
+      payload: {
+        mimeType: 'text/plain',
+        headers: [
+          { name: 'Subject', value: `Message ${n}` },
+          { name: 'From', value: 'a@b.test' },
+          { name: 'Message-ID', value: `<${id}@b.test>` },
+        ],
+        body: { data: Buffer.from(`Body ${n}`).toString('base64url') },
+      },
+    });
+    for (const [n, id] of mailbox.slice(0, 300).entries())
+      held.set(id, readGmailMessage(message(id, n), new Map()));
+    const units: Record<string, number> = { labels: 1, profile: 1, history: 2, list: 5, get: 20 };
+    const calls: { at: number; units: number }[] = [];
+    const fetch = (async (url: string | URL | Request) => {
+      const path = decodeURIComponent(String(url).slice(GMAIL.length));
+      sent.push({ path, at: clock, authorization: null });
+      const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200 });
+      const call = path.endsWith('/labels')
+        ? 'labels'
+        : path.endsWith('/profile')
+          ? 'profile'
+          : path.includes('/history')
+            ? 'history'
+            : /\/messages\/m\d+/.test(path)
+              ? 'get'
+              : 'list';
+      calls.push({ at: clock - NOW, units: units[call] ?? 0 });
+      if (call === 'labels') return json({ labels: [{ id: 'INBOX', name: 'INBOX' }] });
+      if (call === 'profile') return json({ emailAddress: 'alex@gmail.test', historyId: '9' });
+      if (call === 'history') return json({ historyId: '9' });
+      const one = /\/messages\/(m\d+)/.exec(path)?.[1];
+      if (one) return json(message(one, mailbox.indexOf(one)));
+      if (path.includes('labelIds=TRASH')) return json({});
+      return json({ messages: mailbox.map((id) => ({ id, threadId: id })) });
+    }) as typeof globalThis.fetch;
+
+    const { progress } = await sync(fetch);
+
+    // Only the 300 it doesn't hold are fetched; the rest come back from cheap listings.
+    expect(gets()).toEqual(mailbox.slice(300));
+    expect(progress[0]).toEqual({ done: 300, total: 600 });
+    // No minute ever sees more than Gmail's 6,000 units per user, nor much over 250 message fetches.
+    for (const { at: start } of calls) {
+      const inMinute = calls.filter(({ at }) => at >= start && at < start + 60_000);
+      expect(inMinute.reduce((sum, each) => sum + each.units, 0)).toBeLessThanOrEqual(6_000);
+      expect(inMinute.filter((each) => each.units === 20).length).toBeLessThanOrEqual(275);
+    }
+  });
+});
+
 describe('after the first sync', () => {
   it('applies Gmail’s history: new mail, read, starred, archived, deleted and trashed', async () => {
     const cursor = await afterFirstSync();

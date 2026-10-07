@@ -215,7 +215,7 @@ describe('Settings → Accounts requests from the window', () => {
     expect(response).toMatchObject({ ok: true, state: { accounts: [] } });
   });
 
-  it('shows each Account’s sync status, and passes Sync now, the cadence and the Teams switch to the Core', async () => {
+  it('shows each Account’s sync status, and passes Sync now, the cadence, Re-sync and the Teams switch to the Core', async () => {
     linear.addApiKey('lin_api_secret', ACME);
     await linearAccounts.connectWithApiKey('lin_api_secret');
     const asked: string[] = [];
@@ -234,6 +234,7 @@ describe('Settings → Accounts requests from the window', () => {
     const sync = {
       status: (id: string) => (id === 'linear:org-acme' ? status : null),
       refresh: (id: string, source?: string) => asked.push(`refresh ${id}${source ? ` ${source}` : ''}`),
+      resync: (id: string) => asked.push(`resync ${id}`),
       setCadence: (id: string, minutes: number) => asked.push(`cadence ${id} ${minutes}`),
       setAlsoAfterOtherSources: (id: string, enabled: boolean) => asked.push(`alongside ${id} ${enabled}`),
     };
@@ -254,6 +255,8 @@ describe('Settings → Accounts requests from the window', () => {
       { op: 'set-sync-cadence', accountId: 'linear:org-acme', minutes: 30 },
       sync,
     );
+    // Re-sync (#205): every Source the Account carries, from scratch.
+    await answerAccountsRequest(accounts, { op: 'resync', accountId: 'google:1045' }, sync);
 
     await answerAccountsRequest(
       accounts,
@@ -265,6 +268,7 @@ describe('Settings → Accounts requests from the window', () => {
       'refresh linear:org-acme',
       'refresh google:1045 google-calendar',
       'cadence linear:org-acme 30',
+      'resync google:1045',
       'alongside teams:tenant-1:u-sam false',
     ]);
     expect(synced).toMatchObject({ ok: true, state: { accounts: [{ name: 'Acme', sync: status }] } });

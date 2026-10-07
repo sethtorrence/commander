@@ -90,6 +90,11 @@ export function createCoreSyncChannel({
       send({ type: 'sync-command', command: { op: 'refresh', account, ...(source ? { source } : {}) } });
     },
 
+    // Re-sync (#205): every Source the Account carries, from scratch.
+    resync(account: string) {
+      send({ type: 'sync-command', command: { op: 'resync', account } });
+    },
+
     setCadence(account: string, minutes: number) {
       send({ type: 'sync-command', command: { op: 'set-cadence', account, minutes } });
     },

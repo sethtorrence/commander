@@ -9,9 +9,9 @@ import { source } from './items';
 
 const accountId = z.string().min(1);
 
-// Why a sync ran: on the Account's cadence, at once (Sync now, opening a Section, after an edit), or
-// as a light check after another Source's sync (Teams).
-export const syncTrigger = z.enum(['scheduled', 'refresh', 'alongside']);
+// Why a sync ran: on the Account's cadence, at once (Sync now, opening a Section, after an edit), as
+// a light check after another Source's sync (Teams), or as the User's Re-sync (#205: from scratch).
+export const syncTrigger = z.enum(['scheduled', 'refresh', 'alongside', 'resync']);
 export type SyncTrigger = z.infer<typeof syncTrigger>;
 
 export const syncOutcomeKind = z.enum(['synced', 'rate-limited', 'refused', 'failed']);
@@ -70,6 +70,12 @@ export const accountSyncStatus = z.object({
   // How far a long sync has got (Gmail's 30-day download), while it runs; null otherwise.
   progress: z
     .object({ done: z.number().int().nonnegative(), total: z.number().int().nonnegative() })
+    .nullable()
+    .optional(),
+  // A re-sync (#205: the User's Re-sync, or the Source rejecting its cursor), while it waits its turn or
+  // runs: the Items read again so far, of how many when the Source says (null when it doesn't).
+  resync: z
+    .object({ done: z.number().int().nonnegative(), total: z.number().int().nonnegative().nullable() })
     .nullable()
     .optional(),
 });
@@ -135,6 +141,8 @@ export const coreSyncCommand = z.object({
       minutes: z.number().int().positive(),
     }),
     z.object({ op: z.literal('set-also-after-other-sources'), account: accountId, enabled: z.boolean() }),
+    // Re-sync (#205): forget the Account's cursors (every Source it carries) and read everything again.
+    z.object({ op: z.literal('resync'), account: accountId }),
   ]),
 });
 export type CoreSyncCommand = z.infer<typeof coreSyncCommand>;
