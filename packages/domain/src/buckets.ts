@@ -21,6 +21,8 @@ const timestamp = z.number().int().nonnegative();
 // rules and the Email tab's count look for Needs reply and Waiting on others by id.
 export const NEEDS_REPLY = 'needs-reply';
 export const WAITING_ON_OTHERS = 'waiting-on-others';
+// FYI, which Ares reads for Todos (#144) beside Needs reply.
+export const FYI = 'fyi';
 
 /** The starter set, in order, as a fresh install has it. */
 export const STARTER_BUCKETS: readonly { id: string; name: string; description: string }[] = [
@@ -34,7 +36,7 @@ export const STARTER_BUCKETS: readonly { id: string; name: string; description: 
     name: 'Waiting on others',
     description: 'I asked someone for something or sent them something, and I’m waiting for their answer.',
   },
-  { id: 'fyi', name: 'FYI', description: 'Worth knowing, with nothing for me to do.' },
+  { id: FYI, name: 'FYI', description: 'Worth knowing, with nothing for me to do.' },
   {
     id: 'newsletters',
     name: 'Newsletters',

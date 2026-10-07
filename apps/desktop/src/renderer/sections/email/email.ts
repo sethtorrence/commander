@@ -1,12 +1,14 @@
 import type {
   ActivityEntry,
   Bucket,
+  EmailInvitationCard,
   EmailLabel,
   EmailListView,
   EmailSearchResult,
   EmailThread,
   EmailThreadList,
   EmailViewCounts,
+  EventResponse,
   Item,
   ItemAction,
   MessageFields,
@@ -37,7 +39,8 @@ import { type EmailTodoDraft, makeEmailTodo } from './email-todo';
   change the User can undo, and so does organising it (#135): archive, Trash, star, read, labels and
   snooze are edits of each message's synced fields (ADR 0003), which the Core queues for Gmail or
   Outlook. So is moving it to a Bucket (#137), though that stays in Commander. A Todo made from an
-  email (#140) is the Todo and its made-from Link, as one change.
+  email (#140) is the Todo and its made-from Link, as one change. An invitation email's card (#144) is
+  answered on its event, exactly as from Calendar.
 */
 
 export interface EmailClient {
@@ -92,6 +95,13 @@ export interface EmailClient {
   draftReply(itemId: string, instruction?: string): Promise<ReadyReply>;
   /** Dismiss on Ares's suggested reply (by the message it answers): away until a new message arrives. */
   dismissSuggestedReply(itemId: string): Promise<void>;
+  /**
+   * An invitation email's card (#144): its event, with what it overlaps in the User's other Accounts
+   * (the Core refreshing the Account's calendar first when it isn't synced yet), or why it can't be shown.
+   */
+  invitation(itemId: string): Promise<EmailInvitationCard>;
+  /** Answers an invitation's event exactly as from Calendar (#129): its answer fields, as the User. */
+  answerInvitation(eventId: string, fields: Record<string, EventResponse>): Promise<ActivityEntry>;
 }
 
 /** The window's channels to Ares (his suggestions, his jobs, his Skills) and his settings. */
@@ -164,6 +174,9 @@ export function emailIn(
     async dismissSuggestedReply(itemId) {
       await itemStore({ op: 'dismiss-suggested-reply', itemId });
     },
+    invitation: (itemId) => itemStore({ op: 'email-invitation', itemId }),
+    answerInvitation: (eventId, fields) =>
+      itemStore({ op: 'record', action: { type: 'edit-fields', itemId: eventId, fields } }),
   };
 }
 

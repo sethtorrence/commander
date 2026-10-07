@@ -83,6 +83,21 @@ export const deltaPage = z.object({
 });
 export type DeltaPage = z.infer<typeof deltaPage>;
 
+// An event message read again with the event it is about (#144): `GET /me/messages/{id}` with
+// `$expand=microsoft.graph.eventMessage/event`. Its meeting message type says whether it is an
+// invitation (`meetingRequest`), a cancellation or someone's answer; the event is the one in the
+// mailbox's calendar (its id is the event's id there).
+export const graphEventMessage = z.object({
+  id: z.string().min(1),
+  meetingMessageType: text,
+  startDateTime: z.object({ dateTime: text, timeZone: text }).nullish(),
+  endDateTime: z.object({ dateTime: text, timeZone: text }).nullish(),
+  isAllDay: flag,
+  subject: text,
+  event: z.object({ id: z.string().min(1), iCalUId: text, subject: text }).nullish(),
+});
+export type GraphEventMessage = z.infer<typeof graphEventMessage>;
+
 export const graphAttachment = z.object({
   id: z.string().min(1),
   '@odata.type': text,

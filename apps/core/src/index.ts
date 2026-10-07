@@ -13,6 +13,7 @@ import { setUpBusyCopies } from './busy-copies';
 import { composeFiles, setUpCompose } from './compose';
 import { setUpConversations } from './conversations';
 import { createAboutReader } from './conversations/about';
+import { setUpEmailInvitations } from './email-invitations';
 import { setUpEmailReader } from './email-reader';
 import { workerSanitiser } from './email-reader/sanitiser';
 import { setUpGitHubDiscussion } from './github-discussion';
@@ -412,6 +413,24 @@ const scheduler = setUpScheduler({
   freeBusy: (account, source, request) => sync.freeBusy(account, source, request),
 });
 
+// Invitations in the thread (#144): an invitation email's card finds its event (refreshing that
+// Account's calendar first when it isn't synced yet), and invitations are linked to their events as
+// mail and calendars sync.
+const emailInvitations = setUpEmailInvitations({
+  store: itemStore,
+  accounts: () => sync.accounts(),
+  refresh: (account, source) => sync.engine.refresh(account, source),
+  onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),
+});
+sync.engine.onSynced((event) => {
+  try {
+    const linked = emailInvitations.linkAfterSync(event);
+    if (linked.length) port.postMessage({ type: 'items-changed', itemIds: linked } satisfies CoreMessage);
+  } catch (error) {
+    console.warn(`Couldn’t link invitations to their events: ${error}`);
+  }
+});
+
 // Block time across Accounts (#131): Busy copies follow each calendar sync, and the pairs in
 // Settings → Calendar (a pair switched on sets its action to Auto). Copies are made through the gate.
 const busyCopies = setUpBusyCopies({ store: itemStore, gate });
@@ -444,6 +463,7 @@ port.on('message', ({ data }) => {
   if (compose.handle(data)) return;
   if (githubDiscussion.handle(data)) return;
   if (scheduler.handle(data, (reply) => port.postMessage(reply))) return;
+  if (emailInvitations.handle(data, (reply) => port.postMessage(reply))) return;
   let changed: CoreMessage | null = null;
   let changedIds: string[] = [];
   // Settings → Calendar's focus time as it was, to tell which pairs the User switched on.

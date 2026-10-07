@@ -11,7 +11,8 @@ import {
   the Todo it would add, styled as a suggestion, with Add (the User accepts it through the gate) and
   Dismiss. It isn't an Item yet, so it goes by an id of its own (`suggestion:12`), which Ares's ranking
   uses too. One he hasn't ranked waits at the end of Today, with why he suggested it. One from a Teams
-  Chat (#110) opens the Chat at the message it came from; one from a Daily Note opens its Block.
+  Chat (#110) opens the Chat at the message it came from; one from an email (#144) opens its thread;
+  one from a Daily Note opens its Block.
 */
 
 const SUGGEST_TODOS = 'suggest-todos';
@@ -28,6 +29,8 @@ export interface SuggestedTodo {
   source: string;
   /** For one from a Teams Chat (#110): the Chat and the message it came from, where it opens. */
   fromMessage?: { itemId: string; messageId: string };
+  /** For one from an email (#144): it opens the email's thread. */
+  fromEmail?: boolean;
 }
 
 /** A pending Suggest Todos suggestion as a Dashboard row's Item, or null for anything else. */
@@ -64,6 +67,7 @@ export function suggestedTodoOf(row: AresActivity): { item: Item; suggestion: Su
       reason: row.reason,
       source: row.item?.title ?? '',
       ...(fromMessage && { fromMessage }),
+      ...(row.item?.kind === 'email' && { fromEmail: true }),
     },
   };
 }

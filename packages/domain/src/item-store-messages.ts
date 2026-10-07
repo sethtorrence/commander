@@ -14,6 +14,7 @@ import { type ChannelChoices, channelChoices, channelSettingAction } from './cha
 import { commanderEventDraft } from './commander-events';
 import { type DailyTemplate, dailyTemplate } from './daily-template';
 import type { EmailLabel } from './email';
+import { type EmailInvitationCard, emailInvitationCard } from './email-calendar';
 import { type SortingProgress, sortingProgress } from './email-sorting';
 import {
   type EmailSearchResult,
@@ -272,6 +273,9 @@ export const itemStoreRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('change-people'), action: peopleAction }),
   // Invitations still to come that wait for the User's answer, earliest first (the Dashboard's Today).
   z.object({ op: z.literal('invitations') }),
+  // An invitation email's card (#144): its event (refreshing the Account's calendar first when the event
+  // isn't synced yet), with what it overlaps in the User's other Accounts, or why it can't be shown.
+  z.object({ op: z.literal('email-invitation'), itemId: z.string().min(1) }),
   // Settings → Calendar's focus time (#131): working hours, the Account focus blocks go in, and the
   // pairs of Block time across Accounts.
   z.object({ op: z.literal('focus-settings') }),
@@ -373,6 +377,7 @@ export type ItemStoreResults = {
   people: Person[];
   'change-people': PeopleChange;
   invitations: Item[];
+  'email-invitation': EmailInvitationCard;
   'focus-settings': FocusSettings;
   'save-focus-settings': FocusSettings;
   'scheduling-settings': SchedulingSettings;
@@ -451,6 +456,7 @@ export const itemStoreResult = {
   people: z.array(person),
   'change-people': peopleChange,
   invitations: z.array(item),
+  'email-invitation': emailInvitationCard,
   'focus-settings': focusSettings,
   'save-focus-settings': focusSettings,
   'scheduling-settings': schedulingSettings,

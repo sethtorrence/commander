@@ -250,6 +250,7 @@ describe('the first sync', () => {
       seriesId: null,
       webUrl: `https://outlook.office365.com/owa/?itemid=${encodeURIComponent(evt('designreview'))}&exvsurl=1&path=/calendar/item`,
       createdByCommander: null,
+      icalUid: '040000008200E00074C5B7101A82E008-designreview',
     } satisfies EventDetail);
   });
 

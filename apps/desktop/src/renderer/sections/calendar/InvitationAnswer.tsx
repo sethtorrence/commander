@@ -21,7 +21,7 @@ import { type SuggestedReply, sourceName } from './invitations';
 /** The keys for each answer: letters the fixed scheme (#29) and the Calendar views leave free. */
 export const ANSWER_KEYS: Record<InvitationAnswer, string> = { accepted: 'y', tentative: 'i', declined: 'n' };
 
-function AnswerButtons({
+export function AnswerButtons({
   current,
   label,
   keys = false,
@@ -111,7 +111,7 @@ export function SuggestedReplyCard({
 }
 
 /** Where the answer stands, under the buttons. */
-function AnswerSync({
+export function AnswerSync({
   sync,
   note,
   where,

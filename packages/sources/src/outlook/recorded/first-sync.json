@@ -1219,6 +1219,65 @@
   },
   {
     "request": {
+      "method": "POST",
+      "path": "/$batch",
+      "body": {
+        "requests": [
+          {
+            "id": "1",
+            "method": "GET",
+            "url": "/me/messages/AAMkAGI2-msg-design-review%3D?$select=id,subject,meetingMessageType,startDateTime,endDateTime,isAllDay&$expand=microsoft.graph.eventMessage/event($select=id,iCalUId,subject)",
+            "headers": {
+              "prefer": "IdType=\"ImmutableId\""
+            }
+          }
+        ]
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; odata.metadata=minimal; odata.streaming=true; IEEE754Compatible=false; charset=utf-8"
+      },
+      "body": {
+        "responses": [
+          {
+            "id": "1",
+            "status": 200,
+            "headers": {
+              "content-type": "application/json"
+            },
+            "body": {
+              "@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages(id,subject,meetingMessageType,startDateTime,endDateTime,isAllDay,event(id,iCalUId,subject))/$entity",
+              "@odata.type": "#microsoft.graph.eventMessage",
+              "@odata.etag": "W/\"CQAAABYAAAD27\"",
+              "id": "AAMkAGI2-msg-design-review=",
+              "subject": "Design review: onboarding",
+              "meetingMessageType": "meetingRequest",
+              "isAllDay": false,
+              "startDateTime": {
+                "dateTime": "2026-10-07T13:00:00.0000000",
+                "timeZone": "UTC"
+              },
+              "endDateTime": {
+                "dateTime": "2026-10-07T14:00:00.0000000",
+                "timeZone": "UTC"
+              },
+              "event@odata.context": "https://graph.test/v1.0/$metadata#users('sam%40contoso.test')/messages('AAMkAGI2-msg-design-review%3D')/microsoft.graph.eventMessage/event(id,iCalUId,subject)/$entity",
+              "event": {
+                "@odata.etag": "W/\"DwAAABYAAAD27\"",
+                "id": "AAMkAGI2-evt-design-review=",
+                "iCalUId": "040000008200E00074C5B7101A82E00800000000D3B2C4DC9A1F0D01000000000000000010000000A1B2C3D4E5F60718293A4B5C6D7E8F90",
+                "subject": "Design review: onboarding"
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  {
+    "request": {
       "method": "GET",
       "path": "/me/mailFolders/AAMkAGI2-fld-deleteditems=/messages/delta?$select=id,isRead,flag,parentFolderId,categories,lastModifiedDateTime,receivedDateTime&$filter=receivedDateTime ge 2026-09-03T12:00:00.000Z&$orderby=receivedDateTime desc"
     },

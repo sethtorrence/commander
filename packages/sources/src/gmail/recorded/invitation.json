@@ -1,0 +1,314 @@
+{
+  "invitation": {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a6c0f1e2d3b4a5?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a6c0f1e2d3b4a5",
+        "threadId": "19a6c0f1e2d3b4a5",
+        "labelIds": ["UNREAD", "IMPORTANT", "CATEGORY_PERSONAL", "INBOX"],
+        "snippet": "You have been invited to the following event. Pricing review Thursday 8 Oct 2026 ⋅ 15:00 – 16:00 (British Summer Time)",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@example.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Tue, 06 Oct 2026 09:42:10 +0000"
+            },
+            {
+              "name": "Reply-To",
+              "value": "Dana Reyes <dana@acme.test>"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<calendar-7f3c2a1e-9b8d-4c6e-a5f4-3e2d1c0b9a87@google.com>"
+            },
+            {
+              "name": "Subject",
+              "value": "Invitation: Pricing review @ Thu 8 Oct 2026 15:00 - 16:00 (BST) (alex@example.test)"
+            },
+            {
+              "name": "From",
+              "value": "Dana Reyes <dana@acme.test>"
+            },
+            {
+              "name": "To",
+              "value": "alex@example.test"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/mixed; boundary=\"000000000000c4f1e00623a1b2c3\""
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "partId": "0",
+              "mimeType": "multipart/alternative",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "multipart/alternative; boundary=\"000000000000c4f1df0623a1b2c1\""
+                }
+              ],
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes"
+                    }
+                  ],
+                  "body": {
+                    "size": 243,
+                    "data": "WW91IGhhdmUgYmVlbiBpbnZpdGVkIHRvIHRoZSBmb2xsb3dpbmcgZXZlbnQuCgpQcmljaW5nIHJldmlldwpUaHVyc2RheSA4IE9jdCAyMDI2IOKLhSAxNTowMCDigJMgMTY6MDAgKEJyaXRpc2ggU3VtbWVyIFRpbWUpCgpPcmdhbmlzZXIKRGFuYSBSZXllcwpkYW5hQGFjbWUudGVzdAoKR3Vlc3RzCkRhbmEgUmV5ZXMgLSBvcmdhbmlzZXIKYWxleEBleGFtcGxlLnRlc3QKCkludml0YXRpb24gZnJvbSBHb29nbGUgQ2FsZW5kYXIK"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "text/html; charset=\"UTF-8\""
+                    }
+                  ],
+                  "body": {
+                    "size": 169,
+                    "data": "PGh0bWw-PGJvZHk-PHA-WW91IGhhdmUgYmVlbiBpbnZpdGVkIHRvIHRoZSBmb2xsb3dpbmcgZXZlbnQuPC9wPjxoMj5QcmljaW5nIHJldmlldzwvaDI-PHA-VGh1cnNkYXkgOCBPY3QgMjAyNiDii4UgMTU6MDAg4oCTIDE2OjAwIChCcml0aXNoIFN1bW1lciBUaW1lKTwvcD48L2JvZHk-PC9odG1sPg"
+                  }
+                },
+                {
+                  "partId": "0.2",
+                  "mimeType": "text/calendar",
+                  "filename": "",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "text/calendar; charset=\"UTF-8\"; method=REQUEST"
+                    },
+                    {
+                      "name": "Content-Transfer-Encoding",
+                      "value": "7bit"
+                    }
+                  ],
+                  "body": {
+                    "size": 912,
+                    "data": "QkVHSU46VkNBTEVOREFSDQpQUk9ESUQ6LS8vR29vZ2xlIEluYy8vR29vZ2xlIENhbGVuZGFyIDcwLjkwNTQvL0VODQpWRVJTSU9OOjIuMA0KQ0FMU0NBTEU6R1JFR09SSUFODQpNRVRIT0Q6UkVRVUVTVA0KQkVHSU46VkVWRU5UDQpEVFNUQVJUOjIwMjYxMDA4VDE0MDAwMFoNCkRURU5EOjIwMjYxMDA4VDE1MDAwMFoNCkRUU1RBTVA6MjAyNjEwMDZUMDk0MjEwWg0KT1JHQU5JWkVSO0NOPURhbmEgUmV5ZXM6bWFpbHRvOmRhbmFAYWNtZS50ZXN0DQpVSUQ6NWsybThxMXY3YzNuOWIweDRyNnQycDhzMWRAZ29vZ2xlLmNvbQ0KQVRURU5ERUU7Q1VUWVBFPUlORElWSURVQUw7Uk9MRT1SRVEtUEFSVElDSVBBTlQ7UEFSVFNUQVQ9QUNDRVBURUQ7UlNWUD1UUlVFDQogO0NOPURhbmEgUmV5ZXM7WC1OVU0tR1VFU1RTPTA6bWFpbHRvOmRhbmFAYWNtZS50ZXN0DQpBVFRFTkRFRTtDVVRZUEU9SU5ESVZJRFVBTDtST0xFPVJFUS1QQVJUSUNJUEFOVDtQQVJUU1RBVD1ORUVEUy1BQ1RJT047UlNWUD0NCiBUUlVFO0NOPWFsZXhAZXhhbXBsZS50ZXN0O1gtTlVNLUdVRVNUUz0wOm1haWx0bzphbGV4QGV4YW1wbGUudGVzdA0KWC1NSUNST1NPRlQtQ0RPLU9XTkVSQVBQVElEOi0xNzAyNTg0NjIxDQpDUkVBVEVEOjIwMjYxMDA2VDA5NDIwOFoNCkRFU0NSSVBUSU9OOkxldCdzIHNldHRsZSB0aGUgUTQgcHJpY2UgbGlzdFwsIGJlZm9yZSB0aGUgYm9hcmQgbWVldHMuXG5cbkpvaW4gd2l0aCBHb29nbGUgTWVldDogaHR0cHM6Ly9tZWV0Lmdvb2dsZS5jb20vYWJjLWRlZmctaGlqDQpMQVNULU1PRElGSUVEOjIwMjYxMDA2VDA5NDIwOFoNCkxPQ0FUSU9OOg0KU0VRVUVOQ0U6MA0KU1RBVFVTOkNPTkZJUk1FRA0KU1VNTUFSWTpQcmljaW5nIHJldmlldw0KVFJBTlNQOk9QQVFVRQ0KRU5EOlZFVkVOVA0KRU5EOlZDQUxFTkRBUg0K"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/ics",
+              "filename": "invite.ics",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/ics; name=\"invite.ics\""
+                },
+                {
+                  "name": "Content-Disposition",
+                  "value": "attachment; filename=\"invite.ics\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "base64"
+                }
+              ],
+              "body": {
+                "attachmentId": "ANGjdJ8w7Q1invitationics",
+                "size": 912
+              }
+            }
+          ]
+        },
+        "sizeEstimate": 14211,
+        "historyId": "5230",
+        "internalDate": "1791366130000"
+      }
+    }
+  },
+  "cancellation": {
+    "request": {
+      "path": "/gmail/v1/users/me/messages/19a6c0f1e2d3b4b6?format=full"
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json; charset=UTF-8"
+      },
+      "body": {
+        "id": "19a6c0f1e2d3b4b6",
+        "threadId": "19a6c0f1e2d3b4b6",
+        "labelIds": ["UNREAD", "IMPORTANT", "CATEGORY_PERSONAL", "INBOX"],
+        "snippet": "You have been invited to the following event. Pricing review Thursday 8 Oct 2026 ⋅ 15:00 – 16:00 (British Summer Time)",
+        "payload": {
+          "partId": "",
+          "mimeType": "multipart/mixed",
+          "filename": "",
+          "headers": [
+            {
+              "name": "Delivered-To",
+              "value": "alex@example.test"
+            },
+            {
+              "name": "MIME-Version",
+              "value": "1.0"
+            },
+            {
+              "name": "Date",
+              "value": "Tue, 06 Oct 2026 09:42:10 +0000"
+            },
+            {
+              "name": "Reply-To",
+              "value": "Dana Reyes <dana@acme.test>"
+            },
+            {
+              "name": "Message-ID",
+              "value": "<calendar-7f3c2a1e-9b8d-4c6e-a5f4-3e2d1c0b9a87@google.com>"
+            },
+            {
+              "name": "Subject",
+              "value": "Cancelled event: Pricing review @ Thu 8 Oct 2026 15:00 - 16:00 (BST) (alex@example.test)"
+            },
+            {
+              "name": "From",
+              "value": "Dana Reyes <dana@acme.test>"
+            },
+            {
+              "name": "To",
+              "value": "alex@example.test"
+            },
+            {
+              "name": "Content-Type",
+              "value": "multipart/mixed; boundary=\"000000000000c4f1e00623a1b2c3\""
+            }
+          ],
+          "body": {
+            "size": 0
+          },
+          "parts": [
+            {
+              "partId": "0",
+              "mimeType": "multipart/alternative",
+              "filename": "",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "multipart/alternative; boundary=\"000000000000c4f1df0623a1b2c1\""
+                }
+              ],
+              "body": {
+                "size": 0
+              },
+              "parts": [
+                {
+                  "partId": "0.0",
+                  "mimeType": "text/plain",
+                  "filename": "",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "text/plain; charset=\"UTF-8\"; format=flowed; delsp=yes"
+                    }
+                  ],
+                  "body": {
+                    "size": 243,
+                    "data": "WW91IGhhdmUgYmVlbiBpbnZpdGVkIHRvIHRoZSBmb2xsb3dpbmcgZXZlbnQuCgpQcmljaW5nIHJldmlldwpUaHVyc2RheSA4IE9jdCAyMDI2IOKLhSAxNTowMCDigJMgMTY6MDAgKEJyaXRpc2ggU3VtbWVyIFRpbWUpCgpPcmdhbmlzZXIKRGFuYSBSZXllcwpkYW5hQGFjbWUudGVzdAoKR3Vlc3RzCkRhbmEgUmV5ZXMgLSBvcmdhbmlzZXIKYWxleEBleGFtcGxlLnRlc3QKCkludml0YXRpb24gZnJvbSBHb29nbGUgQ2FsZW5kYXIK"
+                  }
+                },
+                {
+                  "partId": "0.1",
+                  "mimeType": "text/html",
+                  "filename": "",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "text/html; charset=\"UTF-8\""
+                    }
+                  ],
+                  "body": {
+                    "size": 169,
+                    "data": "PGh0bWw-PGJvZHk-PHA-WW91IGhhdmUgYmVlbiBpbnZpdGVkIHRvIHRoZSBmb2xsb3dpbmcgZXZlbnQuPC9wPjxoMj5QcmljaW5nIHJldmlldzwvaDI-PHA-VGh1cnNkYXkgOCBPY3QgMjAyNiDii4UgMTU6MDAg4oCTIDE2OjAwIChCcml0aXNoIFN1bW1lciBUaW1lKTwvcD48L2JvZHk-PC9odG1sPg"
+                  }
+                },
+                {
+                  "partId": "0.2",
+                  "mimeType": "text/calendar",
+                  "filename": "",
+                  "headers": [
+                    {
+                      "name": "Content-Type",
+                      "value": "text/calendar; charset=\"UTF-8\"; method=CANCEL"
+                    },
+                    {
+                      "name": "Content-Transfer-Encoding",
+                      "value": "7bit"
+                    }
+                  ],
+                  "body": {
+                    "size": 911,
+                    "data": "QkVHSU46VkNBTEVOREFSDQpQUk9ESUQ6LS8vR29vZ2xlIEluYy8vR29vZ2xlIENhbGVuZGFyIDcwLjkwNTQvL0VODQpWRVJTSU9OOjIuMA0KQ0FMU0NBTEU6R1JFR09SSUFODQpNRVRIT0Q6Q0FOQ0VMDQpCRUdJTjpWRVZFTlQNCkRUU1RBUlQ6MjAyNjEwMDhUMTQwMDAwWg0KRFRFTkQ6MjAyNjEwMDhUMTUwMDAwWg0KRFRTVEFNUDoyMDI2MTAwNlQwOTQyMTBaDQpPUkdBTklaRVI7Q049RGFuYSBSZXllczptYWlsdG86ZGFuYUBhY21lLnRlc3QNClVJRDo1azJtOHExdjdjM245YjB4NHI2dDJwOHMxZEBnb29nbGUuY29tDQpBVFRFTkRFRTtDVVRZUEU9SU5ESVZJRFVBTDtST0xFPVJFUS1QQVJUSUNJUEFOVDtQQVJUU1RBVD1BQ0NFUFRFRDtSU1ZQPVRSVUUNCiA7Q049RGFuYSBSZXllcztYLU5VTS1HVUVTVFM9MDptYWlsdG86ZGFuYUBhY21lLnRlc3QNCkFUVEVOREVFO0NVVFlQRT1JTkRJVklEVUFMO1JPTEU9UkVRLVBBUlRJQ0lQQU5UO1BBUlRTVEFUPU5FRURTLUFDVElPTjtSU1ZQPQ0KIFRSVUU7Q049YWxleEBleGFtcGxlLnRlc3Q7WC1OVU0tR1VFU1RTPTA6bWFpbHRvOmFsZXhAZXhhbXBsZS50ZXN0DQpYLU1JQ1JPU09GVC1DRE8tT1dORVJBUFBUSUQ6LTE3MDI1ODQ2MjENCkNSRUFURUQ6MjAyNjEwMDZUMDk0MjA4Wg0KREVTQ1JJUFRJT046TGV0J3Mgc2V0dGxlIHRoZSBRNCBwcmljZSBsaXN0XCwgYmVmb3JlIHRoZSBib2FyZCBtZWV0cy5cblxuSm9pbiB3aXRoIEdvb2dsZSBNZWV0OiBodHRwczovL21lZXQuZ29vZ2xlLmNvbS9hYmMtZGVmZy1oaWoNCkxBU1QtTU9ESUZJRUQ6MjAyNjEwMDZUMDk0MjA4Wg0KTE9DQVRJT046DQpTRVFVRU5DRTowDQpTVEFUVVM6Q0FOQ0VMTEVEDQpTVU1NQVJZOlByaWNpbmcgcmV2aWV3DQpUUkFOU1A6T1BBUVVFDQpFTkQ6VkVWRU5UDQpFTkQ6VkNBTEVOREFSDQo"
+                  }
+                }
+              ]
+            },
+            {
+              "partId": "1",
+              "mimeType": "application/ics",
+              "filename": "invite.ics",
+              "headers": [
+                {
+                  "name": "Content-Type",
+                  "value": "application/ics; name=\"invite.ics\""
+                },
+                {
+                  "name": "Content-Disposition",
+                  "value": "attachment; filename=\"invite.ics\""
+                },
+                {
+                  "name": "Content-Transfer-Encoding",
+                  "value": "base64"
+                }
+              ],
+              "body": {
+                "attachmentId": "ANGjdJ8w7Q1invitationics",
+                "size": 912
+              }
+            }
+          ]
+        },
+        "sizeEstimate": 14211,
+        "historyId": "5230",
+        "internalDate": "1791366130000"
+      }
+    }
+  }
+}

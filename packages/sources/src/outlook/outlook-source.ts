@@ -41,6 +41,8 @@ import {
   attachmentOf,
   filedIn,
   folderOf,
+  invitationOfEventMessage,
+  isEventMessage,
   type MessageContext,
   readOutlookMessage,
   showsInlineParts,
@@ -53,6 +55,7 @@ import {
   type GraphMailFolder,
   type GraphMessage,
   graphAttachment,
+  graphEventMessage,
   type MessageState,
   mailFoldersPage,
   meAnswer,
@@ -86,6 +89,9 @@ import {
 //   window: its messages are read again, and held ones filed there that it no longer lists are
 //   tombstoned. 429s, and 503s with Retry-After, raise RateLimited. Requests stay under 4 at a time per
 //   mailbox, shared with the Account's calendar (mailbox-gate.ts).
+// - Invitations (#144): an event message (a meeting request, answer or cancellation) is read once more,
+//   in a JSON batch, with the event it is about (`$expand=microsoft.graph.eventMessage/event`), so its
+//   card finds the event in the calendar: its meeting type, times, and the event's id and UID.
 //
 // Writes (#136, ADR 0003): the synced fields `read` (`isRead`), `starred` (the flag) as one PATCH, and
 // where the message is filed, as one move (`POST /messages/{id}/move`): `trash` to Deleted Items and
@@ -179,6 +185,7 @@ const TRASH_FIELDS = 'id,isRead,flag,parentFolderId,categories,lastModifiedDateT
 const STATE_FIELDS = 'id,isRead,flag,parentFolderId,categories,lastModifiedDateTime';
 const ATTACHMENT_FIELDS = 'id,name,contentType,size,isInline,contentId';
 const BASE_ATTACHMENT_FIELDS = 'id,name,contentType,size,isInline';
+const EVENT_MESSAGE_FIELDS = 'id,subject,meetingMessageType,startDateTime,endDateTime,isAllDay';
 
 // Per folder: the link to read next (a page's nextLink while its first round is under way, then its
 // delta link; null: start its first round), and whether its first round has finished.
@@ -350,6 +357,10 @@ const firstRound = (folder: Planned, windowStart: number, plain = false) => {
 // refuse that on the attachment collection, only what every attachment has.
 const attachmentsPath = (id: string, fields = ATTACHMENT_FIELDS) =>
   `/me/messages/${encodeURIComponent(id)}/attachments?$select=${fields}`;
+
+// An event message with the event it is about (#144): its meeting type and times, the event's id and UID.
+const eventMessagePath = (id: string) =>
+  `/me/messages/${encodeURIComponent(id)}?$select=${EVENT_MESSAGE_FIELDS}&$expand=microsoft.graph.eventMessage/event($select=id,iCalUId,subject)`;
 
 export function createOutlookSource({
   graphUrl,
@@ -602,11 +613,27 @@ async function syncMailbox(
         return false;
       });
     }
+    // Invitations (#144): each event message read again with the event it is about, once (what was
+    // read is kept with the message). Leniently: one Graph won't read is left without, as before.
+    const heldInvitation = (id: string) => emailOf(held.get(id))?.invitation ?? null;
+    const unread = messages.filter((message) => isEventMessage(message) && !heldInvitation(message.id));
+    const invitations = new Map<string, EmailDetail['invitation']>();
+    if (unread.length) {
+      const answers = await api.batch(
+        unread.map((message) => eventMessagePath(message.id)),
+        { lenient: true },
+      );
+      for (const message of unread) {
+        const parsed = graphEventMessage.safeParse(answers.get(eventMessagePath(message.id)));
+        if (parsed.success) invitations.set(message.id, invitationOfEventMessage(parsed.data));
+      }
+    }
     const items = messages.map((message) => {
       const item = readOutlookMessage(
         message,
         context,
         listedAttachments.get(message.id) ?? heldAttachments(message.id),
+        invitations.get(message.id) ?? heldInvitation(message.id),
       );
       if (!drafts || item.detail?.kind !== 'email') return item;
       return {

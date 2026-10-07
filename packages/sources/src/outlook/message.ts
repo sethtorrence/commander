@@ -15,8 +15,9 @@ import {
   threadMessages,
 } from '@commander/domain';
 import { decodeHeader } from '../gmail/message';
+import { zonedInstant } from '../outlook-calendar/time-zones';
 import { teamsText as htmlText } from '../teams/html';
-import type { GraphAttachment, GraphMessage } from './shapes';
+import type { GraphAttachment, GraphEventMessage, GraphMessage } from './shapes';
 
 // A Graph message (as a folder's delta lists it) as an email Item (#136), in the detail Gmail's mail
 // shares: its reply headers (from `internetMessageHeaders`, so threading needs no request per message;
@@ -39,6 +40,39 @@ export type MessageContext = {
 };
 
 const EVENT_MESSAGE = '#microsoft.graph.eventMessage';
+
+/** Whether a Graph message is an event message (a meeting request, response or cancellation). */
+export const isEventMessage = (message: Pick<GraphMessage, '@odata.type'>) =>
+  message['@odata.type'] === EVENT_MESSAGE;
+
+// Graph's meeting message types, as the invitation's method names them.
+const METHODS: Record<string, string> = {
+  meetingrequest: 'request',
+  meetingcancelled: 'cancel',
+  meetingaccepted: 'reply',
+  meetingtenativelyaccepted: 'reply',
+  meetingtentativelyaccepted: 'reply',
+  meetingdeclined: 'reply',
+};
+
+const instantOf = (time: GraphEventMessage['startDateTime']): number | null => {
+  const at = zonedInstant(time?.dateTime, time?.timeZone ?? 'UTC');
+  return Number.isFinite(at) && at >= 0 ? at : null;
+};
+
+/** The invitation an event message read with its event describes (#144). */
+export function invitationOfEventMessage(message: GraphEventMessage): NonNullable<EmailDetail['invitation']> {
+  const type = (message.meetingMessageType ?? '').trim().toLowerCase();
+  return {
+    method: METHODS[type] ?? (type || 'none'),
+    uid: message.event?.iCalUId?.trim() || null,
+    eventId: message.event?.id ?? null,
+    title: message.event?.subject?.trim() || message.subject?.trim() || null,
+    start: instantOf(message.startDateTime),
+    end: instantOf(message.endDateTime),
+    allDay: message.isAllDay === true,
+  };
+}
 
 const headerOf = (message: GraphMessage, name: string): string | null => {
   const wanted = name.toLowerCase();
@@ -116,13 +150,15 @@ export function filedIn(folder: EmailFolder | null): Pick<EmailDetail, 'folder' 
 
 /**
  * The email Item for a Graph message, with its bodies, filed in its parent folder. `attachments`: its
- * attachments' metadata, as listed (none when it has none). Its thread key is the message's own until
- * the Item store threads it among the Account's mail.
+ * attachments' metadata, as listed (none when it has none); `invitation`: what an event message's
+ * invitation is, when read (#144). Its thread key is the message's own until the Item store threads it
+ * among the Account's mail.
  */
 export function readOutlookMessage(
   message: GraphMessage,
   context: MessageContext,
   attachments: readonly EmailAttachment[],
+  invitation: EmailDetail['invitation'] = null,
 ): SourceItem {
   const from = addressOf(message.from) ?? addressOf(message.sender);
   const to = addressesOf(message.toRecipients);
@@ -158,7 +194,8 @@ export function readOutlookMessage(
     sentByMe: (!!folder && folder.id === context.sent) || (!!me && from?.address.toLowerCase() === me),
     categories: [...message.categories],
     attachments: [...attachments],
-    hasInvitation: message['@odata.type'] === EVENT_MESSAGE,
+    hasInvitation: isEventMessage(message),
+    ...(invitation && isEventMessage(message) ? { invitation } : {}),
     listUnsubscribe: headerOf(message, 'List-Unsubscribe'),
     listId: listId ? decodeHeader(listId) : null,
   };

@@ -77,6 +77,24 @@ export type EmailAttachment = z.infer<typeof emailAttachment>;
 export const emailSnooze = z.object({ until: timestamp, returned: z.boolean() });
 export type EmailSnooze = z.infer<typeof emailSnooze>;
 
+// The calendar invitation an email carries (#144), as its Source describes it: Gmail's text/calendar
+// part (its METHOD, UID, SUMMARY and times), Outlook's event message (its meeting message type and the
+// event it is about). What finds the event in the User's calendars: the event's own id at the Source
+// (Outlook names it), else its iCalendar UID (both Sources' events carry one), else its title and start
+// in the same Account. `method`: `request` (an invitation, or an update to one), `cancel`, `reply`
+// (someone answering the User's own invitation), or another iCalendar method, lower-cased.
+export const emailInvitation = z.object({
+  method: z.string().min(1).max(40),
+  uid: z.string().max(1_000).nullable(),
+  // The event's id at its calendar Source, when the Source says (Outlook's eventMessage/event).
+  eventId: z.string().max(1_000).nullable(),
+  title: z.string().max(1_000).nullable(),
+  start: timestamp.nullable(),
+  end: timestamp.nullable(),
+  allDay: z.boolean(),
+});
+export type EmailInvitation = z.infer<typeof emailInvitation>;
+
 export const emailDetail = z.object({
   kind: z.literal('email'),
   // The RFC 5322 reply headers, with angle brackets ("<id@host>"); null or empty when absent.
@@ -122,6 +140,9 @@ export const emailDetail = z.object({
   attachments: z.array(emailAttachment),
   // It carries a calendar invitation (a text/calendar part).
   hasInvitation: z.boolean(),
+  // What that invitation is (#144), when the Source told: absent on mail synced before, and on an
+  // invitation part Commander couldn't read.
+  invitation: emailInvitation.nullable().optional(),
   listUnsubscribe: z.string().nullable(),
   listId: z.string().nullable(),
   // A draft (#138): one in the Source's Drafts folder (made in Gmail or Outlook, or saved there from

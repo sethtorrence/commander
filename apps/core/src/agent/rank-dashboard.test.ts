@@ -11,6 +11,7 @@ import {
   jobDisplayName,
   type LinearIssueDetail,
   mutedChatIds,
+  NEEDS_REPLY,
   type PullRequestDetail,
   RANK_DASHBOARD,
   type Ranking,
@@ -18,6 +19,7 @@ import {
   rankByBandRules,
   type SourceItem,
   suggestionItemId,
+  WAITING_ON_OTHERS,
 } from '@commander/domain';
 import {
   createModelClient,
@@ -28,6 +30,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Gate, openGate } from '../autonomy/gate';
 import { type ItemStore, openItemStore } from '../item-store';
+import { allowCloudMail, deliver, GMAIL, moveThread } from './fixtures/emails';
 import { BATCH_SIZE, rankDashboardJob } from './rank-dashboard';
 import { createJobRunner, type JobRunner } from './runner';
 import { SUGGEST_TODOS } from './suggest-todos';
@@ -1019,5 +1022,142 @@ describe('GitHub open work (#116)', () => {
         reason: 'Waiting on omar’s review · 3 days',
       }),
     );
+  });
+});
+
+describe('Email threads (#144)', () => {
+  // Dana asked on Thursday and again an hour ago (Needs reply); the User wrote to Leo on Tuesday and is
+  // waiting (Waiting on others); Priya's question already has a Todo made from it (Needs reply).
+  function syncMail() {
+    allowCloudMail(store);
+    const thursday = deliver(store, NOW - 2 * DAY, [
+      { id: 'contract-1', subject: 'The contract', text: 'Did you get a chance to look at the contract?' },
+    ]);
+    deliver(store, NOW - 4 * DAY, [
+      {
+        id: 'leo',
+        subject: 'Venue quote',
+        sentByMe: true,
+        from: { name: 'Sam Rivera', address: 'sam@acme.test' },
+        to: [{ name: 'Leo Park', address: 'leo@contoso.test' }],
+        text: 'Could you send the venue quote?',
+      },
+    ]);
+    const latest = deliver(store, NOW, [
+      {
+        id: 'contract-2',
+        subject: 'Re: The contract',
+        inReplyTo: '<contract-1@mail.test>',
+        references: ['<contract-1@mail.test>'],
+        sourceThreadId: 'g-contract-1',
+        text: 'Following up on the contract: can you sign it today?',
+      },
+      {
+        id: 'priya',
+        subject: 'Agenda',
+        from: { name: 'Priya Patel', address: 'priya@acme.test' },
+        text: 'Can you send the agenda?',
+      },
+    ]);
+    const mail = { ...thursday, ...latest };
+    moveThread(store, mail['contract-2'] as string, NEEDS_REPLY);
+    moveThread(store, mail.priya as string, NEEDS_REPLY);
+    const leo = store.query({ kinds: ['email'] }).find((item) => item.externalId === 'leo')?.id as string;
+    moveThread(store, leo, WAITING_ON_OTHERS);
+    const agenda = todo('Send Priya the agenda');
+    store.record({ type: 'link', from: agenda, linkType: 'made-from', to: mail.priya as string }, user);
+    return { contract: mail['contract-2'] as string, leo, priya: mail.priya as string, agenda };
+  }
+
+  // The window's Items with the inbox's threads in Needs reply and Waiting on others, by their latest
+  // message, ranked as the Dashboard ranks them.
+  function shownWithMail(): Ranking[] {
+    const threads = [NEEDS_REPLY, WAITING_ON_OTHERS].flatMap(
+      (bucket) => store.emailThreads({ view: 'inbox', bucket, limit: 1000 }).threads,
+    );
+    const items: Item[] = [
+      ...store.query({ kinds: ['todo'], statuses: ['open'] }),
+      ...store.query({ kinds: ['linear-issue'], statuses: ['open'] }),
+      ...threads.map((thread) => thread.latest),
+    ];
+    return aresRanker(store.dashboard.state().ranking)(items, { now: clock, users: { [ACME]: me.id } });
+  }
+
+  const blockFor = (prompt: string, title: string) =>
+    prompt.split(/<\/data-[0-9a-f]+>/).find((each) => each.includes(`Title: ${title}\n`)) ?? '';
+
+  it('sends each thread by its latest message, with its Bucket, sender, age, Project and covering Todo', async () => {
+    syncMail();
+    await rank();
+    const prompt = String(calls[0]?.messages.at(-1)?.content);
+    const contract = blockFor(prompt, 'The contract');
+    expect(contract).toMatch(/label="I\d+ · Email thread" source="outside">/);
+    expect(contract).toContain(
+      '┆ Bucket: Needs reply (someone is waiting on the User’s answer) (put there by the User)',
+    );
+    expect(contract).toContain('┆ Latest message: from Dana Whitfield, 2026-10-03 13:02 (1h ago)');
+    expect(contract).toContain('┆ Messages: 2; 2 from Dana Whitfield');
+    expect(contract).toContain('┆ No Todo covers it yet');
+    expect(contract).toContain('can you sign it today?');
+    expect(blockFor(prompt, 'Venue quote')).toContain(
+      '┆ Latest message: from the User (their own message, to Leo Park)',
+    );
+    expect(blockFor(prompt, 'Agenda')).toContain('┆ A Todo already covers it: “Send Priya the agenda”');
+    expect(String(calls[0]?.messages[0]?.content)).toContain('An email thread is one of the User');
+  });
+
+  it('places threads in bands with his reasons, and the Dashboard shows them', async () => {
+    const mail = syncMail();
+    replies.push((refs) =>
+      rankingOf(refs, [
+        ['The contract', 'now', 1, 'Dana has asked twice about the contract'],
+        ['Venue quote', 'waiting', 1, 'No word from Leo since Tuesday'],
+        ['Agenda', 'none', 1, ''],
+        ['Send Priya the agenda', 'today', 1, 'Priya needs it for Monday'],
+      ]),
+    );
+    await rank();
+    const rows = shownWithMail();
+    expect(rows).toContainEqual({
+      itemId: mail.contract,
+      band: 'now',
+      rank: 1,
+      reason: 'Dana has asked twice about the contract',
+    });
+    expect(rows).toContainEqual({
+      itemId: mail.leo,
+      band: 'waiting',
+      rank: 1,
+      reason: 'No word from Leo since Tuesday',
+    });
+    // The Todo carries Priya's question: her thread is off the Dashboard, the Todo on it.
+    expect(rows.map((row) => row.itemId)).not.toContain(mail.priya);
+    expect(rows).toContainEqual(expect.objectContaining({ itemId: mail.agenda, band: 'today' }));
+  });
+
+  it('falls back to the band rules for mail when the model fails', async () => {
+    const mail = syncMail();
+    replies.push(new ModelError('unavailable', 'Z.ai is down'));
+    await rank();
+    expect(store.dashboard.state().ranking).toMatchObject({ by: 'rules' });
+    const rows = shownWithMail();
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        itemId: mail.contract,
+        band: 'today',
+        reason: 'Dana’s waiting on your reply since 13:02',
+      }),
+    );
+    expect(rows).toContainEqual(
+      expect.objectContaining({ itemId: mail.leo, band: 'waiting', reason: 'No reply from Leo for 4 days' }),
+    );
+  });
+
+  it('leaves out mail Ares may not read: the rules place it', async () => {
+    const mail = syncMail();
+    allowCloudMail(store, GMAIL, 'declined');
+    await rank();
+    expect(String(calls[0]?.messages.at(-1)?.content)).not.toContain('Email thread');
+    expect(shownWithMail()).toContainEqual(expect.objectContaining({ itemId: mail.contract, band: 'today' }));
   });
 });

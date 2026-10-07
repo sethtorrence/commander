@@ -95,6 +95,9 @@ export const eventDetail = z.object({
   // Opens the event at its Source (Google Calendar on the web).
   webUrl: z.string().nullable(),
   createdByCommander: commanderEventKind.nullable(),
+  // Its iCalendar UID (Google's `iCalUID`, Graph's `iCalUId`): what an invitation email names it by
+  // (#144). Absent on events synced before.
+  icalUid: z.string().nullable().optional(),
 });
 export type EventDetail = z.infer<typeof eventDetail>;
 

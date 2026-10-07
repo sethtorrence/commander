@@ -77,9 +77,10 @@ function identifierOf(item: Item): string | null {
 
 /**
  * Which Section an Item opens in, by its id, with its name: ["todos", "Todos"]. A suggestion opens its
- * Block, or its Chat for one from Teams.
+ * Block, its Chat for one from Teams, or its thread for one from email.
  */
 export function openIn(row: FeedRow): [string, string] | null {
+  if (row.suggestion?.fromEmail) return ['email', 'Email'];
   if (row.suggestion) return row.suggestion.fromMessage ? ['teams', 'Teams'] : ['notes', 'Notes'];
   const section = sectionFor(row.item.kind);
   return section ? [section, SECTION_LABELS[section] ?? section] : null;

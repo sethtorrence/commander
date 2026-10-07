@@ -85,9 +85,9 @@ export function dashboardIn(
 
     async suggestions() {
       if (!ares) return [];
-      // From Daily Notes and from Teams Chats (#110), oldest first.
+      // From Daily Notes, from Teams Chats (#110) and from email (#144), oldest first.
       const found = await Promise.all(
-        (['notes', 'teams'] as const).map((section) =>
+        (['notes', 'teams', 'email'] as const).map((section) =>
           ares.autonomy({ op: 'activity', query: { section, statuses: ['pending'], limit: 500 } }),
         ),
       );

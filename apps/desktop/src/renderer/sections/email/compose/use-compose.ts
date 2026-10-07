@@ -1,4 +1,5 @@
 import {
+  type ComposeBody,
   type ComposeMode,
   type ComposeState,
   type DraftEntry,
@@ -32,8 +33,11 @@ export interface EmailWriting {
   drafts: DraftEntry[];
   outbox: OutboxEntry[];
   scheduled: ScheduledEntry[];
-  /** Opens a composer: new mail, or a reply, reply all or forward of a message (its Item). */
-  open(mode: ComposeMode, itemId?: string): Promise<void>;
+  /**
+   * Opens a composer: new mail, or a reply, reply all or forward of a message (its Item). `opening`:
+   * what the body starts with, above the signature (Reply with your booking link, #144).
+   */
+  open(mode: ComposeMode, itemId?: string, opening?: ComposeBody): Promise<void>;
   openDraft(itemId: string): Promise<void>;
   /** Ares's suggested reply to a message (#143), in the composer below its thread, as a draft. */
   openSuggested(itemId: string): Promise<void>;
@@ -128,9 +132,10 @@ export function useCompose({
   const current = useCallback(() => latest.current, []);
 
   const open = useCallback(
-    async (mode: ComposeMode, itemId?: string) => {
+    async (mode: ComposeMode, itemId?: string, opening?: ComposeBody) => {
       try {
-        show(await client.open(mode, itemId));
+        const state = await client.open(mode, itemId);
+        show(opening?.length ? { ...state, body: [...opening, ...state.body] } : state);
       } catch (error) {
         toast(message(error));
       }
