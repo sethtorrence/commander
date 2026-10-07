@@ -3,9 +3,10 @@ import type { ItemStore } from '@commander/core/src/item-store';
 import type { ActionContext, LinearIssueDetail, Project } from '@commander/domain';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { requestReveal } from '../frame/reveal';
+import { onReveal, requestReveal } from '../frame/reveal';
 import type { ItemStoreClient } from '../item-store/client';
 import { openTestItemStore } from '../item-store/test-item-store';
+import { CONVERSATIONS_REVEAL } from '../sections/ares/conversations';
 import { WHAT_ARES_KNOWS, WhatAresKnows } from './WhatAresKnows';
 
 // What Ares knows (#74): every memory, grouped by kind, each with where it came from and when; the
@@ -193,5 +194,38 @@ describe('What Ares knows', () => {
     await screen.findByText('Dana leads TX');
     act(() => requestReveal(WHAT_ARES_KNOWS, memory?.id ?? ''));
     await waitFor(() => expect(memoryRow('Dana leads TX').getAttribute('aria-current')).toBe('true'));
+  });
+});
+
+describe('What the User told Ares in a Conversation (#194)', () => {
+  it('links to the turn it came from, opening the Conversation there, and reads “a deleted Conversation” once it is gone', async () => {
+    const { conversation } = store.conversations.create('2026-10-04');
+    const turn = store.conversations.addUserTurn(conversation.id, 'I don’t take meetings before 10');
+    store.memory.tell(
+      {
+        kind: 'preference',
+        key: 'preference:no meetings before 10',
+        text: 'The User doesn’t take meetings before 10',
+        confirmed: true,
+        sources: [],
+      },
+      { conversationId: conversation.id, turnId: turn.id },
+    );
+    const revealed: [string, string | undefined][] = [];
+    const stop = onReveal(CONVERSATIONS_REVEAL, (conversationId, focus) =>
+      revealed.push([conversationId, focus]),
+    );
+    render(<WhatAresKnows client={client} shown />);
+    const row = await waitFor(() => memoryRow('The User doesn’t take meetings before 10'));
+    expect(row.textContent).toMatch(/Added 4 Oct/);
+    fireEvent.click(within(row).getByRole('button', { name: 'I don’t take meetings before 10' }));
+    expect(revealed).toEqual([[conversation.id, String(turn.id)]]);
+    stop();
+    cleanup();
+
+    store.conversations.remove(conversation.id);
+    render(<WhatAresKnows client={client} shown />);
+    const kept = await waitFor(() => memoryRow('The User doesn’t take meetings before 10'));
+    expect(within(kept).getByText('a deleted Conversation')).toBeTruthy();
   });
 });

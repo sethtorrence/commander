@@ -212,7 +212,7 @@ import {
 } from './synced-changes';
 import { openUpdateStore, type UpdateStore } from './updates';
 
-export type { LearnedMemory, MemoryLookup, MemoryStore, RecalledMemory } from '../memory';
+export type { LearnedMemory, MemoryLookup, MemoryStore, RecalledMemory, TurnSource } from '../memory';
 export type { EmbeddedWork, MeaningProgress, MeaningWork, QueryVector, Search } from '../search';
 export type { AgentStore, JobState, SeenItem } from './agent-jobs';
 export type { NewProposal } from './autonomy';
@@ -2904,6 +2904,13 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       learn: sqlite.transaction((input: Parameters<MemoryStore['learn']>[0]) => memory.learn(input)),
       change: sqlite.transaction((action: Parameters<MemoryStore['change']>[0]) => memory.change(action)),
       saveProgress: sqlite.transaction((name: string, value: number) => memory.saveProgress(name, value)),
+      // What the User tells Ares in a Conversation (#194).
+      tell: sqlite.transaction((...args: Parameters<MemoryStore['tell']>) => memory.tell(...args)),
+      correct: sqlite.transaction((...args: Parameters<MemoryStore['correct']>) => memory.correct(...args)),
+      forget: sqlite.transaction((...args: Parameters<MemoryStore['forget']>) => memory.forget(...args)),
+      undoTurn: sqlite.transaction((...args: Parameters<MemoryStore['undoTurn']>) =>
+        memory.undoTurn(...args),
+      ),
     },
 
     saveFromSource,

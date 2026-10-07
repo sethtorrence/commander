@@ -34,6 +34,11 @@
 //   steering flag in any reply marks an Item only with a quote found in it (ADR 0004). He never
 //   starts a Conversation or writes into one unprompted: every turn of his answers one of the User's,
 //   which the Item store enforces.
+// - Remembering (#194, remember.ts): what the User tells him about themselves, their work and the
+//   people in it becomes confirmed Memory, with their turn as its source, learned by a call of its
+//   own beside his answer that reads only the User's words (never an Item, nor his answers). What
+//   changed shows as lines under his answer (`remembered`), each with Undo; Send again keeps them.
+//   With every message, the confirmed memories about what the User said come back to him as theirs.
 // - About an Item (#193, about.ts): a Conversation started with the Ares button on an Item is named
 //   after it, and that Item is handed to him with every message as I1, in a data block of its own by
 //   where it came from, before anything his Skills find. Whatever it leads to is still only an answer
@@ -51,6 +56,7 @@ import {
   type Item,
   LINK_REF,
   type ModelSettings,
+  type Remembered,
   SkillInputError,
   type SkillRegistry,
   SUMMARISE_SKILL,
@@ -59,7 +65,7 @@ import {
 } from '@commander/domain';
 import { type ModelClient, ModelError } from '@commander/models';
 import { z } from 'zod';
-import { buildConversationPrompt, PromptRefused } from '../agent/prompt';
+import { buildConversationPrompt, type PromptData, PromptRefused } from '../agent/prompt';
 import type {
   ConversationStore,
   InjectionWarningStore,
@@ -73,6 +79,7 @@ import { type AboutReading, aboutOf } from './about';
 import { type AnswerReader, pieceBetween, readAnswer } from './answer';
 import { createFairQueue, type QueueTicket } from './fair-queue';
 import { HISTORY_BUDGET_CHARS, historyOf, historyWithin } from './history';
+import type { Rememberer } from './remember';
 import {
   COULDNT_FINISH,
   findingsOf,
@@ -184,6 +191,10 @@ export type ConversationsOptions = {
   // Where an Item a Skill found, left unsent for holding a key or token, is noted as skipped (#201).
   refusals?: Pick<RefusalStore, 'record'>;
   onItemsChanged?: (itemIds: string[]) => void;
+  // What the User tells him becomes Memory (#194, remember.ts). None: nothing is remembered.
+  remember?: Rememberer;
+  // The confirmed memories about what the User said (#194), handed to him with their message as theirs.
+  recall?: (text: string) => PromptData[] | Promise<PromptData[]>;
   log?: (message: string) => void;
 };
 
@@ -201,6 +212,8 @@ type Answering = {
   finished: Promise<void>;
   // What he has written so far, checked.
   partial: () => string;
+  // What he remembered from the User's message was carried over from an answer Send again replaced.
+  remembered: boolean;
 };
 
 const envelope = z.object({
@@ -234,6 +247,47 @@ export function setUpConversations(options: ConversationsOptions): Conversations
   function heed(flag: SteeringFlag, outside: { ref: string; itemId: string }[]) {
     const marked = heedSteering(flag, { outside }, options.injectionWarnings);
     if (marked.length) options.onItemsChanged?.(marked);
+  }
+
+  // What the User told him in their message `replyTo` (#194): learned beside his answer, from their
+  // words alone, and shown under it (`turnId`) as lines with Undo. Never holds his answer up.
+  function learnFrom(view: ConversationView, replyTo: number, turnId: number, signal: AbortSignal) {
+    const remember = options.remember;
+    if (!remember) return;
+    const theirs = view.turns.filter((turn) => turn.by === 'user' && turn.id <= replyTo);
+    const said = theirs.at(-1);
+    if (said?.id !== replyTo) return;
+    const heldHere = view.turns.flatMap((turn) =>
+      turn.remembered.filter((line) => !line.undone && line.did !== 'forgot').map((line) => line.memoryId),
+    );
+    remember
+      .learn({
+        conversationId: view.conversation.id,
+        turnId: replyTo,
+        said: said.text,
+        earlier: theirs.slice(0, -1).map((turn) => turn.text),
+        heldHere: [...new Set(heldHere)],
+        signal,
+      })
+      .then((lines) => {
+        if (closed || !lines.length) return;
+        changed(store.saveAnswer(turnId, { remembered: lines }));
+      })
+      .catch((error: unknown) => {
+        if (closed || signal.aborted || error instanceof ModelError || error instanceof PromptRefused) return;
+        log(`Ares couldn’t remember what the User said: ${error instanceof Error ? error.message : error}`);
+      });
+  }
+
+  // The confirmed memories about what the User said, for every call answering it; none if the lookup fails.
+  async function recalled(text: string | undefined): Promise<PromptData[]> {
+    if (!options.recall || !text) return [];
+    try {
+      return await options.recall(text);
+    } catch (error) {
+      log(`Couldn’t recall Memory for a Conversation: ${error instanceof Error ? error.message : error}`);
+      return [];
+    }
   }
 
   // Ares writes his answer to the User's turn `replyTo`: up to SKILL_STEPS Skill steps first, each a
@@ -283,15 +337,21 @@ export function setUpConversations(options: ConversationsOptions): Conversations
     // What the User asked, for an action's reason.
     const asked = view?.turns.find((turn) => turn.id === replyTo)?.text;
     entry.partial = () => soFar().text;
+    if (view && !entry.remembered) learnFrom(view, replyTo, turnId, controller.signal);
     try {
       if (!view) throw new Error('That Conversation is no longer in Commander');
+      const known = await recalled(asked);
       const turns = historyWithin(historyOf(view.turns, replyTo), budget);
       const offered = options.skills ? offeredSkills(options.skills) : [];
       let stepsLeft = SKILL_STEPS;
       let stage: Stage = offered.length ? { kind: 'choosing', stepsLeft } : { kind: 'last' };
       for (;;) {
         const prompt = buildConversationPrompt(
-          { instructions: conversationInstructions(offered, stage), turns, data: materialOf(gathered) },
+          {
+            instructions: conversationInstructions(offered, stage),
+            turns,
+            data: [...materialOf(gathered), ...known],
+          },
           { secrets: options.secrets },
         );
         const live = readAnswer(prompt.material, lead ? { lead } : {});
@@ -412,9 +472,11 @@ export function setUpConversations(options: ConversationsOptions): Conversations
     }
   }
 
-  // Ares starts answering the User's last turn, now or when it is this Conversation's turn.
-  function answer(conversationId: string, replyTo: number) {
-    const turn = store.startAnswer(conversationId, replyTo, 'queued');
+  // Ares starts answering the User's last turn, now or when it is this Conversation's turn. `carried`:
+  // what he remembered from it in the answer Send again replaced, kept rather than learned again.
+  function answer(conversationId: string, replyTo: number, carried: Remembered[] = []) {
+    let turn = store.startAnswer(conversationId, replyTo, 'queued');
+    if (carried.length) turn = store.saveAnswer(turn.id, { remembered: carried });
     const controller = new AbortController();
     let done: () => void = () => {};
     const entry: Answering = {
@@ -425,6 +487,7 @@ export function setUpConversations(options: ConversationsOptions): Conversations
         done = resolve;
       }),
       partial: () => '',
+      remembered: carried.length > 0,
     };
     answering.set(conversationId, entry);
     entry.ticket = queue.enqueue(conversationId, async () => {
@@ -498,8 +561,9 @@ export function setUpConversations(options: ConversationsOptions): Conversations
       }
       case 'retry': {
         if (answering.has(request.conversationId)) throw new Error('Ares is still answering');
+        const replaced = store.view(request.conversationId)?.turns.at(-1);
         const asked = store.takeBack(request.conversationId);
-        answer(request.conversationId, asked.id);
+        answer(request.conversationId, asked.id, replaced?.by === 'ares' ? replaced.remembered : []);
         return required(request.conversationId);
       }
       case 'stop':
@@ -519,6 +583,27 @@ export function setUpConversations(options: ConversationsOptions): Conversations
         clearTimeout(kept.timer);
         removed.delete(request.conversationId);
         return shown(store.restore(kept.conversation));
+      }
+      case 'undo-remembered': {
+        // Undo on a line under his answer (#194): the memory as it was before the User's message.
+        const answered = store.turn(request.turnId);
+        if (answered?.conversationId !== request.conversationId || answered.replyTo === null)
+          throw new Error('That answer is no longer in Commander');
+        const line = answered.remembered.find((each) => each.memoryId === request.memoryId);
+        if (!line) throw new Error('Ares didn’t remember that in this answer');
+        if (line.undone) return answered;
+        if (!options.remember) throw new Error('Ares can’t change what he remembers here');
+        options.remember.undo(line.memoryId, {
+          conversationId: request.conversationId,
+          turnId: answered.replyTo,
+        });
+        const saved = store.saveAnswer(answered.id, {
+          remembered: answered.remembered.map((each) =>
+            each.memoryId === line.memoryId ? { ...each, undone: true } : each,
+          ),
+        });
+        changed(saved);
+        return saved;
       }
       case 'skills': {
         // Every Skill he has, and whether a Conversation can use it yet.

@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ActionContext, LinearIssueDetail, Project } from '@commander/domain';
+import type { ActionContext, LinearIssueDetail, Memory, Project } from '@commander/domain';
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type ItemStore, openItemStore } from '../item-store';
@@ -353,5 +353,138 @@ describe('the Memory store', () => {
     raw.close();
     open();
     expect(store.memory.lookup({ text: 'beta' })).toHaveLength(1);
+  });
+});
+
+describe('what the User tells Ares in a Conversation (#194)', () => {
+  // A turn of the User's in a Conversation, as Memory's source.
+  function told(text: string) {
+    const { conversation } = store.conversations.create('2026-10-04');
+    const turn = store.conversations.addUserTurn(conversation.id, text);
+    return { conversationId: conversation.id, turnId: turn.id };
+  }
+
+  it('meets the same fact from outside in one memory, confirmed and in their words, and Undo puts it back', () => {
+    const relay = issue('i1', 'OPS-1', 'Relay retries');
+    const fact = store.memory.learn({
+      kind: 'fact',
+      key: 'fact:priya leads relay',
+      text: 'Priya leads Relay',
+      confirmed: false,
+      sources: [relay],
+    }) as Memory;
+    clock += 1000;
+    const turn = told('Priya leads Relay');
+    const said = {
+      kind: 'fact' as const,
+      key: 'fact:priya leads relay',
+      text: 'Priya leads Relay',
+      confirmed: true,
+      sources: [],
+    };
+    const kept = store.memory.tell(said, turn);
+    expect(kept).toMatchObject({ id: fact.id, confirmed: true, sources: [{ itemId: relay }] });
+    expect(kept?.turns).toEqual([
+      { ...turn, at: clock, conversation: { title: 'Priya leads Relay', day: '2026-10-04', daily: false } },
+    ]);
+    // The same turn again changes nothing.
+    expect(store.memory.tell(said, turn)).toMatchObject({
+      id: fact.id,
+      turns: [turn].map((each) => expect.objectContaining(each)),
+    });
+
+    expect(store.memory.undoTurn(fact.id, turn)).toMatchObject({ id: fact.id, confirmed: false, turns: [] });
+  });
+
+  it('keeps one the User deleted when they say it again, and Undo of a new one takes it away altogether', () => {
+    const key = 'preference:no meetings before 10';
+    const said = {
+      kind: 'preference' as const,
+      key,
+      text: 'No meetings before 10',
+      confirmed: true,
+      sources: [],
+    };
+    const first = store.memory.tell(said, told('No meetings before 10')) as Memory;
+    store.memory.change({ type: 'delete', memoryId: first.id });
+    // Learned elsewhere it stays deleted; said again, it is kept again.
+    expect(store.memory.learn(said)).toBeNull();
+    expect(store.memory.tell(said, told('No meetings before 10, really'))).toMatchObject({ id: first.id });
+    expect(store.memory.list().memories.map((memory) => memory.id)).toEqual([first.id]);
+
+    const fresh = told('Leo is our Acme contact');
+    const leo = store.memory.tell(
+      {
+        kind: 'fact',
+        key: 'fact:leo',
+        text: 'Leo is the User’s contact at Acme',
+        confirmed: true,
+        sources: [],
+      },
+      fresh,
+    ) as Memory;
+    expect(store.memory.undoTurn(leo.id, fresh)).toBeNull();
+    expect(store.memory.get(leo.id)).toBeNull();
+    expect(store.memory.knows(['fact:leo']).size).toBe(0);
+    expect(() => store.memory.undoTurn(leo.id, fresh)).toThrow(/can’t be undone/);
+  });
+
+  it('corrects and forgets with Undo, and leaves one deleted on the page deleted', () => {
+    const leo = store.memory.tell(
+      {
+        kind: 'fact',
+        key: 'fact:leo',
+        text: 'Leo is the User’s contact at Acme',
+        confirmed: true,
+        sources: [],
+      },
+      told('Leo is our Acme contact'),
+    ) as Memory;
+    const moved = told('Actually Leo moved to Globex');
+    expect(store.memory.correct(leo.id, 'Leo is the User’s contact at Globex', moved)).toMatchObject({
+      text: 'Leo is the User’s contact at Globex',
+    });
+    expect(store.memory.lookup({ text: 'Globex' }).map((memory) => memory.id)).toEqual([leo.id]);
+    expect(store.memory.undoTurn(leo.id, moved)).toMatchObject({ text: 'Leo is the User’s contact at Acme' });
+    expect(store.memory.lookup({ text: 'Globex' })).toEqual([]);
+
+    const forget = told('Forget that');
+    store.memory.forget(leo.id, forget);
+    expect(store.memory.get(leo.id)).toBeNull();
+    expect(store.memory.lookup({ text: 'Acme' })).toEqual([]);
+    expect(store.memory.undoTurn(leo.id, forget)).toMatchObject({ id: leo.id });
+    expect(store.memory.lookup({ text: 'Acme' }).map((memory) => memory.id)).toEqual([leo.id]);
+
+    // Changed in a Conversation, then deleted on What Ares knows: the line's Undo doesn't bring it back.
+    const again = told('Leo moved to Globex');
+    store.memory.correct(leo.id, 'Leo is the User’s contact at Globex', again);
+    store.memory.change({ type: 'delete', memoryId: leo.id });
+    expect(store.memory.undoTurn(leo.id, again)).toBeNull();
+    expect(store.memory.get(leo.id)).toBeNull();
+  });
+
+  it('never puts what the User told Ares up for review, and keeps it when its Conversation is deleted', () => {
+    const relay = issue('i1', 'OPS-1', 'Relay retries');
+    const said = {
+      kind: 'fact' as const,
+      key: 'fact:relay',
+      text: 'Relay launches in November',
+      sources: [],
+    };
+    store.memory.learn({ ...said, confirmed: false, sources: [relay] });
+    const turn = told('Relay launches in November');
+    const fact = store.memory.tell({ ...said, confirmed: true }, turn) as Memory;
+    store.record({ type: 'delete', itemId: relay }, user);
+    store.conversations.remove(turn.conversationId);
+
+    const { forReview, memories } = store.memory.list();
+    expect(forReview).toEqual([]);
+    expect(memories.find((memory) => memory.id === fact.id)?.turns).toEqual([
+      expect.objectContaining({
+        conversationId: turn.conversationId,
+        turnId: turn.turnId,
+        conversation: null,
+      }),
+    ]);
   });
 });

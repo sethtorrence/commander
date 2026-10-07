@@ -14,7 +14,8 @@
 //   Suggestion. A People-to-Project fact is only ever context: the jobs' instructions say it never
 //   outweighs the Item's own facts, and Rules and the User's filing never reach Ares at all.
 //   Given the embedding of what the job is working on (`meaning`, #73), memories are found by meaning
-//   too, so one phrased differently from the Item still reaches the prompt.
+//   too, so one phrased differently from the Item still reaches the prompt. What the User told Ares
+//   in a Conversation (#194) is confirmed, so it comes back here as theirs, like any other.
 import {
   emailSubject,
   type Item,
@@ -144,6 +145,9 @@ export type RecallRequest = {
   meaning?: QueryVector | null;
   // Memories the job puts in its prompt itself (an Account's writing style, #143): left out here.
   except?: readonly string[];
+  // Only what the User confirmed, as their own material: a Conversation recalls these with every
+  // message (#194), where background would hold back whatever his Skills then do.
+  confirmedOnly?: boolean;
 };
 
 // What a job looks Memory up by meaning with (#73): the text embedded, or null while the embedding
@@ -177,7 +181,7 @@ export function recall(itemStore: ItemStore, request: RecallRequest): PromptData
     })
     .filter((memory) => !except.has(memory.id));
   const confirmed = found.filter((memory) => memory.confirmed);
-  const unconfirmed = found.filter((memory) => !memory.confirmed);
+  const unconfirmed = request.confirmedOnly ? [] : found.filter((memory) => !memory.confirmed);
   const data: PromptData[] = [];
   if (confirmed.length) {
     data.push({ label: 'What Ares knows', from: 'user-settings', text: confirmed.map(line).join('\n') });

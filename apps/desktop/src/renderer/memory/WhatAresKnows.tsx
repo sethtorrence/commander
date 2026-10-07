@@ -5,12 +5,15 @@ import {
   type MemoryAction,
   type MemoryKind,
   type MemorySource,
+  type MemoryTurn,
 } from '@commander/domain';
 import { Button, cn, Input, toast } from '@commander/ui';
 import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { requestReveal, useReveal } from '../frame/reveal';
 import type { ItemStoreClient } from '../item-store/client';
 import { errorText } from '../projects/change-with-undo';
+import { CONVERSATIONS_REVEAL, nameOf } from '../sections/ares/conversations';
+import { dayKey } from '../sections/notes/days';
 import { useOpenSection } from '../sections/section';
 import { goneNote, kindTag, sectionFor } from '../sections/todos/links';
 import { SettingsGroup } from '../settings/parts';
@@ -22,8 +25,9 @@ import { SettingsLink } from '../settings/SettingsLink';
   Ares picked up from outside content (until then it is only ever background to him), edits any
   memory's words (which makes them the User's, so confirmed), deletes one (never learned again), and
   adds a preference by hand. A fact whose source was deleted waits at the top for review: Keep or
-  Delete. Rules show here too, but are changed only in Settings → Rules. Ctrl+K opens it at a memory
-  (`requestReveal(WHAT_ARES_KNOWS, memoryId)`).
+  Delete. What the User told Ares in a Conversation (#194) links to the turn they said it in, or
+  reads "a deleted Conversation" once it is gone. Rules show here too, but are changed only in
+  Settings → Rules. Ctrl+K opens it at a memory (`requestReveal(WHAT_ARES_KNOWS, memoryId)`).
 */
 
 /** The reveal channel (frame/reveal.ts) that shows What Ares knows, at a memory when one is named. */
@@ -124,9 +128,9 @@ export function WhatAresKnows({
       data-testid="what-ares-knows"
     >
       <p className="m-0 border-b border-line2 py-3 pr-6 pl-13 text-note leading-[19px] text-muted">
-        What Ares has learned from your answers, your notes and your Sources, each with where it came from.
-        Facts he picked up from other people’s content are unconfirmed: he uses them only as background until
-        you confirm them.
+        What Ares has learned from your answers, your notes, what you tell him and your Sources, each with
+        where it came from. Facts he picked up from other people’s content are unconfirmed: he uses them only
+        as background until you confirm them.
       </p>
       <div className="flex flex-wrap items-center gap-3 border-b border-line2 py-2.5 pr-6 pl-13">
         <label htmlFor={searchId} className="sr-only">
@@ -231,6 +235,29 @@ function SourceLink({ source }: { source: MemorySource }) {
   );
 }
 
+// The Conversation turn where the User told Ares (#194): opens the Conversation at it, or says the
+// Conversation was deleted (the memory stays: the User said it).
+function TurnLink({ turn }: { turn: MemoryTurn }) {
+  const openSection = useOpenSection();
+  const conversation = turn.conversation;
+  if (!conversation) return <span className="text-note text-faint">a deleted Conversation</span>;
+  return (
+    <span className="inline-flex items-baseline gap-1.5">
+      <span className={metaClass}>Conversation</span>
+      <button
+        type="button"
+        className="cursor-pointer border-0 bg-transparent p-0 text-note text-text underline decoration-line underline-offset-2 hover:text-ink"
+        onClick={() => {
+          openSection('ares');
+          requestReveal(CONVERSATIONS_REVEAL, turn.conversationId, String(turn.turnId));
+        }}
+      >
+        {nameOf(conversation, dayKey(new Date()))}
+      </button>
+    </span>
+  );
+}
+
 function MemoryRow({
   memory,
   focused,
@@ -299,13 +326,18 @@ function MemoryRow({
               Change it in <SettingsLink to={{ group: 'rules' }}>Settings → Rules</SettingsLink>
             </span>
           )}
-          {memory.sources.length > 0 && (
+          {memory.sources.length + memory.turns.length > 0 && (
             <span className="inline-flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
               From{' '}
-              {memory.sources.slice(0, 5).map((source) => (
+              {memory.turns.slice(0, 5).map((turn) => (
+                <TurnLink key={turn.turnId} turn={turn} />
+              ))}
+              {memory.sources.slice(0, Math.max(0, 5 - memory.turns.length)).map((source) => (
                 <SourceLink key={source.itemId} source={source} />
               ))}
-              {memory.sources.length > 5 && <span>and {memory.sources.length - 5} more</span>}
+              {memory.sources.length + memory.turns.length > 5 && (
+                <span>and {memory.sources.length + memory.turns.length - 5} more</span>
+              )}
             </span>
           )}
         </div>

@@ -39,6 +39,8 @@ import type {
   ProposalStatus,
   QueuedAbout,
   QueuedStatus,
+  Remembered,
+  RememberedKind,
   RuleTarget,
   RuleWhen,
   SchedulingSettings,
@@ -1109,6 +1111,42 @@ export const memorySources = sqliteTable(
   (t) => [primaryKey({ columns: [t.memoryId, t.itemId] }), index('memory_sources_item').on(t.itemId)],
 );
 
+// The Conversation turns each memory came from (#194): the User's own turn where they told Ares, and
+// what it did there, with what the memory was before (`before`; null when the turn made it), so the
+// line under his answer can Undo it. No foreign key to the turns: deleting a Conversation keeps what
+// the User told Ares in it, its source shown as "a deleted Conversation".
+export const memoryTurns = sqliteTable(
+  'memory_turns',
+  {
+    memoryId: text('memory_id')
+      .notNull()
+      .references(() => memories.id),
+    conversationId: text('conversation_id').notNull(),
+    turnId: integer('turn_id').notNull(),
+    at: integer('at').notNull(),
+    // What the turn did: learned it, changed it, or forgot it.
+    did: text('did').$type<RememberedKind>().notNull(),
+    before: text('before', { mode: 'json' }).$type<MemoryBefore>(),
+  },
+  (t) => [primaryKey({ columns: [t.memoryId, t.turnId] }), index('memory_turns_turn').on(t.turnId)],
+);
+
+// A memory as it stood before a Conversation turn changed it (#194), for Undo.
+export type MemoryBefore = Pick<
+  typeof memories.$inferSelect,
+  | 'kind'
+  | 'text'
+  | 'keywords'
+  | 'confirmed'
+  | 'by'
+  | 'personId'
+  | 'projectId'
+  | 'handles'
+  | 'editedAt'
+  | 'keptAt'
+  | 'deletedAt'
+>;
+
 // How far each of Ares's learners has got (the last activity entry turned into examples, say).
 export const memoryProgress = sqliteTable('memory_progress', {
   name: text('name').primaryKey(),
@@ -1217,6 +1255,8 @@ export const conversationTurns = sqliteTable(
     skills: text('skills', { mode: 'json' }).$type<string[]>().notNull().default([]),
     // What his action Skills handed the gate for it (#196), by proposal.
     proposalIds: text('proposal_ids', { mode: 'json' }).$type<number[]>().notNull().default([]),
+    // What Ares remembered from the User's message it answers (#194), as the lines under it.
+    remembered: text('remembered', { mode: 'json' }).$type<Remembered[]>().notNull().default([]),
   },
   (t) => [index('conversation_turns_conversation').on(t.conversationId, t.id)],
 );

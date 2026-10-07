@@ -221,7 +221,7 @@ The AI mark on an Item's row or detail pane (or `a` on the focused Item) that op
 _Avoid_: AI button, assistant button, chat bubble
 
 **Memory**:
-What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from; one he picked up from outside content is unconfirmed, only ever background to him, until the User confirms it. The User sees and changes it on What Ares knows.
+What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from; one he picked up from outside content is unconfirmed, only ever background to him, until the User confirms it. What the User tells him in a Conversation is theirs, so confirmed, with their turn as its source; nothing an Item there says ever is. The User sees and changes it on What Ares knows.
 _Avoid_: Knowledge base, context, history, profile
 
 **Update**:

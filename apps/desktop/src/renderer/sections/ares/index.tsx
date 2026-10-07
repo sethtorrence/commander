@@ -13,11 +13,13 @@ const onAresActivity = (listener: () => void) =>
   });
 
 // What Ares knows may have changed: he did or suggested something (an answer to him is an example),
-// or a job finished (Learn facts).
+// a job finished (Learn facts), or he remembered what the User told him in a Conversation, or took
+// it back with Undo (#194).
 const onMemoryChange = (listener: () => void) =>
   window.commander.onCoreMessage((message) => {
     if (message.type === 'ares-activity' || message.type === 'items-changed') listener();
     if (message.type === 'ares-status' && !message.working) listener();
+    if (message.type === 'conversation-turn' && message.turn.remembered.length) listener();
   });
 
 // The Flagged Items list may have changed: an Item was marked, cleared or skipped (#201).

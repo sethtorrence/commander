@@ -91,6 +91,12 @@ const issueOf = (item: Item): LinearIssueDetail | null =>
 
 const fingerprint = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
 
+/**
+ * The key a fact (or a preference the User told Ares, #194) is learned under: the same words learned
+ * again, from anywhere, add to one memory.
+ */
+export const factKey = (text: string, kind: 'fact' | 'preference' = 'fact') => `${kind}:${fingerprint(text)}`;
+
 // What Ares reads an issue by: when none of it changes, there is nothing new to learn.
 function issueFingerprint(item: Item): string {
   const issue = issueOf(item);
@@ -104,11 +110,40 @@ function issueFingerprint(item: Item): string {
 }
 
 // A fact as Memory keeps it: one line, no closing full stop.
-function cleanFact(text: string): string {
+export function cleanFact(text: string): string {
   return cut(text, MAX_FACT).replace(/[.。]+$/, '');
 }
 
 const nameWords = (name: string) => name.toLowerCase().split(/\s+/).filter(Boolean);
+
+/**
+ * The Person a fact names: among the issue's own people (for an issue), or among everyone but the
+ * User by their whole name or a first name only one of them has (for the User's own words: a Block,
+ * or what they told Ares in a Conversation, #194, with no Item). Null when it can't be told.
+ */
+export function personNamed(name: string | undefined, source: Item | null, people: Person[]): Person | null {
+  const wanted = nameWords(name ?? '');
+  if (!wanted.length) return null;
+  const handleOwner = new Map<string, Person>();
+  for (const person of people) {
+    for (const { handle } of person.handles) handleOwner.set(normaliseHandle(handle), person);
+  }
+  const candidates =
+    source?.kind === 'linear-issue'
+      ? identitiesOf(source).flatMap((identity) => {
+          const person = handleOwner.get(identity.handle);
+          return person ? [person] : [];
+        })
+      : people.filter((person) => !person.isUser);
+  const unique = [...new Map(candidates.map((person) => [person.id, person])).values()];
+  const whole = unique.filter((person) => nameWords(person.name).join(' ') === wanted.join(' '));
+  if (whole.length === 1) return whole[0] as Person;
+  if (wanted.length === 1) {
+    const first = unique.filter((person) => nameWords(person.name)[0] === wanted[0]);
+    if (first.length === 1) return first[0] as Person;
+  }
+  return null;
+}
 
 export function learnFactsJob(
   itemStore: ItemStore,
@@ -147,32 +182,6 @@ export function learnFactsJob(
           (comment) => `Comment (${comment.author?.name ?? 'someone'}): ${cut(comment.body, MAX_COMMENT)}`,
         ),
     ].join('\n');
-  }
-
-  // The Person a fact names: among the issue's own people (for an issue), or among everyone by their
-  // whole name or a first name only one of them has. Null when it can't be told.
-  function personNamed(name: string | undefined, source: Item, people: Person[]): Person | null {
-    const wanted = nameWords(name ?? '');
-    if (!wanted.length) return null;
-    const handleOwner = new Map<string, Person>();
-    for (const person of people) {
-      for (const { handle } of person.handles) handleOwner.set(normaliseHandle(handle), person);
-    }
-    const candidates =
-      source.kind === 'linear-issue'
-        ? identitiesOf(source).flatMap((identity) => {
-            const person = handleOwner.get(identity.handle);
-            return person ? [person] : [];
-          })
-        : people.filter((person) => !person.isUser);
-    const unique = [...new Map(candidates.map((person) => [person.id, person])).values()];
-    const whole = unique.filter((person) => nameWords(person.name).join(' ') === wanted.join(' '));
-    if (whole.length === 1) return whole[0] as Person;
-    if (wanted.length === 1) {
-      const first = unique.filter((person) => nameWords(person.name)[0] === wanted[0]);
-      if (first.length === 1) return first[0] as Person;
-    }
-    return null;
   }
 
   return {
@@ -285,7 +294,7 @@ export function learnFactsJob(
           if (!text) continue;
           itemStore.memory.learn({
             kind: 'fact',
-            key: `fact:${fingerprint(text)}`,
+            key: factKey(text),
             text,
             confirmed: trustOf(source) === 'trusted',
             personId: person?.id ?? null,

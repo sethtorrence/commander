@@ -305,6 +305,7 @@ describe('as the User types', () => {
       projectId: null,
       ruleId: null,
       sources: [],
+      turns: [],
       learnedAt: 0,
       updatedAt: 0,
       forReview: false,

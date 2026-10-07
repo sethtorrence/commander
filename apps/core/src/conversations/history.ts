@@ -1,5 +1,6 @@
 // What of a Conversation goes back to the model with each answer (#191): its earlier turns, as its
-// history, within a budget, oldest dropped first.
+// history, within a budget, oldest dropped first. An answer goes back with the lines under it saying
+// what he remembered (#194), so he knows what "forget that" means.
 import { type ConversationTurn, LINK_MARKER } from '@commander/domain';
 import type { PromptTurn } from '../agent/prompt';
 
@@ -19,7 +20,13 @@ export function historyOf(turns: readonly ConversationTurn[], replyTo: number): 
         turn.by === 'user' ||
         ((turn.status === 'done' || turn.status === 'stopped') && turn.text.trim() !== ''),
     )
-    .map((turn) => ({ by: turn.by, text: turn.by === 'ares' ? withoutRefs(turn.text) : turn.text }));
+    .map((turn) => ({ by: turn.by, text: turn.by === 'ares' ? answerOf(turn) : turn.text }));
+}
+
+// His answer as it goes back: without its refs, with the lines saying what he remembered (not undone).
+function answerOf(turn: ConversationTurn): string {
+  const lines = turn.remembered.filter((line) => !line.undone).map((line) => line.line);
+  return [withoutRefs(turn.text), ...lines].filter(Boolean).join('\n\n');
 }
 
 /**

@@ -19,6 +19,10 @@ import { updateSection } from './updates';
 // outside material, the User's own Todos and Blocks as theirs), and the pop-up can be expanded into
 // the Ares Section, where the Conversation carries on like any other.
 //
+// What the User tells Ares about themselves, their work and the people in it (#194) he keeps as
+// confirmed Memory, with their turn as its source; his answer says so in a line under it, with Undo.
+// Only the User's own words are kept this way, never what an Item in the Conversation says.
+//
 // With action Skills (#196) an answer can also do things: each action goes to the gate under the
 // User's Autonomy settings, and the answer names the proposals, shown under it as cards (done, with
 // Undo, or waiting for the User to confirm with one key).
@@ -62,6 +66,22 @@ export const conversationLink = z.object({
 });
 export type ConversationLink = z.infer<typeof conversationLink>;
 
+// What Ares did to his Memory from the User's message (#194): learned what they told him, changed a
+// memory they corrected, or forgot one they asked him to.
+export const rememberedKinds = ['learned', 'changed', 'forgot'] as const;
+export type RememberedKind = (typeof rememberedKinds)[number];
+
+// One line under his answer saying what he remembered from the message it answers, with Undo.
+export const remembered = z.object({
+  memoryId: z.string().min(1),
+  did: z.enum(rememberedKinds),
+  // In Commander's own words around the User's: "I’ll remember that you don’t take meetings before 10."
+  line: z.string(),
+  // The User took it back with Undo: the memory is as it was before.
+  undone: z.boolean(),
+});
+export type Remembered = z.infer<typeof remembered>;
+
 export const conversationTurn = z.object({
   id: turnId,
   conversationId,
@@ -87,6 +107,9 @@ export const conversationTurn = z.object({
   // What his action Skills (#196) handed the gate for this answer, by proposal: each shows under it as
   // a card, done (with Undo) or waiting for the User to confirm.
   proposalIds: z.array(z.number().int().positive()),
+  // What he remembered from the User's message it answers (#194), each line with Undo. Empty on the
+  // User's turns.
+  remembered: z.array(remembered),
 });
 export type ConversationTurn = z.infer<typeof conversationTurn>;
 
@@ -200,6 +223,14 @@ export const conversationsRequest = z.discriminatedUnion('op', [
   z.object({ op: z.literal('undo-delete'), conversationId }),
   // What Ares can do: every Skill he has (#192).
   z.object({ op: z.literal('skills') }),
+  // Undo on a line under his answer (#194): the memory goes back to how it was before the User's
+  // message (one that message made goes altogether).
+  z.object({
+    op: z.literal('undo-remembered'),
+    conversationId,
+    turnId,
+    memoryId: z.string().min(1),
+  }),
 ]);
 export type ConversationsRequest = z.input<typeof conversationsRequest>;
 export type ConversationsOp = ConversationsRequest['op'];
@@ -215,6 +246,7 @@ export type ConversationsResults = {
   delete: { conversationId: string };
   'undo-delete': ConversationView;
   skills: ConversationSkill[];
+  'undo-remembered': ConversationTurn;
 };
 
 export const conversationsResult = {
@@ -228,6 +260,7 @@ export const conversationsResult = {
   delete: z.object({ conversationId }),
   'undo-delete': conversationView,
   skills: z.array(conversationSkill),
+  'undo-remembered': conversationTurn,
 } satisfies Record<ConversationsOp, z.ZodType>;
 
 export type ConversationsResponse<Op extends ConversationsOp = ConversationsOp> =

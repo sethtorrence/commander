@@ -129,6 +129,15 @@ async function connectFakeModel(window: Page) {
   await expect(window.getByTestId('model-key-status')).toHaveText('A key is saved in the keyring.');
 }
 
+// A Conversation's answer calls, and only those: other jobs (and what Ares keeps from what the User
+// tells him, #194, a call of its own beside each answer) may land at any time.
+const conversationCalls = () =>
+  server.requests.filter((request) =>
+    ((request.body.messages as Message[] | undefined)?.[0]?.content ?? '').startsWith(
+      'You are Ares. You work',
+    ),
+  );
+
 async function say(thread: Locator, text: string) {
   const input = thread.getByRole('textbox', { name: 'Message Ares' });
   await input.fill(text);
@@ -223,10 +232,10 @@ test('a Todo added, an issue filed, and a Linear status change confirmed with on
   await page.keyboard.press('Enter');
   await expect(card).toHaveAttribute('data-status', 'confirmed');
   await expect.poll(() => linear.issues.get('issue-2').state.name, { timeout: 20_000 }).toBe('In Review');
-  // Confirming started nothing further: no more calls to the model.
-  const calls = server.requests.length;
+  // Confirming started nothing further: Ares isn't asked anything more.
+  const calls = conversationCalls().length;
   await expect(thread.getByRole('textbox', { name: 'Message Ares' })).toBeFocused();
-  expect(server.requests.length).toBe(calls);
+  expect(conversationCalls().length).toBe(calls);
 
   // Ares's activity: each with the Conversation as its cause.
   const activity = section.getByRole('list', { name: 'Ares’s activity' });
