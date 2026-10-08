@@ -34,10 +34,12 @@ export function AnswerMade({
   // Open in composer took the User elsewhere (the pop-up closes).
   onLeave?: () => void;
 }) {
-  if (!turn.made?.length) return null;
+  // An Update line's actions (#236) are cards of their own (ConversationLine).
+  const shown = (turn.made ?? []).filter((made): made is Shown => made.kind !== 'line-action');
+  if (!shown.length) return null;
   return (
     <ul aria-label="What Ares made" className="m-0 list-none p-0">
-      {turn.made.map((made, index) => (
+      {shown.map((made, index) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: what an answer made never moves
         <li key={index}>
           {made.kind === 'meeting-prep' ? (
@@ -51,7 +53,8 @@ export function AnswerMade({
   );
 }
 
-type Reply = Exclude<ConversationMade, { kind: 'meeting-prep' }>;
+type Shown = Exclude<ConversationMade, { kind: 'line-action' }>;
+type Reply = Exclude<Shown, { kind: 'meeting-prep' }>;
 
 function ReplyCard({ made, onLeave }: { made: Reply; onLeave?: () => void }) {
   const { open } = useUpdates();

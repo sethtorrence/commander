@@ -32,6 +32,11 @@ import { updateSection } from './updates';
 // Draft, Schedule and Meeting prep (#198) also make things for an answer to show (`made`): a draft
 // reply to open in the composer or a Chat's reply box, a reply holding the booking link, a meeting's
 // prep. Nothing is ever sent from a Conversation.
+//
+// A Conversation can be about one line of an Update instead (#236): the Reply box on the line starts
+// it with the User's words as its first message. Ares is handed the line's facts and its Items with
+// every message, and proposes the line's own actions as cards the User confirms (`made`). Nothing the
+// User says there becomes Memory: it is context for that line only (update-line-replies.ts).
 
 const timestamp = z.number().int().nonnegative();
 const conversationId = z.string().min(1);
@@ -153,6 +158,14 @@ export type ConversationAbout = z.infer<typeof conversationAbout>;
 // The ref the Item a Conversation is about always has in his answers.
 export const ABOUT_REF = 'I1';
 
+// The Update line a Conversation is about (#236): the queued line, and the Update it was replied to in
+// (where its link back opens, and whose line its actions' buttons are).
+export const conversationAboutLine = z.object({
+  updateId: z.number().int().positive(),
+  queuedId: z.number().int().positive(),
+});
+export type ConversationAboutLine = z.infer<typeof conversationAboutLine>;
+
 export const conversation = z.object({
   id: conversationId,
   // From the first words the User wrote; null until they write.
@@ -176,6 +189,8 @@ export const conversation = z.object({
   // That Item as it is now, named for the window (the Conversations module reads it); null when the
   // Conversation is about none, or the Item is no longer in Commander.
   about: conversationAbout.nullable(),
+  // The Update line it was started from with the line's Reply box (#236), or null.
+  aboutLine: conversationAboutLine.nullable(),
 });
 export type Conversation = z.infer<typeof conversation>;
 
@@ -243,6 +258,24 @@ export const conversationsRequest = z.discriminatedUnion('op', [
     turnId,
     memoryId: z.string().min(1),
   }),
+  // The Reply box on an Update line (#236): the User's words, sent in the Conversation about that line
+  // (started now, unless the line has one already). `day`: the window's local date.
+  z.object({
+    op: z.literal('reply-to-line'),
+    day: z.iso.date(),
+    updateId: z.number().int().positive(),
+    queuedId: z.number().int().positive(),
+    text: z.string().trim().min(1).max(MAX_TURN_TEXT),
+  }),
+  // A line action's card under one of his answers (#236), confirmed (once the window has carried it out
+  // as the line's button does) or declined: `index` is its place in the answer's `made`.
+  z.object({
+    op: z.literal('settle-line-action'),
+    conversationId,
+    turnId,
+    index: z.number().int().nonnegative(),
+    status: z.enum(['confirmed', 'declined']),
+  }),
 ]);
 export type ConversationsRequest = z.input<typeof conversationsRequest>;
 export type ConversationsOp = ConversationsRequest['op'];
@@ -259,6 +292,8 @@ export type ConversationsResults = {
   'undo-delete': ConversationView;
   skills: ConversationSkill[];
   'undo-remembered': ConversationTurn;
+  'reply-to-line': ConversationView;
+  'settle-line-action': ConversationTurn;
 };
 
 export const conversationsResult = {
@@ -273,6 +308,8 @@ export const conversationsResult = {
   'undo-delete': conversationView,
   skills: z.array(conversationSkill),
   'undo-remembered': conversationTurn,
+  'reply-to-line': conversationView,
+  'settle-line-action': conversationTurn,
 } satisfies Record<ConversationsOp, z.ZodType>;
 
 export type ConversationsResponse<Op extends ConversationsOp = ConversationsOp> =

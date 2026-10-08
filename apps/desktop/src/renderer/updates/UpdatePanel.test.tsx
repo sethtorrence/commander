@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import type {
+  ConversationsRequest,
+  ConversationView,
   CoreMessage,
   QueuedLine,
   UpdateRow,
@@ -12,6 +14,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AresStatus } from '../frame/Header';
 import { CommandProvider, createCommandRegistry } from '../palette/commands';
+import type { ConversationsClient } from '../sections/ares/conversations';
 import { ShortcutProvider } from '../shortcuts/react';
 import { AresQueueCard } from './AresQueueCard';
 import { UpdatesProvider, useUpdates } from './context';
@@ -122,7 +125,9 @@ function Status() {
   );
 }
 
-function renderUpdates() {
+function renderUpdates(
+  more: { conversations?: ConversationsClient; onOpenConversation?: (id: string) => void } = {},
+) {
   return render(
     <ShortcutProvider>
       <CommandProvider registry={registry}>
@@ -137,6 +142,7 @@ function renderUpdates() {
             return () => {};
           }}
           onOpen={(target) => opened.push(target)}
+          {...more}
         >
           <Status />
           <AresQueueCard />
@@ -583,5 +589,88 @@ describe('the Update panel', () => {
     await screen.findByText('Yesterday’s line.');
     expect(screen.getByText(/^Past Update ·/)).toBeTruthy();
     expect(requests).toContainEqual({ op: 'past', id: 1 });
+  });
+});
+
+describe('replying to a line (#236)', () => {
+  const conversation = (id: string): ConversationView => ({
+    conversation: {
+      id,
+      title: 'Dana is handling this now',
+      day: '2026-10-08',
+      daily: false,
+      createdAt: 1,
+      updatedAt: 1,
+      answering: true,
+      waiting: false,
+      failed: false,
+      aboutItemId: null,
+      about: null,
+      aboutLine: { updateId: 1, queuedId: 1 },
+    },
+    turns: [],
+  });
+
+  it('every line has a Reply box: the User’s words go to the Conversation about it, which opens', async () => {
+    const asked: ConversationsRequest[] = [];
+    const conversations = vi.fn(async (request: ConversationsRequest) => {
+      asked.push(request);
+      return conversation('c1');
+    }) as unknown as ConversationsClient;
+    const openedConversations: string[] = [];
+    answer = (request) =>
+      request.op === 'run-skill'
+        ? update([
+            line(1, 'One Todo I wasn’t sure about.'),
+            line(2, 'Meeting prep is ready.', { group: 'now' }),
+          ])
+        : null;
+    renderUpdates({ conversations, onOpenConversation: (id) => openedConversations.push(id) });
+    fireEvent.keyDown(document.body, { key: 'u' });
+    await screen.findByText('One Todo I wasn’t sure about.');
+    expect(within(panel() as HTMLElement).getAllByTestId('update-line-reply')).toHaveLength(2);
+
+    const box = screen.getByRole('textbox', { name: 'Reply to Ares about: One Todo I wasn’t sure about.' });
+    fireEvent.change(box, { target: { value: '  Dana is handling this now ' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+
+    await waitFor(() => expect(openedConversations).toEqual(['c1']));
+    expect(asked).toEqual([
+      {
+        op: 'reply-to-line',
+        day: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        updateId: 1,
+        queuedId: 1,
+        text: 'Dana is handling this now',
+      },
+    ]);
+    // The panel closes for the Conversation.
+    await waitFor(() => expect(panel()).toBeNull());
+  });
+
+  it('a line with a Conversation names it, one click away, and keeps the words when sending fails', async () => {
+    const conversations = vi.fn(async () => {
+      throw new Error('Ares is still answering. Stop him first, or wait for him to finish.');
+    }) as unknown as ConversationsClient;
+    const openedConversations: string[] = [];
+    answer = (request) =>
+      request.op === 'run-skill'
+        ? update([line(1, 'One Todo I wasn’t sure about.', {}, { conversationId: 'c9' })])
+        : null;
+    renderUpdates({ conversations, onOpenConversation: (id) => openedConversations.push(id) });
+    fireEvent.keyDown(document.body, { key: 'u' });
+    await screen.findByText('One Todo I wasn’t sure about.');
+
+    const box = screen.getByPlaceholderText('Add to the Conversation about this…');
+    fireEvent.change(box, { target: { value: 'One more thing' } });
+    fireEvent.click(within(panel() as HTMLElement).getByRole('button', { name: 'Reply' }));
+    await waitFor(() => expect(conversations).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect((box as HTMLInputElement).disabled).toBe(false));
+    expect((box as HTMLInputElement).value).toBe('One more thing');
+    expect(openedConversations).toEqual([]);
+
+    fireEvent.click(screen.getByTestId('update-line-conversation'));
+    expect(openedConversations).toEqual(['c9']);
+    await waitFor(() => expect(panel()).toBeNull());
   });
 });

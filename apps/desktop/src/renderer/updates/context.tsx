@@ -21,6 +21,8 @@ import {
   useState,
 } from 'react';
 import { useCommands } from '../palette/commands';
+import type { ConversationsClient } from '../sections/ares/conversations';
+import { dayKey } from '../sections/notes/days';
 import { type NewBucketSuggestion, SuggestedNewBucket } from './SuggestedNewBucket';
 import { type RuleSuggestion, SuggestedRule } from './SuggestedRule';
 import { UpdatePanel } from './UpdatePanel';
@@ -31,6 +33,10 @@ import { type OpenTarget, openTarget, type UpdatesClient } from './updates';
   Dashboard show a quiet count, and the Update opens only when the User asks for it: `U` (anywhere
   they aren't typing), the header's Ask for an update, the tray's, the Dashboard's, or the palette
   command. Every one of them runs the same Update Skill in the Core.
+
+  Every line has a Reply box (#236): what the User types there goes to the Conversation about the line
+  (started then, unless the line has one), which opens in the Ares panel (#235); the line then shows its
+  Conversation, and the Conversation links back to the Update here (`reopen`).
 */
 
 export type PanelState =
@@ -54,6 +60,15 @@ export interface UpdatesApi {
   act(line: UpdateViewLine, action: QueuedAction, snooze?: SnoozeChoice): Promise<void>;
   /** Acts on one of a line's Items, as the panel does. */
   actRow(line: UpdateViewLine, row: UpdateRow, action: RowAction): Promise<void>;
+  /**
+   * The Reply box on a line of Update `updateId` (#236): the User's words go to the Conversation about
+   * the line, which opens. Resolves false when they couldn't be sent (and says why).
+   */
+  reply(updateId: number, line: UpdateViewLine, text: string): Promise<boolean>;
+  /** Opens a Conversation with Ares in the Ares panel: the one a line's Reply box started. */
+  openConversation(conversationId: string): void;
+  /** Opens the Update panel at an Update Ares gave (a Conversation's link back to its line). */
+  reopen(updateId: number): void;
 }
 
 const UpdatesContext = createContext<UpdatesApi>({
@@ -64,6 +79,9 @@ const UpdatesContext = createContext<UpdatesApi>({
   past: () => Promise.reject(new Error('Ares’s Updates aren’t here')),
   act: async () => {},
   actRow: async () => {},
+  reply: async () => false,
+  openConversation: () => {},
+  reopen: () => {},
 });
 
 /** The quiet count, presence and Ask for an update, for the header and the Dashboard. */
@@ -78,6 +96,8 @@ export function UpdatesProvider({
   onCoreMessage,
   onAskForUpdate,
   onOpen,
+  conversations,
+  onOpenConversation,
   children,
 }: {
   client: UpdatesClient | undefined;
@@ -86,6 +106,10 @@ export function UpdatesProvider({
   onAskForUpdate?: (listener: () => void) => () => void;
   /** Open on a line: its Item, its Section or Settings. */
   onOpen: (target: OpenTarget) => void;
+  /** Where a line's Reply box sends the User's words (#236). */
+  conversations?: ConversationsClient;
+  /** Opens a Conversation in the Ares panel (#235), as Ares's other ways in do. */
+  onOpenConversation?: (conversationId: string) => void;
   children: ReactNode;
 }) {
   const [state, setState] = useState<{ queued: number; presence: Presence | null }>({
@@ -176,11 +200,7 @@ export function UpdatesProvider({
         setBucketSuggestion({ about, queuedId: line.queuedId, at: Date.now() });
         return 'editor';
       }
-      try {
-        await client({ op: 'act', queuedId: line.queuedId, action, ...(snooze && { snooze }) });
-      } catch (error) {
-        report(error);
-      }
+      await client({ op: 'act', queuedId: line.queuedId, action, ...(snooze && { snooze }) });
       return 'done';
     },
     [client],
@@ -189,11 +209,7 @@ export function UpdatesProvider({
   const actOnRow = useCallback(
     async (line: UpdateViewLine, row: UpdateRow, action: RowAction) => {
       if (!client) return;
-      try {
-        await client({ op: 'act-row', queuedId: line.queuedId, itemId: row.itemId, action });
-      } catch (error) {
-        report(error);
-      }
+      await client({ op: 'act-row', queuedId: line.queuedId, itemId: row.itemId, action });
     },
     [client],
   );
@@ -204,7 +220,11 @@ export function UpdatesProvider({
       const view = panel.view;
       const past = panel.past;
       // An editor opened over the panel: the panel closes.
-      if ((await actOnLine(line, action, snooze)) === 'editor') {
+      const acted = await actOnLine(line, action, snooze).catch((error: unknown) => {
+        report(error);
+        return 'done' as const;
+      });
+      if (acted === 'editor') {
         asked.current++;
         setPanel({ mode: 'closed' });
         return;
@@ -218,7 +238,7 @@ export function UpdatesProvider({
   const actRow = useCallback(
     async (line: UpdateViewLine, row: UpdateRow, action: RowAction) => {
       if (!client || panel.mode !== 'update' || !panel.view) return;
-      await actOnRow(line, row, action);
+      await actOnRow(line, row, action).catch(report);
       await refresh(panel.view, panel.past).catch(report);
     },
     [client, panel, refresh, actOnRow],
@@ -244,9 +264,43 @@ export function UpdatesProvider({
   const reopen = useCallback(
     (id: number) => {
       if (!client) return;
-      client({ op: 'past', id }).then((view) => setPanel({ mode: 'update', view, past: true }), report);
+      const ticket = ++asked.current;
+      client({ op: 'past', id }).then(
+        (view) => ticket === asked.current && setPanel({ mode: 'update', view, past: true }),
+        report,
+      );
     },
     [client],
+  );
+
+  const openConversation = useCallback(
+    (conversationId: string) => {
+      close();
+      onOpenConversation?.(conversationId);
+    },
+    [close, onOpenConversation],
+  );
+
+  // The Reply box on a line (#236): the User's words, in the Conversation about the line, which opens.
+  const reply = useCallback(
+    async (updateId: number, line: UpdateViewLine, text: string) => {
+      if (!conversations) return false;
+      try {
+        const view = await conversations({
+          op: 'reply-to-line',
+          day: dayKey(new Date()),
+          updateId,
+          queuedId: line.queuedId,
+          text,
+        });
+        openConversation(view.conversation.id);
+        return true;
+      } catch (error) {
+        report(error);
+        return false;
+      }
+    },
+    [conversations, openConversation],
   );
 
   const past = useCallback(
@@ -261,8 +315,18 @@ export function UpdatesProvider({
   );
 
   const api = useMemo(
-    () => ({ ...state, ask, open: onOpen, past, act: lineAct, actRow: actOnRow }),
-    [state, ask, onOpen, past, lineAct, actOnRow],
+    () => ({
+      ...state,
+      ask,
+      open: onOpen,
+      past,
+      act: lineAct,
+      actRow: actOnRow,
+      reply,
+      openConversation,
+      reopen,
+    }),
+    [state, ask, onOpen, past, lineAct, actOnRow, reply, openConversation, reopen],
   );
   return (
     <UpdatesContext.Provider value={api}>
@@ -275,6 +339,8 @@ export function UpdatesProvider({
         onActRow={actRow}
         onShowHistory={showHistory}
         onReopen={reopen}
+        onReply={conversations ? reply : undefined}
+        onOpenConversation={openConversation}
       />
       {ruleSuggestion && (
         <SuggestedRule

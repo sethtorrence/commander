@@ -49,10 +49,17 @@
 //   after it, and that Item is handed to him with every message as I1, in a data block of its own by
 //   where it came from, before anything his Skills find. Whatever it leads to is still only an answer
 //   (and, once he can act, a proposal through the gate like any other).
+// - About an Update line (#236): the Reply box on a line starts a Conversation about it (or carries on
+//   the one it has) with the User's words. The line's facts and its Items are handed to him with every
+//   message (../updates/line-replies.ts), its Items as I1, I2…, and his line Skill prepares the line's
+//   own actions as cards the User confirms; the window carries a confirmed one out as the line's button
+//   does, and says so here (`settle-line-action`). Nothing said in it becomes Memory: what the User
+//   says there is context for that line only, so the remember step is skipped.
 import {
   ABOUT_REF,
   CONVERSATIONS_MESSAGES,
   type Conversation,
+  type ConversationAboutLine,
   type ConversationsOp,
   type ConversationsResults,
   type ConversationTurn,
@@ -81,6 +88,7 @@ import type {
 import type { KnownSecrets } from '../safety/known-secrets';
 import { heedRefusal } from '../safety/refusal';
 import { heedSteering, type SteeringFlag } from '../safety/steering-flag';
+import type { LineReading } from '../updates/line-replies';
 import { type AboutReading, aboutOf } from './about';
 import { type AnswerReader, pieceBetween, readAnswer } from './answer';
 import { createFairQueue, type QueueTicket } from './fair-queue';
@@ -137,12 +145,12 @@ export const UNFINISHED_PROBLEM =
   'Commander’s core stopped while I was answering, so I didn’t finish. Send this again.';
 
 /**
- * Why an answer failed, in Ares's voice. Never the provider's own words. `aboutItemId`: the Item the
- * Conversation was started from (#193), if any.
+ * Why an answer failed, in Ares's voice. Never the provider's own words. `about`: the Item the
+ * Conversation was started from (#193), or the Items of the Update line it was (#236), if any.
  */
-export function problemFor(error: unknown, aboutItemId: string | null = null): string {
+export function problemFor(error: unknown, about: readonly string[] = []): string {
   // The Item the Conversation is about held it (#201): it is noted as skipped, where it is.
-  if (error instanceof PromptRefused && aboutItemId && error.itemIds.includes(aboutItemId)) {
+  if (error instanceof PromptRefused && error.itemIds.some((itemId) => about.includes(itemId))) {
     return 'What you started this from holds what looks like one of your keys or sign-in tokens, so I didn’t send it anywhere. Open it yourself instead.';
   }
   // Something a Skill found held it (#201): that Item is noted as skipped, where it is.
@@ -192,6 +200,10 @@ export type ConversationsOptions = {
   item?: (itemId: string) => Item | null;
   // Reads the Item a Conversation is about for each message (#193, about.ts). None: it isn't handed.
   readAbout?: (itemId: string) => AboutReading;
+  // Reads the Update line a Conversation is about for each message (#236). None: it isn't handed.
+  readLine?: (about: ConversationAboutLine) => LineReading | null;
+  // Whether an Update holds a line (#236): what the Reply box replies to must be one.
+  hasLine?: (about: ConversationAboutLine) => boolean;
   // Where a steering flag marks an Item, and who hears that it did.
   injectionWarnings?: Pick<InjectionWarningStore, 'flag'>;
   // Where an Item a Skill found, left unsent for holding a key or token, is noted as skipped (#201).
@@ -312,6 +324,18 @@ export function setUpConversations(options: ConversationsOptions): Conversations
       gathered.notes.push(about.note);
       if (about.found) gathered.items.set(ABOUT_REF, about.found);
     }
+    // The Update line it was started from (#236): its facts, and its Items handed first, as I1, I2…
+    const aboutLine = view?.conversation.aboutLine ?? null;
+    const line = aboutLine ? (options.readLine?.(aboutLine) ?? null) : null;
+    if (line) {
+      gathered.notes.push(line.note);
+      for (const found of line.items) gathered.items.set(`I${gathered.items.size + 1}`, found);
+      if (line.facts) gathered.more.push(line.facts);
+    }
+    const aboutItemIds = [
+      ...(aboutItemId ? [aboutItemId] : []),
+      ...(line?.items ?? []).map(({ item }) => item.id),
+    ];
     let sent = '';
     let reader: AnswerReader | null = null;
     // Commander's own words before his: what he couldn't finish.
@@ -348,12 +372,13 @@ export function setUpConversations(options: ConversationsOptions): Conversations
       .filter((turn) => turn.by === 'user' && turn.id <= replyTo)
       .map((turn) => turn.text);
     entry.partial = () => soFar().text;
-    if (view && !entry.remembered) learnFrom(view, replyTo, turnId, controller.signal);
+    // What the User says about an Update line is for that line only (#236): never Memory.
+    if (view && !entry.remembered && !aboutLine) learnFrom(view, replyTo, turnId, controller.signal);
     try {
       if (!view) throw new Error('That Conversation is no longer in Commander');
       const known = await recalled(asked);
       const turns = historyWithin(historyOf(view.turns, replyTo), budget);
-      const offered = options.skills ? offeredSkills(options.skills) : [];
+      const offered = options.skills ? offeredSkills(options.skills, { aboutLine: aboutLine !== null }) : [];
       let stepsLeft = SKILL_STEPS;
       let stage: Stage = offered.length ? { kind: 'choosing', stepsLeft } : { kind: 'last' };
       for (;;) {
@@ -474,7 +499,7 @@ export function setUpConversations(options: ConversationsOptions): Conversations
             ...rests,
             status: 'failed',
             text,
-            problem: problemFor(error, aboutItemId),
+            problem: problemFor(error, aboutItemIds),
             endedAt: now(),
           }),
         );
@@ -617,10 +642,40 @@ export function setUpConversations(options: ConversationsOptions): Conversations
         changed(saved);
         return saved;
       }
+      case 'reply-to-line': {
+        // The Reply box on an Update line (#236): the User's words, in the Conversation about the line.
+        const about = { updateId: request.updateId, queuedId: request.queuedId };
+        if (!options.hasLine?.(about)) throw new Error('That Update line is no longer in Commander');
+        const conversationId =
+          store.aboutLines([about.queuedId]).get(about.queuedId) ??
+          store.create(request.day, { line: about }).conversation.id;
+        const turn = store.addUserTurn(conversationId, request.text);
+        answer(conversationId, turn.id);
+        return required(conversationId);
+      }
+      case 'settle-line-action': {
+        // A line action's card (#236), once the window carried it out as the line's button does, or Not now.
+        const answered = store.turn(request.turnId);
+        if (answered?.conversationId !== request.conversationId || answered.by !== 'ares')
+          throw new Error('That answer is no longer in Commander');
+        if (answered.status === 'queued' || answered.status === 'streaming')
+          throw new Error('Ares is still answering. Wait for him to finish first.');
+        const card = answered.made[request.index];
+        if (card?.kind !== 'line-action') throw new Error('Ares didn’t prepare that in this answer');
+        if (card.status !== 'waiting') return answered;
+        const saved = store.saveAnswer(answered.id, {
+          made: answered.made.map((each, index) =>
+            index === request.index ? { ...card, status: request.status } : each,
+          ),
+        });
+        changed(saved);
+        return saved;
+      }
       case 'skills': {
-        // Every Skill he has, and whether a Conversation can use it yet.
+        // Every Skill he has, and whether a Conversation can use it yet (the line's own, #236, in one
+        // about an Update line).
         const offered = new Set(
-          options.skills ? offeredSkills(options.skills).map((skill) => skill.name) : [],
+          options.skills ? offeredSkills(options.skills, { aboutLine: true }).map((skill) => skill.name) : [],
         );
         return (options.skills?.list() ?? []).map((skill) => ({
           ...skill,

@@ -5,12 +5,14 @@
 //   one answer at a time, and only while that turn has none.
 // - The User can't write over him: a message is refused while he is still answering.
 // A Conversation started from an Item (#193) keeps that Item's id; naming the Item for the window is
-// the Conversations module's, which reads Items (`about` is null here).
+// the Conversations module's, which reads Items (`about` is null here). One started from an Update
+// line's Reply box (#236) keeps the queued line's id and the Update's.
 // Every turn written here is put in search's index of Conversations (#195) in the same transaction,
 // and a deleted Conversation's turns leave it with them (Undo puts them back).
 import { randomUUID } from 'node:crypto';
 import {
   type Conversation,
+  type ConversationAboutLine,
   type ConversationTurn,
   type ConversationView,
   conversationTurn,
@@ -58,8 +60,14 @@ export type ConversationStore = {
   // The day's own Conversation, made the first time it is asked for. Empty Conversations from earlier
   // days go then: nothing was said in them.
   today(day: string): ConversationView;
-  // New Conversation; `about`, when it is started from an Item (#193), named after it.
-  create(day: string, about?: { itemId: string; title: string | null }): ConversationView;
+  // New Conversation; `about`, when it is started from an Item (#193), named after it, or from an
+  // Update line (#236), named from the User's first words.
+  create(
+    day: string,
+    about?: { itemId: string; title: string | null } | { line: ConversationAboutLine },
+  ): ConversationView;
+  // The latest Conversation about each of these queued Update lines (#236), by the line's id.
+  aboutLines(queuedIds: readonly number[]): Map<number, string>;
   // The User's message. Names the Conversation from its first words. Refused while Ares is answering.
   addUserTurn(conversationId: string, text: string): ConversationTurn;
   // Ares starts answering the User's last turn (or waits his turn to). Refused for any other turn,
@@ -142,6 +150,29 @@ export function openConversationStore(
         )
       : new Set();
 
+  // …or a card for its Update line's own action (#236) waiting, while the line still waits for the User.
+  const lineWaitingIn = (ids: readonly string[]): Set<string> =>
+    ids.length
+      ? new Set(
+          db
+            .select({ id: conversations.id })
+            .from(conversations)
+            .innerJoin(schema.updateQueue, eq(schema.updateQueue.id, conversations.aboutQueuedId))
+            .where(
+              and(
+                inArray(conversations.id, [...ids]),
+                eq(schema.updateQueue.status, 'queued'),
+                sql`exists (select 1 from ${conversationTurns}, json_each(${conversationTurns.made}) as card
+                  where ${conversationTurns.conversationId} = ${conversations.id}
+                  and json_extract(card.value, '$.kind') = 'line-action'
+                  and json_extract(card.value, '$.status') = 'waiting')`,
+              ),
+            )
+            .all()
+            .map((row) => row.id),
+        )
+      : new Set();
+
   // Which of them end with an answer that failed.
   const failedIn = (ids: readonly string[]): Set<string> => {
     if (!ids.length) return new Set();
@@ -163,15 +194,19 @@ export function openConversationStore(
   const toConversations = (rows: (typeof conversations.$inferSelect)[]): Conversation[] => {
     const ids = rows.map((row) => row.id);
     const answering = answeringIn(ids);
-    const waiting = waitingIn(ids);
+    const waiting = new Set([...waitingIn(ids), ...lineWaitingIn(ids)]);
     const failed = failedIn(ids);
-    return rows.map(({ dailyOf, ...row }) => ({
+    return rows.map(({ dailyOf, aboutUpdateId, aboutQueuedId, ...row }) => ({
       ...row,
       daily: dailyOf !== null,
       answering: answering.has(row.id),
       waiting: waiting.has(row.id),
       failed: failed.has(row.id),
       about: null,
+      aboutLine:
+        aboutUpdateId !== null && aboutQueuedId !== null
+          ? { updateId: aboutUpdateId, queuedId: aboutQueuedId }
+          : null,
     }));
   };
 
@@ -204,19 +239,23 @@ export function openConversationStore(
   function insert(
     day: string,
     daily: boolean,
-    about?: { itemId: string; title: string | null },
+    about?: { itemId: string; title: string | null } | { line: ConversationAboutLine },
   ): ConversationView {
     const at = now();
     const id = randomUUID();
+    const item = about && 'itemId' in about ? about : null;
+    const line = about && 'line' in about ? about.line : null;
     db.insert(conversations)
       .values({
         id,
-        title: about?.title ?? null,
+        title: item?.title ?? null,
         day,
         dailyOf: daily ? day : null,
         createdAt: at,
         updatedAt: at,
-        aboutItemId: about?.itemId ?? null,
+        aboutItemId: item?.itemId ?? null,
+        aboutUpdateId: line?.updateId ?? null,
+        aboutQueuedId: line?.queuedId ?? null,
       })
       .run();
     return required(id);
@@ -284,6 +323,18 @@ export function openConversationStore(
 
     create(day, about) {
       return insert(day, false, about);
+    },
+
+    aboutLines(queuedIds) {
+      if (!queuedIds.length) return new Map();
+      const rows = db
+        .select({ id: conversations.id, queuedId: conversations.aboutQueuedId })
+        .from(conversations)
+        .where(inArray(conversations.aboutQueuedId, [...queuedIds]))
+        .orderBy(asc(conversations.createdAt))
+        .all();
+      // The newest last, so it is the one kept.
+      return new Map(rows.map((row) => [row.queuedId as number, row.id]));
     },
 
     addUserTurn(conversationId, raw) {

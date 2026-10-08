@@ -79,6 +79,7 @@ export * from './teams';
 export * from './teams-ares';
 export * from './teams-rules';
 export * from './teams-work';
+export * from './update-line-replies';
 export * from './updates';
 export * from './updates-messages';
 export * from './wipe-messages';

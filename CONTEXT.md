@@ -213,7 +213,7 @@ A named ability Ares can use, on request or when he judges it is wanted (e.g. Up
 _Avoid_: Tool, command, feature, plugin
 
 **Conversation**:
-One thread of typed back-and-forth between the User and Ares; several can run at once, and each is kept to pick up again at any time. One started with the Ares button is about that Item, which Ares has in front of him with every message. Opened from anywhere, one opens in the Ares panel.
+One thread of typed back-and-forth between the User and Ares; several can run at once, and each is kept to pick up again at any time. One started with the Ares button is about that Item, which Ares has in front of him with every message. Opened from anywhere, one opens in the Ares panel. One started from an Update line's Reply box is about that line: Ares has its facts and Items with every message, can prepare the line's own actions for the User to confirm, and nothing said there becomes Memory.
 _Avoid_: Chat, session, thread (alone)
 
 **Ares button**:
@@ -225,11 +225,11 @@ Conversations with Ares on the right of whatever Section the User is in, the Sec
 _Avoid_: Chat window, sidebar, drawer, assistant pane
 
 **Memory**:
-What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from; one he picked up from outside content is unconfirmed, only ever background to him, until the User confirms it. What the User tells him in a Conversation is theirs, so confirmed, with their turn as its source; nothing an Item there says ever is. The User sees and changes it on What Ares knows.
+What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from; one he picked up from outside content is unconfirmed, only ever background to him, until the User confirms it. What the User tells him in a Conversation is theirs, so confirmed, with their turn as its source (except in one about an Update line, which keeps nothing); nothing an Item there says ever is. The User sees and changes it on What Ares knows.
 _Avoid_: Knowledge base, context, history, profile
 
 **Update**:
-Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it; each line names what it is about, says what happened, why it matters and what to do, and lists its Items, each with its own actions.
+Everything Ares has queued to tell the User since they last asked, delivered only when the User is active and asks for it; each line names what it is about, says what happened, why it matters and what to do, and lists its Items, each with its own actions, and has a Reply box that starts a Conversation about it.
 _Avoid_: Notification, alert, briefing, digest
 
 **Oversight summary**:

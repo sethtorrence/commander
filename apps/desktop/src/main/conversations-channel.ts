@@ -30,6 +30,8 @@ const TIMEOUTS: Record<ConversationsOp, number> = {
   'undo-delete': 10_000,
   skills: 10_000,
   'undo-remembered': 10_000,
+  'reply-to-line': 10_000,
+  'settle-line-action': 10_000,
 };
 
 const reply = z.object({

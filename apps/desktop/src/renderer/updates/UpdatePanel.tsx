@@ -1,4 +1,5 @@
 import {
+  MAX_TURN_TEXT,
   type QueuedAction,
   type RowAction,
   type SnoozeChoice,
@@ -19,8 +20,9 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Input,
 } from '@commander/ui';
-import { useRef, useState } from 'react';
+import { type KeyboardEvent, useRef, useState } from 'react';
 import type { PanelState } from './context';
 import {
   acceptLabel,
@@ -55,6 +57,13 @@ export interface UpdatePanelProps {
   onActRow(line: UpdateViewLine, row: UpdateRow, action: RowAction): void;
   onShowHistory(): void;
   onReopen(id: number): void;
+  /**
+   * The Reply box on a line of Update `updateId` (#236): the User's words, to the Conversation about the
+   * line. Resolves true once sent. Without it, lines have no Reply box.
+   */
+  onReply?(updateId: number, line: UpdateViewLine, text: string): Promise<boolean>;
+  /** Opens the Conversation a line's Reply box started. */
+  onOpenConversation?(conversationId: string): void;
 }
 
 /**
@@ -63,7 +72,9 @@ export interface UpdatePanelProps {
  * suggestions accepted in place, and changes that couldn't sync retried (#206). Under each line, its
  * Items (#186): each named, stamped with its Section, with where it stands and its own actions,
  * opening where it lives; folded when there are many. After real time away the smaller things fold below the lead. Esc closes it; anything
- * untouched stays queued. Past Updates reopens earlier ones.
+ * untouched stays queued. Past Updates reopens earlier ones. Every line has a Reply box (#236): what the
+ * User types there starts a Conversation about the line with Ares (or carries on the one it has, which
+ * the line then names, one click away).
  */
 export function UpdatePanel({
   state,
@@ -73,6 +84,8 @@ export function UpdatePanel({
   onActRow,
   onShowHistory,
   onReopen,
+  onReply,
+  onOpenConversation,
 }: UpdatePanelProps) {
   const content = useRef<HTMLDivElement>(null);
   const open = state.mode !== 'closed';
@@ -97,7 +110,14 @@ export function UpdatePanel({
           {state.mode === 'loading' && <Note>Ares is putting your Update together…</Note>}
           {state.mode === 'history' && <History list={state.list} onReopen={onReopen} />}
           {state.mode === 'update' && (
-            <Update state={state} onAct={onAct} onOpen={onOpen} onActRow={onActRow} />
+            <Update
+              state={state}
+              onAct={onAct}
+              onOpen={onOpen}
+              onActRow={onActRow}
+              onReply={onReply}
+              onOpenConversation={onOpenConversation}
+            />
           )}
         </div>
         {state.mode !== 'loading' && (
@@ -135,7 +155,10 @@ function Note({ children }: { children: React.ReactNode }) {
   return <p className="hatch m-0 px-6 py-6 text-heading text-muted">{children}</p>;
 }
 
-export type LineHandlers = Pick<UpdatePanelProps, 'onAct' | 'onOpen' | 'onActRow'>;
+export type LineHandlers = Pick<
+  UpdatePanelProps,
+  'onAct' | 'onOpen' | 'onActRow' | 'onReply' | 'onOpenConversation'
+>;
 
 function Update({ state, ...handlers }: { state: Extract<PanelState, { mode: 'update' }> } & LineHandlers) {
   const { view } = state;
@@ -163,7 +186,7 @@ export function UpdateLines({ view, ...handlers }: { view: UpdateView } & LineHa
             </h3>
             <ol className="m-0 list-none p-0">
               {lines.map((line) => (
-                <Line key={line.queuedId} line={line} {...handlers} />
+                <Line key={line.queuedId} updateId={view.id} line={line} {...handlers} />
               ))}
             </ol>
           </section>
@@ -181,7 +204,7 @@ export function UpdateLines({ view, ...handlers }: { view: UpdateView } & LineHa
             {view.lines
               .filter((line) => line.folded)
               .map((line) => (
-                <Line key={line.queuedId} line={line} {...handlers} />
+                <Line key={line.queuedId} updateId={view.id} line={line} {...handlers} />
               ))}
           </ol>
         </details>
@@ -190,7 +213,15 @@ export function UpdateLines({ view, ...handlers }: { view: UpdateView } & LineHa
   );
 }
 
-function Line({ line, onAct, onOpen, onActRow }: { line: UpdateViewLine } & LineHandlers) {
+function Line({
+  updateId,
+  line,
+  onAct,
+  onOpen,
+  onActRow,
+  onReply,
+  onOpenConversation,
+}: { updateId: number; line: UpdateViewLine } & LineHandlers) {
   const [snoozing, setSnoozing] = useState(false);
   const status = lineStatus(line, Date.now());
   const accept = acceptLabel(line);
@@ -270,7 +301,73 @@ function Line({ line, onAct, onOpen, onActRow }: { line: UpdateViewLine } & Line
           )}
         </div>
       )}
+      {onReply && (
+        <LineReply
+          line={line}
+          onReply={(text) => onReply(updateId, line, text)}
+          onOpenConversation={onOpenConversation}
+        />
+      )}
     </li>
+  );
+}
+
+/**
+ * A line's Reply box (#236): the User answers the line in their own words ("Dana's handling this now"),
+ * which go to Ares in the Conversation about it. Enter sends; the line names its Conversation once it
+ * has one.
+ */
+function LineReply({
+  line,
+  onReply,
+  onOpenConversation,
+}: {
+  line: UpdateViewLine;
+  onReply: (text: string) => Promise<boolean>;
+  onOpenConversation?: (conversationId: string) => void;
+}) {
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const conversationId = line.conversationId;
+  const tooLong = text.length > MAX_TURN_TEXT;
+  const send = async () => {
+    if (sending || !text.trim() || tooLong) return;
+    setSending(true);
+    const sent = await onReply(text.trim());
+    setSending(false);
+    if (sent) setText('');
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    void send();
+  };
+  return (
+    <div className="col-span-2 flex items-center gap-2" data-testid="update-line-reply">
+      <Input
+        aria-label={`Reply to Ares about: ${line.text}`}
+        placeholder={conversationId ? 'Add to the Conversation about this…' : 'Reply to Ares about this…'}
+        value={text}
+        disabled={sending}
+        aria-invalid={tooLong || undefined}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={onKeyDown}
+        className="h-7 text-note"
+      />
+      <Button size="sm" disabled={sending || !text.trim() || tooLong} onClick={() => void send()}>
+        Reply
+      </Button>
+      {conversationId && onOpenConversation && (
+        <Button
+          size="sm"
+          variant="ghost"
+          data-testid="update-line-conversation"
+          onClick={() => onOpenConversation(conversationId)}
+        >
+          Conversation
+        </Button>
+      )}
+    </div>
   );
 }
 

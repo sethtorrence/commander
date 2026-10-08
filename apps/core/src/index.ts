@@ -514,6 +514,10 @@ const conversations = setUpConversations({
   item: (itemId) => itemStore.get(itemId)?.item ?? null,
   // The Item a pop-up Conversation was started from (#193), handed to him with every message.
   readAbout: createAboutReader({ itemStore }),
+  // The Update line a Conversation was started from with its Reply box (#236), read the same way.
+  readLine: (about) => updates?.readLine(about) ?? null,
+  hasLine: ({ updateId, queuedId }) =>
+    itemStore.updates.update(updateId)?.lines.some((line) => line.queuedId === queuedId) ?? false,
   injectionWarnings: itemStore.injectionWarnings,
   refusals: itemStore.refusals,
   onItemsChanged: (itemIds) => port.postMessage({ type: 'items-changed', itemIds } satisfies CoreMessage),

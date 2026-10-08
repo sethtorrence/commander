@@ -105,6 +105,8 @@ function FrameProviders({
             onCoreMessage={window.commander.onCoreMessage}
             onAskForUpdate={window.commander.onAskForUpdate}
             onOpen={onOpenUpdateLine}
+            conversations={window.commander.conversations}
+            onOpenConversation={openConversation}
           >
             <WarningActionsProvider value={warnings}>
               <AresPopupHost

@@ -1243,10 +1243,15 @@ export const conversations = sqliteTable(
     // The Item it was started from with the Ares button (#193). Not a foreign key: a Conversation
     // stays when its Item goes, and says so.
     aboutItemId: text('about_item_id'),
+    // The Update line it was started from with the line's Reply box (#236): the queued line, and the
+    // Update it was replied to in. Not foreign keys either: it stays, and says what became of the line.
+    aboutUpdateId: integer('about_update_id'),
+    aboutQueuedId: integer('about_queued_id'),
   },
   (t) => [
     uniqueIndex('conversations_daily_of').on(t.dailyOf),
     index('conversations_updated').on(t.updatedAt),
+    index('conversations_about_queued').on(t.aboutQueuedId),
   ],
 );
 
