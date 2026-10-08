@@ -259,8 +259,8 @@ describe('Conversations in the Ares Section', () => {
   });
 });
 
-describe('from Ctrl+K (#195)', () => {
-  it('Ask Ares starts a new Conversation with what was typed as its first message, opened here', async () => {
+describe('opened at a Conversation, as the Ares panel’s Full view asks (#195, #235)', () => {
+  it('Ask Ares starts a new Conversation with what was typed as its first message, which opens here', async () => {
     show();
     await waitFor(() => expect(within(thread()).getByRole('heading', { name: 'Today' })).toBeTruthy());
     const { conversationId, problem } = await askAres(client, 'How do tides work?', '2026-10-06');
@@ -273,7 +273,7 @@ describe('from Ctrl+K (#195)', () => {
     await waitFor(() => expect(calls).toHaveLength(1));
   });
 
-  it('opens a Conversation search found at the turn that matched, marked', async () => {
+  it('opens a Conversation at the turn search matched, marked', async () => {
     const { conversation } = store.conversations.create('2026-10-05');
     const asked = store.conversations.addUserTurn(conversation.id, 'What is a fjord?');
     const answer = store.conversations.startAnswer(conversation.id, asked.id, 'streaming');

@@ -13,7 +13,7 @@ import { type LaunchedCommander, launchCommander } from './launch-commander';
 // Ask Ares from Ctrl+K, and finding past Conversations in search (#195), end to end, with a fake
 // OpenAI-compatible server standing in for Z.ai (never the real one) and the stand-in embedding model
 // for search by meaning. Typing in the palette and pressing Tab starts a new Conversation in the Ares
-// Section with that text as its first message; the Conversation is found again by its words (the
+// panel with that text as its first message; the Conversation is found again by its words (the
 // matching line, opening at that turn) and by meaning (marked related); deleted, it is gone from
 // search. The model's key goes in the real keyring, so this needs the author's Linux Wayland session.
 const onLinuxWayland = process.platform === 'linux' && !!process.env.WAYLAND_DISPLAY;
@@ -94,8 +94,11 @@ test('asks Ares from Ctrl+K, finds the Conversation again by words and meaning, 
   await search(window).press('Tab');
   await expect(palette(window)).toHaveCount(0);
 
-  // A new Conversation in the Ares Section, with the text as its first message, and his answer.
-  const conversations = window.getByTestId('section-ares').getByTestId('conversations');
+  // A new Conversation in the Ares panel, beside the Section the User was in (#235), with the text as
+  // its first message, and his answer.
+  const conversations = window.getByTestId('ares-panel');
+  await expect(conversations).toBeVisible();
+  await expect(window.getByTestId('header-title')).not.toHaveText('Ares');
   const thread = conversations.getByTestId('conversation-thread');
   await expect(thread.getByRole('heading', { name: 'What is a fjord?' })).toBeVisible();
   const turns = thread.getByTestId('conversation-turn');

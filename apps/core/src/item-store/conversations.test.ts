@@ -207,6 +207,54 @@ describe('Conversations in the Item store', () => {
     expect(left).toContain(blank.conversation.id);
   });
 
+  it('says in the list which Conversations have a card waiting for the User, and which ended in a failed answer', () => {
+    const store = open();
+    const { conversation } = store.conversations.create('2026-10-06');
+    const asked = store.conversations.addUserTurn(conversation.id, 'Add a Todo to book flights');
+    const answer = store.conversations.startAnswer(conversation.id, asked.id, 'streaming');
+    store.conversations.saveAnswer(answer.id, { status: 'done', text: 'Shall I?', endedAt: clock });
+    const other = store.conversations.create('2026-10-06').conversation;
+    const question = store.conversations.addUserTurn(other.id, 'What is a fjord?');
+    const failed = store.conversations.startAnswer(other.id, question.id, 'streaming');
+    store.conversations.saveAnswer(failed.id, { status: 'failed', problem: 'No key.', endedAt: clock });
+    const states = () =>
+      Object.fromEntries(
+        store.conversations.list().map((each) => [each.id, { waiting: each.waiting, failed: each.failed }]),
+      );
+    expect(states()).toEqual({
+      [conversation.id]: { waiting: false, failed: false },
+      [other.id]: { waiting: false, failed: true },
+    });
+
+    // A card under his answer waits for the User's Confirm.
+    const todo = store.record(
+      { type: 'create', item: { kind: 'todo', title: 'Book flights' } },
+      { by: { kind: 'user' } },
+    ).itemId;
+    const proposal = store.autonomy.saveProposal({
+      actionKind: 'organise',
+      action: 'manage-todos',
+      section: null,
+      itemId: todo,
+      itemActions: [],
+      confidence: 1,
+      reason: 'You asked in a Conversation',
+      causedBy: null,
+      chained: false,
+      conversation: { conversationId: conversation.id, turnId: answer.id },
+      decision: 'ask',
+      status: 'pending',
+      entryIds: [],
+    });
+    expect(store.conversations.conversation(conversation.id)).toMatchObject({ waiting: true, failed: false });
+    store.autonomy.settleProposal(proposal.id, { status: 'dismissed', entryIds: [] });
+    expect(store.conversations.conversation(conversation.id)?.waiting).toBe(false);
+
+    // Sent again, it no longer ends in a failure.
+    store.conversations.takeBack(other.id);
+    expect(store.conversations.conversation(other.id)?.failed).toBe(false);
+  });
+
   it('fails answers a stopped Core left unfinished, keeping what was written, so they can be sent again', () => {
     let store = open();
     const { conversation } = store.conversations.today('2026-10-06');

@@ -4,10 +4,11 @@ import { itemKind } from './items';
 import { skillInfo } from './skills';
 import { updateSection } from './updates';
 
-// Conversations (#24, #191): the User talks to Ares in the Ares Section. Each Conversation is a
-// thread of turns of text, the User's and Ares's, kept in the Item store's database; several can run
-// at once. Ares never starts one or writes into one unprompted: each of his turns answers one of the
-// User's. A turn is only text, tied to nothing on screen, so voice can come later.
+// Conversations (#24, #191): the User talks to Ares in the Ares Section, or in the Ares panel beside
+// any Section (#235). Each Conversation is a thread of turns of text, the User's and Ares's, kept in
+// the Item store's database; several can run at once. Ares never starts one or writes into one
+// unprompted: each of his turns answers one of the User's. A turn is only text, tied to nothing on
+// screen, so voice can come later.
 //
 // With Skills (#192) an answer can rest on the User's own data: each Item it was given carries a ref
 // (I1, I2…) for that answer, and the answer names the ones its claims rest on as [I1]; those are its
@@ -18,7 +19,7 @@ import { updateSection } from './updates';
 // starts a new Conversation from it in a small pop-up beside the Item. That Item is handed to Ares
 // with every message as I1, in a data block of its own by where it came from (a Source's Item as
 // outside material, the User's own Todos and Blocks as theirs), and the pop-up can be expanded into
-// the Ares Section, where the Conversation carries on like any other.
+// the Ares panel beside the Section (#235), where the Conversation carries on like any other.
 //
 // What the User tells Ares about themselves, their work and the people in it (#194) he keeps as
 // confirmed Memory, with their turn as its source; his answer says so in a line under it, with Undo.
@@ -166,6 +167,10 @@ export const conversation = z.object({
   updatedAt: timestamp,
   // Ares is answering in it now (or waiting his turn to).
   answering: z.boolean(),
+  // A card under one of his answers waits for the User's Confirm (#196): shown in the list (#235).
+  waiting: z.boolean(),
+  // His last answer failed, for Send again: shown in the list (#235).
+  failed: z.boolean(),
   // The Item it was started from with the Ares button (#193), kept by its id, or null.
   aboutItemId: z.string().nullable(),
   // That Item as it is now, named for the window (the Conversations module reads it); null when the

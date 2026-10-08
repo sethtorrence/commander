@@ -1,16 +1,14 @@
-import { type ItemKind, MAX_TURN_TEXT } from '@commander/domain';
+import type { ItemKind } from '@commander/domain';
 import { AresMark, Button, Kbd, Led, usePortalContainer } from '@commander/ui';
-import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ItemStoreClient } from '../../item-store/client';
 import { type AresActions, AresProvider, type AresTarget } from '../../links/AresButton';
 import { KindTag } from '../todos/detail/parts';
 import { kindTag } from '../todos/links';
 import type { AutonomyClient } from './activity';
-import { AnswerActions } from './ConversationActions';
-import { Turn } from './Conversations';
-import { answeringTurn, type ConversationsClient, canSendAgain } from './conversations';
-import { RememberedLines } from './Remembered';
+import { ConversationThread } from './ConversationThread';
+import { answeringTurn, type ConversationsClient } from './conversations';
 import { useConversation } from './use-conversation';
 import type { CoreMessages } from './use-conversations';
 
@@ -20,8 +18,9 @@ import type { CoreMessages } from './use-conversations';
   are. It is a Conversation like any other: nothing is made until the User sends a message, which
   starts a new Conversation about the Item (the Core hands Ares the Item with every message, by where
   it came from); his answer streams in as in the Ares Section, drawn the same way, with the same
-  links and Updates. Esc closes it (the Conversation stays, saved and listed in the Ares Section);
-  Open in Ares moves it there, where it carries on. Pressing another Item's button starts afresh.
+  links and Updates, by the same thread (ConversationThread). Esc closes it (the Conversation stays,
+  saved and listed); Open in Ares moves it into the Ares panel beside the Section (#235), where it
+  carries on. Pressing another Item's button starts afresh.
 
   <AresPopupHost> gives every Ares button below it this pop-up (links/AresButton.tsx); the frame
   mounts it once.
@@ -85,7 +84,7 @@ export function AresPopupHost({
   /** The Item store, for a meeting's prep an answer made (#198). */
   itemStore?: ItemStoreClient;
   onCoreMessage: CoreMessages;
-  /** Opens a Conversation in the Ares Section. */
+  /** Opens a Conversation in the Ares panel (openConversation). */
   onExpand: (conversationId: string) => void;
   children: ReactNode;
 }) {
@@ -165,17 +164,14 @@ export function AresPopup({
   onExpand: (conversationId: string) => void;
 }) {
   const state = useConversation(client, onCoreMessage, target.id);
-  const { view, live } = state;
-  const [draft, setDraft] = useState('');
+  const { view } = state;
   const popup = useRef<HTMLElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
-  const thread = useRef<HTMLOListElement>(null);
   const container = usePortalContainer();
   const [place] = useState(() =>
     placeBeside(anchor, { width: window.innerWidth, height: window.innerHeight }),
   );
   const answering = answeringTurn(view);
-  const tooLong = draft.length > MAX_TURN_TEXT;
   const kind = KIND_WORDS[target.kind] ?? 'Item';
 
   useEffect(() => input.current?.focus(), []);
@@ -196,33 +192,11 @@ export function AresPopup({
     return () => window.removeEventListener('keydown', onKey, true);
   }, [onClose]);
 
-  // The thread follows what is newest: a new turn, or Ares writing.
-  const lastTurn = view?.turns.at(-1);
-  const lastText = lastTurn ? (live.get(lastTurn.id) ?? lastTurn.text) : '';
-  useEffect(() => {
-    const element = thread.current;
-    if (element && lastText !== undefined) element.scrollTop = element.scrollHeight;
-  }, [lastText]);
-
-  const send = async (text: string) => {
-    if (answering || !text.trim() || text.length > MAX_TURN_TEXT) return;
-    if (await state.send(text)) setDraft('');
-    input.current?.focus();
-  };
-
-  const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
-    event.preventDefault();
-    void send(draft);
-  };
-
   const expand = async () => {
     const conversationId = await state.start();
     if (conversationId) onExpand(conversationId);
   };
 
-  // What Ares may make clickable: only links the User gave in this Conversation.
-  const sources = view?.turns.filter((turn) => turn.by === 'user').map((turn) => turn.text) ?? [];
   const title = target.title.trim() || 'Untitled';
 
   return createPortal(
@@ -241,7 +215,7 @@ export function AresPopup({
           Ares
         </span>
         <span className="flex-1" />
-        <Button size="sm" variant="ghost" onClick={() => void expand()} title="Carry on in the Ares Section">
+        <Button size="sm" variant="ghost" onClick={() => void expand()} title="Carry on in the Ares panel">
           Open in Ares
         </Button>
         <Button size="sm" variant="ghost" aria-label="Close" title="Close (Esc)" onClick={onClose}>
@@ -257,88 +231,34 @@ export function AresPopup({
           {title}
         </span>
       </div>
-      <ol
-        ref={thread}
-        aria-label="Turns"
-        className="m-0 min-h-[120px] flex-1 list-none overflow-y-auto px-3 py-3"
-      >
-        {!view?.turns.length && (
-          <li className="text-note text-faint">
+      <ConversationThread
+        state={state}
+        client={client}
+        autonomy={autonomy}
+        itemStore={itemStore}
+        onCoreMessage={onCoreMessage}
+        size="compact"
+        inputRef={input}
+        onLeave={onLeave}
+        placeholder={`Ask about this ${kind}…`}
+        hint={
+          <>
+            <Kbd>↵</Kbd> sends · <Kbd>Esc</Kbd> closes
+          </>
+        }
+        empty={(send) => (
+          <>
             Ask Ares about this {kind}. He has it in front of him, and looks up anything else he needs.
             <span className="mt-2.5 flex flex-wrap gap-1.5">
               {STARTERS.map((starter) => (
-                <Button key={starter} size="sm" onClick={() => void send(starter)}>
+                <Button key={starter} size="sm" onClick={() => send(starter)}>
                   {starter}
                 </Button>
               ))}
             </span>
-          </li>
+          </>
         )}
-        {view?.turns.map((turn) => (
-          <Turn
-            key={turn.id}
-            turn={turn}
-            text={live.get(turn.id) ?? turn.text}
-            sources={sources}
-            itemStore={itemStore}
-            onLeave={onLeave}
-          >
-            <RememberedLines turn={turn} client={client} sources={sources} />
-            <AnswerActions
-              turn={turn}
-              client={autonomy}
-              onCoreMessage={onCoreMessage}
-              last={turn === lastTurn}
-              writing={draft !== ''}
-              onSettled={() => input.current?.focus()}
-            />
-          </Turn>
-        ))}
-      </ol>
-      {canSendAgain(view) && (
-        <div className="flex flex-none items-center justify-end border-t border-line2 px-3 py-1.5">
-          <Button size="sm" variant="signal" onClick={() => void state.sendAgain()}>
-            Send again
-          </Button>
-        </div>
-      )}
-      <div className="flex-none border-t border-line">
-        <textarea
-          ref={input}
-          aria-label="Message Ares"
-          placeholder={`Ask about this ${kind}…`}
-          value={draft}
-          rows={2}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={onKeyDown}
-          className="block w-full resize-none border-0 bg-sheet px-3 py-2 font-sans text-[14px] text-ink caret-signal placeholder:text-faint focus-visible:outline-none"
-        />
-        <div className="flex items-center justify-end gap-2.5 border-t border-line2 px-2 py-1.5">
-          {tooLong ? (
-            <span role="status" className="font-mono text-label uppercase tracking-label text-ink">
-              Too long to send
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 font-mono text-label uppercase tracking-label text-faint">
-              <Kbd>↵</Kbd> sends · <Kbd>Esc</Kbd> closes
-            </span>
-          )}
-          {answering ? (
-            <Button size="sm" variant="primary" onClick={() => void state.stop()}>
-              Stop
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="primary"
-              disabled={!draft.trim() || tooLong}
-              onClick={() => void send(draft)}
-            >
-              Send
-            </Button>
-          )}
-        </div>
-      </div>
+      />
     </section>,
     container ?? document.body,
   );

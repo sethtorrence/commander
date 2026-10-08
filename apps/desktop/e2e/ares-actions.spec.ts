@@ -245,6 +245,16 @@ test('a Todo added, an issue filed, and a Linear status change confirmed with on
       activity.getByRole('listitem', { name: new RegExp(`^${name}: `) }).getByTestId('activity-conversation'),
     ).toHaveText('Asked for in your Conversation Add a Todo to send Leo…');
   }
+  // Its link opens the Conversation in the Ares panel, beside the Section (#235).
+  await activity
+    .getByRole('listitem', { name: /^Manage Todos: / })
+    .getByRole('button', { name: 'Add a Todo to send Leo…' })
+    .click();
+  const panel = page.getByTestId('ares-panel');
+  await expect(panel.getByRole('heading', { name: 'Add a Todo to send Leo…' })).toBeVisible();
+  await expect(page.getByTestId('header-title')).toHaveText('Ares');
+  await page.keyboard.press('Control+j');
+  await expect(panel).toBeHidden();
 
   // Undo from the reply: the Todo goes again.
   await conversations.scrollIntoViewIfNeeded();

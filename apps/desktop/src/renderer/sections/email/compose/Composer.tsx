@@ -320,7 +320,7 @@ export function Composer({
       className={cn(
         'flex flex-col border border-ink bg-sheet text-ink',
         placement === 'sheet'
-          ? 'fixed right-6 bottom-6 z-40 h-[min(640px,calc(100vh-96px))] w-[min(640px,calc(100vw-48px))] shadow-2xl'
+          ? 'fixed right-[calc(var(--panel)+24px)] bottom-6 z-40 h-[min(640px,calc(100vh-96px))] w-[min(640px,calc(100vw-var(--panel)-48px))] shadow-2xl'
           : 'mt-6',
       )}
     >

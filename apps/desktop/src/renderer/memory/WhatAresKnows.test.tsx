@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { onReveal, requestReveal } from '../frame/reveal';
 import type { ItemStoreClient } from '../item-store/client';
 import { openTestItemStore } from '../item-store/test-item-store';
-import { CONVERSATIONS_REVEAL } from '../sections/ares/conversations';
+import { ARES_PANEL_REVEAL } from '../sections/ares/conversations';
 import { WHAT_ARES_KNOWS, WhatAresKnows } from './WhatAresKnows';
 
 // What Ares knows (#74): every memory, grouped by kind, each with where it came from and when; the
@@ -198,7 +198,7 @@ describe('What Ares knows', () => {
 });
 
 describe('What the User told Ares in a Conversation (#194)', () => {
-  it('links to the turn it came from, opening the Conversation there, and reads “a deleted Conversation” once it is gone', async () => {
+  it('links to the turn it came from, opening the Conversation there in the Ares panel, and reads “a deleted Conversation” once it is gone', async () => {
     const { conversation } = store.conversations.create('2026-10-04');
     const turn = store.conversations.addUserTurn(conversation.id, 'I don’t take meetings before 10');
     store.memory.tell(
@@ -212,7 +212,7 @@ describe('What the User told Ares in a Conversation (#194)', () => {
       { conversationId: conversation.id, turnId: turn.id },
     );
     const revealed: [string, string | undefined][] = [];
-    const stop = onReveal(CONVERSATIONS_REVEAL, (conversationId, focus) =>
+    const stop = onReveal(ARES_PANEL_REVEAL, (conversationId, focus) =>
       revealed.push([conversationId, focus]),
     );
     render(<WhatAresKnows client={client} shown />);

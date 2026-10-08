@@ -14,9 +14,12 @@ import { requestReveal } from '../../frame/reveal';
 import { type OpenTarget, sectionOf } from '../../updates/updates';
 import { dayLabel, longDate, weekday } from '../notes/days';
 
-// Where the Ares button's pop-up (#193) asks the Ares Section to open a Conversation it expands
-// (frame/reveal.ts, with the Conversation's id).
+// Where the Ares panel's Full view (#235) asks the Ares Section to open its Conversation
+// (frame/reveal.ts, with the Conversation's id, and a turn's id when it says which).
 export const CONVERSATIONS_REVEAL = 'ares-conversations';
+
+// Where openConversation asks the Ares panel (#235) to open one, the same way.
+export const ARES_PANEL_REVEAL = 'ares-panel';
 
 // The longest an Item's title shows in a link.
 const LINK_TITLE = 48;
@@ -169,14 +172,19 @@ export function lastWritten(at: number, today: string): string {
   return key === today ? time.format(day) : date.format(day);
 }
 
-/** Opens a Conversation in the Ares Section's Conversations, in view (an action's cause, #196). */
-export function openConversation(conversationId: string): void {
-  requestReveal(CONVERSATIONS_REVEAL, conversationId);
+/**
+ * Opens a Conversation, at one of its turns when given, in the Ares panel (#235) beside whatever
+ * Section the User is in: the one way the window opens a Conversation from elsewhere (the Ares
+ * button's Open in Ares, Ask Ares and search in Ctrl+K, What Ares knows, Ares's activity). The panel
+ * opens if it was closed, and takes the request as soon as it is listening.
+ */
+export function openConversation(conversationId: string, turnId?: number): void {
+  requestReveal(ARES_PANEL_REVEAL, conversationId, turnId === undefined ? undefined : String(turnId));
 }
 
 /**
  * Ask Ares from Ctrl+K (#195): a new Conversation with what the User typed sent as its first message.
- * Its id, to open in the Ares Section, and why the message couldn't be sent, if it couldn't (the
+ * Its id, to open in the Ares panel, and why the message couldn't be sent, if it couldn't (the
  * Conversation is there either way).
  */
 export async function askAres(

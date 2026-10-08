@@ -1,4 +1,4 @@
-import { cn, Kbd, Led } from '@commander/ui';
+import { AresMark, cn, Kbd, Led } from '@commander/ui';
 import type { Ref } from 'react';
 import { clockTime, dayOfYear, isoWeek, shortDate } from './calendar';
 import { useNow } from './use-now';
@@ -28,6 +28,8 @@ export interface AresStatusProps {
   onOpen?: () => void;
   /** Runs the Update Skill: Ask for an update (`U`). */
   onAsk?: () => void;
+  /** The Ares panel (#235): whether it is open, and its AI mark, which opens or closes it (`Ctrl+J`). */
+  panel?: { open: boolean; onToggle: () => void };
 }
 
 export type AresWork = { working: boolean; running: readonly string[] };
@@ -37,7 +39,7 @@ const hhmm = (date: Date) => clockTime(date).slice(0, 5);
 
 /**
  * The Ares status module (.ttn): whether he is working or idle, the quiet count of what he is
- * holding for the next Update, whether you're here, and Ask for an update.
+ * holding for the next Update, whether you're here, the Ares panel's AI mark, and Ask for an update.
  */
 export function AresStatus({
   queued = 0,
@@ -46,6 +48,7 @@ export function AresStatus({
   working,
   onOpen,
   onAsk,
+  panel,
 }: AresStatusProps) {
   const away = presence === 'away';
   const busy = !!working?.working;
@@ -82,6 +85,20 @@ export function AresStatus({
         </div>
         <div className="f-ares-l2">{line}</div>
       </div>
+      {panel && (
+        <button
+          type="button"
+          className="f-talk"
+          onClick={panel.onToggle}
+          aria-label="Ares panel"
+          aria-pressed={panel.open}
+          aria-keyshortcuts="Control+J"
+          title={`${panel.open ? 'Close' : 'Open'} the Ares panel: Conversations beside this Section (Ctrl+J)`}
+        >
+          <AresMark />
+          <span className="l">Ctrl J</span>
+        </button>
+      )}
       <button
         type="button"
         className="f-ask"
@@ -107,6 +124,8 @@ export interface HeaderProps {
   bands?: BandCounts;
   onBand?: (band: string) => void;
   ares?: AresStatusProps;
+  /** The Ares panel's open state and toggle, for its AI mark in the Ares module. */
+  panel?: AresStatusProps['panel'];
   /**
    * Where the open Section can put its own strip across C–E (the Notes Section's week strip). While
    * something is in it, it takes the place of the date and the band meter.
@@ -118,7 +137,7 @@ export interface HeaderProps {
  * The Industrial header (.hdr): identity and clock, the date, the band meter, and Ares. It is also
  * the window's title bar: drag it to move the window, and its right edge holds the window controls.
  */
-export function Header({ eyebrow, title, bands = {}, onBand, ares, slotRef }: HeaderProps) {
+export function Header({ eyebrow, title, bands = {}, onBand, ares, panel, slotRef }: HeaderProps) {
   const now = useNow(1000);
   const frame = useWindowFrame();
   return (
@@ -168,7 +187,7 @@ export function Header({ eyebrow, title, bands = {}, onBand, ares, slotRef }: He
         })}
       </nav>
       <div className="f-slot" ref={slotRef} />
-      <AresStatus {...ares} />
+      <AresStatus {...ares} panel={panel} />
       <WindowControls frame={frame} onControl={(control) => void window.commander.windowControl(control)} />
     </header>
   );
