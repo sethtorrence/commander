@@ -220,6 +220,10 @@
     height: 5px;
     background: var(--faint);
   }
+  /* Only a bullet shows its dot (#239): other lines are plain, headings, numbered or quoted. */
+  .n-blk:where(:not([data-style="bullet"])) > .n-row > .n-bullet i {
+    visibility: hidden;
+  }
   .n-row:hover > .n-bullet i {
     background: var(--muted);
   }
@@ -294,6 +298,50 @@
   }
   .n-kids.opening {
     animation: n-kids-in 0.18s steps(3, end);
+  }
+
+  /* ================= Line styles (#239) ================= */
+  /* Any other line shows its bullet only as a fold box: on hover when lines are under it, and while
+     folded. */
+  .n-blk.has-kids > .n-row:hover > .n-bullet i {
+    visibility: visible;
+  }
+  /* biome-ignore lint/style/noDescendingSpecificity: only the fold box's visibility, after its look above */
+  .n-blk.folded > .n-row > .n-bullet i {
+    visibility: visible;
+  }
+  /* A numbered item's number, counted along its list. */
+  .n-ord {
+    font: 500 11px / 30px var(--mono);
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    user-select: none;
+  }
+  .n-row:focus-within > .n-bullet .n-ord {
+    color: var(--signal-ink);
+  }
+  /* Under a heading or a plain line, the lines follow at its own depth: only lists and quotes nest. */
+  .n-kids.flat {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+  /* A quote (a meeting chip and its notes): one bar down the bullets' column, its lines inside it. */
+  .n-blk.quote {
+    position: relative;
+  }
+  .n-blk.quote::before {
+    content: "";
+    position: absolute;
+    top: 6px;
+    bottom: 6px;
+    left: 11px;
+    width: 2px;
+    background: var(--muted);
+    pointer-events: none;
+  }
+  .n-kids.quote {
+    border-left-color: transparent;
   }
   @keyframes n-kids-in {
     from {

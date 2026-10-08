@@ -151,7 +151,7 @@ _Avoid_: Hidden (that's Teams' own flag), blocked, left
 ## Work and notes
 
 **Todo**:
-An item on your to-do lists: a Linear issue (labelled as Linear), a review asked of you or an issue assigned to you on GitHub (labelled as GitHub), a suggestion the Agent drew from your notes, calendar, email or Teams Chats, one you added yourself, a Block you made into one in a Daily Note (`[]`), or an email you made into one (`t`, "From email").
+An item on your to-do lists: a Linear issue (labelled as Linear), a review asked of you or an issue assigned to you on GitHub (labelled as GitHub), a suggestion the Agent drew from your notes, calendar, email or Teams Chats, one you added yourself, a Block you made into one in a Daily Note (`[ ]`, a checkbox Todo), or an email you made into one (`t`, "From email").
 _Avoid_: Task, action item
 
 **Daily Note**:
@@ -159,11 +159,11 @@ The single note for one calendar day, in the Notes Section; itself an Item, hold
 _Avoid_: Journal, entry, page
 
 **Block**:
-One line of a Daily Note; Blocks nest under one another, and each belongs to a Project (inherited from its parent unless set) and can become a Todo.
+One line of a Daily Note, with a style written as in Markdown: a plain line (the default), a heading, a bullet, a numbered item, a checkbox Todo or a quote. Only bullets and numbered items nest as the User writes (a meeting's notes sit under its Meeting chip); each Block belongs to a Project (inherited from its parent unless set) and can become a Todo. Its style is how it looks, not what it is.
 _Avoid_: Line, paragraph, bullet, node
 
 **Meeting chip**:
-A Block in today's Daily Note, under its top-level Meetings Block, that stands for one of today's calendar events and shows it as a compact live card; the meeting's notes go under it, and it takes the event's Project.
+A Block in today's Daily Note, under its top-level Meetings Block, that stands for one of today's calendar events and shows it as a compact live card in a quote; the meeting's notes go under it, inside its quote, and it takes the event's Project.
 _Avoid_: Meeting block, event card, meeting note
 
 **Meeting prep**:
@@ -183,11 +183,11 @@ The User's own Google appointment-schedule page, saved in Settings → Calendar,
 _Avoid_: Scheduling link, booking page (that's Google's), Calendly
 
 **Daily template**:
-The Blocks each new Daily Note starts with, edited in Settings; a new day gets copies of them, not links to them.
+The Blocks each new Daily Note starts with (unless edited, the day's sections as subheadings), edited in Settings; a new day gets copies of them, not links to them.
 _Avoid_: Default note, skeleton, boilerplate
 
 **Markdown copy**:
-The read-only `YYYY-MM-DD.md` file of each Daily Note that Commander writes to a folder the User chooses, for Obsidian, grep and backups; never read back, so the database stays the source of truth.
+The read-only `YYYY-MM-DD.md` file of each Daily Note that Commander writes to a folder the User chooses, each Block as Markdown by its style, for Obsidian, grep and backups; never read back, so the database stays the source of truth.
 _Avoid_: Export, sync, vault, mirror
 
 **Snapshot**:

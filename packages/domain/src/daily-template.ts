@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { blockStyle } from './items';
 
 // The daily template: the Blocks each new day's Daily Note starts with, edited in Settings → Notes.
 // A setting, not Items: its Blocks are copied into a new day as fresh Items with their own ids, never
@@ -13,6 +14,8 @@ export const templateBlock = z.object({
   position: z.string().min(1),
   text: z.string(),
   folded: z.boolean(),
+  // How its line looks, as a Block's style (#239); a plain line when absent.
+  style: blockStyle.optional(),
 });
 export type TemplateBlock = z.infer<typeof templateBlock>;
 
@@ -26,7 +29,7 @@ export const dailyTemplate = z.object({
 });
 export type DailyTemplate = z.infer<typeof dailyTemplate>;
 
-// Until the User edits it: the five sections of the day, as plain top-level Blocks.
+// Until the User edits it: the five sections of the day, as top-level subheadings (`##`, #239).
 export const defaultDailyTemplate: DailyTemplate = {
   blocks: ['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening'].map((text, i) => ({
     id: `default-${text.toLowerCase()}`,
@@ -34,5 +37,6 @@ export const defaultDailyTemplate: DailyTemplate = {
     position: `a${i}`,
     text,
     folded: false,
+    style: 'heading-2',
   })),
 };

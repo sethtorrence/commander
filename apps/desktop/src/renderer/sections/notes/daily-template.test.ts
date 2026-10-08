@@ -1,4 +1,5 @@
 import type { ItemStore } from '@commander/core/src/item-store';
+import type { BlockStyle } from '@commander/domain';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ItemStoreClient } from '../../item-store/client';
 import { openTestItemStore } from '../../item-store/test-item-store';
@@ -40,10 +41,15 @@ function openNotes(today: string) {
   return notebook;
 }
 
+// A line as Markdown would start it: "## " for a subheading, "- " for a bullet, nothing when plain.
+const MARKS: Partial<Record<BlockStyle, string>> = { 'heading-2': '## ', bullet: '- ' };
+const line = (depth: number, text: string, style: BlockStyle | undefined) =>
+  `${'  '.repeat(depth)}${MARKS[style ?? 'plain'] ?? ''}${text}`;
+
 const lines = (notebook: Notebook, day = TEMPLATE_DAY) =>
   visibleBlocks(notebook.snapshot().days.find((d) => d.day === day)?.outline ?? new Map(), {
     includeFolded: true,
-  }).map(({ block, depth }) => `${'  '.repeat(depth)}${block.text}`);
+  }).map(({ block, depth }) => line(depth, block.text, block.style));
 
 const templateLines = () => {
   const blocks = store.dailyTemplate().blocks;
@@ -52,13 +58,15 @@ const templateLines = () => {
     for (const block of blocks
       .filter((b) => b.parentId === parentId)
       .sort((a, b) => (a.position < b.position ? -1 : 1))) {
-      out.push(`${'  '.repeat(depth)}${block.text}`);
+      out.push(line(depth, block.text, block.style));
       walk(block.id, depth + 1);
     }
   };
   walk(null, 0);
   return out;
 };
+
+const SECTIONS = ['## Morning', '## Meetings', '## Todos', '## Ideas', '## Evening'];
 
 // The id of the Block holding `text` in the template editor.
 const idOf = (notebook: Notebook, text: string) => {
@@ -69,30 +77,45 @@ const idOf = (notebook: Notebook, text: string) => {
 };
 
 describe('editing the daily template', () => {
-  it('shows the template’s Blocks, the defaults on a fresh database', async () => {
+  it('shows the template’s Blocks, the defaults on a fresh database: the day’s sections as subheadings', async () => {
     const editor = openTemplate();
     await editor.start();
 
     expect(editor.snapshot().days.map((d) => d.day)).toEqual([TEMPLATE_DAY]);
-    expect(lines(editor)).toEqual(['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening']);
+    expect(lines(editor)).toEqual(SECTIONS);
   });
 
-  it('saves Blocks added, nested and removed with the outliner, without touching any Item', async () => {
+  it('saves Blocks added, styled, nested and removed with the outliner, without touching any Item', async () => {
     const editor = openTemplate();
     await editor.start();
 
-    // A Block under Morning, Ideas removed, and Evening typed over.
+    // A plain line after Morning, a list under it, Ideas removed, and Evening typed over.
     const morning = idOf(editor, 'Morning');
-    const coffee = editor.enter(TEMPLATE_DAY, morning, 7, 7);
-    editor.type(TEMPLATE_DAY, coffee?.id as string, 'Coffee');
-    editor.indent(TEMPLATE_DAY, coffee?.id as string, 6);
+    const coffee = editor.enter(TEMPLATE_DAY, morning, 7, 7)?.id as string;
+    editor.type(TEMPLATE_DAY, coffee, 'Coffee first');
+    const list = editor.enter(TEMPLATE_DAY, coffee, 12, 12)?.id as string;
+    editor.type(TEMPLATE_DAY, list, '- ', 2);
+    editor.type(TEMPLATE_DAY, list, 'Beans');
+    const ground = editor.enter(TEMPLATE_DAY, list, 5, 5)?.id as string;
+    editor.type(TEMPLATE_DAY, ground, 'Ground');
+    editor.indent(TEMPLATE_DAY, ground, 6);
     const ideas = idOf(editor, 'Ideas');
     editor.type(TEMPLATE_DAY, ideas, '');
+    // Backspace takes the subheading off first, then the empty line goes.
+    editor.removeBackward(TEMPLATE_DAY, ideas);
     editor.removeBackward(TEMPLATE_DAY, ideas);
     editor.type(TEMPLATE_DAY, idOf(editor, 'Evening'), 'Wind down');
     await editor.flush();
 
-    const expected = ['Morning', '  Coffee', 'Meetings', 'Todos', 'Wind down'];
+    const expected = [
+      '## Morning',
+      'Coffee first',
+      '- Beans',
+      '  - Ground',
+      '## Meetings',
+      '## Todos',
+      '## Wind down',
+    ];
     expect(lines(editor)).toEqual(expected);
     expect(templateLines()).toEqual(expected);
     expect(store.query()).toEqual([]);
@@ -102,7 +125,7 @@ describe('editing the daily template', () => {
     expect(lines(reopened)).toEqual(expected);
   });
 
-  it('keeps [] as text: the template’s Blocks don’t become Todos', async () => {
+  it('keeps [ ] as text: the template’s Blocks don’t become Todos', async () => {
     const editor = openTemplate();
     await editor.start();
     const ideas = idOf(editor, 'Ideas');
@@ -111,7 +134,7 @@ describe('editing the daily template', () => {
     expect(editor.makeTodo(TEMPLATE_DAY, ideas)).toBeNull();
     await editor.flush();
 
-    expect(templateLines()).toContain('[] Ideas');
+    expect(templateLines()).toContain('## [] Ideas');
     expect(editor.snapshot().days[0]?.outline.get(ideas)?.todo).toBeUndefined();
     expect(store.query()).toEqual([]);
   });
@@ -121,17 +144,17 @@ describe('editing the daily template', () => {
     await editor.start();
     const meetings = idOf(editor, 'Meetings');
 
-    editor.indent(TEMPLATE_DAY, meetings, 0);
+    editor.removeBackward(TEMPLATE_DAY, meetings);
     await editor.flush();
-    expect(templateLines().slice(0, 2)).toEqual(['Morning', '  Meetings']);
+    expect(templateLines().slice(0, 2)).toEqual(['## Morning', 'Meetings']);
 
     editor.undo();
     await editor.flush();
-    expect(templateLines().slice(0, 2)).toEqual(['Morning', 'Meetings']);
+    expect(templateLines().slice(0, 2)).toEqual(['## Morning', '## Meetings']);
 
     editor.redo();
     await editor.flush();
-    expect(templateLines().slice(0, 2)).toEqual(['Morning', '  Meetings']);
+    expect(templateLines().slice(0, 2)).toEqual(['## Morning', 'Meetings']);
   });
 
   it('can be emptied', async () => {
@@ -140,6 +163,7 @@ describe('editing the daily template', () => {
     for (const text of ['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening']) {
       const id = idOf(editor, text);
       editor.type(TEMPLATE_DAY, id, '');
+      editor.removeBackward(TEMPLATE_DAY, id);
       editor.removeBackward(TEMPLATE_DAY, id);
     }
     await editor.flush();
@@ -151,17 +175,29 @@ describe('editing the daily template', () => {
   it('changes the next new day, but not today or any earlier day', async () => {
     const notes = openNotes('2026-10-03');
     await notes.start();
-    expect(lines(notes, '2026-10-03')).toEqual(['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening']);
+    expect(lines(notes, '2026-10-03')).toEqual(SECTIONS);
 
     const editor = openTemplate();
     await editor.start();
     const todos = idOf(editor, 'Todos');
-    editor.type(TEMPLATE_DAY, todos, 'Top three');
-    editor.indent(TEMPLATE_DAY, todos, 0);
+    const under = editor.enter(TEMPLATE_DAY, todos, 5, 5)?.id as string;
+    editor.type(TEMPLATE_DAY, under, '1. ', 3);
+    editor.type(TEMPLATE_DAY, under, 'Top three');
     await editor.flush();
 
     await notes.setToday('2026-10-04');
-    expect(lines(notes, '2026-10-04')).toEqual(['Morning', 'Meetings', '  Top three', 'Ideas', 'Evening']);
-    expect(lines(notes, '2026-10-03')).toEqual(['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening']);
+    expect(lines(notes, '2026-10-04')).toEqual([
+      '## Morning',
+      '## Meetings',
+      '## Todos',
+      'Top three',
+      '## Ideas',
+      '## Evening',
+    ]);
+    expect(notes.snapshot().days[0]?.outline.get(under)).toBeUndefined();
+    expect(
+      [...(notes.snapshot().days[0]?.outline.values() ?? [])].find((block) => block.text === 'Top three'),
+    ).toMatchObject({ style: 'numbered' });
+    expect(lines(notes, '2026-10-03')).toEqual(SECTIONS);
   });
 });

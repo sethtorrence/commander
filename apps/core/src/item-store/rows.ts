@@ -61,6 +61,7 @@ export const blockDetailOf = (block: BlockDetailRow): ItemDetail => ({
   position: block.position,
   text: block.text,
   folded: block.folded,
+  style: block.style,
 });
 
 export const linearIssueDetailOf = (issue: LinearIssueDetailRow): ItemDetail => ({

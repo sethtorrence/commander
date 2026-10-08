@@ -23,7 +23,8 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 /**
  * Settings → Notes → Daily template: the Blocks each new day's Daily Note starts with, edited in the
- * Notes Section's own outliner (same keys, nesting and folds). Changes reach days made afterwards.
+ * Notes Section's own outliner (same keys, line styles, nesting and folds). Changes reach days made
+ * afterwards.
  */
 export function DailyTemplateSettings({ no }: { no: string }) {
   const [notebook] = useState(() =>
@@ -77,7 +78,7 @@ export function DailyTemplateSettings({ no }: { no: string }) {
     >
       <SettingRow
         label="Daily template"
-        description="Each new day’s Daily Note starts with a copy of these Blocks. Edit them as in Notes: Enter, Tab and Shift+Tab. Changes apply from the next new day; today and earlier days keep what they have."
+        description="Each new day’s Daily Note starts with a copy of these Blocks. Write them as in Notes: “## ” makes a subheading, “- ” a bullet and “1. ” a numbered item, and Tab nests list items. Changes apply from the next new day; today and earlier days keep what they have."
       >
         <OutlineContext.Provider value={controls}>
           <div className="max-w-[640px] pl-10" data-notes-stream="" data-testid="daily-template">
@@ -89,7 +90,7 @@ export function DailyTemplateSettings({ no }: { no: string }) {
       </SettingRow>
       <SettingRow
         label="Meeting chips"
-        description="Today’s meetings go under a top-level “Meetings” Block in today’s Daily Note, one chip each, in time order, ready for notes underneath. A day without that Block gets no chips."
+        description="Today’s meetings go under a top-level “Meetings” Block in today’s Daily Note, one chip each, in time order, each a quote ready for its notes. A day without that Block gets no chips."
       >
         <p className="m-0 text-note leading-[19px] text-muted" data-testid="meeting-chips-setting">
           {hasMeetings

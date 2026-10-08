@@ -98,10 +98,23 @@ function Legend() {
   return (
     <div className="n-legend" data-testid="outliner-key">
       <div className="n-lt">
-        <span>Key · every line is a block</span>
+        <span>Key · written as Markdown</span>
         <span className="n-lt-n">LGD-01</span>
       </div>
-      <Key keys={<Kbd>↵</Kbd>}>new block</Key>
+      <Key keys={<Kbd>↵</Kbd>}>new line, or the list’s next item</Key>
+      <Key
+        keys={
+          <>
+            <Kbd>-</Kbd>
+            <Kbd>1.</Kbd>
+          </>
+        }
+      >
+        start a line, get a list
+      </Key>
+      <Key keys={<Kbd>##</Kbd>}>start a line, get a heading</Key>
+      <Key keys={<Kbd>[ ]</Kbd>}>start a line, get a Todo</Key>
+      <Key keys={<Kbd>⌫</Kbd>}>at its start, back to a plain line</Key>
       <Key
         keys={
           <>
@@ -113,10 +126,9 @@ function Legend() {
           </>
         }
       >
-        indent, outdent
+        nest a list item, take it out
       </Key>
       <Key keys={<Kbd>■</Kbd>}>click a bullet to fold</Key>
-      <Key keys={<Kbd>[ ]</Kbd>}>start a line, get a Todo</Key>
       <Key keys={<Kbd>#LT</Kbd>}>file it under a Project</Key>
       <Key keys={<Kbd>Ctrl ↵</Kbd>}>make a Todo, tick it</Key>
       <Key keys={<Kbd>[[</Kbd>}>link a day, Project or meeting</Key>

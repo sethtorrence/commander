@@ -111,7 +111,7 @@ describe('the Markdown copy', () => {
     await copy.flush();
 
     expect(files()).toEqual(['2026-10-01.md', '2026-10-03.md']);
-    expect(read('2026-10-03.md')).toBe(`${READ_ONLY_NOTICE}\n\n- Stand-up notes\n`);
+    expect(read('2026-10-03.md')).toBe(`${READ_ONLY_NOTICE}\n\nStand-up notes\n`);
     expect(copy.status()).toMatchObject({ folder, state: 'ok', problem: null });
     expect(sent).toContainEqual({ type: 'markdown-copy-status', status: copy.status() });
   });
@@ -129,7 +129,7 @@ describe('the Markdown copy', () => {
   });
 
   it('rewrites a day’s file a moment after its Blocks change, today or past', async () => {
-    const id = addBlock('2026-09-20', 'First draft');
+    const id = addBlock('2026-09-20', 'First draft', { style: 'bullet' });
     chooseFolder(folder);
     await copy.flush();
 
@@ -168,7 +168,7 @@ describe('the Markdown copy', () => {
     setText(id, 'From Commander, again');
     copy.itemsChanged([id]);
     await copy.flush();
-    expect(read('2026-10-01.md')).toBe(`${READ_ONLY_NOTICE}\n\n- From Commander, again\n`);
+    expect(read('2026-10-01.md')).toBe(`${READ_ONLY_NOTICE}\n\nFrom Commander, again\n`);
   });
 
   it('rewrites a day when one of its Todos is ticked', async () => {
@@ -203,7 +203,7 @@ describe('the Markdown copy', () => {
     const blockId = addBlock('2026-10-01', 'need to send Dana the Q3 numbers');
     chooseFolder(folder);
     await copy.flush();
-    expect(read('2026-10-01.md')).toContain('- need to send Dana the Q3 numbers');
+    expect(read('2026-10-01.md')).toContain('\n\nneed to send Dana the Q3 numbers\n');
 
     // As the Core wires it: the gate's changes go to the copy as well as to the window.
     const gate = openGate({ itemStore: store, onChange: (itemIds) => copy.itemsChanged(itemIds) });
@@ -243,26 +243,28 @@ describe('the Markdown copy', () => {
     store.changeProject({ type: 'merge', projectId: old, into: longtail });
     chooseFolder(folder);
     await copy.flush();
-    expect(read('2026-10-02.md')).toContain('- On [[Longtail]]');
+    expect(read('2026-10-02.md')).toContain('\nOn [[Longtail]]\n');
 
     const action = { type: 'update', projectId: longtail, changes: { name: 'Long Tail' } } as const;
     store.changeProject(action);
     copy.afterRequest({ op: 'change-project', action });
     await copy.flush();
-    expect(read('2026-10-01.md')).toContain('- On [[Long Tail]]');
-    expect(read('2026-10-02.md')).toContain('- On [[Long Tail]]');
+    expect(read('2026-10-01.md')).toContain('\nOn [[Long Tail]]\n');
+    expect(read('2026-10-02.md')).toContain('\nOn [[Long Tail]]\n');
   });
 
-  it('writes a new day made from the template', async () => {
+  it('writes a new day made from the template, its sections as subheadings', async () => {
     store.saveDailyTemplate({
-      blocks: [{ id: 't1', parentId: null, position: 'a0', text: '# Morning', folded: false }],
+      blocks: [
+        { id: 't1', parentId: null, position: 'a0', text: 'Morning', folded: false, style: 'heading-2' },
+      ],
     });
     chooseFolder(folder);
     await copy.flush();
     store.ensureDailyNote('2026-10-04', user, { fromTemplate: true });
     copy.afterRequest({ op: 'daily-note', day: '2026-10-04', fromTemplate: true });
     await copy.flush();
-    expect(read('2026-10-04.md')).toBe(`${READ_ONLY_NOTICE}\n\n# Morning\n`);
+    expect(read('2026-10-04.md')).toBe(`${READ_ONLY_NOTICE}\n\n## Morning\n`);
   });
 
   it('copies a day’s images into attachments/ beside the files', async () => {
@@ -270,7 +272,7 @@ describe('the Markdown copy', () => {
     addBlock('2026-10-01', `![](attachments/${name})`);
     chooseFolder(folder);
     await copy.flush();
-    expect(read('2026-10-01.md')).toContain(`- ![](attachments/${name})`);
+    expect(read('2026-10-01.md')).toContain(`\n![](attachments/${name})\n`);
     expect(files(join(folder, 'attachments'))).toEqual([name]);
     expect(readFileSync(join(folder, 'attachments', name))).toEqual(Buffer.from(PNG));
   });
@@ -299,7 +301,7 @@ describe('the Markdown copy', () => {
       setText(id, 'Two');
       copy.itemsChanged([id]);
       await copy.flush();
-      expect(readFileSync(join(other, '2026-10-01.md'), 'utf8')).toContain('- One');
+      expect(readFileSync(join(other, '2026-10-01.md'), 'utf8')).toContain('\nOne\n');
     } finally {
       rmSync(other, { recursive: true, force: true });
     }
@@ -330,7 +332,7 @@ describe('the Markdown copy', () => {
     mkdirSync(folder);
     await copy.flush();
     expect(copy.status()).toMatchObject({ state: 'ok', problem: null });
-    expect(read('2026-10-01.md')).toContain('- Two');
+    expect(read('2026-10-01.md')).toContain('\nTwo\n');
   });
 
   it.skipIf(process.getuid?.() === 0)('says so when Commander may not write in the folder', async () => {

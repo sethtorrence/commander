@@ -73,20 +73,38 @@ const nested: DailyTemplate = {
 };
 
 describe('the daily template', () => {
-  it('starts as Morning, Meetings, Todos, Ideas and Evening on a fresh database', () => {
-    expect(store.dailyTemplate().blocks.map((block) => [block.text, block.parentId])).toEqual([
-      ['Morning', null],
-      ['Meetings', null],
-      ['Todos', null],
-      ['Ideas', null],
-      ['Evening', null],
+  it('starts as Morning, Meetings, Todos, Ideas and Evening on a fresh database, as subheadings', () => {
+    expect(store.dailyTemplate().blocks.map((block) => [block.text, block.parentId, block.style])).toEqual([
+      ['Morning', null, 'heading-2'],
+      ['Meetings', null, 'heading-2'],
+      ['Todos', null, 'heading-2'],
+      ['Ideas', null, 'heading-2'],
+      ['Evening', null, 'heading-2'],
     ]);
   });
 
-  it('fills a Daily Note made as today, on a fresh database', () => {
+  it('fills a Daily Note made as today, on a fresh database, its sections as subheadings', () => {
     const note = store.ensureDailyNote('2026-10-03', user, asToday);
 
     expect(outline(note.id)).toEqual(['Morning', 'Meetings', 'Todos', 'Ideas', 'Evening']);
+    expect(store.blocks([note.id]).map((block) => detailOf(block).style)).toEqual(Array(5).fill('heading-2'));
+  });
+
+  it('copies each Block’s line style, a plain line where it has none', () => {
+    store.saveDailyTemplate({
+      blocks: [
+        t('t-plan', 'Plan', { position: 'a0', style: 'heading-3' }),
+        t('t-list', 'Top three', { position: 'a1', style: 'numbered' }),
+        t('t-log', 'Log', { position: 'a2' }),
+      ],
+    });
+    const note = store.ensureDailyNote('2026-10-03', user, asToday);
+
+    expect(store.blocks([note.id]).map((block) => detailOf(block).style)).toEqual([
+      'heading-3',
+      'numbered',
+      'plain',
+    ]);
   });
 
   it('leaves a Daily Note made for any other reason empty', () => {

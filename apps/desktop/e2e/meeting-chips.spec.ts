@@ -166,18 +166,24 @@ test('sync → meeting chips in today’s note → a note under one → the meet
   );
   await expect(sheet.getByRole('complementary', { name: 'Daily Note details' })).toContainText('Meetings02');
 
-  // Write a note under the Weekly sync chip: the caret past the chip (End), Enter, Tab, and type.
+  // Write a note under the Weekly sync chip: the caret past the chip (End), Enter, and type. The
+  // meeting is a quote, and its notes go inside it (#239).
   const syncBlock = sheet.locator(
     '[data-block-text]:has([data-chip="event"][data-label$="Weekly sync with Priya"])',
   );
   const syncId = (await syncBlock.getAttribute('data-block-id')) as string;
+  await expect(sheet.locator(`.n-blk[data-block="${syncId}"]`)).toHaveClass(/\bquote\b/);
   // (Focused rather than clicked: a click on the card would open the event.)
   await syncBlock.focus();
   await window.keyboard.press('End');
   await window.keyboard.press('Enter');
-  await window.keyboard.press('Tab');
   await window.keyboard.type('Priya owns the launch checklist');
   await expect.poll(() => savedChildren(window, syncId)).toEqual(['Priya owns the launch checklist']);
+  await expect(
+    sheet.locator(`.n-blk[data-block="${syncId}"] .n-blk[data-style="quote"]`, {
+      hasText: 'Priya owns the launch checklist',
+    }),
+  ).toBeVisible();
 
   // The Dashboard's side column shows tomorrow's schedule.
   await tab(window, 'Dashboard').click();

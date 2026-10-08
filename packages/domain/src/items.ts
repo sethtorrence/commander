@@ -93,9 +93,27 @@ export const dailyNoteDetail = z.object({
 });
 export type DailyNoteDetail = z.infer<typeof dailyNoteDetail>;
 
-// A Block: one line of a Daily Note. Blocks nest under one another; siblings sort by position, a
-// fractional index ("a0" < "a0V" < "a1") so a move or insert changes only the Block itself. The text
-// is the Block's own, and its Item's title follows it.
+// How a Block's line looks (#239), as Markdown writes it: a plain line, a heading (`#` to `###`), a
+// bullet (`- `), a numbered item (`1. `), a checkbox Todo (`[ ] `) or a quote (`> `, a meeting's
+// lines). How a line looks, not what it is: a Block's text, Links, Project and Todo don't depend on it.
+export const blockStyles = [
+  'plain',
+  'heading-1',
+  'heading-2',
+  'heading-3',
+  'bullet',
+  'numbered',
+  'todo',
+  'quote',
+] as const;
+export const blockStyle = z.enum(blockStyles);
+export type BlockStyle = z.infer<typeof blockStyle>;
+
+// A Block: one line of a Daily Note, with a style. Only list items (bullets and numbered items) nest
+// under one another as the User writes, though a meeting's lines sit under its chip, and Blocks from
+// before #239 may nest anywhere. Siblings sort by position, a fractional index ("a0" < "a0V" < "a1")
+// so a move or insert changes only the Block itself. The text is the Block's own, without its
+// style's mark, and its Item's title follows it.
 export const blockDetail = z.object({
   kind: z.literal('block'),
   dailyNoteId: id,
@@ -105,6 +123,9 @@ export const blockDetail = z.object({
   text: z.string(),
   // Whether its children are hidden.
   folded: z.boolean(),
+  // How its line looks; a plain line when absent (a Block written without one). The Item store
+  // always reads one back.
+  style: blockStyle.optional(),
 });
 export type BlockDetail = z.infer<typeof blockDetail>;
 

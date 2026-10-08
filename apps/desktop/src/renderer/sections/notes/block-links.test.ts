@@ -143,6 +143,8 @@ describe('Blocks with links', () => {
     const notebook = open();
     await notebook.start();
     const { id: first } = notebook.begin(today, 'Meetings');
+    // As bullets, which nest (#239).
+    notebook.type(today, first, '- Meetings', 2);
     const second = notebook.enter(today, first, 8, 8);
     if (!second) throw new Error('No second Block');
     notebook.type(today, second.id, 'Call [[2026-10-01]]');

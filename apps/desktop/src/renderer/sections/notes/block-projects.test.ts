@@ -70,9 +70,14 @@ const shown = (notebook: Notebook, id: string) => effectiveFilings(outlineOfToda
 // The Project kept on each Block's Item in the store.
 const saved = (id: string) => store.get(id)?.item.filing;
 
-// Writes a parent Block and a child under it; returns their ids.
+// Makes a Block a bullet, as typing `- ` at its start does: only list items nest (#239).
+const bullet = (notebook: Notebook, id: string) =>
+  notebook.type(TODAY, id, `- ${textOf(notebook, id) ?? ''}`, 2);
+
+// Writes a parent bullet and a child bullet under it; returns their ids.
 function parentAndChild(notebook: Notebook, parent: string, child: string): [string, string] {
   const { id: parentId } = notebook.begin(TODAY, parent);
+  bullet(notebook, parentId);
   const next = notebook.enter(TODAY, parentId, parent.length, parent.length);
   if (!next) throw new Error('Enter did nothing');
   notebook.type(TODAY, next.id, child);
@@ -160,6 +165,7 @@ describe('inheritance in the note', () => {
   it('re-inherits when a Block is indented under a tagged Block and outdented again, as one change each', async () => {
     const notebook = await open();
     const { id: parent } = notebook.begin(TODAY, 'Longtail #LT');
+    bullet(notebook, parent);
     const next = notebook.enter(TODAY, parent, 12, 12);
     if (!next) throw new Error('Enter did nothing');
     notebook.type(TODAY, next.id, 'Standup');

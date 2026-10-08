@@ -35,13 +35,16 @@ export function templateIn(itemStore: ItemStoreClient): DailyNotes {
     return lastEntry;
   };
   const persist = async () => {
-    const saved: TemplateBlock[] = [...blocks.values()].map(({ id, parentId, position, text, folded }) => ({
-      id,
-      parentId,
-      position,
-      text,
-      folded,
-    }));
+    const saved: TemplateBlock[] = [...blocks.values()].map(
+      ({ id, parentId, position, text, folded, style }) => ({
+        id,
+        parentId,
+        position,
+        text,
+        folded,
+        ...(style && { style }),
+      }),
+    );
     await itemStore({ op: 'save-daily-template', template: { blocks: saved } });
   };
 

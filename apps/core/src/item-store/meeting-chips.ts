@@ -213,6 +213,8 @@ export function meetingChipsIn(deps: Deps): MeetingChips {
             position,
             text,
             folded: false,
+            // A meeting shows as a quote, and its notes go inside it (#239).
+            style: 'quote',
           },
           deletedAt: null,
         },

@@ -1,11 +1,13 @@
 import { type ItemAction, isOwnFiling } from '@commander/domain';
+import { plainStyleUnder, styleOf } from './line-styles';
 import { type Block, type BlockChange, type Caret, type Edit, enter, type Outline } from './outline';
 
 /*
-  Blocks that are Todos (`[]` at the start of a Block). The Todo is its own Item, origin Daily Note,
-  with a made-from Link to its Block; the Block shows a checkbox for it. In the outline a Block carries
-  its Todo (`block.todo`) as the Notes Section wants it to be, and this module turns each saved change
-  into the Todo's side of it, so the Block and its Todo are saved together as one change:
+  Blocks that are Todos (`[ ]` at the start of a Block): checkbox Todo lines (line-styles.ts). The Todo
+  is its own Item, origin Daily Note, with a made-from Link to its Block; the Block shows a checkbox
+  for it. In the outline a Block carries its Todo (`block.todo`) as the Notes Section wants it to be,
+  and this module turns each saved change into the Todo's side of it, so the Block and its Todo are
+  saved together as one change:
 
   - a Block that gains a Todo makes it, titled with the Block's text, and links it to the Block;
   - a Todo Block's text is its Todo's title, and ticking the checkbox ticks the Todo;
@@ -14,8 +16,8 @@ import { type Block, type BlockChange, type Caret, type Edit, enter, type Outlin
   The Todos Section keeps the other direction: renaming such a Todo there changes its Block's text.
 */
 
-/** `[]` or `[ ]` and a space at the very start of a Block's text: the Block becomes a Todo. */
-export const TODO_MARK = /^\[ ?\] /;
+/** `[]` or `[ ]` and a space at the very start of a Block's text, after `- ` or not: the Block becomes a Todo. */
+export const TODO_MARK = /^(?:[-*] )?\[ ?\] /;
 
 // ---- edits: like the outline's own (outline.ts), each returns the new outline and the change ----
 
@@ -24,11 +26,15 @@ function changeBlock(outline: Outline, block: Block, focus?: Caret): Edit {
   return { outline: new Map(outline).set(block.id, block), changes: [{ type: 'update', block }], focus };
 }
 
-const withoutTodo = ({ todo: _todo, ...block }: Block): Block => block;
+// A Block without its Todo is a plain line again (a quote line, in a meeting).
+const withoutTodo = (outline: Outline, { todo: _todo, ...block }: Block): Block => {
+  const parentId = block.parentId !== null && outline.has(block.parentId) ? block.parentId : null;
+  return styleOf(block) === 'todo' ? { ...block, style: plainStyleUnder(outline, parentId) } : block;
+};
 
 /**
- * Text typed into a plain Block that starts with `[] `: the Block becomes a Todo (`todoId`), without
- * the mark. `caret` is where it was in the typed text. Null when there is no mark to act on.
+ * Text typed into a plain Block that starts with `[ ] `: the Block becomes a checkbox Todo (`todoId`),
+ * without the mark. `caret` is where it was in the typed text. Null when there is no mark to act on.
  */
 export function typeTodoMark(
   outline: Outline,
@@ -42,14 +48,15 @@ export function typeTodoMark(
   if (!block || block.todo || !mark) return null;
   const rest = text.slice(mark[0].length);
   const offset = caret === undefined ? rest.length : Math.max(0, caret - mark[0].length);
-  return changeBlock(outline, { ...block, text: rest, todo: { id: todoId, done: false } }, { id, offset });
+  const todo = { id: todoId, done: false };
+  return changeBlock(outline, { ...block, text: rest, style: 'todo', todo }, { id, offset });
 }
 
-/** Ctrl+Enter on a plain Block: it becomes a Todo (`todoId`). */
+/** Ctrl+Enter on a plain Block: it becomes a checkbox Todo (`todoId`). */
 export function makeTodo(outline: Outline, id: string, todoId: string): Edit | null {
   const block = outline.get(id);
   if (!block || block.todo) return null;
-  return changeBlock(outline, { ...block, todo: { id: todoId, done: false } });
+  return changeBlock(outline, { ...block, style: 'todo', todo: { id: todoId, done: false } });
 }
 
 /** The checkbox, or Ctrl+Enter on a Todo Block: ticks its Todo, or unticks it. */
@@ -63,7 +70,7 @@ export function tickTodo(outline: Outline, id: string): Edit | null {
 export function removeTodo(outline: Outline, id: string): Edit | null {
   const block = outline.get(id);
   if (!block?.todo) return null;
-  return changeBlock(outline, withoutTodo(block), { id, offset: 0 });
+  return changeBlock(outline, withoutTodo(outline, block), { id, offset: 0 });
 }
 
 /**
@@ -85,7 +92,7 @@ export function enterTodo(
   const next = new Map(edit.outline);
   const changes = edit.changes.map((change): BlockChange => {
     if (change.type !== 'create') return change;
-    const fresh = { ...change.block, todo: { id: newId(), done: false } };
+    const fresh: Block = { ...change.block, style: 'todo', todo: { id: newId(), done: false } };
     next.set(fresh.id, fresh);
     return { type: 'create', block: fresh };
   });
@@ -104,6 +111,7 @@ export const sameSavedBlock = (a: Block, b: Block) =>
   a.position === b.position &&
   a.text === b.text &&
   a.folded === b.folded &&
+  styleOf(a) === styleOf(b) &&
   ownProject(a) === ownProject(b);
 
 // The Todo's Item for a Block that became a Todo, and its made-from Link to the Block.
