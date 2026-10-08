@@ -1,0 +1,1 @@
+ALTER TABLE `block_details` ADD `style` text DEFAULT 'plain' NOT NULL;

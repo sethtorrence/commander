@@ -63,6 +63,8 @@ test('on a fresh database, today’s Daily Note starts with Morning, Meetings, T
   });
 
   await expect.poll(() => outlineOf(window.locator(`#day-${today}`))).toEqual(DEFAULTS);
+  // As subheadings (#239).
+  await expect(window.locator(`#day-${today} .n-blk[data-style="heading-2"]`)).toHaveCount(DEFAULTS.length);
   await commander.close();
 });
 
@@ -80,23 +82,28 @@ test('the template edited in Settings makes the next day, at midnight while runn
   await expect.poll(() => outlineOf(todaySheet)).toEqual(DEFAULTS);
   const todayBefore = await shownBlocks(todaySheet);
 
-  // Settings → Notes → Daily template, in the same outliner: add and nest, remove, retype.
+  // Settings → Notes → Daily template, in the same outliner and line styles: add a list and nest in
+  // it, remove a subheading (Backspace makes it a plain line, then removes it), retype.
   await openSettings(window, 'Notes');
   const editor = window.getByTestId('daily-template');
   await expect.poll(() => outlineOf(editor)).toEqual(DEFAULTS);
+  await expect(editor.locator('.n-blk[data-style="heading-2"]')).toHaveCount(DEFAULTS.length);
   await block(editor, 'Morning').click();
   await window.keyboard.press('End');
   await window.keyboard.press('Enter');
-  await window.keyboard.type('Coffee');
+  await window.keyboard.type('- Coffee');
+  await window.keyboard.press('Enter');
   await window.keyboard.press('Tab');
+  await window.keyboard.type('Beans');
   await block(editor, 'Ideas').click();
   await window.keyboard.press('End');
-  for (let i = 0; i <= 'Ideas'.length; i++) await window.keyboard.press('Backspace');
+  for (let i = 0; i <= 'Ideas'.length + 1; i++) await window.keyboard.press('Backspace');
   await block(editor, 'Evening').click();
   await window.keyboard.press('End');
   await window.keyboard.type(' review');
   await window.keyboard.press('Escape');
-  const edited = ['Morning', '  Coffee', 'Meetings', 'Todos', 'Evening review'];
+  const edited = ['Morning', 'Coffee', '  Beans', 'Meetings', 'Todos', 'Evening review'];
+  await expect(editor.locator('.n-blk[data-style="bullet"]')).toHaveCount(2);
   await expect.poll(() => outlineOf(editor)).toEqual(edited);
   await expect.poll(() => savedOutline(window)).toEqual(edited);
 

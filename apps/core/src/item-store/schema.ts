@@ -5,6 +5,7 @@ import type {
   ActivityAction,
   AresBand,
   AutonomySection,
+  BlockStyle,
   ChannelPostDetail,
   ChatDetail,
   ComposeAttachment,
@@ -120,7 +121,8 @@ export const dailyNoteDetails = sqliteTable('daily_note_details', {
   day: text('day').notNull().unique(),
 });
 
-// Kind-specific detail for Blocks: where each sits in its Daily Note's outline, and its text.
+// Kind-specific detail for Blocks: where each sits in its Daily Note's outline, its text, and how its
+// line looks (#239).
 export const blockDetails = sqliteTable(
   'block_details',
   {
@@ -134,6 +136,7 @@ export const blockDetails = sqliteTable(
     position: text('position').notNull(),
     text: text('text').notNull(),
     folded: integer('folded', { mode: 'boolean' }).notNull(),
+    style: text('style').$type<BlockStyle>().notNull().default('plain'),
   },
   (t) => [index('block_details_daily_note').on(t.dailyNoteId)],
 );

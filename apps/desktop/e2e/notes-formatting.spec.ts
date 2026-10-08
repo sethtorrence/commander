@@ -100,10 +100,11 @@ test('each kind of formatting types with its Markdown and with its shortcut, sho
   await window.keyboard.press('Enter');
   await window.keyboard.type('#LT is the Project shorthand, not a heading');
 
+  // A heading's `#` marks give the line its style (#239): its text is the words alone.
   const expected = [
-    '# Morning',
-    '## Plans',
-    '### Later',
+    'Morning',
+    'Plans',
+    'Later',
     'Typed **bold**, *italic* and `code`',
     '**strong** *slanted* run `npm test`',
     '#LT is the Project shorthand, not a heading',
@@ -112,6 +113,7 @@ test('each kind of formatting types with its Markdown and with its shortcut, sho
 
   const check = async () => {
     await expect(row(sheet, 0)).toHaveAttribute('data-heading', '1');
+    await expect(row(sheet, 0)).toHaveAttribute('data-style', 'heading-1');
     await expect(row(sheet, 1)).toHaveAttribute('data-heading', '2');
     await expect(row(sheet, 2)).toHaveAttribute('data-heading', '3');
     await expect(row(sheet, 5)).not.toHaveAttribute('data-heading');
@@ -123,7 +125,7 @@ test('each kind of formatting types with its Markdown and with its shortcut, sho
     await expect(text(sheet, 4).locator('code')).toHaveText('`npm test`');
     // Not editing: the marks are hidden, and what's left reads as formatted text.
     await expect(text(sheet, 3).locator('.n-mk').first()).toBeHidden();
-    await expect(text(sheet, 0)).toHaveText('# Morning');
+    await expect(text(sheet, 0)).toHaveText('Morning');
     expect(await text(sheet, 0).evaluate((el) => (el as HTMLElement).innerText)).toBe('MORNING');
     expect(
       await text(sheet, 3)

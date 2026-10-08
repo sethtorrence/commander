@@ -59,23 +59,32 @@ const writePastDay = (page: Page) =>
     const [heading, standUp, todoBlock, link, image, todo] = Array.from({ length: 6 }, () =>
       crypto.randomUUID(),
     ) as [string, string, string, string, string, string];
-    const block = (id: string, text: string, parentId: string | null, position: string) => ({
+    type Style = 'plain' | 'heading-2' | 'bullet' | 'todo';
+    const block = (id: string, text: string, parentId: string | null, position: string, style: Style) => ({
       type: 'create' as const,
       item: {
         id,
         kind: 'block' as const,
         title: text,
-        detail: { kind: 'block' as const, dailyNoteId: note.id, parentId, position, text, folded: false },
+        detail: {
+          kind: 'block' as const,
+          dailyNoteId: note.id,
+          parentId,
+          position,
+          text,
+          folded: false,
+          style,
+        },
       },
     });
-    const meetings = block(heading, '# Meetings', null, 'a0');
+    const meetings = block(heading, 'Meetings', null, 'a0', 'heading-2');
     await store({
       op: 'record-all',
       actions: [
         { ...meetings, item: { ...meetings.item, filing: { projectId: project.id, filedBy: 'user' } } },
-        block(standUp, 'Stand-up with **Ana**', heading, 'a0'),
-        block(link, `See [[2026-09-02]] and [[project:${project.id}]]`, standUp, 'a0'),
-        block(todoBlock, 'Send the deck', heading, 'a1'),
+        block(standUp, 'Stand-up with **Ana**', heading, 'a0', 'bullet'),
+        block(link, `See [[2026-09-02]] and [[project:${project.id}]]`, standUp, 'a0', 'bullet'),
+        block(todoBlock, 'Send the deck', heading, 'a1', 'todo'),
         {
           type: 'create',
           item: {
@@ -87,7 +96,7 @@ const writePastDay = (page: Page) =>
           },
         },
         { type: 'link', from: todo, linkType: 'made-from', to: todoBlock },
-        block(image, `![](attachments/${name})`, null, 'a1'),
+        block(image, `![](attachments/${name})`, null, 'a1', 'plain'),
       ],
     });
     return name;
@@ -117,13 +126,13 @@ test('choosing a folder writes each day; edits rewrite it within seconds, over a
     [
       NOTICE,
       '',
-      '# Meetings #LT',
+      '## Meetings #LT',
       '',
       '- Stand-up with **Ana**',
       '\t- See [[2026-09-02]] and [[Longtail]]',
       '- [x] Send the deck',
       '',
-      `- ![](attachments/${image})`,
+      `![](attachments/${image})`,
       '',
     ].join('\n'),
   );
@@ -139,14 +148,14 @@ test('choosing a folder writes each day; edits rewrite it within seconds, over a
   const sheet = page.locator(`#day-${day}`);
   await sheet.locator('[data-block-text]').first().click();
   await page.keyboard.type('Written today');
-  await expect.poll(() => fileIn(`${day}.md`), { timeout: 15_000 }).toBe(`${NOTICE}\n\n- Written today\n`);
+  await expect.poll(() => fileIn(`${day}.md`), { timeout: 15_000 }).toBe(`${NOTICE}\n\nWritten today\n`);
 
   // A hand edit changes nothing in Commander, and the next write overwrites it.
   writeFileSync(join(vault, `${day}.md`), '- Edited by hand\n');
   await page.keyboard.type(', and again');
   await expect
     .poll(() => fileIn(`${day}.md`), { timeout: 15_000 })
-    .toBe(`${NOTICE}\n\n- Written today, and again\n`);
+    .toBe(`${NOTICE}\n\nWritten today, and again\n`);
   await expect(sheet.locator('[data-block-text]').first()).toHaveText('Written today, and again');
 
   // Turned off, nothing more is written.

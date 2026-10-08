@@ -20,6 +20,8 @@ import {
   setText,
   startOutline,
   toggleFold,
+  typeShorthand,
+  unstyle,
   visibleBlocks,
 } from './outline';
 
@@ -37,7 +39,10 @@ import {
     too).
   - Each edit, and each pause in typing, is one step to undo. Undo puts the outline back here and
     asks the Item store to undo that step's activity entries; redo undoes those undos.
-  - A Block can be a Todo (block-todos.ts): `[] ` typed at its start, or Ctrl+Enter, makes one;
+  - Each Block's line has a style (line-styles.ts): a shorthand typed at the start of a plain line
+    (`- `, `1. `, `# `) gives it one at once, and Backspace at its start takes it off, each one step
+    to undo.
+  - A Block can be a Todo (block-todos.ts): `[ ] ` typed at its start, or Ctrl+Enter, makes one;
     its checkbox ticks it; deleting the checkbox or the Block deletes the Todo. Each is one step to
     undo, saved together with the Block. Changes made in the Todos Section show after `refresh()`.
   - A Block can belong to a Project (block-projects.ts): `#LT` in its text, or the Badge picker
@@ -98,9 +103,9 @@ export interface Notebook {
   daysWithContent(from: string, to: string): Promise<Set<string>>;
 
   /**
-   * The User's text for a Block, as typed, with the caret at `caret`. Saved after a pause. `[] ` typed
-   * at the start of a plain Block makes it a Todo at once: the mark goes, and the caret to put back
-   * in the Block is returned (null otherwise).
+   * The User's text for a Block, as typed, with the caret at `caret`. Saved after a pause. `[ ] ` typed
+   * at the start of a plain Block makes it a Todo at once, and a shorthand (`- `, `1. `, `## `) gives
+   * it a style: the mark goes, and the caret to put back in the Block is returned (null otherwise).
    */
   type(day: string, id: string, text: string, caret?: number): Caret | null;
   /** Writing in an empty day: makes its first Block, holding `text`. */
@@ -110,6 +115,11 @@ export interface Notebook {
   outdent(day: string, id: string, offset: number): Caret | null;
   move(day: string, id: string, direction: 'up' | 'down', offset: number): Caret | null;
   removeBackward(day: string, id: string): Caret | null;
+  /**
+   * Backspace at the start of a styled line: a Todo's checkbox goes (and its Todo), or another style,
+   * and the line is plain. Null on a plain line, where Backspace removes or joins instead.
+   */
+  unstyle(day: string, id: string): Caret | null;
   joinNext(day: string, id: string): Caret | null;
   toggleFold(day: string, id: string): boolean;
   /** Ctrl+Enter on a plain Block: makes it a Todo. Null if it is one already. */
@@ -440,7 +450,8 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     type(day, id, text, caret) {
       const before = outlineOfDay(day);
       const todo = api.todos !== false ? typeTodoMark(before, id, text, caret, newId()) : null;
-      if (todo?.focus) {
+      const marked = todo ?? typeShorthand(before, id, text, caret);
+      if (marked?.focus) {
         // The typing that led up to the mark is folded into this one step.
         const held = typing?.day === day && typing.id === id ? typing : null;
         if (held) {
@@ -449,7 +460,8 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
           undoStack = undoStack.filter((s) => s !== held.step);
         } else flushTyping();
         const saved = held?.step.before ?? before;
-        return commit(day, todo, 'Make a Todo', held?.step.focusBefore ?? todo.focus, saved);
+        const why = todo ? 'Make a Todo' : 'Line style';
+        return commit(day, marked, why, held?.step.focusBefore ?? marked.focus, saved);
       }
       const typed = setText(before, id, text);
       if (!typed) return null;
@@ -509,9 +521,15 @@ export function createNotebook(api: DailyNotes, options: NotebookOptions): Noteb
     },
 
     removeBackward(day, id) {
-      // Backspace at the start of a Todo deletes its checkbox first.
-      if (outlineOfDay(day).get(id)?.todo) return removeCheckbox(day, id);
+      // Backspace at the start of a styled line takes its style (a Todo's checkbox) off first.
+      const plain = notebook.unstyle(day, id);
+      if (plain) return plain;
       return edit(day, 'Remove Block', { id, offset: 0 }, (outline) => removeBackward(outline, id));
+    },
+
+    unstyle(day, id) {
+      if (outlineOfDay(day).get(id)?.todo) return removeCheckbox(day, id);
+      return edit(day, 'Plain line', { id, offset: 0 }, (outline) => unstyle(outline, id));
     },
 
     joinNext(day, id) {

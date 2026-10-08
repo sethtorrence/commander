@@ -25,7 +25,7 @@ async function openNotes(window: Page) {
   return sheet;
 }
 
-// A Daily Note's Blocks as shown: id, text, depth and whether folded, in outline order.
+// A Daily Note's Blocks as shown: id, text, depth (in the outline) and whether folded, in outline order.
 const shownBlocks = (page: Page, day: string) =>
   page.evaluate((key) => {
     const sheet = document.getElementById(`day-${key}`);
@@ -119,14 +119,15 @@ test('Notes opens on today’s Daily Note: part number, rulers and numbered Bloc
   await commander.close();
 });
 
-test('a small outline written with the outliner keys is all back after a restart, ids, nesting and folds included', async () => {
+test('a small list written with the outliner keys is all back after a restart, ids, nesting and folds included', async () => {
   const first = await launchCommander();
   let window = await first.window();
   let sheet = await openNotes(window);
   const today = await dayFrom(window);
 
+  // A bullet list (`- `): Enter goes on with it, and its items nest with Tab and Shift+Tab.
   await sheet.locator('[data-block-text]').first().click();
-  await window.keyboard.type('Morning');
+  await window.keyboard.type('- Morning');
   await window.keyboard.press('Enter');
   await window.keyboard.press('Tab');
   await window.keyboard.type('Coffee');
@@ -231,7 +232,7 @@ test('structural changes go in the activity log, and undo reverses the last one,
     shownBlocks(window, today).then((blocks) => blocks.find((b) => b.text === text)?.depth);
 
   await sheet.locator('[data-block-text]').first().click();
-  await window.keyboard.type('One');
+  await window.keyboard.type('- One');
   await window.keyboard.press('Enter');
   await window.keyboard.type('Two');
   await window.keyboard.press('Tab');

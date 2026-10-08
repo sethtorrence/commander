@@ -51,11 +51,13 @@ const lines = (notebook: Notebook, day: string) =>
     ({ block, depth }) => `${'  '.repeat(depth)}${block.folded ? '+ ' : ''}${block.text}`,
   );
 
-// Writes lines into a day as the User would: the first Block, then Enter and typing for the rest.
+// Writes lines into a day as the User would: the first Block, then Enter and typing for the rest. A
+// shorthand at the start of a plain line gives it its style ("- One"); Enter goes on with a list.
 // Returns the Blocks' ids.
 function write(notebook: Notebook, day: string, ...texts: string[]): string[] {
   const ids: string[] = [];
   let caret = notebook.begin(day, texts[0] ?? '');
+  notebook.type(day, caret.id, texts[0] ?? '');
   ids.push(caret.id);
   for (const text of texts.slice(1)) {
     const current = dayOf(notebook, day).outline.get(caret.id);
@@ -229,7 +231,15 @@ describe('writing', () => {
     const notebook = open();
     await notebook.start();
     const day = '2026-10-03';
-    const [morning, coffee, , evening] = write(notebook, day, 'Morning', 'Coffee', 'Walk', 'Evening', 'Read');
+    const [morning, coffee, , evening] = write(
+      notebook,
+      day,
+      '- Morning',
+      'Coffee',
+      'Walk',
+      'Evening',
+      'Read',
+    );
     notebook.indent(day, coffee as string, 0);
     const walk = visibleBlocks(dayOf(notebook, day).outline)[2]?.block.id as string;
     notebook.indent(day, walk, 0);
@@ -301,7 +311,7 @@ describe('writing', () => {
     });
     notebooks.push(notebook);
     await notebook.start();
-    const [first] = write(notebook, '2026-10-03', 'Before');
+    const [first] = write(notebook, '2026-10-03', '- Before');
     await notebook.flush();
 
     down = true;
@@ -382,7 +392,7 @@ describe('writing', () => {
   it('records each structural change in the activity log as the User’s', async () => {
     const notebook = open();
     await notebook.start();
-    const [, second] = write(notebook, '2026-10-03', 'One', 'Two');
+    const [, second] = write(notebook, '2026-10-03', '- One', 'Two');
     await notebook.flush();
     const before = store.activity().length;
 
@@ -412,11 +422,104 @@ describe('writing', () => {
   });
 });
 
+describe('line styles (#239)', () => {
+  const day = '2026-10-03';
+  const savedStyles = (ids: string[]) =>
+    ids.map((id) => {
+      const detail = store.get(id)?.item.detail;
+      return detail?.kind === 'block' ? detail.style : undefined;
+    });
+
+  it('saves each line’s style with its text, and they come back', async () => {
+    const notebook = open();
+    await notebook.start();
+    // Enter on the empty bullet ends the list, and the line it leaves is written in.
+    const written = write(
+      notebook,
+      day,
+      '## Plan',
+      '- Milk',
+      'Eggs',
+      '',
+      'A plain line',
+      '1. First',
+      'Second',
+    );
+    const ids = [...new Set(written)];
+    await notebook.flush();
+
+    expect(lines(notebook, day)).toEqual(['Plan', 'Milk', 'Eggs', 'A plain line', 'First', 'Second']);
+    expect(savedStyles(ids)).toEqual(['heading-2', 'bullet', 'bullet', 'plain', 'numbered', 'numbered']);
+    // Titles follow the text, without the marks.
+    expect(ids.map((id) => store.get(id)?.item.title)).toEqual(lines(notebook, day));
+    const reopened = open();
+    await reopened.start();
+    expect([...dayOf(reopened, day).outline.values()].map((block) => block.style)).toEqual(savedStyles(ids));
+  });
+
+  it('takes a shorthand back as one step with the typing before it', async () => {
+    const notebook = open();
+    await notebook.start();
+    const [id] = write(notebook, day, 'Before');
+    await notebook.flush();
+    notebook.type(day, id as string, '');
+    notebook.type(day, id as string, '#', 1);
+    expect(notebook.type(day, id as string, '# ', 2)).toEqual({ id, offset: 0 });
+    expect(dayOf(notebook, day).outline.get(id as string)).toMatchObject({ text: '', style: 'heading-1' });
+
+    notebook.undo();
+    await notebook.flush();
+    expect(dayOf(notebook, day).outline.get(id as string)).toMatchObject({ text: 'Before' });
+    expect(store.get(id as string)?.item.detail).toMatchObject({ text: 'Before', style: 'plain' });
+  });
+
+  it('turns a styled line back into a plain line with Backspace at its start, as one step', async () => {
+    const notebook = open();
+    await notebook.start();
+    const [id] = write(notebook, day, '- Milk');
+
+    expect(notebook.removeBackward(day, id as string)).toEqual({ id, offset: 0 });
+    await notebook.flush();
+    expect(savedStyles([id as string])).toEqual(['plain']);
+    expect(store.activity()[0]).toMatchObject({ itemId: id, why: 'Plain line' });
+    // On a plain line Backspace joins or removes as before: here, the first line, nothing.
+    expect(notebook.unstyle(day, id as string)).toBeNull();
+
+    notebook.undo();
+    await notebook.flush();
+    expect(savedStyles([id as string])).toEqual(['bullet']);
+  });
+
+  it('makes a checkbox Todo from `- [ ] ` typed into a plain line, which ticking completes', async () => {
+    const notebook = open();
+    await notebook.start();
+    const [id] = write(notebook, day, '');
+    const block = id as string;
+    notebook.type(day, block, '- ', 2);
+    notebook.type(day, block, '[ ] ', 4);
+    notebook.type(day, block, 'Send the deck');
+    await notebook.flush();
+
+    expect(dayOf(notebook, day).outline.get(block)).toMatchObject({ text: 'Send the deck', style: 'todo' });
+    const [made] = store.blockTodos({ dailyNoteIds: [dayOf(notebook, day).noteId as string] });
+    expect(made).toMatchObject({ block: { id: block }, todo: { title: 'Send the deck', status: 'open' } });
+    notebook.tick(day, block);
+    await notebook.flush();
+    expect(store.get(made?.todo.id as string)?.item.status).toBe('done');
+
+    // Backspace at its start takes the checkbox off, and the Todo with it.
+    notebook.removeBackward(day, block);
+    await notebook.flush();
+    expect(savedStyles([block])).toEqual(['plain']);
+    expect(store.get(made?.todo.id as string)?.item.deletedAt).not.toBeNull();
+  });
+});
+
 describe('undo and redo', () => {
   it('reverse the last structural change, here and in the Item store', async () => {
     const notebook = open();
     await notebook.start();
-    const [, second] = write(notebook, '2026-10-03', 'One', 'Two');
+    const [, second] = write(notebook, '2026-10-03', '- One', 'Two');
     notebook.indent('2026-10-03', second as string, 3);
     await notebook.flush();
     expect(lines(notebook, '2026-10-03')).toEqual(['One', '  Two']);
@@ -467,7 +570,7 @@ describe('undo and redo', () => {
   it('forget what could be redone once something new is written', async () => {
     const notebook = open();
     await notebook.start();
-    const [, second] = write(notebook, '2026-10-03', 'One', 'Two');
+    const [, second] = write(notebook, '2026-10-03', '- One', 'Two');
     notebook.indent('2026-10-03', second as string, 0);
     notebook.undo();
     notebook.type('2026-10-03', second as string, 'Two!');

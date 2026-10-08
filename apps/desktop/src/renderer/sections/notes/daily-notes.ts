@@ -2,12 +2,13 @@ import type { DailyNotePage, DailyNoteProjects, DailyNoteQuery, Item, ItemAction
 import type { ItemStoreClient } from '../../item-store/client';
 import { ownFiling } from './block-projects';
 import { sameSavedBlock, todoActionsFor } from './block-todos';
+import { styleOf } from './line-styles';
 import type { Block, BlockChange, Outline } from './outline';
 
 /*
   The Notes Section's view of the Item store: everything it reads or changes goes through here. A
   Daily Note is an Item for one day, and each Block an Item whose detail holds its Daily Note, parent,
-  position and text (ADR 0002). Reached only through the window's bridge, so every change is the User's.
+  position, text and line style (ADR 0002). Reached only through the window's bridge, so every change is the User's.
 */
 
 export interface DailyNotes {
@@ -46,8 +47,8 @@ export interface DailyNotes {
 
 export function blockOf(item: Item): Block | null {
   if (item.detail?.kind !== 'block') return null;
-  const { parentId, position, text, folded } = item.detail;
-  return { id: item.id, parentId, position, text, folded, filing: item.filing };
+  const { parentId, position, text, folded, style } = item.detail;
+  return { id: item.id, parentId, position, text, folded, ...(style && { style }), filing: item.filing };
 }
 
 // A Block change as an Item action. Its own Project goes with it when it has changed since `was` (the
@@ -55,7 +56,8 @@ export function blockOf(item: Item): Block | null {
 function actionFor(dailyNoteId: string, change: BlockChange, was?: Block): ItemAction {
   if (change.type === 'delete') return { type: 'delete', itemId: change.id };
   const { id, parentId, position, text, folded } = change.block;
-  const detail = { kind: 'block' as const, dailyNoteId, parentId, position, text, folded };
+  const style = styleOf(change.block);
+  const detail = { kind: 'block' as const, dailyNoteId, parentId, position, text, folded, style };
   const filing = ownFiling(change.block);
   const refiled = JSON.stringify(filing) !== JSON.stringify(was ? ownFiling(was) : null);
   if (change.type === 'create') {

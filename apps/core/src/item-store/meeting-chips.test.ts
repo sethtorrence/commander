@@ -159,6 +159,10 @@ describe('meeting chips in today’s Daily Note', () => {
     expect(change.itemIds).toHaveLength(2);
     // Each chip is joined to its event by a refers-to Link: the event is "mentioned in" today's note.
     const chip = chipOf(TODAY, 'Standup') as Item;
+    // Under the Meetings subheading, each meeting shows as a quote (#239).
+    expect(detailOf(chip).style).toBe('quote');
+    const meetings = store.blocks([noteOf(TODAY)?.id as string]).find((b) => detailOf(b).text === 'Meetings');
+    expect(detailOf(meetings).style).toBe('heading-2');
     expect(store.backlinks({ targetType: 'item', id: eventItem('standup').id })).toEqual([
       expect.objectContaining({ type: 'refers-to', from: expect.objectContaining({ id: chip.id }) }),
     ]);

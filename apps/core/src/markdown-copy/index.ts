@@ -135,7 +135,7 @@ export function dailyNoteFiles(store: ItemStore, attachmentsDir: string) {
     );
     return store.blocks([dailyNoteId]).flatMap((item) => {
       if (item.detail?.kind !== 'block') return [];
-      const { parentId, position, text } = item.detail;
+      const { parentId, position, text, style = 'plain' } = item.detail;
       const todo = todos.get(item.id);
       return [
         {
@@ -143,6 +143,7 @@ export function dailyNoteFiles(store: ItemStore, attachmentsDir: string) {
           parentId,
           position,
           text,
+          style,
           ownProjectId: item.filing && isOwnFiling(item.filing) ? item.filing.projectId : null,
           todo: todo ? (todo.status === 'done' ? 'done' : 'open') : null,
         },

@@ -1,3 +1,4 @@
+import type { BlockStyle } from '@commander/domain';
 import { describe, expect, it } from 'vitest';
 import {
   type Block,
@@ -13,14 +14,29 @@ import {
   outlineOf,
   removeBackward,
   removeBlock,
+  setStyle,
   setText,
   startOutline,
   toggleFold,
+  typeShorthand,
+  unstyle,
   visibleBlocks,
 } from './outline';
 
-// Outlines are written as indented lines, two spaces a level. A line starting "+ " is folded. Each
-// Block's id is its text with spaces removed, unless it ends in "#id".
+// Each line style's mark, as the outlines below write it (a plain line has none).
+const MARKS: [string, BlockStyle][] = [
+  ['### ', 'heading-3'],
+  ['## ', 'heading-2'],
+  ['# ', 'heading-1'],
+  ['- ', 'bullet'],
+  ['1. ', 'numbered'],
+  ['[ ] ', 'todo'],
+  ['> ', 'quote'],
+];
+
+// Outlines are written as indented lines, two spaces a level. A line starting "+ " is folded, and its
+// style's mark comes next ("- " a bullet, "## " a heading, "> " a quote line). Each Block's id is its
+// text with spaces removed, unless it ends in "#id".
 function parse(source: string): Outline {
   const blocks: Block[] = [];
   const parents: string[] = [];
@@ -31,12 +47,14 @@ function parse(source: string): Outline {
     let text = line.trim();
     const folded = text.startsWith('+ ');
     if (folded) text = text.slice(2);
+    const [mark, style] = MARKS.find(([mark]) => text.startsWith(mark)) ?? ['', 'plain'];
+    text = text.slice(mark.length);
     const [body = '', explicit] = text.split('#');
     const id = explicit ?? body.replace(/\s/g, '');
     const parentId = depth ? (parents[depth - 1] ?? null) : null;
     const n = counts.get(parentId) ?? 0;
     counts.set(parentId, n + 1);
-    blocks.push({ id, parentId, position: `a${n}`, text: body, folded });
+    blocks.push({ id, parentId, position: `a${n}`, text: body, folded, ...(mark && { style }) });
     parents[depth] = id;
     parents.length = depth + 1;
   }
@@ -45,7 +63,10 @@ function parse(source: string): Outline {
 
 function print(outline: Outline): string {
   return visibleBlocks(outline, { includeFolded: true })
-    .map(({ block, depth }) => `${'  '.repeat(depth)}${block.folded ? '+ ' : ''}${block.text}`)
+    .map(({ block, depth }) => {
+      const mark = MARKS.find(([, style]) => style === block.style)?.[0] ?? '';
+      return `${'  '.repeat(depth)}${block.folded ? '+ ' : ''}${mark}${block.text}`;
+    })
     .join('\n');
 }
 
@@ -138,45 +159,201 @@ describe('Enter', () => {
     expect(print(edit.outline)).toBe(lines('+ Parent', '  Child', '', 'Next'));
   });
 
-  it('on an empty last child moves it out a level instead', () => {
-    const edit = apply(enter(parse(lines('Parent', '  Child', '  #empty', 'Next')), 'empty', 0, 0, 'new'));
+  it('on a plain line makes a plain line, and after a heading too (#239)', () => {
+    const plain = apply(enter(parse('Text'), 'Text', 4, 4, 'new'));
+    expect(plain.changes).toMatchObject([{ type: 'create', block: { id: 'new', style: 'plain' } }]);
 
-    expect(print(edit.outline)).toBe(lines('Parent', '  Child', '', 'Next'));
+    const heading = apply(enter(parse(lines('## Morning', '## Evening')), 'Morning', 7, 7, 'new'));
+    expect(print(heading.outline)).toBe(lines('## Morning', '', '## Evening'));
+    // A heading split in two keeps its first half; the rest is a plain line.
+    expect(print(apply(enter(parse('## Good morning'), 'Goodmorning', 4, 4, 'new')).outline)).toBe(
+      lines('## Good', ' morning'),
+    );
+  });
+
+  it('on an empty plain line makes another, wherever it is', () => {
+    const edit = apply(enter(parse(lines('## Morning', '  #empty')), 'empty', 0, 0, 'new'));
+
+    expect(print(edit.outline)).toBe(lines('## Morning', '  ', '  '));
+  });
+});
+
+describe('lists (#239)', () => {
+  it('go on with Enter, bullets as bullets and numbered items as numbered items', () => {
+    expect(print(apply(enter(parse('- Milk'), 'Milk', 4, 4, 'new')).outline)).toBe(lines('- Milk', '- '));
+    expect(print(apply(enter(parse('1. Step'), 'Step', 4, 4, 'new')).outline)).toBe(lines('1. Step', '1. '));
+    // At the start of an item, the new one above is an item too.
+    expect(print(apply(enter(parse('- Milk'), 'Milk', 0, 0, 'new')).outline)).toBe(lines('- ', '- Milk'));
+  });
+
+  it('take a new first item under an item with items under it, as theirs', () => {
+    const edit = apply(enter(parse(lines('- Groceries', '  1. Milk')), 'Groceries', 9, 9, 'new'));
+
+    expect(print(edit.outline)).toBe(lines('- Groceries', '  1. ', '  1. Milk'));
+  });
+
+  it('end on Enter in an empty top item, which becomes a plain line', () => {
+    const edit = apply(enter(parse(lines('- Milk', '- #empty')), 'empty', 0, 0, 'new'));
+
+    expect(print(edit.outline)).toBe(lines('- Milk', ''));
+    expect(edit.changes).toMatchObject([{ type: 'update', block: { id: 'empty', style: 'plain' } }]);
+    expect(edit.focus).toEqual({ id: 'empty', offset: 0 });
+  });
+
+  it('let an empty last line under an item step out of it on Enter', () => {
+    const outline = parse(lines('- Groceries', '  - Milk', '  #empty', 'Next'));
+    const edit = apply(enter(outline, 'empty', 0, 0, 'new'));
+
+    expect(print(edit.outline)).toBe(lines('- Groceries', '  - Milk', '', 'Next'));
+  });
+
+  it('step out a level on Enter in an empty nested item, still an item', () => {
+    const outline = parse(lines('- Groceries', '  - Milk', '  - #empty', '- Next'));
+    const edit = apply(enter(outline, 'empty', 0, 0, 'new'));
+
+    expect(print(edit.outline)).toBe(lines('- Groceries', '  - Milk', '- ', '- Next'));
     expect(edit.changes).toMatchObject([{ type: 'update', block: { id: 'empty', parentId: null } }]);
   });
 });
 
 describe('Tab and Shift+Tab', () => {
-  it('indents a Block under the one above, as its last child, with its own children', () => {
-    const outline = parse(lines('One', '  One child', 'Two', '  Two child'));
+  it('indents a list item under the item above, as its last child, with its own children', () => {
+    const outline = parse(lines('- One', '  - One child', '1. Two', '  - Two child'));
     const edit = apply(indent(outline, 'Two'));
 
-    expect(print(edit.outline)).toBe(lines('One', '  One child', '  Two', '    Two child'));
+    expect(print(edit.outline)).toBe(lines('- One', '  - One child', '  1. Two', '    - Two child'));
     expect(edit.changes).toMatchObject([{ type: 'update', block: { id: 'Two', parentId: 'One' } }]);
   });
 
-  it('unfolds the Block it indents under', () => {
-    const edit = apply(indent(parse(lines('+ One', '  Hidden', 'Two')), 'Two'));
+  it('unfolds the item it indents under', () => {
+    const edit = apply(indent(parse(lines('+ - One', '  - Hidden', '- Two')), 'Two'));
 
-    expect(print(edit.outline)).toBe(lines('One', '  Hidden', '  Two'));
+    expect(print(edit.outline)).toBe(lines('- One', '  - Hidden', '  - Two'));
     expect(edit.changes).toHaveLength(2);
   });
 
-  it('cannot indent the first Block among its siblings', () => {
-    expect(indent(parse(lines('One', '  Child')), 'Child')).toBeNull();
-    expect(indent(parse('One'), 'One')).toBeNull();
+  it('cannot indent the first item among its siblings', () => {
+    expect(indent(parse(lines('- One', '  - Child')), 'Child')).toBeNull();
+    expect(indent(parse('- One'), 'One')).toBeNull();
   });
 
-  it('outdents a Block to just after its parent, leaving later siblings where they are', () => {
-    const outline = parse(lines('Parent', '  A', '  B', '    B child', '  C', 'Next'));
+  it('does nothing to plain lines, headings, quotes and Todos, nor under one (#239)', () => {
+    const outline = parse(lines('Plain', 'Also plain', '## Heading', '> Quoted', '[ ] Todo', '- Item'));
+    for (const id of ['Alsoplain', 'Heading', 'Quoted', 'Todo', 'Item'])
+      expect(indent(outline, id)).toBeNull();
+    expect(outdent(parse(lines('- One', '  Plain under it')), 'Plainunderit')).toBeNull();
+  });
+
+  it('outdents a list item to just after the item it is under, leaving later siblings where they are', () => {
+    const outline = parse(lines('- Parent', '  - A', '  - B', '    - B child', '  - C', '- Next'));
     const edit = apply(outdent(outline, 'B'));
 
-    expect(print(edit.outline)).toBe(lines('Parent', '  A', '  C', 'B', '  B child', 'Next'));
+    expect(print(edit.outline)).toBe(lines('- Parent', '  - A', '  - C', '- B', '  - B child', '- Next'));
     expect(edit.changes).toHaveLength(1);
   });
 
-  it('cannot outdent a top-level Block', () => {
-    expect(outdent(parse('Top'), 'Top')).toBeNull();
+  it('cannot outdent a top-level item, nor one out from under a heading or a meeting', () => {
+    expect(outdent(parse('- Top'), 'Top')).toBeNull();
+    expect(outdent(parse(lines('## Heading', '  - Item')), 'Item')).toBeNull();
+    expect(outdent(parse(lines('> [[event:e1]]#chip', '  - Item')), 'Item')).toBeNull();
+  });
+});
+
+describe('a meeting’s quote (#239)', () => {
+  const meeting = (...notes: string[]) =>
+    parse(lines('## Meetings', '  > [[event:e1]]#chip', ...notes, '  > [[event:e2]]#next'));
+
+  it('takes Enter on its chip as the first line of its notes, a quote line', () => {
+    const edit = apply(enter(meeting(), 'chip', 15, 15, 'new'));
+
+    expect(print(edit.outline)).toBe(lines('## Meetings', '  > [[event:e1]]', '    > ', '  > [[event:e2]]'));
+  });
+
+  it('goes on with Enter in its notes, bullets and all', () => {
+    const quote = apply(enter(meeting('    > Budget'), 'Budget', 6, 6, 'new'));
+    expect(quote.changes).toMatchObject([{ type: 'create', block: { parentId: 'chip', style: 'quote' } }]);
+    const bullet = apply(enter(meeting('    - Risk'), 'Risk', 4, 4, 'new'));
+    expect(bullet.changes).toMatchObject([{ type: 'create', block: { parentId: 'chip', style: 'bullet' } }]);
+  });
+
+  it('is left on Enter in an empty last line, which follows the meeting as a plain line', () => {
+    const edit = apply(enter(meeting('    > Budget', '    > #empty'), 'empty', 0, 0, 'new'));
+
+    expect(print(edit.outline)).toBe(
+      lines('## Meetings', '  > [[event:e1]]', '    > Budget', '  ', '  > [[event:e2]]'),
+    );
+    expect(edit.changes).toMatchObject([
+      { type: 'update', block: { id: 'empty', parentId: 'Meetings', style: 'plain' } },
+    ]);
+  });
+
+  it('keeps an empty line in the middle of the notes, with another after it', () => {
+    const edit = apply(enter(meeting('    > #empty', '    > Budget'), 'empty', 0, 0, 'new'));
+
+    expect(edit.changes).toMatchObject([{ type: 'create', block: { parentId: 'chip', style: 'quote' } }]);
+  });
+});
+
+describe('line styles (#239)', () => {
+  it('come from a shorthand typed at the start of a plain line, which goes', () => {
+    const cases: [string, string, string][] = [
+      ['- ', 'bullet', '- Milk'],
+      ['* ', 'bullet', '- Milk'],
+      ['1. ', 'numbered', '1. Milk'],
+      ['12. ', 'numbered', '1. Milk'],
+      ['# ', 'heading-1', '# Milk'],
+      ['## ', 'heading-2', '## Milk'],
+      ['### ', 'heading-3', '### Milk'],
+    ];
+    for (const [mark, style, printed] of cases) {
+      const edit = apply(typeShorthand(parse('Milk'), 'Milk', `${mark}Milk`, mark.length));
+      expect(edit.changes).toMatchObject([{ type: 'update', block: { text: 'Milk', style } }]);
+      expect(print(edit.outline)).toBe(printed);
+      expect(edit.focus).toEqual({ id: 'Milk', offset: 0 });
+    }
+  });
+
+  it('come from a shorthand in a meeting’s quote line too', () => {
+    const outline = parse(lines('> [[event:e1]]#chip', '  > #note'));
+
+    expect(apply(typeShorthand(outline, 'note', '- ', 2)).changes).toMatchObject([
+      { type: 'update', block: { id: 'note', style: 'bullet', text: '' } },
+    ]);
+  });
+
+  it('need the caret just after the mark, and a plain line', () => {
+    expect(typeShorthand(parse('Milk'), 'Milk', '- Milk', 6)).toBeNull();
+    expect(typeShorthand(parse('Milk'), 'Milk', '-Milk', 1)).toBeNull();
+    expect(typeShorthand(parse('Milk'), 'Milk', '#LT Milk', 1)).toBeNull();
+    expect(typeShorthand(parse('- Milk'), 'Milk', '- Milk', 2)).toBeNull();
+    expect(typeShorthand(parse('## Milk'), 'Milk', '- Milk', 2)).toBeNull();
+    expect(typeShorthand(parse('[[event:e1]]#chip'), 'chip', '- [[event:e1]]', 2)).toBeNull();
+  });
+
+  it('come off with Backspace at the start, leaving a plain line (a quote line in a meeting)', () => {
+    for (const styled of ['- Milk', '1. Milk', '## Milk', '> Milk', '[ ] Milk']) {
+      const edit = apply(unstyle(parse(styled), 'Milk'));
+      expect(print(edit.outline)).toBe('Milk');
+      expect(edit.focus).toEqual({ id: 'Milk', offset: 0 });
+    }
+    const inMeeting = parse(lines('> [[event:e1]]#chip', '  - #item'));
+    expect(apply(unstyle(inMeeting, 'item')).changes).toMatchObject([
+      { block: { id: 'item', style: 'quote' } },
+    ]);
+  });
+
+  it('are not there to take off a plain line, a meeting’s quote line or its chip', () => {
+    expect(unstyle(parse('Milk'), 'Milk')).toBeNull();
+    const meeting = parse(lines('> [[event:e1]]#chip', '  > #note'));
+    expect(unstyle(meeting, 'chip')).toBeNull();
+    expect(unstyle(meeting, 'note')).toBeNull();
+  });
+
+  it('can be set directly, as one change', () => {
+    const edit = apply(setStyle(parse('Milk'), 'Milk', 'heading-2', 4));
+
+    expect(print(edit.outline)).toBe('## Milk');
+    expect(setStyle(edit.outline, 'Milk', 'heading-2', 4)).toBeNull();
   });
 });
 

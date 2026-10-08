@@ -400,6 +400,20 @@
       "when": 1791476964963,
       "tag": "0056_conversation_about_line",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1791494221123,
+      "tag": "0057_block_styles",
+      "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1791494252486,
+      "tag": "0058_block_styles_from_notes",
+      "breakpoints": true
     }
   ]
 }

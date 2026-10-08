@@ -35,6 +35,7 @@ import {
   showEdit,
 } from './block-editor';
 import { caretX, onFirstLine, onLastLine, placeCaret, placeCaretAtX, selectionIn } from './caret';
+import { headingOf, isListItem, listNumbers, styleOf } from './line-styles';
 import { MeetingPrep } from './MeetingPrep';
 import { headingLevel, toggleMark } from './markdown';
 import type { Notebook } from './notebook';
@@ -43,7 +44,8 @@ import { useTagPicker } from './TagPicker';
 import { clearTags, highlightTags } from './tag-highlights';
 
 /*
-  One Daily Note's outline: each Block a row with its number, bullet and its own editable text (a
+  One Daily Note's outline: each Block a row with its number, its line style's mark (a bullet, a
+  number, a checkbox, a quote's bar, or nothing on a plain line) and its own editable text (a
   contenteditable, plain text only). The outliner keys are handled here and turned into Notebook
   edits; the Notebook answers with where the caret goes, and the stream puts it there after rendering.
   Moving between Blocks with the arrow keys walks the editable rows in page order, across days.
@@ -283,6 +285,12 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
     };
     if (event.key === 'Backspace' && !mod && start === 0 && end === 0) {
       take();
+      // A styled line becomes a plain line first (a Todo loses its checkbox).
+      const plain = notebook.unstyle(day, id);
+      if (plain) {
+        focus(plain);
+        return;
+      }
       const image = block.text ? imageNext(-1) : undefined;
       if (image) image.focus();
       else focus(notebook.removeBackward(day, id));
@@ -315,7 +323,8 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
         const element = event.currentTarget;
         const text = element.textContent ?? '';
         if (!(event.nativeEvent as InputEvent).isComposing) renderBlockText(element, text, label);
-        // `[] ` typed at the start makes the Block a Todo: the mark goes, and the caret stays put.
+        // `[ ] ` typed at the start makes the Block a Todo, and `- `, `1. ` or `## ` give it a style:
+        // the mark goes, and the caret stays put.
         focus(notebook.type(day, block.id, text, selectionIn(element)[0]));
         tags.onInput(element);
         links.afterInput(element);
@@ -363,14 +372,21 @@ const BlockText = memo(function BlockText({ day, block }: { day: string; block: 
 interface BlockViewProps {
   day: string;
   block: Block;
+  /** How far in it is drawn: list items and a quote's lines go in a step, other lines don't. */
   depth: number;
   tree: Map<string | null, Block[]>;
+  /** Each Block's number on the sheet ("001"). */
   numbers: Map<string, string>;
+  /** Each numbered item's number in its list. */
+  ordinals: Map<string, number>;
+  /** Whether it is inside a quote (a meeting's), which draws the quote's bar. */
+  quoted: boolean;
   outline: Outline;
   projectView?: ProjectView;
 }
 
-function BlockView({ day, block, depth, tree, numbers, outline, projectView }: BlockViewProps) {
+function BlockView(props: BlockViewProps) {
+  const { day, block, depth, tree, numbers, ordinals, quoted, outline, projectView } = props;
   const { notebook, focus, projects, sendToLinear } = useControls();
   // Under the Project filter, Blocks outside it (and not above one in it) aren't shown.
   const children = (tree.get(block.id) ?? []).filter((child) => !projectView?.hidden.has(child.id));
@@ -391,6 +407,12 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
 
   const image = imageAttachmentOf(block.text);
   const meeting = meetingChipEventId(block.text);
+  const style = styleOf(block);
+  // A meeting chip, or a quote line outside one, starts a quote: its bar runs down its lines.
+  const quoteStarts = !quoted && (!!meeting || style === 'quote');
+  // Only list items, Todos and a quote's lines take the lines under them in a step, as Markdown nests;
+  // under a heading or a plain line they follow at its own depth.
+  const nests = isListItem(block) || style === 'todo' || !!block.todo || style === 'quote' || !!meeting;
   return (
     <div
       className={cn(
@@ -399,10 +421,12 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
         folded && 'folded',
         block.todo && 'todo',
         block.todo?.done && 'done',
+        quoteStarts && 'quote',
         projectView?.dimmed.has(block.id) && 'dim',
       )}
       data-block={block.id}
-      data-heading={headingLevel(block.text) || undefined}
+      data-style={style}
+      data-heading={headingOf(style) || headingLevel(block.text) || undefined}
       data-image={image ? '' : undefined}
     >
       <div className={cn('n-row', ownProject && 'has-badge')} style={{ '--d': depth } as CSSProperties}>
@@ -428,7 +452,8 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
           onMouseDown={(event) => event.preventDefault()}
           onClick={fold}
         >
-          <i />
+          {/* A bullet's dot, a numbered item's number; any other line shows only its fold box. */}
+          {style === 'numbered' ? <span className="n-ord">{ordinals.get(block.id) ?? 1}.</span> : <i />}
         </button>
         {image ? <BlockImage day={day} block={block} name={image} /> : <BlockText day={day} block={block} />}
         {folded && (
@@ -453,15 +478,17 @@ function BlockView({ day, block, depth, tree, numbers, outline, projectView }: B
       {/* A meeting chip's Prep (#130): under its row, not a Block. */}
       {meeting && <MeetingPrep eventId={meeting} />}
       {hasKids && !folded && (
-        <div className={cn('n-kids', opening && 'opening')}>
+        <div className={cn('n-kids', !nests && 'flat', quoteStarts && 'quote', opening && 'opening')}>
           {children.map((child) => (
             <BlockView
               key={child.id}
               day={day}
               block={child}
-              depth={depth + 1}
+              depth={nests ? depth + 1 : depth}
               tree={tree}
               numbers={numbers}
+              ordinals={ordinals}
+              quoted={quoted || quoteStarts}
               outline={outline}
               projectView={projectView}
             />
@@ -503,9 +530,8 @@ function FirstBlock({ day, placeholder }: { day: string; placeholder: string }) 
         <span className="n-bn" aria-hidden="true">
           001
         </span>
-        <span className="n-bullet" aria-hidden="true">
-          <i />
-        </span>
+        {/* A plain line: no bullet. */}
+        <span className="n-bullet" aria-hidden="true" />
         {/* biome-ignore lint/a11y/useSemanticElements: a Block's text is a contenteditable, not an input */}
         <div
           ref={ref}
@@ -560,6 +586,7 @@ export function OutlineView({
 }) {
   const tree = useMemo(() => treeOf(outline), [outline]);
   const numbers = useMemo(() => blockNumbers(outline), [outline]);
+  const ordinals = useMemo(() => listNumbers(tree), [tree]);
   const top = (tree.get(null) ?? []).filter((block) => !projectView?.hidden.has(block.id));
   return (
     <div className="n-outline">
@@ -574,6 +601,8 @@ export function OutlineView({
             depth={0}
             tree={tree}
             numbers={numbers}
+            ordinals={ordinals}
+            quoted={false}
             outline={outline}
             projectView={projectView}
           />

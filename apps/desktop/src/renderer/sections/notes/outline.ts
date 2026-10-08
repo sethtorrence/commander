@@ -1,5 +1,13 @@
-import type { Filing } from '@commander/domain';
+import type { BlockStyle, Filing } from '@commander/domain';
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
+import {
+  hasLineStyle,
+  isListItem,
+  isMeetingChip,
+  plainStyleUnder,
+  shorthandIn,
+  styleOf,
+} from './line-styles';
 
 /*
   The outliner model for one Daily Note: its Blocks as a tree, and the edits the outliner keys make
@@ -8,6 +16,9 @@ import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing';
 
   Siblings sort by `position`, a fractional index: a Block can go between two others by changing only
   its own position, never renumbering its neighbours.
+
+  Each Block's line has a style, as Markdown writes it (line-styles.ts): Enter continues a list and a
+  meeting's quote, and only list items nest.
 */
 
 export interface Block {
@@ -17,6 +28,8 @@ export interface Block {
   position: string;
   text: string;
   folded: boolean;
+  /** How its line looks (#239); a plain line when absent. */
+  style?: BlockStyle;
   /** The Todo made from this Block (`[]`), shown as its checkbox; absent for a plain Block. */
   todo?: BlockTodo;
   /**
@@ -157,6 +170,23 @@ export function startOutline(id: string, outline: Outline = new Map()): Edit {
   return change(outline, [{ type: 'create', block }], { id, offset: 0 });
 }
 
+/**
+ * The style of a new line written beside this Block (Enter at its end, or at its start): a list goes
+ * on as a list and a meeting's quote as a quote; beside a heading or a plain line comes a plain line.
+ */
+function continuedStyle(outline: Outline, block: Block): BlockStyle {
+  const style = styleOf(block);
+  if (isListItem(block) || style === 'quote') return style;
+  return plainStyleUnder(outline, parentIn(outline, block));
+}
+
+// The style of a new first child: the list's own under a list item, a plain line (a quote line in a
+// meeting) under anything else.
+function firstChildStyle(outline: Outline, block: Block, first: Block | undefined): BlockStyle {
+  if (first && isListItem(first)) return styleOf(first);
+  return isListItem(block) ? styleOf(block) : plainStyleUnder(outline, block.id);
+}
+
 /** Enter, with the selection from `start` to `end` in the Block's text. `newId` is the id for a new Block. */
 export function enter(outline: Outline, id: string, start: number, end: number, newId: string): Edit | null {
   const block = outline.get(id);
@@ -164,8 +194,18 @@ export function enter(outline: Outline, id: string, start: number, end: number, 
   const { next, previous } = siblingsAround(outline, block);
   const parentId = parentIn(outline, block);
 
-  // An empty last child steps out a level, as the next line of its parent's list.
-  if (block.text === '' && parentId !== null && !next) return outdent(outline, id);
+  if (block.text === '' && !isMeetingChip(block)) {
+    const underListItem = isListItem(parentId === null ? undefined : outline.get(parentId));
+    // An empty list item ends its list: a nested one steps out a level, any other becomes a plain line.
+    if (isListItem(block)) {
+      if (underListItem) return stepOut(outline, block);
+      return setStyle(outline, id, plainStyleUnder(outline, parentId), 0);
+    }
+    // The empty last line under a list item steps out of it, and that of a meeting's notes leaves the
+    // meeting, as the line after it.
+    const inQuote = styleOf(block) === 'quote' && plainStyleUnder(outline, parentId) === 'quote';
+    if (!next && (underListItem || inQuote)) return stepOut(outline, block);
+  }
 
   // At the very start of a Block with text: a new empty Block goes above, and the caret stays.
   if (start === 0 && end === 0 && block.text !== '') {
@@ -175,6 +215,7 @@ export function enter(outline: Outline, id: string, start: number, end: number, 
       position: between(previous?.position ?? null, block.position),
       text: '',
       folded: false,
+      style: continuedStyle(outline, block),
     };
     return change(outline, [{ type: 'create', block: above }], { id, offset: 0 });
   }
@@ -184,9 +225,10 @@ export function enter(outline: Outline, id: string, start: number, end: number, 
   const changes: BlockChange[] = [];
   if (kept !== block.text) changes.push({ type: 'update', block: { ...block, text: kept } });
 
-  // Under an open parent the new Block becomes its first child; otherwise it follows as a sibling.
+  // Under an open parent the new Block becomes its first child, as it does under an open meeting chip
+  // with nothing under it yet (its notes go in its quote); otherwise it follows as a sibling.
   const children = childrenOf(outline, id);
-  const intoChildren = children.length > 0 && !block.folded;
+  const intoChildren = !block.folded && (children.length > 0 || isMeetingChip(block));
   const fresh: Block = intoChildren
     ? {
         id: newId,
@@ -194,6 +236,7 @@ export function enter(outline: Outline, id: string, start: number, end: number, 
         position: between(null, children[0]?.position ?? null),
         text: carried,
         folded: false,
+        style: firstChildStyle(outline, block, children[0]),
       }
     : {
         id: newId,
@@ -201,17 +244,18 @@ export function enter(outline: Outline, id: string, start: number, end: number, 
         position: between(block.position, next?.position ?? null),
         text: carried,
         folded: false,
+        style: continuedStyle(outline, block),
       };
   changes.push({ type: 'create', block: fresh });
   return change(outline, changes, { id: newId, offset: 0 });
 }
 
-/** Tab: the Block becomes the last child of the sibling above it, bringing its children. */
+/** Tab on a list item: it becomes the last child of the list item above it, bringing its children. */
 export function indent(outline: Outline, id: string): Edit | null {
   const block = outline.get(id);
-  if (!block) return null;
+  if (!block || !isListItem(block)) return null;
   const { previous } = siblingsAround(outline, block);
-  if (!previous) return null;
+  if (!previous || !isListItem(previous)) return null;
   const last = childrenOf(outline, previous.id).at(-1);
   const changes: BlockChange[] = [];
   if (previous.folded) changes.push({ type: 'update', block: { ...previous, folded: false } });
@@ -222,19 +266,59 @@ export function indent(outline: Outline, id: string): Edit | null {
   return change(outline, changes);
 }
 
-/** Shift+Tab: the Block moves out to just after its parent. Its later siblings stay where they are. */
+/**
+ * Shift+Tab on a list item nested in another: it moves out to just after that one. Its later siblings
+ * stay where they are.
+ */
 export function outdent(outline: Outline, id: string): Edit | null {
   const block = outline.get(id);
   const parentId = block && parentIn(outline, block);
+  if (!block || !isListItem(block) || !parentId || !isListItem(outline.get(parentId))) return null;
+  return stepOut(outline, block);
+}
+
+// A Block moved out to just after its parent. A quote line leaving its meeting becomes a plain line.
+function stepOut(outline: Outline, block: Block): Edit | null {
+  const parentId = parentIn(outline, block);
   const parent = parentId ? outline.get(parentId) : undefined;
-  if (!block || !parent) return null;
+  if (!parent) return null;
   const { next } = siblingsAround(outline, parent);
+  const to = parentIn(outline, parent);
   const moved: Block = {
     ...block,
-    parentId: parentIn(outline, parent),
+    parentId: to,
     position: between(parent.position, next?.position ?? null),
+    style: styleOf(block) === 'quote' ? plainStyleUnder(outline, to) : styleOf(block),
   };
   return change(outline, [{ type: 'update', block: moved }]);
+}
+
+/** Gives a Block a style, with the caret at `offset`. Null when it has that style already. */
+export function setStyle(outline: Outline, id: string, style: BlockStyle, offset: number): Edit | null {
+  const block = outline.get(id);
+  if (!block || styleOf(block) === style) return null;
+  return change(outline, [{ type: 'update', block: { ...block, style } }], { id, offset });
+}
+
+/**
+ * Text typed into a plain line (a quote line, in a meeting) that starts with a shorthand, with the
+ * caret just after it: the line takes the shorthand's style, and the mark goes, the caret staying
+ * where the text starts. Null when there is no shorthand to act on.
+ */
+export function typeShorthand(outline: Outline, id: string, text: string, caret?: number): Edit | null {
+  const block = outline.get(id);
+  const found = shorthandIn(text);
+  if (!block || !found || block.todo || isMeetingChip(block) || hasLineStyle(outline, block)) return null;
+  if (caret !== undefined && caret !== found.length) return null;
+  const restyled: Block = { ...block, text: text.slice(found.length), style: found.style };
+  return change(outline, [{ type: 'update', block: restyled }], { id, offset: 0 });
+}
+
+/** Backspace at the start of a styled line: it becomes a plain line. Null on a plain one. */
+export function unstyle(outline: Outline, id: string): Edit | null {
+  const block = outline.get(id);
+  if (!block || !hasLineStyle(outline, block)) return null;
+  return setStyle(outline, id, plainStyleUnder(outline, parentIn(outline, block)), 0);
 }
 
 /** Alt+Shift+Up or Down: the Block, with its children, swaps places with the sibling above or below. */

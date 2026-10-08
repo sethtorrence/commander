@@ -62,8 +62,9 @@ test('tag a parent with #LT, its child inherits, the child’s Todo shows the Ba
   await expect(sheet).toBeVisible();
 
   // `#` and a letter offer the Projects; Enter puts the code in, and the Block is filed under it.
+  // A bullet (`- `), so a list item can nest under it.
   await sheet.locator('[data-block-text]').first().click();
-  await page.keyboard.type('Longtail planning #l');
+  await page.keyboard.type('- Longtail planning #l');
   const picker = page.getByTestId('tag-picker');
   await expect(picker.getByRole('option')).toHaveText([/Longtail/]);
   await page.keyboard.press('Enter');
@@ -98,11 +99,12 @@ test('tag a parent with #LT, its child inherits, the child’s Todo shows the Ba
   // Back in Notes, a Block outside the Project, then the filter: `p` then 1 is Longtail.
   await tab(page, 'Notes').click();
   await child.locator('[data-block-text]').click();
-  // Enter after a Todo makes another; Enter on that empty one makes it plain.
+  // Enter after a Todo makes another; Enter on that empty one makes it plain, and Enter on that
+  // empty line steps it out of the list.
   await page.keyboard.press('End');
   await page.keyboard.press('Enter');
   await page.keyboard.press('Enter');
-  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Enter');
   await page.keyboard.type('Groceries');
   await page.keyboard.press('Escape');
   const groceries = blockRow(sheet, 'Groceries');

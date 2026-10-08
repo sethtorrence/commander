@@ -2235,14 +2235,14 @@ export function openItemStore(options: ItemStoreOptions): ItemStore {
       const id = randomUUID();
       ids.set(block.id, id);
       const parentId = block.parentId === null ? null : (ids.get(block.parentId) ?? null);
-      const { position, text, folded } = block;
+      const { position, text, folded, style } = block;
       const copy: ItemState = {
         title: text,
         people: [],
         status: 'open',
         // `#LT` in the template's text files the copy under LT; the Blocks under it inherit that.
         filing: blockFiling.fromText(text),
-        detail: { kind: 'block', dailyNoteId, parentId, position, text, folded },
+        detail: { kind: 'block', dailyNoteId, parentId, position, text, folded, style },
         deletedAt: null,
       };
       const identity = { kind: 'block' as const, source: null, account: null, externalId: null };
