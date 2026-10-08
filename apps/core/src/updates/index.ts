@@ -26,11 +26,15 @@
 //   an instruction (clears its warning mark), Send now or Discard a missed send-later (#139), Retry
 //   changes that couldn't sync (#206, as the whole line's Retry does), or Dismiss it from the line;
 //   the line goes once none of its Items is left.
+// - Replying to a line (#236, line-replies.ts): each line shows the Conversation the User started
+//   about it with its Reply box. Ares is handed the line's facts and Items there with every message
+//   (`readLine`), and his line Skill prepares the line's own actions as cards the User confirms.
 import {
   type AutonomyLevel,
   autonomyLevels,
   type ChatDraft,
   type ChatSummary,
+  type ConversationAboutLine,
   chosenLevel,
   createSkillRegistry,
   DRAFT_REPLIES,
@@ -79,12 +83,14 @@ import type { KnownSecrets } from '../safety/known-secrets';
 import { createDraftSkill } from '../skills/draft';
 import { compose } from './compose';
 import { type LineContext, lineRows, lineTemplate, lineWithout } from './kinds';
+import { createLineSkill, type LineReading, readLine } from './line-replies';
 import type { WatchedAccount } from './linear';
 import { AWAY_AFTER_MS, createPresence, type PresenceModel } from './presence';
 import { createProducers } from './producers';
 import { createUpdateQueue, type UpdateQueue } from './queue';
 import { summaries } from './teams';
 
+export type { LineReading } from './line-replies';
 export type { WatchedAccount } from './linear';
 export type { UpdateQueue } from './queue';
 
@@ -159,6 +165,8 @@ export type Updates = {
   act(queuedId: number, action: QueuedAction, snooze?: SnoozeChoice): QueuedLine;
   // One of a line's Items, acted on in the Update.
   actRow(queuedId: number, itemId: string, action: RowAction): QueuedLine;
+  // The line a Conversation is about (#236), as Ares is handed it with each message there.
+  readLine(about: ConversationAboutLine): LineReading;
   // A message from the main process (the window's requests, presence reports). True when it was ours.
   handle(message: unknown): boolean;
   stop(): void;
@@ -212,7 +220,15 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     return { queued: queue.count(), presence: presence.current() };
   }
 
+  // While the User acts on a line, the gate's change (a suggestion dismissed or accepted) waits to be
+  // swept until the line is settled as theirs: otherwise it would read as settled elsewhere (#236).
+  let holding = 0;
+  let held = false;
   function sweep() {
+    if (holding) {
+      held = true;
+      return;
+    }
     try {
       producers.sweep();
     } catch (error) {
@@ -322,9 +338,11 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     return [...titles, ...said];
   }
 
-  // An Update as the panel shows it: each line as its queued line stands now, with its Items.
+  // An Update as the panel shows it: each line as its queued line stands now, with its Items and the
+  // Conversation the User started about it (#236).
   function view(update: GivenUpdate): UpdateView {
     const context = lineContext();
+    const conversations = itemStore.conversations.aboutLines(update.lines.map((line) => line.queuedId));
     return {
       ...update,
       lines: update.lines.map((line) => {
@@ -332,7 +350,8 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
         const rows = queued
           ? lineRows(queued, line.itemIds, context, { waiting: queued.status === 'queued' })
           : [];
-        return { ...line, queued, rows };
+        const conversationId = conversations.get(line.queuedId);
+        return { ...line, queued, rows, ...(conversationId && { conversationId }) };
       }),
     };
   }
@@ -378,8 +397,7 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     return ids.filter((id) => itemStore.autonomy.proposal(id)?.status === 'pending');
   }
 
-  // Takes a line out of the queue once it has been dealt with, unless that already happened (the
-  // gate's change resolved it).
+  // Takes a line out of the queue once it has been dealt with, unless that already happened.
   function settle(queuedId: number, action: 'done' | 'dismiss'): QueuedLine {
     const line = store.line(queuedId);
     if (line?.status === 'queued') return queue.act(queuedId, action);
@@ -412,6 +430,20 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
       return settle(line.id, 'done');
     }
     throw new Error('There is nothing to accept on that line');
+  }
+
+  // Acts on a line as the User, the gate's sweeps held until it is settled.
+  function asTheUser<T>(acting: () => T): T {
+    holding++;
+    try {
+      return acting();
+    } finally {
+      holding--;
+      if (!holding && held) {
+        held = false;
+        sweep();
+      }
+    }
   }
 
   function act(queuedId: number, action: QueuedAction, snooze?: SnoozeChoice): QueuedLine {
@@ -599,6 +631,15 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
   // Draft (#143, #198): a Chat gets a draft for its reply box, an email thread its suggested reply, with
   // the User's own message in a Conversation as what it should say.
   skills.register(createDraftSkill({ itemStore, draftChat: draft, draftEmail }));
+  // The line a Conversation is about (#236): its own actions, prepared as cards for the User to confirm.
+  skills.register(
+    createLineSkill({
+      itemStore,
+      context: lineContext,
+      now,
+      lineOf: (conversationId) => itemStore.conversations.conversation(conversationId)?.aboutLine ?? null,
+    }),
+  );
 
   async function answer(raw: unknown): Promise<{ ok: true; result: unknown } | { ok: false; error: string }> {
     const parsed = updatesRequest.safeParse(raw);
@@ -631,9 +672,15 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
         case 'past':
           return { ok: true, result: past(request.id) };
         case 'act':
-          return { ok: true, result: act(request.queuedId, request.action, request.snooze) };
+          return {
+            ok: true,
+            result: asTheUser(() => act(request.queuedId, request.action, request.snooze)),
+          };
         case 'act-row':
-          return { ok: true, result: actRow(request.queuedId, request.itemId, request.action) };
+          return {
+            ok: true,
+            result: asTheUser(() => actRow(request.queuedId, request.itemId, request.action)),
+          };
       }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
@@ -655,8 +702,9 @@ export function setUpUpdates(options: UpdatesOptions): Updates {
     draftEmail,
     history,
     past,
-    act,
-    actRow,
+    act: (queuedId, action, snooze) => asTheUser(() => act(queuedId, action, snooze)),
+    actRow: (queuedId, itemId, action) => asTheUser(() => actRow(queuedId, itemId, action)),
+    readLine: (about) => readLine(about, { itemStore, context: lineContext }),
 
     handle(message) {
       const report = presenceReport.safeParse(message);

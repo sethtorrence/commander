@@ -8,7 +8,8 @@ import { openTarget } from '../../updates/updates';
 /*
   The Update Ares gave in a Conversation (#192): the same lines, Items and actions as the Update
   panel, read as the Update stands now (lines acted on anywhere show as such), and read again after
-  each action taken here. Open goes where the panel's Open goes.
+  each action taken here. Open goes where the panel's Open goes, and each line's Reply box (#236) starts
+  a Conversation about that line, as in the panel.
 */
 
 export function ConversationUpdate({ updateId }: { updateId: number }) {
@@ -51,6 +52,8 @@ export function ConversationUpdate({ updateId }: { updateId: number }) {
         onOpen={(line, row, how) =>
           updates.open(openTarget(line, row, { reply: how === 'reply', edit: how === 'edit' }))
         }
+        onReply={updates.reply}
+        onOpenConversation={updates.openConversation}
       />
     </section>
   );

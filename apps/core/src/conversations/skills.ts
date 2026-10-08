@@ -14,6 +14,7 @@ import {
   DRAFT_SKILL,
   FIND_SKILL,
   type Item,
+  LINE_SKILL,
   LINK_MARKER,
   LINK_REF,
   MEETING_PREP_SKILL,
@@ -47,10 +48,17 @@ export const CONVERSATION_SKILLS: readonly string[] = [
   ...ACTION_SKILLS.map((skill) => skill.name),
 ];
 
-/** The Skills the registry has that a Conversation can use. */
-export function offeredSkills(registry: Pick<SkillRegistry, 'list'>): SkillInfo[] {
+// …and, in a Conversation about an Update line (#236), the line's own actions.
+export const LINE_CONVERSATION_SKILLS: readonly string[] = [LINE_SKILL.name];
+
+/** The Skills the registry has that a Conversation can use: `aboutLine`, one about an Update line. */
+export function offeredSkills(
+  registry: Pick<SkillRegistry, 'list'>,
+  { aboutLine = false }: { aboutLine?: boolean } = {},
+): SkillInfo[] {
   const all = registry.list();
-  return CONVERSATION_SKILLS.flatMap((name) => all.filter((skill) => skill.name === name));
+  const names = aboutLine ? [...CONVERSATION_SKILLS, ...LINE_CONVERSATION_SKILLS] : CONVERSATION_SKILLS;
+  return names.flatMap((name) => all.filter((skill) => skill.name === name));
 }
 
 /** What he couldn't finish, said plainly by Commander, before anything he goes on to say. */

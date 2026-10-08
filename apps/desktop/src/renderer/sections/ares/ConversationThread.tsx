@@ -15,6 +15,7 @@ import { KindTag } from '../todos/detail/parts';
 import { kindTag } from '../todos/links';
 import type { AutonomyClient } from './activity';
 import { AnswerActions } from './ConversationActions';
+import { AboutLine, LineActionCards } from './ConversationLine';
 import { AnswerMade } from './ConversationMade';
 import { ConversationUpdate } from './ConversationUpdate';
 import {
@@ -35,6 +36,9 @@ import type { CoreMessages } from './use-conversations';
   what his Skills did, made or remembered under it, Send again after a failed answer, and the box
   the User writes in, with Send, or Stop while he answers. Each Conversation keeps its own unsent
   words while the thread stays mounted. Enter sends, Shift+Enter makes a new line.
+  One started from an Update line's Reply box (#236) shows that line over the turns, as it stands now,
+  with the way back to its Update; the line's actions Ares prepared show under his words as cards
+  (ConversationLine), confirmed with one key as the action cards are.
 */
 
 const metaClass = 'font-mono text-label leading-none font-medium uppercase tracking-label text-muted';
@@ -158,8 +162,18 @@ export function ConversationThread({
   // What Ares may make clickable: only links the User gave in this Conversation.
   const sources = view?.turns.filter((turn) => turn.by === 'user').map((turn) => turn.text) ?? [];
 
+  const aboutLine = view?.conversation.aboutLine ?? null;
+
   return (
     <>
+      {view && aboutLine && (
+        <AboutLine
+          key={view.conversation.id}
+          about={aboutLine}
+          onCoreMessage={onCoreMessage}
+          compact={size === 'compact'}
+        />
+      )}
       <ol ref={thread} aria-label="Turns" className={cn('m-0 list-none overflow-y-auto', sizes.turns)}>
         {!view?.turns.length && empty && (
           <li className="text-note text-faint">{empty((text) => void send(text))}</li>
@@ -183,6 +197,16 @@ export function ConversationThread({
               writing={draft !== ''}
               onSettled={() => input.current?.focus()}
             />
+            {aboutLine && (
+              <LineActionCards
+                turn={turn}
+                about={aboutLine}
+                client={client}
+                onCoreMessage={onCoreMessage}
+                focus={turn === lastTurn && draft === '' && !turn.proposalIds.length}
+                onSettled={() => input.current?.focus()}
+              />
+            )}
           </Turn>
         ))}
       </ol>

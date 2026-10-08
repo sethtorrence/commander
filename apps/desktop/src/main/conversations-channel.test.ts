@@ -24,6 +24,7 @@ const view = {
     failed: false,
     aboutItemId: null,
     about: null,
+    aboutLine: null,
   },
   turns: [],
 };

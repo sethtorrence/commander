@@ -347,7 +347,14 @@ export type UpdateRow = z.infer<typeof updateRow>;
 // An Update as the panel shows it: each line with where its queued line stands now, so lines acted
 // on show as such and only the rest offer Done, Dismiss, Snooze, Open and Accept, and with its Items.
 export const updateView = givenUpdate.extend({
-  lines: z.array(updateLine.extend({ queued: queuedLine.nullable(), rows: z.array(updateRow) })),
+  lines: z.array(
+    updateLine.extend({
+      queued: queuedLine.nullable(),
+      rows: z.array(updateRow),
+      // The Conversation the User started about the line with its Reply box (#236), if any.
+      conversationId: z.string().min(1).optional(),
+    }),
+  ),
 });
 export type UpdateView = z.infer<typeof updateView>;
 export type UpdateViewLine = UpdateView['lines'][number];

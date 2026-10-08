@@ -56,6 +56,8 @@ export function useConversations(
   const first = useRef(remembered ?? null);
   const showing = useRef(shown);
   showing.current = shown;
+  const listed = useRef(list);
+  listed.current = list;
 
   const show = useCallback((next: ConversationView | null) => {
     openId.current = next?.conversation.id ?? null;
@@ -125,6 +127,10 @@ export function useConversations(
               return next;
             });
           }
+          // A card for an Update line's own action (#236) may be waiting for the User now, or settled.
+          const lineCard = turn.made.some((made) => made.kind === 'line-action');
+          if (lineCard && turn.status !== 'queued' && turn.status !== 'streaming' && showing.current)
+            void reload();
           setList((current) =>
             current.map((each) =>
               each.id === turn.conversationId
@@ -139,6 +145,9 @@ export function useConversations(
         } else if (message.type === 'ares-activity') {
           // A card of his may be waiting for the User now, or settled (#196): the list says so.
           if (showing.current) void reload();
+        } else if (message.type === 'ares-updates') {
+          // An Update line acted on or gone (#236): a card for it no longer waits.
+          if (showing.current && listed.current.some((each) => each.aboutLine)) void reload();
         } else if (message.type === 'core-restarted') {
           // A new Core settled any answer the old one was writing when it stopped (#200).
           setLive(new Map());

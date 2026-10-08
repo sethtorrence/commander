@@ -656,7 +656,12 @@ describe('giving an Update', () => {
     suggest('need to send Dana the Q3 numbers', 'Send Dana the Q3 numbers');
     const update = (await updates.skills.run('update', undefined)) as { lines: unknown[] };
     expect(update.lines).toHaveLength(1);
-    expect(updates.skills.list().map((skill) => skill.name)).toEqual(['update', 'summarise', 'draft']);
+    expect(updates.skills.list().map((skill) => skill.name)).toEqual([
+      'update',
+      'summarise',
+      'draft',
+      'line',
+    ]);
   });
 });
 
@@ -675,7 +680,8 @@ describe('acting on a line', () => {
     expect(updates.state().queued).toBe(1);
     expect(states.at(-1)?.queued).toBe(1);
     const reopened = updates.past(update?.id as number);
-    expect(reopened.lines.find((each) => each.kind === 'suggestions')?.queued?.status).not.toBe('queued');
+    // Done by the User, not settled elsewhere by the gate's change (#236).
+    expect(reopened.lines.find((each) => each.kind === 'suggestions')?.queued?.status).toBe('done');
   });
 
   it('accepts a merged line of Organise suggestions all at once', () => {
@@ -713,6 +719,8 @@ describe('acting on a line', () => {
     const [line] = queued();
     updates.act(line?.id as number, 'dismiss');
     expect(store.autonomy.proposal(dana)?.status).toBe('dismissed');
+    // The User's own: dismissed by them, not settled elsewhere by the gate's change (#236).
+    expect(store.updates.line(line?.id as number)?.status).toBe('dismissed');
 
     const flights = suggest('maybe book flights', 'Book flights');
     const [next] = queued();
