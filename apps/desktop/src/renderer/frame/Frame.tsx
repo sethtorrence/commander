@@ -20,8 +20,10 @@ import { PROJECT_PAGE_SCOPE, ProjectPage } from '../projects/page/ProjectPage';
 import { ProjectPageTab } from '../projects/page/ProjectPageTab';
 import { type ProjectsClient, projectsIn } from '../projects/projects';
 import { SECTIONS, type SectionDefinition } from '../sections';
+import { AresPanel } from '../sections/ares/AresPanel';
 import { AresPopupHost } from '../sections/ares/AresPopup';
-import { CONVERSATIONS_REVEAL } from '../sections/ares/conversations';
+import { CONVERSATIONS_REVEAL, openConversation } from '../sections/ares/conversations';
+import { usePanelLayout } from '../sections/ares/panel-layout';
 import { FindTimeHost } from '../sections/calendar/FindTime';
 import { DashboardProvider, useDashboard } from '../sections/dashboard/context';
 import { type DashboardClient, dashboardAccountsIn, dashboardIn } from '../sections/dashboard/dashboard';
@@ -72,7 +74,8 @@ function SectionView({
  * in an Item is, for every row and pane that shows people), the Dashboard's ranked
  * list (read by the Dashboard, the header's band meter and the Project pages), Ares's Updates
  * (the quiet count, and the Update the User asks for), Not an instruction on every warning mark, and
- * the pop-up every Ares button on an Item opens (#193).
+ * the pop-up every Ares button on an Item opens (#193), whose Open in Ares carries its Conversation
+ * on in the Ares panel (#235).
  */
 function FrameProviders({
   projects,
@@ -81,7 +84,6 @@ function FrameProviders({
   dashboard,
   open,
   onOpenUpdateLine,
-  onExpandConversation,
   children,
 }: {
   projects: ProjectsClient;
@@ -90,7 +92,6 @@ function FrameProviders({
   dashboard: DashboardClient;
   open: string;
   onOpenUpdateLine: (target: OpenTarget) => void;
-  onExpandConversation: (conversationId: string) => void;
   children: ReactNode;
 }) {
   const people = useMemo(() => peopleIn(window.commander.itemStore), []);
@@ -111,7 +112,7 @@ function FrameProviders({
                 autonomy={window.commander.autonomy}
                 itemStore={window.commander.itemStore}
                 onCoreMessage={window.commander.onCoreMessage}
-                onExpand={onExpandConversation}
+                onExpand={openConversation}
               >
                 {children}
               </AresPopupHost>
@@ -165,7 +166,8 @@ function FrameHeader({
  * The app frame: the Industrial header, the rulers and exposed grid, the numbered notebook tabs,
  * and the open Section's sheet. Sections stay mounted while another is open, so they keep their
  * state. The frame's own keys: 1–9 open Sections; `,` Settings, `?` the cheat sheet, `Ctrl+K` and `/`
- * the palette come with it (palette/PaletteHost.tsx). It also holds
+ * the palette come with it (palette/PaletteHost.tsx), and `Ctrl+J` the Ares panel (#235), which sits
+ * beside every Section, the Section giving way by its width. It also holds
  * the Projects and the one Project filter every Section shares (projects/context.tsx).
  */
 export function Frame() {
@@ -259,13 +261,16 @@ export function Frame() {
     },
     [openSettings, openSection],
   );
-  // The Ares button's pop-up moves its Conversation into the Ares Section (#193).
-  const expandConversation = useCallback(
+  // The Ares panel (#235), and its Full view: the Conversation it shows, in the Ares Section.
+  const panel = usePanelLayout();
+  const { setOpen: setPanelOpen } = panel;
+  const fullView = useCallback(
     (conversationId: string) => {
+      setPanelOpen(false);
       openSection('ares');
       requestReveal(CONVERSATIONS_REVEAL, conversationId);
     },
-    [openSection],
+    [openSection, setPanelOpen],
   );
   // A meeting's heads-up was clicked (the main process shows the window): its event, in Calendar.
   useEffect(
@@ -336,7 +341,6 @@ export function Frame() {
       dashboard={dashboard}
       open={open === PROJECT_PAGE_SCOPE ? `${open}:${page}` : open}
       onOpenUpdateLine={openUpdateLine}
-      onExpandConversation={expandConversation}
     >
       <DrawingGrid className="fixed top-(--top) right-0 bottom-0 left-(--rul)" />
       <FrameHeader
@@ -346,6 +350,7 @@ export function Frame() {
         onBand={() => openSection('dashboard')}
         slotRef={setHeaderSlot}
         ares={{ working: aresWork, onOpen: () => openSection('ares') }}
+        panel={{ open: panel.open, onToggle: panel.toggle }}
       />
       <RulerX className="fixed top-(--hdr) right-0 left-0 z-24" />
       <RulerY className="fixed top-(--top) bottom-0 left-0 z-24" />
@@ -378,7 +383,7 @@ export function Frame() {
           </>
         }
       />
-      <main className="relative z-1 ml-(--rul) pt-(--body)">
+      <main className="relative z-1 mr-(--panel) ml-(--rul) pt-(--body)">
         {/* Settings may open a Section too (What Ares knows, from Settings → Ares). */}
         <FrameControlsProvider value={controls}>
           <HeaderSlotProvider value={headerSlot}>
@@ -430,6 +435,14 @@ export function Frame() {
           <CoreBanner />
         </FrameControlsProvider>
       </main>
+      <AresPanel
+        layout={panel}
+        client={window.commander.conversations}
+        autonomy={window.commander.autonomy}
+        itemStore={window.commander.itemStore}
+        onCoreMessage={window.commander.onCoreMessage}
+        onFullView={fullView}
+      />
       <CheatSheet open={cheatSheet} onOpenChange={setCheatSheet} />
       <FindTimeHost />
       <PaletteHost

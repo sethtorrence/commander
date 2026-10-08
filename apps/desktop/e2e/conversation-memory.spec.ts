@@ -135,17 +135,22 @@ test('a preference told to Ares is kept as the User’s, linked to its turn, rec
     'Not at 9: you don’t take meetings before 10.',
   );
 
-  // Its source opens the Conversation at the turn the User said it in.
+  // Its source opens the Conversation at the turn the User said it in, in the Ares panel (#235).
   await known.scrollIntoViewIfNeeded();
   await kept.getByRole('button', { name: 'I don’t take meetings before 10' }).click();
-  await expect(thread.getByRole('heading', { name: 'I don’t take meetings before 10' })).toBeVisible();
-  await expect(turns.nth(0)).toHaveAttribute('data-found', 'true');
+  const panel = window.getByTestId('ares-panel').getByTestId('conversation-thread');
+  await expect(panel.getByRole('heading', { name: 'I don’t take meetings before 10' })).toBeVisible();
+  const told = panel.getByTestId('conversation-turn');
+  await expect(told.nth(0)).toHaveAttribute('data-found', 'true');
 
-  // Undo on the line: the memory goes from What Ares knows.
-  await line.getByRole('button', { name: /^Undo/ }).click();
-  await expect(line).toHaveAttribute('data-undone', 'true');
-  await expect(line).toContainText('Undone');
+  // Undo on the line there: the memory goes from What Ares knows.
+  const there = told.nth(1).getByTestId('remembered');
+  await there.getByRole('button', { name: /^Undo/ }).click();
+  await expect(there).toHaveAttribute('data-undone', 'true');
+  await expect(there).toContainText('Undone');
   await expect(memoryRow(known, PREFERENCE)).toHaveCount(0);
+  await window.keyboard.press('Control+j');
+  await expect(window.getByTestId('ares-panel')).toBeHidden();
 
   // A fact told in a Conversation that is then deleted stays, from "a deleted Conversation".
   await conversations.getByRole('button', { name: 'New Conversation' }).click();

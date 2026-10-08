@@ -5,6 +5,11 @@
   on the design system's tokens. The rulers and grid come from @commander/ui (Drawing).
 */
 @layer components {
+  /* The Ares panel's width while it is open (#235, set by AresPanel): the Sections give way by it. */
+  :root {
+    --panel: 0px;
+  }
+
   /* ================= Header ================= */
   .f-hdr {
     position: fixed;
@@ -208,7 +213,7 @@
   .f-ares {
     grid-column: 7 / 10;
     display: grid;
-    grid-template-columns: 78px minmax(0, 1fr) auto;
+    grid-template-columns: 78px minmax(0, 1fr) auto auto;
     position: relative;
   }
   .f-ares::before {
@@ -341,8 +346,50 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .f-ask {
+  /* The Ares panel's AI mark (#235): opens and closes the Conversations beside the Section. */
+  .f-talk {
     grid-column: 3;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+    background: none;
+    padding: 0 14px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    color: var(--signal-ink);
+    font: 500 8px / 1 var(--mono);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .f-talk svg {
+    width: 14px;
+    height: 14px;
+  }
+  .f-talk .l {
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .f-talk:hover {
+    background: var(--raise);
+  }
+  .f-talk[aria-pressed="true"] {
+    background: var(--ink);
+    color: var(--signal);
+  }
+  .f-talk[aria-pressed="true"] .l {
+    color: var(--bg);
+  }
+  .f-talk:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: -2px;
+  }
+
+  .f-ask {
+    grid-column: 4;
     border: 0;
     border-left: 1px solid var(--line);
     background: none;
@@ -659,6 +706,12 @@
       --wc: 32px;
     }
     .f-ask > span {
+      display: none;
+    }
+    .f-talk {
+      padding: 0 11px;
+    }
+    .f-talk .l {
       display: none;
     }
   }

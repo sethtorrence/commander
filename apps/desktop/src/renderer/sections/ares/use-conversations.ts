@@ -31,13 +31,18 @@ export type ConversationsState = {
 };
 
 /**
- * Conversations with Ares, as the Ares Section shows them: the list, the open one (today's when the
- * Section opens on a new day), and Ares's answers streaming into it as core messages arrive.
+ * Conversations with Ares, as the Ares Section and the Ares panel (#235) show them: the list, the
+ * open one, and Ares's answers streaming in as core messages arrive, for every Conversation at once,
+ * so switching to another never loses what he is writing in one. The Ares Section lands on today's
+ * Conversation when it opens on a new day. The panel passes `remembered`, the Conversation it had
+ * open (null for none): it lands on that one when first shown (today's when it is gone), then stays
+ * wherever the User leaves it, whatever the day.
  */
 export function useConversations(
   client: ConversationsClient,
   shown: boolean,
   onCoreMessage: CoreMessages,
+  { remembered }: { remembered?: string | null } = {},
 ): ConversationsState {
   const [today, setToday] = useState(() => dayKey(new Date()));
   const [list, setList] = useState<Conversation[]>([]);
@@ -47,6 +52,10 @@ export function useConversations(
   const pushed = useRef(new Map<number, ConversationTurn>());
   const openId = useRef<string | null>(null);
   const landedOn = useRef<string | null>(null);
+  const stays = remembered !== undefined;
+  const first = useRef(remembered ?? null);
+  const showing = useRef(shown);
+  showing.current = shown;
 
   const show = useCallback((next: ConversationView | null) => {
     openId.current = next?.conversation.id ?? null;
@@ -70,21 +79,30 @@ export function useConversations(
     }
   }, []);
 
-  // Opening the Section lands on today's Conversation, made on the first open of the day.
+  // Opening the Section lands on today's Conversation, made on the first open of the day; the panel
+  // on the one it had open.
   useEffect(() => {
     if (!shown) return;
     const day = dayKey(new Date());
     setToday(day);
-    if (landedOn.current === day && openId.current) {
+    if ((landedOn.current === day || (stays && landedOn.current)) && openId.current) {
       void reload();
       return;
     }
     landedOn.current = day;
-    void ask(client({ op: 'today', day })).then((daily) => {
-      if (daily) show(daily);
-      void reload();
-    });
-  }, [shown, client, ask, show, reload]);
+    const before = openId.current;
+    const kept = stays && first.current;
+    const landing = kept
+      ? client({ op: 'open', conversationId: kept }).catch(() => null)
+      : Promise.resolve(null);
+    void landing
+      .then((view) => view ?? ask(client({ op: 'today', day })))
+      .then((view) => {
+        // Unless the User (or a link) opened another meanwhile.
+        if (view && openId.current === before) show(view);
+        void reload();
+      });
+  }, [shown, stays, client, ask, show, reload]);
 
   // Ares's answers as he writes them, and his turns as they change.
   useEffect(
@@ -110,10 +128,17 @@ export function useConversations(
           setList((current) =>
             current.map((each) =>
               each.id === turn.conversationId
-                ? { ...each, answering: turn.status === 'queued' || turn.status === 'streaming' }
+                ? {
+                    ...each,
+                    answering: turn.status === 'queued' || turn.status === 'streaming',
+                    failed: turn.status === 'failed',
+                  }
                 : each,
             ),
           );
+        } else if (message.type === 'ares-activity') {
+          // A card of his may be waiting for the User now, or settled (#196): the list says so.
+          if (showing.current) void reload();
         } else if (message.type === 'core-restarted') {
           // A new Core settled any answer the old one was writing when it stopped (#200).
           setLive(new Map());

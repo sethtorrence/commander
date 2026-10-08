@@ -127,12 +127,50 @@ export function openConversationStore(
         )
       : new Set();
 
+  // Which of them have a card under one of Ares's answers waiting for the User's Confirm (#196).
+  const waitingIn = (ids: readonly string[]): Set<string> =>
+    ids.length
+      ? new Set(
+          db
+            .selectDistinct({ id: schema.proposals.conversationId })
+            .from(schema.proposals)
+            .where(
+              and(inArray(schema.proposals.conversationId, [...ids]), eq(schema.proposals.status, 'pending')),
+            )
+            .all()
+            .flatMap((row) => (row.id ? [row.id] : [])),
+        )
+      : new Set();
+
+  // Which of them end with an answer that failed.
+  const failedIn = (ids: readonly string[]): Set<string> => {
+    if (!ids.length) return new Set();
+    const last = db
+      .select({ id: sql<number>`max(${conversationTurns.id})` })
+      .from(conversationTurns)
+      .where(inArray(conversationTurns.conversationId, [...ids]))
+      .groupBy(conversationTurns.conversationId);
+    return new Set(
+      db
+        .select({ id: conversationTurns.conversationId })
+        .from(conversationTurns)
+        .where(and(inArray(conversationTurns.id, last), eq(conversationTurns.status, 'failed')))
+        .all()
+        .map((row) => row.id),
+    );
+  };
+
   const toConversations = (rows: (typeof conversations.$inferSelect)[]): Conversation[] => {
-    const answering = answeringIn(rows.map((row) => row.id));
+    const ids = rows.map((row) => row.id);
+    const answering = answeringIn(ids);
+    const waiting = waitingIn(ids);
+    const failed = failedIn(ids);
     return rows.map(({ dailyOf, ...row }) => ({
       ...row,
       daily: dailyOf !== null,
       answering: answering.has(row.id),
+      waiting: waiting.has(row.id),
+      failed: failed.has(row.id),
       about: null,
     }));
   };

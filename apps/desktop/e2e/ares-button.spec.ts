@@ -16,7 +16,7 @@ import { type LaunchedCommander, launchCommander } from './launch-commander';
 // a pop-up beside it; asked what it's about, Ares answers from the email, which reached him as
 // outside material in a block of its own, and Esc closes the pop-up. From a Todo, `a` opens it; Ares
 // answers from the Todo, the User's own words, and Open in Ares carries the same Conversation on in
-// the Ares Section, where both are saved and listed. A Daily Note line has its button too, and `a`
+// the Ares panel beside the Todos (#235), where both are saved and listed. A Daily Note line has its button too, and `a`
 // once the User leaves the text. Tokens and the model's key go in the real keyring, so this needs the
 // author's Linux Wayland session.
 const onLinuxWayland = process.platform === 'linux' && !!process.env.WAYLAND_DISPLAY;
@@ -102,7 +102,7 @@ const conversationCalls = () =>
     ),
   );
 
-test('the Ares button on an email and a Todo opens a pop-up Conversation about it, which expands into the Ares Section', async () => {
+test('the Ares button on an email and a Todo opens a pop-up Conversation about it, which expands into the Ares panel', async () => {
   test.setTimeout(150_000);
   const config = {
     clientId: google.clientId,
@@ -197,18 +197,20 @@ test('the Ares button on an email and a Todo opens a pop-up Conversation about i
   const second = conversationCalls().at(-1)?.body as { messages: Message[] };
   expect(second.messages.at(-1)?.content).toMatch(FLIGHTS);
 
-  // Open in Ares: the same Conversation carries on in the Ares Section; both are saved and listed.
+  // Open in Ares: the same Conversation carries on in the Ares panel, beside the Todos; both are saved
+  // and listed.
   await popup.getByRole('button', { name: 'Open in Ares' }).click();
   await expect(popup).toHaveCount(0);
-  await expect(page.getByTestId('header-title')).toHaveText('Ares');
-  const conversations = page.getByTestId('section-ares').getByTestId('conversations');
-  const shown = conversations.getByTestId('conversation-thread');
+  await expect(page.getByTestId('header-title')).toHaveText('Todos');
+  const panel = page.getByTestId('ares-panel');
+  await expect(panel).toBeVisible();
+  const shown = panel.getByTestId('conversation-thread');
   await expect(shown.getByRole('heading', { name: 'Book flights for the offsite' })).toBeInViewport();
   await expect(shown.getByTestId('conversation-about')).toHaveText('AboutTDOBook flights for the offsite');
   await expect(shown.getByTestId('ares-answer')).toHaveText(
     'It’s yours: compare fares before Friday Book flights for the offsite.',
   );
-  const list = conversations.getByTestId('conversation-list');
+  const list = panel.getByTestId('conversation-list');
   await expect(list.getByRole('listitem', { name: 'Book flights for the offsite' })).toBeVisible();
   await expect(list.getByRole('listitem', { name: 'Q4 offsite dates' })).toBeVisible();
   // It carries on there: he still has the Todo in front of him.
@@ -220,6 +222,9 @@ test('the Ares button on an email and a Todo opens a pop-up Conversation about i
   });
   const third = conversationCalls().at(-1)?.body as { messages: Message[] };
   expect(third.messages.at(-1)?.content).toMatch(FLIGHTS);
+  // Ctrl+J puts the panel away.
+  await page.keyboard.press('Control+j');
+  await expect(panel).toBeHidden();
 
   // A Daily Note line: its Ares button shows on the row pointed at, and `a`, once the User has left
   // the text, asks about the line they were writing.

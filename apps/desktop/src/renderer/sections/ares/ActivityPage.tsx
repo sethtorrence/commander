@@ -225,7 +225,7 @@ function Cause({ row }: { row: AresActivity }) {
   );
 }
 
-/** The Conversation it was asked for in (#196), which opens there. */
+/** The Conversation it was asked for in (#196), which opens in the Ares panel (#235). */
 function FromConversation({ row }: { row: AresActivity }) {
   const asked = row.conversation;
   if (!asked) return null;

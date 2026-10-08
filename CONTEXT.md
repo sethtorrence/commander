@@ -213,12 +213,16 @@ A named ability Ares can use, on request or when he judges it is wanted (e.g. Up
 _Avoid_: Tool, command, feature, plugin
 
 **Conversation**:
-One thread of typed back-and-forth between the User and Ares; several can run at once. One started with the Ares button is about that Item, which Ares has in front of him with every message.
+One thread of typed back-and-forth between the User and Ares; several can run at once, and each is kept to pick up again at any time. One started with the Ares button is about that Item, which Ares has in front of him with every message. Opened from anywhere, one opens in the Ares panel.
 _Avoid_: Chat, session, thread (alone)
 
 **Ares button**:
-The AI mark on an Item's row or detail pane (or `a` on the focused Item) that opens a small pop-up beside it, starting a new Conversation about that Item; **Open in Ares** carries it on in the Ares Section.
+The AI mark on an Item's row or detail pane (or `a` on the focused Item) that opens a small pop-up beside it, starting a new Conversation about that Item; **Open in Ares** carries it on in the Ares panel.
 _Avoid_: AI button, assistant button, chat bubble
+
+**Ares panel**:
+Conversations with Ares on the right of whatever Section the User is in, the Section giving way beside it (the AI mark in the header, or `Ctrl+J`): their list, saying which Ares is answering, has a card waiting in or didn't finish, and the open one, drawn as the Ares Section draws them; it stays as the User left it (open, its width, its Conversation) across Sections and restarts.
+_Avoid_: Chat window, sidebar, drawer, assistant pane
 
 **Memory**:
 What Ares has learned and keeps about the User's world (accepted rules, examples from corrections, facts about People and Projects, and the User's preferences), each remembered with where it came from; one he picked up from outside content is unconfirmed, only ever background to him, until the User confirms it. What the User tells him in a Conversation is theirs, so confirmed, with their turn as its source; nothing an Item there says ever is. The User sees and changes it on What Ares knows.

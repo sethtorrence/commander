@@ -10,7 +10,7 @@ import { PEOPLE_SETTINGS } from '../people/PeopleSettings';
 import { useProjects } from '../projects/context';
 import { inFilter } from '../projects/filter';
 import { SECTIONS } from '../sections';
-import { askAres, CONVERSATIONS_REVEAL } from '../sections/ares/conversations';
+import { askAres, openConversation } from '../sections/ares/conversations';
 import { type EmailAccountSummary, emailAccountsIn } from '../sections/email/email';
 import { linearAccountsIn } from '../sections/linear/linear-issues';
 import { dayKey } from '../sections/notes/days';
@@ -169,15 +169,13 @@ export function PaletteHost({ current, onOpenSection, onOpenSettings, onToggleSh
         onOpenSection('ares');
         return requestReveal(WHAT_ARES_KNOWS, action.memoryId);
       case 'conversation':
-        // The Conversation in the Ares Section, at the turn that matched.
-        onOpenSection('ares');
-        return requestReveal(CONVERSATIONS_REVEAL, action.conversationId, String(action.turnId));
+        // The Conversation in the Ares panel, beside the Section, at the turn that matched.
+        return openConversation(action.conversationId, action.turnId);
       case 'ask-ares':
         void askAres(window.commander.conversations, action.text, today).then(
           ({ conversationId, problem }) => {
             if (problem) report(problem);
-            onOpenSection('ares');
-            requestReveal(CONVERSATIONS_REVEAL, conversationId);
+            openConversation(conversationId);
           },
           report,
         );

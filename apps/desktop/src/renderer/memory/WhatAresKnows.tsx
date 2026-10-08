@@ -12,7 +12,7 @@ import { type FormEvent, useCallback, useEffect, useId, useRef, useState } from 
 import { requestReveal, useReveal } from '../frame/reveal';
 import type { ItemStoreClient } from '../item-store/client';
 import { errorText } from '../projects/change-with-undo';
-import { CONVERSATIONS_REVEAL, nameOf } from '../sections/ares/conversations';
+import { nameOf, openConversation } from '../sections/ares/conversations';
 import { dayKey } from '../sections/notes/days';
 import { useOpenSection } from '../sections/section';
 import { goneNote, kindTag, sectionFor } from '../sections/todos/links';
@@ -235,10 +235,9 @@ function SourceLink({ source }: { source: MemorySource }) {
   );
 }
 
-// The Conversation turn where the User told Ares (#194): opens the Conversation at it, or says the
-// Conversation was deleted (the memory stays: the User said it).
+// The Conversation turn where the User told Ares (#194): opens the Conversation at it, in the Ares
+// panel (#235), or says the Conversation was deleted (the memory stays: the User said it).
 function TurnLink({ turn }: { turn: MemoryTurn }) {
-  const openSection = useOpenSection();
   const conversation = turn.conversation;
   if (!conversation) return <span className="text-note text-faint">a deleted Conversation</span>;
   return (
@@ -247,10 +246,7 @@ function TurnLink({ turn }: { turn: MemoryTurn }) {
       <button
         type="button"
         className="cursor-pointer border-0 bg-transparent p-0 text-note text-text underline decoration-line underline-offset-2 hover:text-ink"
-        onClick={() => {
-          openSection('ares');
-          requestReveal(CONVERSATIONS_REVEAL, turn.conversationId, String(turn.turnId));
-        }}
+        onClick={() => openConversation(turn.conversationId, turn.turnId)}
       >
         {nameOf(conversation, dayKey(new Date()))}
       </button>

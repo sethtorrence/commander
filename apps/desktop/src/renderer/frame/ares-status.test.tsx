@@ -29,6 +29,18 @@ describe('the Ares status module', () => {
     expect(screen.getByTestId('ares-status').textContent).toContain('Ares is holding 3 things for you');
   });
 
+  it('holds the Ares panel’s AI mark, pressed while the panel is open (#235)', () => {
+    let toggled = 0;
+    const { rerender } = render(<AresStatus panel={{ open: false, onToggle: () => toggled++ }} />);
+    const mark = screen.getByRole('button', { name: 'Ares panel' });
+    expect(mark.getAttribute('aria-pressed')).toBe('false');
+    expect(mark.getAttribute('aria-keyshortcuts')).toBe('Control+J');
+    mark.click();
+    expect(toggled).toBe(1);
+    rerender(<AresStatus panel={{ open: true, onToggle: () => toggled++ }} />);
+    expect(screen.getByRole('button', { name: 'Ares panel' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
   it('says when Ares is working, and on what', () => {
     render(<AresStatus working={{ working: true, running: ['Suggest Todos'] }} />);
     expect(screen.getByTestId('ares-state').textContent).toBe('Working');
