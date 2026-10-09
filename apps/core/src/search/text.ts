@@ -1,4 +1,4 @@
-import { githubIdentifier, type Item } from '@commander/domain';
+import { githubIdentifier, type Item, isBusyCopy } from '@commander/domain';
 
 // What search reads of an Item: its title, its identifier (a Linear issue's ENG-418, a Daily Note's
 // day, a pull request's or GitHub issue's acme/api#12) and the rest of its words (a Chat's: its recent
@@ -23,12 +23,14 @@ export type SearchableItem = Pick<
 export type SearchText = { title: string; identifier: string; body: string };
 
 /**
- * The Item's searchable text, or null when it has none or shouldn't be found (a tombstone, or Ares's
- * meeting prep, shown with its meeting rather than on its own, or his GitHub summary, in the GitHub Section).
+ * The Item's searchable text, or null when it has none or shouldn't be found (a tombstone, Ares's
+ * meeting prep, shown with its meeting rather than on its own, his GitHub summary, in the GitHub
+ * Section, or Commander's busy copy of an event, #131, which is found as the event it copies).
  */
 export function searchTextOf(item: SearchableItem): SearchText | null {
   if (item.deletedAt !== null || item.kind === 'meeting-prep' || item.kind === 'github-summary') return null;
   const detail = item.detail;
+  if (detail?.kind === 'event' && isBusyCopy(detail)) return null;
   let identifier = '';
   let body = '';
   if (detail?.kind === 'linear-issue') {

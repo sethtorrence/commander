@@ -353,11 +353,26 @@ test('a pair switched on: a personal event puts a private Busy on the work calen
     await tab(page, 'Todos').click();
     await tab(page, 'Calendar').click();
   };
-  // The copy comes back with the work calendar's sync, and is never copied back to Google.
+  // The copy comes back with the work calendar's sync (read in full, so known as Commander's), and is
+  // never copied back to Google. The Calendar Section shows the dentist, not the copy (#241).
   await syncAgain();
-  await expect(
-    page.getByTestId('section-calendar').getByTestId('calendar-event').filter({ hasText: 'Busy' }),
-  ).toHaveCount(1);
+  const events = page.getByTestId('section-calendar').getByTestId('calendar-event');
+  await expect(events.filter({ hasText: 'Dentist' })).toHaveCount(1);
+  await expect
+    .poll(() =>
+      page.evaluate(async (at) => {
+        const items = await window.commander.itemStore({ op: 'query', query: { kinds: ['event'] } });
+        return items.filter(
+          (item) =>
+            item.source === 'outlook-calendar' &&
+            item.detail?.kind === 'event' &&
+            item.detail.createdByCommander === 'busy-block' &&
+            item.detail.start.at === at,
+        ).length;
+      }, dentist),
+    )
+    .toBe(1);
+  await expect(events.filter({ hasText: 'Busy' })).toHaveCount(0);
   await syncAgain();
   expect(google.eventsOn(ALEX.sub, PRIMARY).map((event) => event.summary)).toEqual(['Dentist']);
 

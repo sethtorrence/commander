@@ -11,6 +11,7 @@ import {
   type SyncPage,
 } from '../source';
 import {
+  CURSOR_VERSION,
   createOutlookCalendarSource,
   MAX_CONCURRENT_REQUESTS,
   OUTLOOK_CALENDAR_CADENCE,
@@ -19,14 +20,22 @@ import {
 import expired from './recorded/expired.json';
 import firstSync from './recorded/first-sync.json';
 import incremental from './recorded/incremental.json';
+import partialDelta from './recorded/partial-delta.json';
 import quiet from './recorded/quiet.json';
+import { graphEvent, hydrated, isBare } from './shapes';
 
 // The Outlook Calendar adapter against recorded Microsoft Graph v1.0 responses (shaped as Graph
 // answers), each recording also pinning down the request Commander must send for it. Calendars sync
 // side by side, so requests are matched by address rather than order.
+//
+// Most recordings give delta's events in full, as the primary calendar's delta does. Graph's
+// per-calendar delta gave the User's work account bare events instead (times and series, no subject,
+// #241), which partial-delta.json records: those are read in full by their ids, in JSON batches.
 
 type Recorded = { status: number; headers: Record<string, string>; body: unknown };
-type Exchange = { request: { path: string }; response: Recorded };
+// A JSON batch's recording also pins down the requests it carries.
+type BatchRequest = { id: string; method: string; url: string; headers?: Record<string, string> };
+type Exchange = { request: { path: string; body?: { requests: BatchRequest[] } }; response: Recorded };
 
 const GRAPH = 'https://graph.test/v1.0';
 const DAY = 24 * 60 * 60_000;
@@ -44,7 +53,12 @@ const token: AccessToken = { token: 'eyJ0eXAiOi.recorded', kind: 'oauth' };
 let held: Map<string, SourceItem>;
 let listed: ListedCalendar[];
 let switched: Map<string, boolean>;
-let sent: { path: string; authorization: string | null; prefer: string | null }[];
+let sent: {
+  path: string;
+  authorization: string | null;
+  prefer: string | null;
+  batch?: BatchRequest[];
+}[];
 
 beforeEach(() => {
   held = new Map();
@@ -73,14 +87,30 @@ const calendars: CalendarChoices = {
   },
 };
 
-// Answers each request with a recording made for that address (each used once, in order).
+// A batch's requests as compared: their addresses decoded.
+const batchKey = (requests: BatchRequest[]) =>
+  JSON.stringify(requests.map((each) => ({ ...each, url: decodeURIComponent(each.url) })));
+
+// Answers each request with a recording made for that address (each used once, in order); a JSON
+// batch with the recording made for the requests it carries.
 function replay(exchanges: Exchange[], delayMs = 0) {
   const queue = [...exchanges];
   const fetch = async (url: string | URL | Request, init?: RequestInit) => {
     const path = decodeURIComponent(String(url).slice(GRAPH.length));
     const headers = new Headers(init?.headers);
-    sent.push({ path, authorization: headers.get('authorization'), prefer: headers.get('prefer') });
-    const index = queue.findIndex((each) => each.request.path === path);
+    const batch =
+      path === '/$batch' ? (JSON.parse(String(init?.body)).requests as BatchRequest[]) : undefined;
+    sent.push({
+      path,
+      authorization: headers.get('authorization'),
+      prefer: headers.get('prefer'),
+      ...(batch && { batch }),
+    });
+    const index = queue.findIndex(
+      (each) =>
+        each.request.path === path &&
+        (!batch || (!!each.request.body && batchKey(each.request.body.requests) === batchKey(batch))),
+    );
     if (index < 0) throw new Error(`Unexpected request ${path}`);
     const [next] = queue.splice(index, 1) as [Exchange];
     if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -131,6 +161,8 @@ describe('the first sync', () => {
 
     expect(recorded.remaining()).toBe(0);
     expect(cost.requests).toBe(5);
+    // Events delta gives in full aren't read again.
+    expect(sent.some((request) => request.path === '/$batch')).toBe(false);
     expect(sent.every((request) => request.authorization === 'Bearer eyJ0eXAiOi.recorded')).toBe(true);
     expect(listed).toEqual([
       { id: DEFAULT, name: 'Calendar', colour: '#0078d4', primary: true, accessRole: 'owner' },
@@ -152,6 +184,7 @@ describe('the first sync', () => {
       `/me/calendars/${DEFAULT}/calendarView/delta?${WINDOW}`,
     );
     expect(cursor).toEqual({
+      version: 2,
       calendars: {
         [DEFAULT]: {
           deltaLink: `${GRAPH}/me/calendars/${DEFAULT}/calendarView/delta?$deltatoken=default-delta-1`,
@@ -295,6 +328,241 @@ describe('the first sync', () => {
     const { deleted } = await sync(replay(exchanges(firstSync)).fetch);
     expect(eventOf(evt('budgetsync'))).toBeUndefined();
     expect(deleted).toContain(evt('budgetsync'));
+  });
+});
+
+describe('events a delta answers without their properties (#241)', () => {
+  const BUSY_COPY = evt('busycopy');
+
+  it('reads each bare event in full by its id, in a JSON batch, and stores all of it', async () => {
+    // What a first sync of full events stores, to compare with.
+    await sync(replay(exchanges(firstSync)).fetch);
+    const full = new Map(held);
+    held = new Map();
+    sent = [];
+
+    const recorded = replay(exchanges(partialDelta));
+    const { cursor, cost } = await sync(recorded.fetch);
+    expect(recorded.remaining()).toBe(0);
+    // Two pages of calendars, a delta of each calendar on, and a batch for each.
+    expect(cost.requests).toBe(6);
+    const batches = sent.filter((request) => request.path === '/$batch');
+    expect(batches).toHaveLength(2);
+    for (const { batch } of batches) {
+      expect(batch?.every((each) => each.method === 'GET' && each.url.startsWith('/me/events/'))).toBe(true);
+      expect(batch?.every((each) => each.headers?.prefer === 'IdType="ImmutableId"')).toBe(true);
+    }
+    // Each event as a delta of full events stores it: subject, organiser, guests, link, place, notes.
+    for (const id of [
+      evt('designreview'),
+      evt('dentist'),
+      evt('standup-20261005'),
+      evt('standup-20261006'),
+    ]) {
+      expect(eventOf(id)).toEqual(full.get(id));
+    }
+    expect(eventOf(evt('designreview'))).toMatchObject({
+      title: 'Design review: onboarding',
+      detail: {
+        organiser: { email: 'dana@titanlink.test' },
+        location: 'Room 4',
+        meetingUrl: 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_onboarding%40thread.v2/0',
+        description: expect.stringContaining('Walk through the new onboarding flow.'),
+      },
+    });
+    expect(detailOf(evt('designreview')).attendees).toHaveLength(4);
+    expect([...held.values()].some((item) => item.title === '(No title)')).toBe(false);
+    expect(cursor.version).toBe(CURSOR_VERSION);
+  });
+
+  it('keeps each recurring instance its own, with the delta’s id and times', async () => {
+    await sync(replay(exchanges(partialDelta)).fetch);
+    expect(eventOf(evt('standup-20261005'))).toMatchObject({
+      externalId: evt('standup-20261005'),
+      title: 'TL standup',
+      detail: {
+        seriesId: evt('standup'),
+        start: { at: Date.UTC(2026, 9, 5, 15), timeZone: 'America/Los_Angeles' },
+        end: { at: Date.UTC(2026, 9, 5, 15, 15) },
+      },
+    });
+    expect(detailOf(evt('standup-20261006')).start.at).toBe(Date.UTC(2026, 9, 6, 15));
+  });
+
+  it('fills a bare event in from its full one, keeping what the delta said', () => {
+    const bare = graphEvent.parse({
+      id: evt('standup-20261007'),
+      type: 'exception',
+      seriesMasterId: evt('standup'),
+      start: { dateTime: '2026-10-07T16:00:00.0000000', timeZone: 'UTC' },
+      end: { dateTime: '2026-10-07T16:15:00.0000000', timeZone: 'UTC' },
+    });
+    const full = graphEvent.parse({
+      id: evt('standup'),
+      type: 'seriesMaster',
+      subject: 'TL standup',
+      seriesMasterId: null,
+      start: { dateTime: '2026-10-05T15:00:00.0000000', timeZone: 'UTC' },
+      end: { dateTime: '2026-10-05T15:15:00.0000000', timeZone: 'UTC' },
+    });
+    expect(isBare(bare)).toBe(true);
+    expect(isBare(full)).toBe(false);
+    expect(isBare(graphEvent.parse({ id: evt('x'), '@removed': { reason: 'deleted' } }))).toBe(false);
+    expect(hydrated(bare, full)).toMatchObject({
+      id: evt('standup-20261007'),
+      type: 'exception',
+      subject: 'TL standup',
+      seriesMasterId: evt('standup'),
+      start: { dateTime: '2026-10-07T16:00:00.0000000' },
+      end: { dateTime: '2026-10-07T16:15:00.0000000' },
+    });
+  });
+
+  it('knows its own busy copy by the transactionId only the full event carries', async () => {
+    await sync(replay(exchanges(partialDelta)).fetch);
+    expect(eventOf(BUSY_COPY)).toMatchObject({
+      title: 'Busy',
+      commanderItemId: '7d9c2f3e-41a6-4c1b-9e57-2b8d0f6a1c34',
+      detail: { createdByCommander: 'busy-block', private: true },
+    });
+  });
+
+  it('tombstones an event the full read says is cancelled', async () => {
+    const { deleted } = await sync(replay(exchanges(partialDelta)).fetch);
+    expect(eventOf(evt('budgetsync'))).toBeUndefined();
+    expect(deleted).toContain(evt('budgetsync'));
+  });
+
+  // One calendar answering `count` bare events in one page, each read in full through batches whose
+  // answers `answer` gives (each event in full, unless it says otherwise). `owned`: the User's own
+  // calendar, or a colleague's shared with them.
+  function bareCalendar(
+    count: number,
+    answer: (id: string) => { status: number; headers?: Record<string, string>; body?: unknown } = (id) => ({
+      status: 200,
+      body: { id, subject: `Meeting ${id}`, start: {}, end: {} },
+    }),
+    owned = true,
+  ) {
+    const calendarId = owned ? DEFAULT : SHARED;
+    if (!owned) switched.set(SHARED, true);
+    const ids = Array.from({ length: count }, (_, n) => evt(`bare${n + 1}`));
+    const at = (n: number, minutes: string) =>
+      `2026-10-05T${String(9 + n).padStart(2, '0')}:${minutes}:00.0000000`;
+    const value = ids.map((id, n) => ({
+      '@odata.etag': `W/"${n}"`,
+      id,
+      type: 'singleInstance',
+      start: { dateTime: at(n, '00'), timeZone: 'UTC' },
+      end: { dateTime: at(n, '30'), timeZone: 'UTC' },
+    }));
+    let running = 0;
+    let most = 0;
+    const batches: BatchRequest[][] = [];
+    const fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+      const path = decodeURIComponent(String(url).slice(GRAPH.length));
+      if (path.startsWith('/me/calendars?')) {
+        const calendar = {
+          id: calendarId,
+          name: owned ? 'Calendar' : 'Dana Ruiz',
+          isDefaultCalendar: owned,
+          canEdit: owned,
+          owner: { address: owned ? ME : 'dana@titanlink.test' },
+        };
+        return new Response(JSON.stringify({ value: [calendar] }));
+      }
+      if (path.includes('/calendarView/delta')) {
+        return new Response(JSON.stringify({ value, '@odata.deltaLink': `${GRAPH}/d?$deltatoken=b` }));
+      }
+      const requests = JSON.parse(String(init?.body)).requests as BatchRequest[];
+      batches.push(requests.map((each) => ({ ...each, url: decodeURIComponent(each.url) })));
+      running += requests.length;
+      most = Math.max(most, running);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      running -= requests.length;
+      const responses = requests.map((each) => {
+        const id = decodeURIComponent(/\/events\/([^?]+)/.exec(each.url)?.[1] ?? '');
+        return { id: each.id, ...answer(id) };
+      });
+      return new Response(JSON.stringify({ responses }));
+    }) as typeof globalThis.fetch;
+    return { ids, fetch, batches, most: () => most };
+  }
+
+  it(`batches at most ${MAX_CONCURRENT_REQUESTS} events at a time, within the mailbox’s ${MAX_CONCURRENT_REQUESTS} requests at once`, async () => {
+    const calendar = bareCalendar(10);
+    await sync(calendar.fetch);
+    expect(calendar.batches.map((batch) => batch.length)).toEqual([4, 4, 2]);
+    expect(calendar.most()).toBeLessThanOrEqual(MAX_CONCURRENT_REQUESTS);
+    expect(calendar.ids.map((id) => eventOf(id)?.title)).toEqual(calendar.ids.map((id) => `Meeting ${id}`));
+    expect(detailOf(evt('bare3')).start.at).toBe(Date.UTC(2026, 9, 5, 11));
+  });
+
+  it('reads a shared calendar’s bare events through that calendar', async () => {
+    const calendar = bareCalendar(1, undefined, false);
+    await sync(calendar.fetch);
+    expect(calendar.batches[0]?.[0]?.url).toMatch(
+      new RegExp(`^/me/calendars/${SHARED}/events/${evt('bare1')}\\?\\$select=id,type,subject,`),
+    );
+    expect(eventOf(evt('bare1'))?.title).toBe(`Meeting ${evt('bare1')}`);
+  });
+
+  it('leaves an event Graph won’t give in full as Commander last saw it, even on a full read', async () => {
+    await sync(bareCalendar(2).fetch);
+    const again = bareCalendar(2, (id) =>
+      id === evt('bare2')
+        ? { status: 404, body: { error: { code: 'ErrorItemNotFound' } } }
+        : { status: 200, body: { id, subject: 'Planning', start: {}, end: {} } },
+    );
+    const { items, deleted } = await sync(again.fetch);
+    expect(items.map((item) => item.externalId)).toEqual([evt('bare1')]);
+    expect(deleted).toEqual([]);
+    expect(eventOf(evt('bare2'))?.title).toBe(`Meeting ${evt('bare2')}`);
+  });
+
+  it('takes a throttled read in a batch for a rate limit, waiting as long as Microsoft asks', async () => {
+    const calendar = bareCalendar(1, () => ({
+      status: 429,
+      headers: { 'Retry-After': '20' },
+      body: { error: { code: 'ApplicationThrottled' } },
+    }));
+    const error = await sync(calendar.fetch).catch((caught) => caught);
+    expect(error).toBeInstanceOf(RateLimited);
+    expect((error as RateLimited).retryAfterMs).toBe(20_000);
+  });
+
+  it('fails the sync, to be tried again, when Graph can’t give an event just now', async () => {
+    const calendar = bareCalendar(1, () => ({
+      status: 500,
+      body: { error: { code: 'InternalServerError' } },
+    }));
+    await expect(sync(calendar.fetch)).rejects.toBeInstanceOf(SourceUnavailable);
+  });
+
+  it('expires a cursor from before, once: reading from scratch gives "(No title)" events their titles', async () => {
+    // What the earlier version stored from the bare events, and the cursor it kept.
+    const { version: _, ...before } = (await sync(replay(exchanges(partialDelta)).fetch)).cursor;
+    for (const item of held.values()) held.set(item.externalId, { ...item, title: '(No title)' });
+
+    await expect(sync(replay(exchanges(quiet)).fetch, before)).rejects.toBeInstanceOf(CursorExpired);
+    // The engine forgets the cursor and syncs from scratch.
+    const again = await sync(replay(exchanges(partialDelta)).fetch, null);
+    expect(again.items.map((item) => item.externalId).sort()).toEqual(
+      [
+        evt('designreview'),
+        evt('dentist'),
+        BUSY_COPY,
+        evt('standup-20261005'),
+        evt('standup-20261006'),
+      ].sort(),
+    );
+    expect([...held.values()].map((item) => item.title).sort()).toEqual(
+      ['Busy', 'Dentist', 'Design review: onboarding', 'TL standup', 'TL standup'].sort(),
+    );
+    // From then on, it reads from the delta links again.
+    const recorded = replay(exchanges(quiet));
+    await sync(recorded.fetch, again.cursor);
+    expect(recorded.remaining()).toBe(0);
   });
 });
 

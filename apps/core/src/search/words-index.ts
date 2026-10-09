@@ -20,8 +20,9 @@ import { wordQuery } from './words';
   - Tombstones are not indexed: put drops them, and undoing the delete puts them back.
 */
 
-// Bump to rebuild every index from the Items at the next start (a change to what is indexed).
-const INDEX_VERSION = 1;
+// Bump to rebuild every index from the Items at the next start (a change to what is indexed). 2: busy
+// copies (#131) are no longer found.
+const INDEX_VERSION = 2;
 
 // bm25 weights for title, identifier and body.
 const WEIGHTS = '10.0, 10.0, 1.0';

@@ -19,7 +19,10 @@ import { createFakeTeamsChannels, type FakeTeamsChannels } from './fake-teams-ch
 // moment); for Outlook Calendar, `GET /me/calendars` and each calendar's `calendarView/delta` over
 // a window, paged by `Prefer: odata.maxpagesize`, ending in a delta link that later returns only
 // changes (deleted events as `@removed`), 410 SyncStateNotFound once delta links expire, and
-// throttling; answering invitations (#129): `GET /me/events/{id}` (a series master stands for
+// throttling; its events bare, as Graph's per-calendar delta gave a work account's (#241: an id, the
+// type, series and times, nothing else) unless switched to full ones, and each event in full by its id
+// (`GET /me/events/{id}` or `/me/calendars/{id}/events/{id}`, with `$select`), alone or in a JSON
+// batch; answering invitations (#129): `GET /me/events/{id}` (a series master stands for
 // its instances) and `POST /me/events/{id}/accept`, `/tentativelyAccept` or `/decline`, each recorded
 // with its `sendResponse`, after which the event (or every instance of the series) carries the
 // answer; and for the events Commander writes (#131), `POST /me/calendars` (an owned calendar the
@@ -139,6 +142,9 @@ export type FakeMicrosoft = {
   removeEvent(userId: string, calendarId: string, eventId: string): void;
   // Every delta link handed out so far stops working (410 SyncStateNotFound), mail's too.
   expireDeltaLinks(): void;
+  // Calendar delta answers events bare (true, from the start, as Graph's per-calendar delta did) or
+  // in full (false, as the primary calendar's delta does).
+  bareDeltaEvents(bare: boolean): void;
   // Outlook mail (#136): each user's mailbox, its folders and messages (fake-outlook-mail.ts).
   mail: FakeOutlookMail;
   // Channel posts (#111): teams, channels, posts and replies (fake-teams-channels.ts).
@@ -252,6 +258,7 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
   const calendarsByUser = new Map<string, CalendarState[]>();
   let version = 0;
   let deltaGeneration = 0;
+  let bareDelta = true;
   const deltaTokens = new Map<
     string,
     { calendarId: string; since: number; window: Window; generation: number }
@@ -353,7 +360,17 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       deltaGeneration += 1;
       fake.mail.expireDeltaLinks();
     },
-    mail: createFakeOutlookMail(() => fake.graphUrl),
+    bareDeltaEvents: (bare) => {
+      bareDelta = bare;
+    },
+    mail: createFakeOutlookMail(
+      () => fake.graphUrl,
+      (url, user) => {
+        const read = eventRead(user, url);
+        if (read) fake.graphRequests.push(decodeURIComponent(url.pathname + url.search));
+        return read;
+      },
+    ),
     channels: createFakeTeamsChannels(() => fake.graphUrl, tenantId),
     calendarPrefers: [],
     rsvps: [],
@@ -631,7 +648,18 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     const prefer = String(request.headers.prefer ?? '');
     fake.calendarPrefers.push(prefer);
     const pageSize = Number(/odata\.maxpagesize=(\d+)/.exec(prefer)?.[1] ?? 10) || 10;
-    const asEvent = (event: FakeOutlookEvent) => ({ '@odata.type': '#microsoft.graph.event', ...event });
+    const asEvent = (event: FakeOutlookEvent) =>
+      bareDelta
+        ? {
+            '@odata.type': '#microsoft.graph.event',
+            '@odata.etag': `W/"${event.id}"`,
+            id: event.id,
+            ...(event.type !== undefined && { type: event.type }),
+            ...(event.seriesMasterId ? { seriesMasterId: event.seriesMasterId } : {}),
+            start: event.start,
+            end: event.end,
+          }
+        : { '@odata.type': '#microsoft.graph.event', ...event };
     let all: unknown[];
     let upTo = version;
     let window: Window;
@@ -778,6 +806,38 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
       ...(user && { owner: { name: user.displayName, address: user.userPrincipalName } }),
       ...calendar,
     };
+  }
+
+  // One event in full by its id (a series master by its instances, as eventResource), through the
+  // user's events or a calendar's, with the properties `$select` names (null when it has none, as Graph
+  // answers them); null for a path that isn't one.
+  function eventRead(user: FakeMicrosoftUser, url: URL): { status: number; body: unknown } | null {
+    const mine = /^\/v1\.0\/me\/events\/([^/]+)$/.exec(url.pathname);
+    const onCalendar = /^\/v1\.0\/me\/calendars\/([^/]+)\/events\/([^/]+)$/.exec(url.pathname);
+    if (!mine && !onCalendar) return null;
+    const eventId = decodeURIComponent((mine?.[1] ?? onCalendar?.[2]) as string);
+    const calendars = (calendarsByUser.get(user.id) ?? []).filter(
+      (each) => !onCalendar || each.calendar.id === decodeURIComponent(onCalendar[1] as string),
+    );
+    const held = calendars.flatMap((calendar) => [...calendar.events.values()]);
+    const own = held.find((each) => each.event.id === eventId)?.event;
+    const instance = held.find((each) => each.event.seriesMasterId === eventId)?.event;
+    const shown = own ?? (instance ? { ...instance, id: eventId, type: 'seriesMaster' } : null);
+    if (!shown) {
+      return {
+        status: 404,
+        body: {
+          error: { code: 'ErrorItemNotFound', message: 'The specified object was not found in the store.' },
+        },
+      };
+    }
+    const select = url.searchParams.get('$select')?.split(',').filter(Boolean);
+    const body = select
+      ? Object.fromEntries(
+          ['id', ...select].map((key) => [key, (shown as Record<string, unknown>)[key] ?? null]),
+        )
+      : shown;
+    return { status: 200, body: { '@odata.etag': `W/"${eventId}"`, ...body } };
   }
 
   // An event with the extended properties it was made with: answers to writes, never delta.
@@ -1029,6 +1089,10 @@ export async function startFakeMicrosoft(options: FakeMicrosoftOptions = {}): Pr
     }
     if (url.pathname.startsWith('/v1.0/chats/')) return chatResource(url, response, user);
     if (url.pathname === '/v1.0/me/calendars') return calendarList(user, url, response);
+    if (/^\/v1\.0\/me\/calendars\/[^/]+\/events\/[^/]+$/.test(url.pathname)) {
+      const read = eventRead(user, url);
+      if (read) return json(response, read.status, read.body);
+    }
     if (url.pathname.startsWith('/v1.0/me/calendars/')) return calendarView(user, request, url, response);
     if (url.pathname.startsWith('/v1.0/me/events/')) return void eventResource(user, request, url, response);
     if (url.pathname === '/v1.0/me') {

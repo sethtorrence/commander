@@ -9,8 +9,9 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 // `@removed`), and 410 SyncStateNotFound once delta links expire; messages under immutable ids that
 // keep their id when moved, with their internet headers (none on the User's own sent mail), HTML or
 // text bodies and attachments (metadata, and bytes through `$value`); JSON batches (`/$batch`) of
-// those reads; and what organising mail writes: `PATCH /me/messages/{id}` (isRead, flag) and
-// `POST /me/messages/{id}/move` (to a folder id or a well-known name). Writing email (#138): drafts
+// those reads (and of events, which the rest of the fake Graph answers); and what organising mail
+// writes: `PATCH /me/messages/{id}` (isRead, flag) and `POST /me/messages/{id}/move` (to a folder id
+// or a well-known name). Writing email (#138): drafts
 // made with `POST /me/messages` or `createReply` / `createReplyAll` / `createForward` (in Drafts, with
 // the reply's thread and headers), PATCHed with their fields and Commander's extended property,
 // attachments added in the request or through an upload session (PUT in chunks), sent with `send`
@@ -164,6 +165,13 @@ const DEFAULT_PAGE = 10;
 const DEFERRED_SEND = 'SystemTime 0x3FEF';
 
 type Answer = { status: number; body?: unknown; bytes?: Buffer; type?: string };
+
+// Whether a path is the mailbox's.
+const isMail = (path: string) =>
+  path.startsWith('/v1.0/me/mailFolders') ||
+  path.startsWith('/v1.0/me/messages') ||
+  path.startsWith('/v1.0/me/outlook/masterCategories');
+
 const notFound = (code = 'ErrorItemNotFound'): Answer => ({
   status: 404,
   body: { error: { code, message: 'The specified object was not found in the store.' } },
@@ -186,7 +194,14 @@ const recipient = (address: FakeOutlookAddress) => ({ emailAddress: address });
 const preview = (message: FakeOutlookMessageInput) =>
   (message.text ?? (message.html ?? '').replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim().slice(0, 255);
 
-export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
+// A read in a JSON batch that isn't mail's (an event, #241), answered by the rest of the fake Graph:
+// null when it has no answer for it.
+export type OtherBatchRead = (
+  url: URL,
+  user: FakeMailUser,
+) => { status: number; headers?: Record<string, string>; body?: unknown } | null;
+
+export function createFakeOutlookMail(graphUrl: () => string, otherRead?: OtherBatchRead): FakeOutlookMail {
   const mailboxes = new Map<string, Mailbox>();
   let version = 0;
   let generation = 0;
@@ -900,13 +915,8 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
       pages.clear();
     },
     handles(request, url) {
-      const path = url.pathname;
-      if (path === '/v1.0/$batch') return request.method === 'POST';
-      return (
-        path.startsWith('/v1.0/me/mailFolders') ||
-        path.startsWith('/v1.0/me/messages') ||
-        path.startsWith('/v1.0/me/outlook/masterCategories')
-      );
+      if (url.pathname === '/v1.0/$batch') return request.method === 'POST';
+      return isMail(url.pathname);
     },
     async handle(request, url, response, user) {
       const method = request.method ?? 'GET';
@@ -920,6 +930,13 @@ export function createFakeOutlookMail(graphUrl: () => string): FakeOutlookMail {
         ).slice(0, 20);
         const responses = requests.map((each) => {
           const inner = new URL(`/v1.0${each.url}`, 'http://localhost');
+          const other = !isMail(inner.pathname) && each.method === 'GET' ? otherRead?.(inner, user) : null;
+          if (other)
+            return {
+              id: each.id,
+              ...other,
+              headers: { 'content-type': 'application/json', ...other.headers },
+            };
           fake.requests.push(`${each.method} ${decodeURIComponent(inner.pathname + inner.search)}`);
           const answered = answer(each.method, inner, undefined, prefer, user);
           return {
