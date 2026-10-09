@@ -286,7 +286,62 @@ test('connect Outlook → events in the Agenda → open one in Outlook on the we
   await expect(rows(section).filter({ hasText: 'Offsite planning' })).toHaveCount(1);
 });
 
+test('Graph’s delta answers events bare: each is read in full, the Agenda shows real titles, and no Busy copy', async () => {
+  // As Graph's per-calendar delta answered the User's work account (#241): ids, types, series and
+  // times, nothing else. The fake does so unless told otherwise; here it is said out loud.
+  microsoft.bareDeltaEvents(true);
+  // Commander's own busy copy of an event in another Account, known by its transactionId alone.
+  const copyAt = soon + 2 * DAY;
+  microsoft.putEvent(
+    SAM.id,
+    DEFAULT,
+    timed('AAMkAGI2-evt-busycopy=', 'Busy', copyAt, Math.min(30, toMidnight(copyAt)), {
+      sensitivity: 'private',
+      isReminderOn: false,
+      transactionId: 'busy-block:7d9c2f3e-41a6-4c1b-9e57-2b8d0f6a1c34',
+    }),
+  );
+  commander = await launchCommander({ env: microsoftEnv() });
+  const { app } = commander;
+  const window = await app.firstWindow();
+  await standInForTheBrowser(app, [microsoft.loginUrl]);
+
+  await openSettings(window, 'Accounts');
+  const outlook = window.getByTestId('accounts-panel').getByTestId('source-outlook');
+  await outlook.getByRole('button', { name: 'Connect Outlook' }).click();
+  await expect(outlook.getByTestId('calendar-switches').getByRole('switch')).toHaveCount(3);
+
+  await tab(window, 'Calendar').click();
+  const section = window.getByTestId('section-calendar');
+  await expect(rows(section)).toHaveText([
+    /Design review: onboarding/,
+    /TL standup/,
+    /Dentist/,
+    /TL standup/,
+  ]);
+  await expect(rows(section).filter({ hasText: 'No title' })).toHaveCount(0);
+  await expect(rows(section).filter({ hasText: 'Busy' })).toHaveCount(0);
+  // Each was read in full by its id, with the properties Commander shows.
+  const reads = microsoft.graphRequests.filter((request) => request.startsWith('/v1.0/me/events/'));
+  expect(reads.some((request) => request.includes('AAMkAGI2-evt-designreview=?$select='))).toBe(true);
+  expect(reads.some((request) => request.includes('AAMkAGI2-evt-standup-1=?$select='))).toBe(true);
+  expect(reads.every((request) => /\$select=.*subject.*organizer.*attendees/.test(request))).toBe(true);
+
+  // Opened, the design review has all of itself: organiser, place, Teams link and notes.
+  await rows(section).filter({ hasText: 'Design review' }).click();
+  const pane = section.getByRole('region', { name: 'Event detail' });
+  await expect(pane.locator('[data-field="location"] dd')).toHaveText('Room 4');
+  await expect(pane.locator('[data-field="organiser"] dd')).toHaveText('Dana Ruiz');
+  await expect(pane.locator('[data-field="meeting"] dd')).toContainText('teams.microsoft.com');
+  await expect(pane.getByTestId('event-description')).toContainText('Walk through the new onboarding.');
+
+  // The busy copy is still on the calendar, holding the time.
+  expect(microsoft.eventsOn(SAM.id, DEFAULT).map((event) => event.id)).toContain('AAMkAGI2-evt-busycopy=');
+});
+
 test('with a Google Account too, the Agenda shows both Accounts’ events together, calendars grouped by Account', async () => {
+  // Delta answers full events here, as the primary calendar's does: none is read again.
+  microsoft.bareDeltaEvents(false);
   google = await startFakeGoogle();
   google.setCalendars(ALEX.sub, [
     {
@@ -355,4 +410,5 @@ test('with a Google Account too, the Agenda shows both Accounts’ events togeth
   await expect(groups.nth(1)).toContainText(`${SAM.userPrincipalName} · Outlook`);
   // A New event button for each Account.
   await expect(section.getByRole('button', { name: /New event/ })).toHaveCount(2);
+  expect(microsoft.graphRequests.some((request) => request.startsWith('/v1.0/me/events/'))).toBe(false);
 });

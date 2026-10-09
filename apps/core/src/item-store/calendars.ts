@@ -4,12 +4,13 @@
 // calendar off (which also hides its events) is the Item store's own action, as it changes Items.
 import {
   type CalendarSummary,
+  type CommanderEventKind,
   calendarOnByDefault,
   type EventQuery,
   eventQuery,
   type Source,
 } from '@commander/domain';
-import { and, asc, eq, gt, gte, inArray, isNull, lt, notInArray, or } from 'drizzle-orm';
+import { and, asc, eq, gt, gte, inArray, isNull, lt, notInArray, or, sql } from 'drizzle-orm';
 import type { BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type { ItemRow } from './rows';
 import * as schema from './schema';
@@ -120,6 +121,9 @@ export function calendarsIn(db: BetterSQLite3Database<typeof schema>): CalendarS
   };
 }
 
+// What a busy copy's detail says made it.
+const BUSY_COPY_KIND: CommanderEventKind = 'busy-block';
+
 // An all-day event's days, anywhere on Earth: from UTC-12 to UTC+14.
 const EARLIEST_ZONE_MS = 14 * 60 * 60_000;
 const LATEST_ZONE_MS = 12 * 60 * 60_000;
@@ -136,7 +140,11 @@ export function eventRange(detail: { start: { at: number }; end: { at: number };
   };
 }
 
-/** The rows of the live events overlapping a range, earliest first. */
+/**
+ * The rows of the live events overlapping a range, earliest first. Commander's busy copies (#131) are
+ * left out: each stays on its calendar holding the time, but the event it copies is the one shown,
+ * wherever events are (the Calendar Section, the Dashboard, meeting chips and prep, Ares's reading).
+ */
 export function eventRows(db: BetterSQLite3Database<typeof schema>, input: EventQuery): ItemRow[] {
   const query = eventQuery.parse(input);
   const { items, eventDetails } = schema;
@@ -151,6 +159,7 @@ export function eventRows(db: BetterSQLite3Database<typeof schema>, input: Event
         // An event that takes no time still counts at its start.
         or(gt(eventDetails.endAt, query.from), gte(eventDetails.startAt, query.from)),
         query.accounts ? inArray(items.account, query.accounts) : undefined,
+        sql`coalesce(json_extract(${eventDetails.data}, '$.createdByCommander'), '') <> ${BUSY_COPY_KIND}`,
       ),
     )
     .orderBy(asc(eventDetails.startAt), asc(eventDetails.endAt), asc(items.title))

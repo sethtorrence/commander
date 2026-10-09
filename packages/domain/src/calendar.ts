@@ -57,6 +57,13 @@ export type CommanderEventKind = z.infer<typeof commanderEventKind>;
 export const isCommanderHold = (detail: { createdByCommander: CommanderEventKind | null }) =>
   detail.createdByCommander === 'focus-block' || detail.createdByCommander === 'busy-block';
 
+/**
+ * Whether an event is Commander's busy copy of another (#131): it stays on its calendar holding the
+ * time, but is never shown as an event of its own; the event it copies is.
+ */
+export const isBusyCopy = (detail: { createdByCommander: CommanderEventKind | null }) =>
+  detail.createdByCommander === 'busy-block';
+
 // The calendar an event is on, as its Account lists it.
 export const eventCalendar = z.object({
   id,

@@ -90,6 +90,37 @@ export const graphEvent = z.object({
 });
 export type GraphEvent = z.infer<typeof graphEvent>;
 
+// The properties Commander reads of an event, as a `$select` asks for them by name.
+export const EVENT_PROPERTIES = Object.keys(graphEvent.shape).filter(
+  (key) => !key.startsWith('@') && key !== 'singleValueExtendedProperties',
+);
+
+/**
+ * Whether a delta answered an event without its properties: Graph's per-calendar delta gave the User's
+ * work account only an event's times and series, with no `subject` key at all (an event with no
+ * subject has the key, empty or null), and the parse leaves out what Graph left out. Removals and
+ * series masters are never shown, so they need nothing more.
+ */
+export const isBare = (event: GraphEvent) =>
+  !('subject' in event) && !event['@removed'] && event.type !== 'seriesMaster';
+
+/**
+ * A bare delta event filled in from the full event read by its id. What the delta did say wins: its id
+ * (an instance's own), its times and its series, so a recurring instance stays that instance.
+ */
+export function hydrated(bare: GraphEvent, full: GraphEvent): GraphEvent {
+  const said = Object.fromEntries(
+    Object.entries(bare).filter(([, value]) => value !== undefined && value !== null),
+  ) as Partial<GraphEvent>;
+  return {
+    ...full,
+    ...said,
+    id: bare.id,
+    start: bare.start.dateTime ? bare.start : full.start,
+    end: bare.end.dateTime ? bare.end : full.end,
+  };
+}
+
 export const eventsPage = z.object({
   value: z
     .array(graphEvent)

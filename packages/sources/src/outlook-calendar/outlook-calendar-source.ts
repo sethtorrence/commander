@@ -22,6 +22,7 @@ import {
 } from '../google-calendar/google-calendar-source';
 import type { ListedCalendar } from '../google-calendar/shapes';
 import { type Gate, MAILBOX_CONCURRENCY, mailboxGate } from '../outlook/mailbox-gate';
+import { batchAnswer } from '../outlook/shapes';
 import {
   type AccessToken,
   type Cadence,
@@ -44,12 +45,15 @@ import {
   COMMANDER_EVENT_PROPERTY,
   calendarsPage,
   commanderEventTag,
+  EVENT_PROPERTIES,
   eventsPage,
   type GraphCalendar,
   type GraphEvent,
   graphCalendar,
   graphEvent,
   graphTime,
+  hydrated,
+  isBare,
   isGone,
   responseOf,
   toEventItem,
@@ -68,6 +72,11 @@ import { zonedInstant } from './time-zones';
 //   events into their instances, over the same window as Google Calendar (30 days back to 12 months
 //   ahead), then from the delta link Graph hands back, kept per calendar in the cursor. Every request
 //   asks for immutable ids, so an event moved to another calendar keeps its Item.
+// - Graph v1.0 documents delta only for the primary calendar's view, and the per-calendar one answered
+//   a work account's events with little but their times and series (no subject, organiser, guests,
+//   notes or meeting link, and no transactionId), #241. So delta tracks what changed, and an event it
+//   answers without its properties is read in full by its id, in JSON batches (`/$batch`), keeping the
+//   delta's id and times (a recurring instance stays that instance). Full events cost nothing more.
 // - A delta's window is fixed when it starts, so once its start is more than 7 days old the calendar
 //   starts a fresh delta: a quiet full re-read that saves only what changed and tombstones held events
 //   in the new window that it no longer returns.
@@ -118,13 +127,24 @@ const CALENDARS_PATH = '/me/calendars?$select=id,name,color,hexColor,isDefaultCa
 const PREFER = `IdType="ImmutableId", odata.maxpagesize=${PAGE_SIZE}`;
 // Writes, and their look-ups, ask for immutable ids alone.
 const WRITE_PREFER = 'IdType="ImmutableId"';
+// Events read by id go in JSON batches of the mailbox's 4 at once (Graph takes up to 20 in a batch, but
+// runs them side by side against the mailbox, each counted as a request of its own).
+const BATCH_SIZE = MAILBOX_CONCURRENCY;
 // Outlook's colour for a calendar Commander can't find in the Account's list.
 const OUTLOOK_BLUE = '#0078d4';
 
 // Per calendar: the delta link to read from next (null: read it in full), and when its delta started
 // (its window runs from 30 days before that to 12 months after).
 const calendarMark = z.object({ deltaLink: z.string().nullable(), since: z.number() });
-const outlookCalendarCursor = z.object({ calendars: z.record(z.string(), calendarMark) });
+// What the cursor's events were read as. 2 (#241): every event in full, which Graph's per-calendar
+// delta didn't always give (most of a work account's events came without their subjects). A cursor
+// from before is expired, so each Account reads its calendars once more from scratch (a re-sync, #205,
+// matched back by external id), and the events stored as "(No title)" get their subjects and details.
+export const CURSOR_VERSION = 2;
+const outlookCalendarCursor = z.object({
+  version: z.literal(CURSOR_VERSION),
+  calendars: z.record(z.string(), calendarMark),
+});
 export type OutlookCalendarCursor = z.infer<typeof outlookCalendarCursor>;
 type CalendarMark = z.infer<typeof calendarMark>;
 
@@ -175,7 +195,8 @@ const unchanged = (item: SourceItem, stored: StoredItem | undefined) =>
 // `calendar`: the request reads one calendar's events, so a refusal is that calendar's alone; `write`:
 // it is made for a write; `missing`: a 404 answers null; `event`: it reads or answers one event the
 // User is invited to (#129), so a 404 means it is gone and a refusal is final (both WriteRejected).
-type Purpose = { calendar?: boolean; write?: boolean; missing?: boolean; event?: boolean };
+// `weight`: the mailbox's places it holds (a JSON batch, one for each request it carries).
+type Purpose = { calendar?: boolean; write?: boolean; missing?: boolean; event?: boolean; weight?: number };
 
 function connect(
   baseUrl: string,
@@ -211,7 +232,8 @@ function connect(
           headers: {
             authorization: `Bearer ${token.token}`,
             accept: 'application/json',
-            prefer: about.write ? WRITE_PREFER : PREFER,
+            // A batch's requests carry their own.
+            prefer: about.write || about.weight ? WRITE_PREFER : PREFER,
             ...(payload !== undefined && { 'content-type': 'application/json' }),
           },
           ...(payload !== undefined && { body: JSON.stringify(payload) }),
@@ -279,7 +301,7 @@ function connect(
         `Outlook Calendar couldn’t answer just now (HTTP ${response.status}).`,
         cost,
       );
-    });
+    }, about.weight);
   }
 
   // GETs what a sync reads.
@@ -312,7 +334,62 @@ function connect(
     return (await call(method, path, payload, shape, { event: true })) as T;
   }
 
-  return { get, send, event, cost, base };
+  /**
+   * Reads events by their paths, in JSON batches of BATCH_SIZE, each holding as many of the mailbox's
+   * places as it carries. Answers each path's event, or null where Graph won't give it (gone since the
+   * delta, 404; or refused, 400 or 403). A throttled request throttles the whole sync, a refused
+   * sign-in refuses it, and any other failure (a passing 5xx) fails it, to be tried again.
+   */
+  async function batch(paths: readonly string[]): Promise<Map<string, GraphEvent | null>> {
+    const answers = new Map<string, GraphEvent | null>();
+    for (let at = 0; at < paths.length; at += BATCH_SIZE) {
+      const chunk = paths.slice(at, at + BATCH_SIZE);
+      const requests = chunk.map((url, index) => ({
+        id: String(index + 1),
+        method: 'GET',
+        url,
+        headers: { prefer: WRITE_PREFER },
+      }));
+      const { responses } = (await call('POST', '/$batch', { requests }, batchAnswer, {
+        weight: chunk.length,
+      })) as z.infer<typeof batchAnswer>;
+      for (const [index, path] of chunk.entries()) {
+        const answer = responses.find((each) => each.id === String(index + 1));
+        if (!answer) throw new SourceUnavailable('Outlook Calendar left out part of an answer.', cost);
+        if (answer.status >= 200 && answer.status < 300) {
+          const event = graphEvent.safeParse(answer.body);
+          if (!event.success) {
+            throw new SourceUnavailable('Outlook Calendar sent an answer Commander didn’t understand.', cost);
+          }
+          answers.set(path, event.data);
+          continue;
+        }
+        const header = (name: string) =>
+          Object.entries(answer.headers ?? {}).find(([key]) => key.toLowerCase() === name)?.[1] ?? null;
+        const retryAfter = retryAfterMs(header('retry-after'), now());
+        if (answer.status === 429 || (answer.status === 503 && retryAfter !== null)) {
+          throw new RateLimited(
+            'Microsoft asked Commander to check Outlook Calendar less often.',
+            retryAfter,
+            cost,
+          );
+        }
+        if (answer.status === 401)
+          throw new SignInRefused('Microsoft refused this Outlook Account’s sign-in.');
+        if (answer.status === 400 || answer.status === 403 || answer.status === 404) {
+          answers.set(path, null);
+          continue;
+        }
+        throw new SourceUnavailable(
+          `Outlook Calendar couldn’t answer just now (HTTP ${answer.status}).`,
+          cost,
+        );
+      }
+    }
+    return answers;
+  }
+
+  return { get, send, event, batch, cost, base };
 }
 type Api = ReturnType<typeof connect>;
 
@@ -616,6 +693,12 @@ export function createOutlookCalendarSource({
 
     async sync(request) {
       const { account } = request;
+      const previous = outlookCalendarCursor.safeParse(request.cursor);
+      // A cursor from an earlier version (or none Commander can read): the engine forgets it and syncs
+      // from scratch, once.
+      if (request.cursor != null && !previous.success) {
+        throw new CursorExpired('Commander reads Outlook Calendar events more fully now.');
+      }
       // Stops the other calendars' reads once one fails, or when the sync is no longer wanted.
       const stop = new AbortController();
       const onAbort = () => stop.abort(request.signal.reason);
@@ -623,7 +706,6 @@ export function createOutlookCalendarSource({
       request.signal.addEventListener('abort', onAbort, { once: true });
       const api = connect(graphUrl(), fetch, now, gateOf(account), request, stop.signal);
       const started = now();
-      const previous = outlookCalendarCursor.safeParse(request.cursor);
       const marks = previous.success ? previous.data.calendars : {};
 
       try {
@@ -656,7 +738,7 @@ export function createOutlookCalendarSource({
             }),
         );
         if (failure) throw failure;
-        const next: OutlookCalendarCursor = { calendars: {} };
+        const next: OutlookCalendarCursor = { version: CURSOR_VERSION, calendars: {} };
         for (const calendar of listed) {
           const mark = read.get(calendar.id);
           if (mark) next.calendars[calendar.id] = mark;
@@ -695,6 +777,8 @@ export function createOutlookCalendarSource({
           while (link) {
             const page: z.infer<typeof eventsPage> = await api.get(link, eventsPage, { calendar: true });
             stop.signal.throwIfAborted();
+            const full = await fullEvents(listing, page.value);
+            stop.signal.throwIfAborted();
             const items: SourceItem[] = [];
             const deleted: string[] = [];
             // What this calendar holds now: an event another calendar has just saved (it moved there)
@@ -704,8 +788,11 @@ export function createOutlookCalendarSource({
               here ??= heldNow();
               return here;
             };
-            for (const event of page.value) {
-              seen.add(event.id);
+            for (const answered of page.value) {
+              seen.add(answered.id);
+              // A bare event Graph wouldn't give in full is left as Commander last saw it.
+              const event = full.has(answered.id) ? full.get(answered.id) : answered;
+              if (!event) continue;
               if (isGone(event)) {
                 deleted.push(...removals(event, holds()));
                 continue;
@@ -727,6 +814,26 @@ export function createOutlookCalendarSource({
             if (missing.length) request.save({ items: [], deleted: missing });
           }
           return { deltaLink, since };
+        }
+
+        // Reads the page's bare events (isBare) in full by their ids. Answers each by its id, filled in
+        // from its full event, or null where Graph wouldn't give it. Calendars the User owns are read
+        // through their events (`/me/events/{id}`), others (shared, delegated) through the calendar.
+        async function fullEvents(listing: ListedCalendar, events: readonly GraphEvent[]) {
+          const bare = events.filter(isBare);
+          const read = new Map<string, GraphEvent | null>();
+          if (!bare.length) return read;
+          const select = `?$select=${EVENT_PROPERTIES.join(',')}`;
+          const pathOf = (id: string) =>
+            listing.accessRole === 'owner'
+              ? `${eventPath(id)}${select}`
+              : `/me/calendars/${encodeURIComponent(listing.id)}/events/${encodeURIComponent(id)}${select}`;
+          const answers = await api.batch(bare.map((event) => pathOf(event.id)));
+          for (const event of bare) {
+            const answer = answers.get(pathOf(event.id));
+            read.set(event.id, answer ? hydrated(event, answer) : null);
+          }
+          return read;
         }
       } finally {
         request.signal.removeEventListener('abort', onAbort);

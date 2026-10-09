@@ -175,7 +175,7 @@ An event holding time to work on one Todo, suggested by Ares in the User's free 
 _Avoid_: Time block, hold, focus time (that's the Calendar Section's panel of suggestions)
 
 **Busy copy**:
-The private event titled "Busy" that Block time across Accounts puts on another Account's main calendar for a busy event, carrying nothing else of it, and moving and going with it; Commander never copies one again.
+The private event titled "Busy" that Block time across Accounts puts on another Account's main calendar for a busy event, carrying nothing else of it, and moving and going with it; Commander never copies one again, and never shows one as an event of its own (the event it copies is what shows).
 _Avoid_: Mirror, shadow event, blocker
 
 **Booking link**:

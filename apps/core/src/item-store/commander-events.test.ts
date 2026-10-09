@@ -382,6 +382,48 @@ describe('a busy copy', () => {
     expect(store.busyCopies.list()).toEqual([{ eventId: dentist, targetAccount: SAM, copyId: entry.itemId }]);
   });
 
+  it('stays on its calendar, but is never listed or found as an event: the event it copies is (#241)', () => {
+    const dentist = work();
+    const entry = store.createEvent(
+      {
+        kind: 'busy-block',
+        account: SAM,
+        title: 'Busy',
+        start: time(START),
+        end: time(START + HOUR),
+        copyOf: dentist,
+      },
+      ares,
+    );
+    // Once Outlook has it too.
+    store.saveFromSource({
+      source: 'outlook-calendar',
+      account: SAM,
+      items: [
+        {
+          externalId: 'AAMk-evt-busy=',
+          kind: 'event',
+          title: 'Busy',
+          people: [],
+          detail: { ...detailOf(entry.itemId), webUrl: null },
+          commanderItemId: entry.itemId,
+        },
+      ],
+    });
+    expect(store.get(entry.itemId)?.item).toMatchObject({ externalId: 'AAMk-evt-busy=', deletedAt: null });
+    expect(store.events({ from: START, to: START + HOUR }).map((each) => each.id)).toEqual([dentist]);
+    expect(store.events({ from: START, to: START + HOUR, accounts: [SAM] })).toEqual([]);
+    expect(store.search.query({ text: 'Busy' }).hits).toEqual([]);
+    expect(store.search.query({ text: 'Dentist' }).hits.map((hit) => hit.item.id)).toEqual([dentist]);
+    // It still follows its event.
+    store.moveEvent(
+      entry.itemId,
+      { start: time(START + HOUR), end: time(START + 2 * HOUR), allDay: false },
+      ares,
+    );
+    expect(detailOf(entry.itemId).start.at).toBe(START + HOUR);
+  });
+
   it('is made once per event and Account, and needs the event it copies', () => {
     const dentist = work();
     const draft: CommanderEventDraft = {
